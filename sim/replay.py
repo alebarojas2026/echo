@@ -14,12 +14,15 @@ from .fake import pace
 from .wire import as_replay, time_of
 
 
-def read(file):
-    """Yield (t, line) for every non-blank line of an open file."""
+def read(file, seq=None):
+    """Yield (t, line) for every non-blank line of an open file.
+
+    `seq` is an optional counter (an iterator of ints) used to re-number the lines.
+    """
     for line in file:
         line = line.strip()
         if line:
-            yield time_of(line), as_replay(line)
+            yield time_of(line), as_replay(line, next(seq) if seq else None)
 
 
 def main(argv=None) -> None:
