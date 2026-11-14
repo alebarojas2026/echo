@@ -1,6 +1,6 @@
-import type { Advice, Alert, Checkin, CmdMsg, LinkState, Narration, ObjectMark, Pred, StateMsg, Teacher, Xray } from './contract'
+import type { Advice, Alert, Checkin, CmdMsg, EventMsg, LinkState, Narration, ObjectMark, Pred, StateMsg, Teacher, Xray } from './contract'
 import type { Transport } from './feed'
-import { demoScene } from './demo'
+import { DEMO_MS, demoScene } from './demo'
 import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
 
 // Mock state messages (CONTRACTS.md v2 section 5) for building the screen without the board.
@@ -224,21 +224,34 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
 /** A Transport that plays a scenario at 10 states a second and answers router commands. */
 export function createMockSource(scenario: MockScenario): Transport {
   let router = HOME_SPOT
+  let sendReset = () => {}
   return {
     start(deliver, setConnected) {
       const t0 = performance.now()
       const start = Date.now()
       let seq = 0
+      let loop = 0
+      // The brain's answer to the reset command (contract section 5): an event of kind "reset".
+      sendReset = () => {
+        seq++
+        deliver({ v: 2, type: 'event', t: Date.now(), seq, src: 'sim', id: `mock-reset-${seq}`, kind: 'reset', info: {} } satisfies EventMsg)
+      }
       setConnected(true)
       const id = setInterval(() => {
         const t = performance.now() - t0
         if (scenario === 'stall' && t > 1000) return clearInterval(id)
+        // ?mock=demo: each new loop begins the way a demo does between judges, right after a reset.
+        if (scenario === 'demo' && Math.floor(t / DEMO_MS) > loop) {
+          loop = Math.floor(t / DEMO_MS)
+          sendReset()
+        }
         deliver(mockState(scenario, ++seq, t, router, start))
       }, 100)
     },
     send(msg: CmdMsg) {
       if (msg.cmd === 'router_moved' && typeof msg.args.spot === 'string') router = msg.args.spot
       if (msg.cmd === 'router_home') router = HOME_SPOT
+      if (msg.cmd === 'reset') sendReset()
     },
   }
 }
