@@ -35,8 +35,10 @@ export function segments(pairs: Vec3[], material: LineBasicMaterial | LineDashed
   return lines
 }
 
-function buildShell(): Group {
+/** The drawn floor and back walls (replaced by a room scan when there is one), and the square with its zones. */
+function buildShell(): { room: Group; square: Group } {
   const g = new Group()
+  const sq = new Group()
   const lo = -MARGIN_M
   const hi = SQUARE_M + MARGIN_M
   const size = hi - lo
@@ -66,10 +68,10 @@ function buildShell(): Group {
 
   // The sensing square and its four zones.
   const s = SQUARE_M
-  g.add(segments(outline([[0, 0, 0], [s, 0, 0], [s, s, 0], [0, s, 0]]), new LineBasicMaterial({ color: INK })))
+  sq.add(segments(outline([[0, 0, 0], [s, 0, 0], [s, s, 0], [0, s, 0]]), new LineBasicMaterial({ color: INK })))
   const dash = new LineDashedMaterial({ color: LINE, dashSize: 0.06, gapSize: 0.05 })
-  g.add(segments([[mid, 0, 0], [mid, s, 0], [0, mid, 0], [s, mid, 0]], dash))
-  return g
+  sq.add(segments([[mid, 0, 0], [mid, s, 0], [0, mid, 0], [s, mid, 0]], dash))
+  return { room: g, square: sq }
 }
 
 /** Segment pairs that join the points in order and close the loop. */
@@ -86,10 +88,14 @@ interface NodeMesh {
 
 export class Stage {
   readonly group = new Group()
+  /** The drawn floor and walls; hidden while a room scan stands in for them. */
+  readonly drawnRoom: Group
   private readonly nodes: NodeMesh[] = []
 
   constructor(private readonly view: RoomView) {
-    this.group.add(buildShell())
+    const { room, square } = buildShell()
+    this.drawnRoom = room
+    this.group.add(room, square)
 
     // Zone names sit in each zone's outer corner, clear of the links that cross the middle.
     const near = 0.3

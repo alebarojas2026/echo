@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/label.json",
-  "$comment": "Section 4. One per processed camera frame. present:false -> zone 0 and foot_m, motion null. clipped:true -> zone, foot_m null.",
+  "$comment": "Section 4. One per processed camera frame. present:false -> zone 0 and foot_m, motion null. clipped:true -> zone, foot_m and motion null, even when present is false.",
   "$ref": "common.json#/$defs/envelope",
   "properties": {
     "type": {"const": "label"},
@@ -18,10 +18,13 @@
   "required": ["frame", "mode", "persons_in_frame", "present", "zone", "foot_m", "motion", "conf", "clipped"],
   "unevaluatedProperties": false,
   "allOf": [
-    {"if": {"properties": {"present": {"const": false}}, "required": ["present"]},
-     "then": {"properties": {"zone": {"const": 0}, "foot_m": {"type": "null"}, "motion": {"type": "null"}}},
-     "else": {"properties": {"motion": {"$ref": "common.json#/$defs/motion"}}}},
     {"if": {"properties": {"clipped": {"const": true}}, "required": ["clipped"]},
-     "then": {"properties": {"zone": {"type": "null"}, "foot_m": {"type": "null"}}}}
+     "then": {"properties": {"zone": {"type": "null"}, "foot_m": {"type": "null"}, "motion": {"type": "null"}}}},
+    {"if": {"properties": {"present": {"const": false}}, "required": ["present"]},
+     "then": {"properties": {"foot_m": {"type": "null"}, "motion": {"type": "null"}}}},
+    {"if": {"properties": {"present": {"const": false}, "clipped": {"const": false}}, "required": ["present", "clipped"]},
+     "then": {"properties": {"zone": {"const": 0}}}},
+    {"if": {"properties": {"present": {"const": true}, "clipped": {"const": false}}, "required": ["present", "clipped"]},
+     "then": {"properties": {"motion": {"$ref": "common.json#/$defs/motion"}}}}
   ]
 }

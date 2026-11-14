@@ -1,11 +1,19 @@
 import pytest
 
-from proof.false_alarms import analyze, analyze_many, update_proof
+from proof.false_alarms import analyze as raw_analyze, analyze_many, update_proof
+
+
+def analyze(messages, events, zones=None):
+    if messages:
+        events = events + [dict(type="state", src="live", recv_t=min(m["recv_t"] for m in messages)),
+                           dict(type="state", src="live", recv_t=max(m["recv_t"] for m in messages))]
+    return raw_analyze(messages, events, zones)
 
 
 @pytest.fixture(autouse=True)
 def zones(monkeypatch):
     monkeypatch.setattr("proof.false_alarms.load_zones", lambda: {1: 60, 2: None, 3: None, 4: 10})
+    monkeypatch.setattr("proof.false_alarms.analyze", analyze)
 
 
 def labels(zone=0, seconds=2):
@@ -31,7 +39,8 @@ def test_expected_no_movement_alert_is_not_false():
 
 
 def test_unknown_and_moving_time_excluded():
-    assert analyze([], [event("object_on")])["false_alarms_per_min"] is None
+    with pytest.raises(ValueError):
+        analyze([], [event("object_on")])
     messages = labels(4)
     for m in messages:
         m["motion"] = "moving"

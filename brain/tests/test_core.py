@@ -200,7 +200,7 @@ def test_reset_clears_the_judge_state_and_recording_events_share_one_seq():
     after = brain.state()
     events = brain.pop_events()
     assert after["narration"] is None
-    assert [(e["kind"], e["info"]) for e in events] == [("reset", {}), ("recording", {"on": False, "session": None})]
+    assert [(e["kind"], e["info"]) for e in events] == [("reset", {}), ("recording", {"on": False})]   # no nulls in info
     assert [e["id"] for e in events] == ["e1", "e2"]
     # state, event, event, state: one counter across both types
     assert [events[0]["seq"], events[1]["seq"], after["seq"]] == [2, 3, 4]
@@ -301,3 +301,165 @@ def test_a_link_is_listed_once_it_has_a_reading():
     links = brain.state()["links"]
     assert [l["id"] for l in links] == ["east>pi5:ble"]
     assert links[0]["dbm"] is not None and links[0]["base_dbm"] is None and links[0]["drop_db"] is None
+
+
+# ---- fixes from the post-merge review (#172, #157, #171) ----
+
+def check_all(messages):
+    from contracts.check import errors
+    return [(m["type"], m.get("kind"), e) for m in messages for e in errors(m)]
+
+
+def test_every_state_and_event_passes_the_contract_schemas():
+    brain, feed = taught()
+    out = brain.pop_events()
+    for path in ("empty_room", "tray_t1", "dropped_link", "zone_tour"):
+        states = []
+        feed.play(path, seed=9, states=states)
+        out += [s for _, s in states] + brain.pop_events()
+    brain.on_cmd(cmd("router_moved", spot="S-W30"))
+    brain.on_cmd(cmd("router_home"))
+    out += brain.pop_events()
+    kinds_seen = {m["kind"] for m in out if m["type"] == "event"}
+    assert {"trained", "baseline_done", "recording", "blind_on", "blind_off", "router_moved"} <= kinds_seen
+    bad = [b for b in check_all(out) if "pred.motion" not in b[2]]   # motion null is the schema's to fix (#170)
+    assert not bad, bad[:5]
+
+
+def test_nobody_there_is_zone_0_not_null(ready):
+    brain, feed = ready
+    feed.play("empty_room", seed=4)
+    assert brain.pred["present"] is False and brain.pred["zone"] == 0 and brain.pred["zone_set"] == []
+    assert brain.pred["motion"] is None and brain.pred["kind"] != "person"
+    block = brain.state()["alert"]
+    assert block["state"] == "none" and block["zone"] is None      # zone 0 never counts or alerts
+    assert not [e for e in brain.pop_events() if e["kind"] in ("alert_on", "checkin")]
+
+
+def test_a_quiet_link_keeps_its_last_dbm_and_drop():
+    brain, feed = taught()
+    states = []
+    feed.play("dropped_link", seed=3, states=states)     # east is silent from 10 to 20 s
+    quiet = {l["id"]: l for l in at(states, 16)["links"]}["east>pi5:ble"]
+    before = {l["id"]: l for l in at(states, 9.5)["links"]}["east>pi5:ble"]
+    assert quiet["rate_hz"] == 0 and quiet["status"] == "blind"
+    assert isinstance(quiet["dbm"], float) and abs(quiet["dbm"] - before["dbm"]) < 3
+    assert isinstance(quiet["drop_db"], float)
+
+
+def baseline_feed(brain, path="empty_room", edit=None, seed=1):
+    """Ask for a baseline and play one path. edit(message) may change or drop (return None) messages."""
+    brain.on_cmd(cmd("baseline"))
+    for m in sim_to_v2(path, seed=seed):
+        m = edit(m) if edit else m
+        if m:
+            brain.on_message(m)
+
+
+def test_baseline_needs_the_camera_on():
+    brain = Brain()
+    baseline_feed(brain, edit=lambda m: None if m["type"] in ("cam", "label") else m)
+    assert not brain.base and brain.capture is not None      # still waiting, never done blind
+    brain2 = Brain()
+    baseline_feed(brain2, edit=lambda m: dict(m, state="off") if m["type"] == "cam" else m)
+    assert not brain2.base
+
+
+def test_baseline_needs_every_link_through_the_capture():
+    def east_goes_quiet(m):   # east stops 5 s in and never comes back
+        return None if m["type"] == "rssi" and m["tx"] == "east" and m["recv_t"] - T0_MS > 5_000 else m
+
+    brain = Brain()
+    baseline_feed(brain, edit=east_goes_quiet)
+    assert not brain.base
+
+    def east_blips(m):        # east is quiet from 5 to 8 s: the 20 s start again at 8 s
+        return None if m["type"] == "rssi" and m["tx"] == "east" and 5_000 < m["recv_t"] - T0_MS < 8_000 else m
+
+    brain = Brain()
+    done_at = []
+    baseline_feed(brain, edit=lambda m: (done_at.append(m["recv_t"]) if brain.base and not done_at else None,
+                                         east_blips(m))[1])
+    assert 28_000 <= done_at[0] - T0_MS < 28_400
+    assert all(hz > 13 for hz in brain.expected_hz.values())   # counted over a full 20 s
+
+
+def test_baseline_restarts_if_label_mode_is_turned_on():
+    brain = Brain()
+    turned_on = []
+
+    def edit(m):
+        if not turned_on and m["recv_t"] - T0_MS > 10_000:
+            turned_on.append(1)
+            brain.on_cmd(cmd("label_mode", mode="person"))
+        return m
+
+    baseline_feed(brain, edit=edit)
+    assert not brain.base
+
+
+def test_blind_pauses_the_still_timer():
+    brain, feed = taught()
+    states = []
+    feed.play("dropped_link", seed=3, states=states)     # standing in zone 1; blind from about 13 to 23 s
+    before, after = at(states, 12)["pred"]["still_s"], at(states, 27)["pred"]["still_s"]
+    assert before > 8
+    assert after >= before                               # the time built up is kept across the blind span
+
+
+def test_ms_per_decision_comes_back_right_after_a_retrain(ready):
+    brain, feed = ready
+    feed.play("empty_room", seed=6)
+    assert brain.state()["model"]["ms_per_decision"] is not None
+    brain.on_cmd(cmd("train"))
+    brain.on_cmd(cmd("train"))
+    model = brain.state()["model"]                       # no new readings since the retrain
+    assert model["trained"] and model["ver"] == "m3" and model["ms_per_decision"] is not None
+
+
+def test_back_to_back_recordings_keep_both_sessions():
+    brain = Brain()
+    feed = Feed(brain)
+    brain.on_cmd(cmd("baseline"))
+    feed.play("empty_room", seed=1)
+    brain.on_cmd(cmd("record_start", session="a1", purpose="train", walker="w1"))
+    feed.play("zone_tour", seed=2, meta={"session": "a1", "purpose": "train", "walker": "w1"})
+    brain.on_cmd(cmd("record_start", session="a2", purpose="train", walker="w2"))   # no record_stop first
+    feed.play("zone_tour", seed=3, meta={"session": "a2", "purpose": "train", "walker": "w2"})
+    brain.on_cmd(cmd("record_stop"))
+    assert sorted(brain.sessions) == ["a1", "a2"]
+    assert all(len(s["messages"]) > 1000 for s in brain.sessions.values())
+
+
+def test_src_follows_the_radio_feed_only():
+    brain = Brain()
+    for m in sim_to_v2("empty_room")[:200]:
+        brain.on_message(dict(m, src="live") if m["type"] in ("cam", "label", "meta") else m)
+    assert brain.state()["src"] == "sim"                 # the camera and the bus's meta say live
+
+
+def test_training_block_while_a_fit_runs():
+    pending = []
+    brain, _ = taught(spawn=lambda fit, done: pending.append((fit, done)))
+    training = brain.state()["model"]["training"]
+    assert set(training) == {"started_t", "progress", "sessions"} and training["progress"] is None
+    assert training["sessions"] == sorted(training["sessions"]) and "s01" in training["sessions"]
+    fit, done = pending[0]
+    done(fit())
+    assert brain.state()["model"]["training"] is None and brain.model.trained
+
+
+def test_baseline_json_is_written_and_read_back_at_start(tmp_path):
+    import json
+    brain = Brain(sessions_dir=tmp_path)
+    baseline_feed(brain)
+    doc = json.loads((tmp_path / "baseline.json").read_text())
+    assert set(doc) == {"t", "session", "links"} and doc["session"] is None and doc["t"] > T0_MS
+    assert set(doc["links"]) == set(F.LINKS)
+    assert doc["links"]["pi5>unoq:wifi"] == {"base_dbm": brain.base["pi5>unoq:wifi"],
+                                             "expected_hz": brain.expected_hz["pi5>unoq:wifi"]}
+    again = Brain(sessions_dir=tmp_path)                 # a restart picks it up
+    assert again.base == brain.base and again.expected_hz == brain.expected_hz
+    assert again.windower is not None
+    (tmp_path / "baseline.json").write_text("not json")
+    assert Brain(sessions_dir=tmp_path).base == {}

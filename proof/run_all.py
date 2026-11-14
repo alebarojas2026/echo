@@ -52,18 +52,22 @@ def plan(folder, output, baseline, document, on_board=False):
     # Negative recordings are declared explicitly; waves/objects are not negative tests.
     manifest = folder / "proof-plan.json"
     negative = json.loads(manifest.read_text()).get("negative_sessions", []) if manifest.exists() else []
-    known = {s["meta"]["session"]: path for path, s in sessions}
+    known = {s["meta"]["session"]: (path, s["meta"].get("purpose")) for path, s in sessions}
     if not negative:
         missing.append(f"empty/still negative-session ids in {manifest}")
     # Combine negative sessions so each exposure contributes to the final rate.
     negative_pairs = []
     for identity in negative:
-        path = known.get(identity)
-        if path is None:
+        entry = known.get(identity)
+        if entry is None:
             missing.append(f"declared negative session: {identity}")
             continue
+        path, purpose = entry
+        if purpose != "heldout":
+            missing.append(f"negative session {identity}: needs purpose=heldout, got {purpose}")
+            continue
         events = path.with_suffix(".events.jsonl")
-        if not events.exists():
+        if not events.exists() or not events.read_text(encoding="utf-8").strip():
             missing.append(f"captured negative events: {events}")
             continue
         negative_pairs.append((str(path), str(events)))
@@ -86,6 +90,10 @@ def missing_metrics(proof):
               ("decision p95 on board", (proof.get("ms_per_decision") or {}).get("p95")),
               ("false-event rate", proof.get("false_alarms_per_min")),
               ("radio-only power measurement", (proof.get("watts") or {}).get("radio_only")),
+              ("idle power measurement", (proof.get("watts") or {}).get("idle")),
+              ("teaching power measurement", (proof.get("watts") or {}).get("teaching")),
+              ("measured images stored", proof.get("images_stored")),
+              ("installed model inventory", proof.get("models_on_board")),
               ("measured egress bytes", proof.get("bytes_out"))]
     return [label for label, value in fields if value is None]
 

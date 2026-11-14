@@ -4,6 +4,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
+import os
 from pathlib import Path
 import socket
 import subprocess
@@ -78,12 +79,14 @@ def run_action(app, action):
             time.sleep(1)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--device", type=Path, default=Path("/dev/video0"))
-    parser.add_argument("--heartbeat", type=Path, required=True)
-    parser.add_argument("--app", required=True, help="App Lab app path or user: alias")
-    args = parser.parse_args()
+    parser.add_argument("--device", type=Path, default=Path(os.environ.get("TEACHER_DEVICE", "/dev/video0")))
+    parser.add_argument("--heartbeat", type=Path, default=os.environ.get("TEACHER_HEARTBEAT"))
+    parser.add_argument("--app", default=os.environ.get("TEACHER_APP"), help="App Lab app path or user: alias")
+    args = parser.parse_args(argv)
+    if args.heartbeat is None or not args.app or not args.app.strip():
+        parser.error("set TEACHER_HEARTBEAT and TEACHER_APP in .env, or pass --heartbeat and --app")
     logging.basicConfig(level=logging.INFO)
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp, ThreadPoolExecutor(max_workers=1) as worker:
         def send(message):
