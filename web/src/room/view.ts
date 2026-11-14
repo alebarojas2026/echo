@@ -1,4 +1,5 @@
 import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
+import { SQUARE_M } from './frame'
 import { PAPER } from './palette'
 
 // Owns the renderer, the camera and the frame loop. Frames are drawn only when something changed
@@ -12,8 +13,26 @@ interface Label {
   at: Vector3
 }
 
-const TARGET = new Vector3(0, 0.25, 0)
+// Defaults are set for the Pi 5 kiosk: no multisampling and one canvas pixel per CSS pixel.
+export interface ViewOptions {
+  /** Multisampled edges. Off by default; ?aa=1 turns it on. */
+  antialias?: boolean
+  /** Canvas pixels per CSS pixel. 1 by default; ?dpr=2 (any value up to 3) for sharper screens. */
+  pixelRatio?: number
+}
+
+/** Reads ?aa= and ?dpr= so the screen can be tuned from its URL without a rebuild. */
+export function viewOptions(params: URLSearchParams): ViewOptions {
+  const dpr = Number(params.get('dpr'))
+  return {
+    antialias: params.get('aa') === '1',
+    pixelRatio: dpr > 0 && dpr <= 3 ? dpr : 1,
+  }
+}
+
 const VIEW_DIR = new Vector3(0.26, 1.2, 1).normalize()
+// Framing for the contract's 2 m square; both scale with the square from nodes.json.
+const TARGET_Y_M = 0.25
 const FIT_RADIUS_M = 2.0
 
 export class RoomView {
@@ -31,10 +50,10 @@ export class RoomView {
   private labelsDirty = true
   private readonly scratch = new Vector3()
 
-  constructor(readonly host: HTMLElement) {
-    this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
+  constructor(readonly host: HTMLElement, opts: ViewOptions = {}) {
+    this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? false, powerPreference: 'high-performance' })
     this.renderer.setClearColor(PAPER, 1)
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    this.renderer.setPixelRatio(opts.pixelRatio ?? 1)
     this.renderer.domElement.className = 'room-canvas'
     this.renderer.domElement.setAttribute('aria-hidden', 'true')
     host.append(this.renderer.domElement)
@@ -93,9 +112,11 @@ export class RoomView {
     // Fit the room in whichever of the two fields of view is narrower.
     const vfov = (this.camera.fov * Math.PI) / 180
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect)
-    const dist = FIT_RADIUS_M / Math.sin(Math.min(vfov, hfov) / 2)
-    this.camera.position.copy(VIEW_DIR).multiplyScalar(dist).add(TARGET)
-    this.camera.lookAt(TARGET)
+    const scale = SQUARE_M / 2
+    const target = new Vector3(0, TARGET_Y_M * scale, 0)
+    const dist = (FIT_RADIUS_M * scale) / Math.sin(Math.min(vfov, hfov) / 2)
+    this.camera.position.copy(VIEW_DIR).multiplyScalar(dist).add(target)
+    this.camera.lookAt(target)
     this.camera.updateProjectionMatrix()
     for (const fn of this.resizeHooks) fn(w, h)
     this.labelsDirty = true

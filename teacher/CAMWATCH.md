@@ -1,5 +1,13 @@
 # Host camera watcher
 
+The board service runs `python -m teacher.camwatch` without flags and loads the
+repository `.env` as its EnvironmentFile. Set `TEACHER_APP` to the installed App
+Lab alias, `TEACHER_HEARTBEAT` to the host path of the mounted heartbeat file, and
+optionally `TEACHER_DEVICE` to the Brio device path (default /dev/video0).
+Flags override these environment values. The container's TEACHER_HEARTBEAT uses
+the corresponding container mount path; it need not equal the host path string.
+The Python entry point reads its process environment; systemd loads `.env`.
+
 Run `python -m teacher.camwatch --app user:radio-sight-teacher --heartbeat
 <host-shared-directory>/heartbeat.json` on the **host**, not inside App Lab.
 Use the installed app's actual alias and the Brio's stable video-device path

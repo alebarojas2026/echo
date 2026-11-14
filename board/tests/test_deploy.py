@@ -12,6 +12,7 @@ REPO = Path(__file__).resolve().parents[2]
 BOARD_UNITS = {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan",
                "radio-sight-camwatch", "radio-sight-brain", "radio-sight-serve",
                "radio-sight-llm", "radio-sight-narrate"}
+NEEDS_PI = {"radio-sight-wifi-rssi", "radio-sight-hci-scan"}
 
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="needs bash and git")
@@ -53,16 +54,22 @@ def repo(tmp_path):
     return r
 
 
-def deploy(repo, ref, role="board", ok=True):
+def deploy(repo, *args, role="board", ok=True, **env_extra):
     unit_dir = (repo.parent / "units").as_posix()
-    env = {**os.environ, "ROLE": role, "UNIT_DIR": unit_dir, "SYSTEMCTL": "echo systemctl", "SUDO": ""}
-    r = subprocess.run([BASH, "board/deploy.sh", ref], cwd=repo, env=env, capture_output=True, text=True)
+    env = {k: v for k, v in os.environ.items() if k != "PYTHON"}
+    env.update(ROLE=role, UNIT_DIR=unit_dir, SYSTEMCTL="echo systemctl", SUDO="", **env_extra)
+    r = subprocess.run([BASH, "board/deploy.sh", *args], cwd=repo, env=env, capture_output=True, text=True)
     assert (r.returncode == 0) == ok, r.stdout + r.stderr
-    restarted = set()
-    for line in r.stdout.splitlines():
-        if line.startswith("systemctl restart "):
-            restarted |= {u.removesuffix(".service") for u in line.split()[2:]}
-    return restarted, r.stdout + r.stderr
+    return calls(r.stdout, "restart"), r.stdout + r.stderr
+
+
+def calls(out, verb):
+    """Units passed to `systemctl <verb>` (flags dropped)."""
+    units = set()
+    for line in out.splitlines():
+        if line.startswith(f"systemctl {verb} "):
+            units |= {u.removesuffix(".service") for u in line.split()[2:] if not u.startswith("-")}
+    return units
 
 
 def installed(repo):
@@ -192,3 +199,70 @@ def test_missing_unit_source_is_skipped(repo):
     commit(repo)
     restarted, out = deploy(repo, "HEAD")
     assert "radio-sight-llm" not in restarted and "skipping radio-sight-llm" in out
+
+
+def test_every_run_enables_and_starts_every_unit(repo):
+    deploy(repo, "v1")
+    restarted, out = deploy(repo, "v1")
+    assert restarted == set() and calls(out, "enable") == BOARD_UNITS
+
+
+def test_install_uses_the_checkout_and_is_idempotent(repo):
+    branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    restarted, out = deploy(repo, "--install")
+    assert restarted == installed(repo) == calls(out, "enable") == BOARD_UNITS
+    assert git(repo, "rev-parse", "--abbrev-ref", "HEAD") == branch  # nothing checked out
+    restarted, out = deploy(repo, "--install")
+    assert restarted == set() and calls(out, "enable") == BOARD_UNITS
+    assert "systemctl daemon-reload" not in out
+
+
+@pytest.mark.parametrize("args", [("--install", "--no-pi"), ("--no-pi", "v1")])
+def test_no_pi_installs_everything_but_runs_only_what_works_alone(repo, args):
+    restarted, out = deploy(repo, *args)
+    assert installed(repo) == BOARD_UNITS
+    assert calls(out, "enable") == BOARD_UNITS - NEEDS_PI
+    assert calls(out, "disable") == NEEDS_PI
+    assert restarted == BOARD_UNITS - NEEDS_PI
+
+
+def test_dropping_no_pi_starts_the_pi_units(repo):
+    deploy(repo, "--install", "--no-pi")
+    restarted, out = deploy(repo, "--install")
+    assert restarted == set() and calls(out, "enable") == BOARD_UNITS and calls(out, "disable") == set()
+
+
+def exec_start(repo, unit):
+    text = (repo.parent / "units" / f"{unit}.service").read_text()
+    return next(line for line in text.splitlines() if line.startswith("ExecStart="))
+
+
+def test_python_defaults_to_the_board_venv(repo):
+    _, out = deploy(repo, "--install")
+    assert exec_start(repo, "radio-sight-bus") == "ExecStart=/opt/rs/venv/bin/python -m bus"
+
+
+def test_python_can_be_overridden(repo):
+    deploy(repo, "--install", PYTHON="/usr/local/bin/python3.11")
+    assert exec_start(repo, "radio-sight-brain") == "ExecStart=/usr/local/bin/python3.11 -m brain.main"
+
+
+def test_old_llm_service_is_removed(repo):
+    old = repo.parent / "units" / "llm.service"
+    old.write_text("[Unit]\nDescription=Radio Sight narrator model (llama-server on 127.0.0.1:8091)\n")
+    _, out = deploy(repo, "--install")
+    assert not old.exists() and "llm" in calls(out, "disable")
+    assert "radio-sight-llm" in calls(out, "enable")
+
+
+def test_someone_elses_llm_service_is_left_alone(repo):
+    other = repo.parent / "units" / "llm.service"
+    other.write_text("[Unit]\nDescription=something else\n")
+    deploy(repo, "--install")
+    assert other.exists()
+
+
+@pytest.mark.parametrize("args", [(), ("--install", "v1"), ("--bogus",), ("v1", "v2")])
+def test_bad_arguments_show_usage(repo, args):
+    _, out = deploy(repo, *args, ok=False)
+    assert "usage" in out or "unknown option" in out

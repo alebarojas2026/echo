@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Narrator gate: one sentence from the on-board model, end to end, in 8 s or less
-# while the brain runs. On the UNO Q, from the repo root, with llm.service up:
+# while the brain runs. On the UNO Q, from the repo root, with radio-sight-llm.service up:
 #   bash narrator/gate.sh
 # It warms the model once (the live narrator does the same when it starts), then
 # times one fresh alert_on event from the event to the finished narration message.
