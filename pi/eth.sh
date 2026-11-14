@@ -8,18 +8,21 @@
 # Usage: sudo bash pi/eth.sh
 set -euo pipefail
 
-ENV_FILE="/etc/deadzone.env"
-if [[ ! -f "$ENV_FILE" ]]; then
-    cat >&2 <<'EOF'
-Missing /etc/deadzone.env.  Create it with:
-  ETH_IFACE=<Ethernet interface name, e.g. eth0>
-EOF
-    exit 1
-fi
-# shellcheck source=/dev/null
-source "$ENV_FILE"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-: "${ETH_IFACE:?set ETH_IFACE in /etc/deadzone.env}"
+if [[ -f "$REPO_DIR/.env" ]]; then
+    # shellcheck source=/dev/null
+    source "$REPO_DIR/.env"
+elif [[ -f ".env" ]]; then
+    # shellcheck source=/dev/null
+    source ".env"
+elif [[ -f "/etc/deadzone.env" ]]; then
+    # shellcheck source=/dev/null
+    source "/etc/deadzone.env"
+fi
+
+: "${ETH_IFACE:?set ETH_IFACE in .env}"
 
 CON_NAME="deadzone-eth"
 

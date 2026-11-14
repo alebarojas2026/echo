@@ -19,21 +19,26 @@ GATE_PATH = Path(__file__).resolve().parent / "GATE.md"
 
 # A filled row looks like:
 #   | 1 | -62 | -67 | 5 | PASS |
+# or unmeasured:
+#   | 1 | __  | __  | __ | __ |
 _ROW_RE = re.compile(
     r"\|\s*(?P<run>\d+)\s*\|"
-    r"\s*(?P<baseline>-?\d+(?:\.\d+)?)\s*\|"
-    r"\s*(?P<blocked>-?\d+(?:\.\d+)?)\s*\|"
-    r"\s*(?P<drop>-?\d+(?:\.\d+)?)\s*\|"
+    r"\s*(?P<baseline>-?\d+(?:\.\d+)?|__)\s*\|"
+    r"\s*(?P<blocked>-?\d+(?:\.\d+)?|__)\s*\|"
+    r"\s*(?P<drop>-?\d+(?:\.\d+)?|__)\s*\|"
     r"\s*(?P<result>PASS|FAIL|__)\s*\|",
     re.IGNORECASE,
 )
-_RATE_RE = re.compile(r"samples/s[^\d]*(\d+(?:\.\d+)?)", re.IGNORECASE)
+_RATE_RE = re.compile(
+    r"Measured sample rate[\s:*]+(?P<rate>\d+(?:\.\d+)?)\s*samples/s",
+    re.IGNORECASE,
+)
 
 
 def parse_gate_md(text: str) -> dict:
     """Return parsed gate-1 data: rate and per-run rows."""
     rate_match = _RATE_RE.search(text)
-    rate = float(rate_match.group(1)) if rate_match else None
+    rate = float(rate_match.group("rate")) if rate_match else None
     rows = [m.groupdict() for m in _ROW_RE.finditer(text)]
     return {"rate_hz": rate, "rows": rows}
 
@@ -43,7 +48,7 @@ def check(data: dict) -> list[str]:
     failures: list[str] = []
     rate = data.get("rate_hz")
     if rate is None:
-        failures.append("samples/s not recorded in GATE.md")
+        failures.append("measured sample rate not recorded in GATE.md")
     elif rate < 20:
         failures.append(f"rate {rate} < 20 samples/s")
 
@@ -52,6 +57,9 @@ def check(data: dict) -> list[str]:
         failures.append(f"only {len(rows)} run(s) recorded; need 3")
     else:
         for row in rows[:3]:
+            if row["result"].strip().upper() == "__" or row["drop"].strip() == "__":
+                failures.append(f"run {row['run']}: not yet measured")
+                continue
             drop = float(row["drop"])
             if drop < 3.0:
                 failures.append(f"run {row['run']}: drop {drop} dB < 3 dB")

@@ -1,4 +1,4 @@
-Station aa:bb:cc:dd:ee:ff (on wlan0)
+Station <bssid> (on wlan0)
 	inactive time:	32 ms
 	rx bytes:	274183
 	rx packets:	1823

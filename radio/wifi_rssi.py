@@ -4,6 +4,10 @@ Reads the received-signal-strength of the pi5>unoq:wifi link by polling
 ``iw dev <iface> station get <bssid>`` at a target rate and publishing
 contract-v2 ``rssi`` messages to the bus.
 
+Sends a message only when `rx packets:` increases since the previous poll.
+When no new packets have arrived, the reading is skipped and `seq` does not
+advance.
+
 Entry point (CONTRACTS.md §9):
     python -m radio.wifi_rssi
 
@@ -42,17 +46,25 @@ TX = "pi5"
 RX = "unoq"
 KIND = "wifi"
 
-# iw reports signal in a line like:
-#   signal:                 -62 dBm
 _SIGNAL_RE = re.compile(r"signal:\s+(-?\d+)\s+dBm")
+_RX_PACKETS_RE = re.compile(r"rx packets:\s+(\d+)")
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _read_rssi_dbm(iface: str, bssid: str) -> int | None:
-    """Return the current RSSI in dBm, or None if unavailable."""
+def parse_station_output(text: str) -> tuple[int | None, int | None]:
+    """Parse signal dBm and rx packets counter from iw station output."""
+    m_sig = _SIGNAL_RE.search(text)
+    m_rx = _RX_PACKETS_RE.search(text)
+    dbm = int(m_sig.group(1)) if m_sig else None
+    rx_pkts = int(m_rx.group(1)) if m_rx else None
+    return dbm, rx_pkts
+
+
+def _read_station_info(iface: str, bssid: str) -> tuple[int | None, int | None]:
+    """Return (dbm, rx_packets) or (None, None) on failure."""
     try:
         out = subprocess.check_output(
             ["iw", "dev", iface, "station", "get", bssid],
@@ -60,9 +72,8 @@ def _read_rssi_dbm(iface: str, bssid: str) -> int | None:
             timeout=0.5,
         ).decode()
     except Exception:
-        return None
-    m = _SIGNAL_RE.search(out)
-    return int(m.group(1)) if m else None
+        return None, None
+    return parse_station_output(out)
 
 
 def _make_message(dbm: int, seq: int) -> bytes:
@@ -99,21 +110,29 @@ def run(iface: str = IFACE, bssid: str = BSSID,
     seq = 0
     errors = 0
     max_consecutive_errors = 50
+    prev_rx_packets: int | None = None
 
     print(
-        f"[wifi_rssi] polling {iface} station {bssid[:5]}… "
-        f"-> {bus_host}:{bus_port} at {rate_hz} Hz",
+        f"[wifi_rssi] polling {iface} -> {bus_host}:{bus_port} at {rate_hz} Hz",
         flush=True,
     )
 
     next_tick = time.monotonic()
     while True:
-        dbm = _read_rssi_dbm(iface, bssid)
-        if dbm is not None:
+        dbm, rx_pkts = _read_station_info(iface, bssid)
+        if dbm is not None and rx_pkts is not None:
+            errors = 0
+            if prev_rx_packets is not None and rx_pkts > prev_rx_packets:
+                payload = _make_message(dbm, seq)
+                sock.sendto(payload, (bus_host, bus_port))
+                seq += 1
+            prev_rx_packets = rx_pkts
+        elif dbm is not None:
+            # Fallback if rx_packets could not be parsed
+            errors = 0
             payload = _make_message(dbm, seq)
             sock.sendto(payload, (bus_host, bus_port))
             seq += 1
-            errors = 0
         else:
             errors += 1
             if errors >= max_consecutive_errors:
