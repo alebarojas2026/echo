@@ -47,17 +47,23 @@ async function boardJson(req: IncomingMessage, res: ServerResponse, next: () => 
 
 const ROOM_JSON = new URL('./public/models/room.json', import.meta.url)
 
-// The room scan is optional: only a build that finds web/public/models/room.glb asks for it, so the kiosk
-// never logs a 404 for a missing file. Its alignment, if any, is web/public/models/room.json.
+/** models/<name> when web/public/models/<name> exists. */
+const model = (name: string) => (existsSync(new URL(`./public/models/${name}`, import.meta.url)) ? `models/${name}` : undefined)
+
+// The hall scan is optional: only a build that finds one in web/public/models asks for it, so the screen
+// never logs a 404 for a missing file. hall-hi.glb is the detailed model, hall-lo.glb the light one, and
+// room.glb (npm run scan:prep) stands in for the light one. Its alignment, if any, is room.json.
 function roomScan() {
-  if (!existsSync(new URL('./public/models/room.glb', import.meta.url))) return null
+  const hi = model('hall-hi.glb')
+  const lo = model('hall-lo.glb') ?? model('room.glb')
+  if (!hi && !lo) return null
   let fit = {}
   try {
     fit = JSON.parse(readFileSync(ROOM_JSON, 'utf8'))
   } catch {
     // no alignment file: the scan is centred on the square
   }
-  return { url: 'models/room.glb', fit }
+  return { hi, lo, fit }
 }
 
 /** Only the four alignment numbers, each finite and in a sane range, or null. */

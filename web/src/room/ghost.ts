@@ -141,6 +141,11 @@ export class Presence {
     view.addAnimator((dt) => this.ease(dt))
   }
 
+  /** Where the figure stands now (scene floor point) and how visible it is (0..1), for the hall view's column. */
+  standing(): { at: Vector3; alpha: number } {
+    return { at: this.at, alpha: this.alpha }
+  }
+
   /** The zones the screen shows right now (held), for the zone names and tiles. */
   shownZones(): number[] {
     return this.placed && this.zones.value ? this.zones.value.split(',').map(Number) : []

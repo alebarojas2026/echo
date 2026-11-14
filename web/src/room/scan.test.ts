@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { placeScan } from './scan'
+import { placeScan, scanUrl } from './scan'
 
 describe('scan placement', () => {
   it('puts the scan floor under the square, centred, by default', () => {
@@ -21,5 +21,16 @@ describe('scan placement', () => {
     expect(p.scale).toBe(0.98)
     expect(p.cut).toBe(1.2)
     expect(placeScan([0, 0, 0], [1, 1, 1], { scale: -2 }).scale).toBe(1)
+  })
+})
+
+describe('which hall model to load', () => {
+  it('gives hi the detailed model and pi the light one, each falling back to the other', () => {
+    const both = { hi: 'models/hall-hi.glb', lo: 'models/hall-lo.glb', fit: {} }
+    expect(scanUrl(both, 'hi')).toBe('models/hall-hi.glb')
+    expect(scanUrl(both, 'pi')).toBe('models/hall-lo.glb')
+    expect(scanUrl({ lo: 'models/room.glb', fit: {} }, 'hi')).toBe('models/room.glb')
+    expect(scanUrl({ hi: 'models/hall-hi.glb', fit: {} }, 'pi')).toBe('models/hall-hi.glb')
+    expect(scanUrl({ fit: {} }, 'hi')).toBeUndefined()
   })
 })

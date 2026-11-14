@@ -13,22 +13,52 @@ interface Label {
   at: Vector3
 }
 
-// Defaults are set for the Pi 5 kiosk, from measurements on a Pi 5 at 1080p (issue #12): with antialiasing the
-// GPU was about 99% busy at 60 fps and the NO DATA screen dipped to 53 fps; without it, about 40% busy and a
-// steady 60. The render scale made no difference there, and DPR 2 fell to 16 fps.
+// Two qualities. "pi" is what measurements on a Pi 5 at 1080p chose (issue #12): with antialiasing the GPU was
+// about 99% busy at 60 fps and the NO DATA screen dipped to 53 fps; without it, about 40% busy and a steady 60.
+// The render scale made no difference there, and DPR 2 fell to 16 fps. "hi" is for a laptop's GPU (the demo
+// screen is a MacBook): antialiasing, the display's own DPR up to 2, and the detailed hall model.
+export type Quality = 'hi' | 'pi'
+
 export interface ViewOptions {
-  /** Multisampled edges. Off by default; ?aa=1 turns it on (fine on a desktop, costly on the Pi). */
-  antialias?: boolean
-  /** Canvas pixels per CSS pixel. 1 by default; ?dpr= (any value up to 3) changes it. */
-  pixelRatio?: number
+  quality: Quality
+  /** Multisampled edges: on for hi, off for pi; ?aa=1 or ?aa=0 decides instead. */
+  antialias: boolean
+  /** Canvas pixels per CSS pixel: the display's (up to 2) for hi, 1 for pi; ?dpr= (up to 3) decides instead. */
+  pixelRatio: number
 }
 
-/** Reads ?aa= and ?dpr= so the screen can be tuned from its URL without a rebuild. */
-export function viewOptions(params: URLSearchParams): ViewOptions {
+/** ?q=hi or ?q=pi, else pi when the GPU is the Pi 5's (Broadcom V3D), else hi. */
+export function qualityFor(params: URLSearchParams, gpu: string): Quality {
+  const q = params.get('q')
+  if (q === 'hi' || q === 'pi') return q
+  return /\bv3d\b/i.test(gpu) ? 'pi' : 'hi'
+}
+
+/** The GPU's name as WebGL reports it, or '' when it can't be read. */
+export function gpuName(): string {
+  if (typeof document === 'undefined') return ''
+  try {
+    const gl = document.createElement('canvas').getContext('webgl')
+    if (!gl) return ''
+    const info = gl.getExtension('WEBGL_debug_renderer_info')
+    const name = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER))
+    gl.getExtension('WEBGL_lose_context')?.loseContext()
+    return name
+  } catch {
+    return ''
+  }
+}
+
+/** Picks the quality, then reads ?aa= and ?dpr= so the screen can be tuned from its URL without a rebuild. */
+export function viewOptions(params: URLSearchParams, gpu = gpuName(), deviceRatio = globalThis.devicePixelRatio ?? 1): ViewOptions {
+  const quality = qualityFor(params, gpu)
+  const hi = quality === 'hi'
+  const aa = params.get('aa')
   const dpr = Number(params.get('dpr'))
   return {
-    antialias: params.get('aa') === '1',
-    pixelRatio: dpr > 0 && dpr <= 3 ? dpr : 1,
+    quality,
+    antialias: aa === '1' ? true : aa === '0' ? false : hi,
+    pixelRatio: dpr > 0 && dpr <= 3 ? dpr : hi ? Math.min(2, Math.max(1, deviceRatio)) : 1,
   }
 }
 
@@ -69,6 +99,9 @@ export function fitCamera(camera: PerspectiveCamera, width: number, height: numb
   const dist = shot.radiusM / Math.sin(Math.min(vfov, hfov) / 2)
   camera.position.set(0, Math.sin(elev), Math.cos(elev)).multiplyScalar(dist).add(shot.target)
   camera.lookAt(shot.target)
+  // Depth range to suit the distance: about 8 m for the square, about 100 m for the whole hall.
+  camera.near = Math.max(0.05, dist / 100)
+  camera.far = dist * 3 + 20
   camera.updateProjectionMatrix()
   camera.updateMatrixWorld()
 }
@@ -89,7 +122,7 @@ export class RoomView {
   private readonly scratch = new Vector3()
   private shot = roomShot()
 
-  constructor(readonly host: HTMLElement, opts: ViewOptions = {}) {
+  constructor(readonly host: HTMLElement, opts: Partial<ViewOptions> = {}) {
     this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? false, powerPreference: 'high-performance' })
     this.renderer.setClearColor(BG, 1)
     this.renderer.setPixelRatio(opts.pixelRatio ?? 1)

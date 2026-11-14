@@ -1,9 +1,11 @@
 import { Box3, Color, Group, Mesh, ShaderMaterial, Texture, type Object3D } from 'three'
 import { FLOOR, WALL_SHADE } from './palette'
-import type { RoomView } from './view'
+import type { Quality, RoomView } from './view'
 
-// The scanned room (web/public/models/room.glb), drawn flat in the room's colours instead of the drawn walls.
-// vite.config.ts sets __ROOM_SCAN__ at build time only when the file exists, so a board without a scan
+// The scanned hall, instead of the drawn walls: web/public/models/hall-hi.glb (for a laptop's GPU) or
+// hall-lo.glb (for the Pi), with room.glb (npm run scan:prep) as the fallback. A model with vertex colours
+// (COLOR_0, its shading baked in) is drawn in those colours; one without is drawn flat in the room's colours.
+// vite.config.ts sets __ROOM_SCAN__ at build time only when a file exists, so a board without a scan
 // never asks for it. ?scan=0 keeps the drawn room. Alignment comes from web/public/models/room.json, made by
 // lining the scan up by eye with ?align=1 (align.ts). Under `vite` the screen asks the dev server instead
 // (/__room-scan), so a new scan or alignment shows on reload without a restart.
@@ -13,9 +15,16 @@ export interface Scan {
   /** The alignment shown now. */
   fit: ScanFit
   apply(fit: ScanFit): void
+  /** The scan's box in the scene, as placed now. */
+  bounds(): Box3
 }
 
-type ScanSource = { url: string; fit: ScanFit } | null
+export type ScanSource = { hi?: string; lo?: string; fit: ScanFit } | null
+
+/** The model for this quality: hi takes the detailed one when there is one, pi the light one. */
+export function scanUrl(source: NonNullable<ScanSource>, quality: Quality): string | undefined {
+  return quality === 'hi' ? (source.hi ?? source.lo) : (source.lo ?? source.hi)
+}
 
 /** Where the scan and its alignment are: the dev server's current answer, or what the build found. */
 async function scanSource(): Promise<ScanSource> {
@@ -64,25 +73,32 @@ export function placeScan(min: [number, number, number], max: [number, number, n
   }
 }
 
-/** Floors take the floor colour, walls a shade lighter, darkened a little by which way they face. */
-function scanMaterial(cut: number): ShaderMaterial {
+/**
+ * With `colored`, the model's own vertex colours (shading baked in). Without, floors take the floor colour and
+ * walls a shade lighter, darkened a little by which way they face. Both cut away everything above `cut`.
+ */
+function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial {
   return new ShaderMaterial({
+    vertexColors: colored, // three defines USE_COLOR (and USE_COLOR_ALPHA for RGBA) and declares `color`
     uniforms: {
       uFloor: { value: new Color(FLOOR) },
       uWall: { value: new Color(0x23272d) },
       uShade: { value: new Color(WALL_SHADE) },
-      uCut: { value: cut },
+      uCut: cut,
     },
     vertexShader: /* glsl */ `
+      #include <color_pars_vertex>
       varying vec3 vNormal;
       varying float vHeight;
       void main() {
+        #include <color_vertex>
         vec4 world = modelMatrix * vec4(position, 1.0);
         vHeight = world.y;
         vNormal = mat3(modelMatrix) * normal;
         gl_Position = projectionMatrix * viewMatrix * world;
       }`,
     fragmentShader: /* glsl */ `
+      #include <color_pars_fragment>
       uniform vec3 uFloor;
       uniform vec3 uWall;
       uniform vec3 uShade;
@@ -91,10 +107,14 @@ function scanMaterial(cut: number): ShaderMaterial {
       varying float vHeight;
       void main() {
         if (vHeight > uCut) discard;
-        vec3 n = normalize(vNormal);
-        float up = abs(n.y);
-        vec3 base = mix(uWall, uFloor, up);
-        base = mix(base, uShade, 0.22 * (1.0 - up) * (0.4 + 0.6 * abs(n.x)));
+        #ifdef USE_COLOR
+          vec3 base = vColor.rgb; // glTF vertex colours are linear, like the rest of the scene
+        #else
+          vec3 n = normalize(vNormal);
+          float up = abs(n.y);
+          vec3 base = mix(uWall, uFloor, up);
+          base = mix(base, uShade, 0.22 * (1.0 - up) * (0.4 + 0.6 * abs(n.x)));
+        #endif
         gl_FragColor = vec4(base, 1.0);
         #include <colorspace_fragment>
       }`,
@@ -104,10 +124,13 @@ function scanMaterial(cut: number): ShaderMaterial {
   })
 }
 
-const TRIANGLE_BUDGET = 150_000
+/** Triangles each GPU draws comfortably: the Pi measured at 1080p, a laptop with room to spare. */
+const TRIANGLE_BUDGET: Record<Quality, number> = { pi: 150_000, hi: 400_000 }
 
-/** Replaces every material with `material` and drops textures. Returns the triangle count. */
-function flatten(root: Object3D, material: ShaderMaterial): number {
+/** Puts our material on every mesh (coloured where it has vertex colours) and drops textures. Returns the triangle count. */
+function flatten(root: Object3D, cut: { value: number }): number {
+  const flat = scanMaterial(cut, false)
+  const colored = scanMaterial(cut, true)
   let triangles = 0
   root.traverse((obj) => {
     if (!(obj instanceof Mesh)) return
@@ -117,7 +140,7 @@ function flatten(root: Object3D, material: ShaderMaterial): number {
       m.dispose()
     }
     if (!obj.geometry.getAttribute('normal')) obj.geometry.computeVertexNormals()
-    obj.material = material
+    obj.material = obj.geometry.getAttribute('color') ? colored : flat
     const index = obj.geometry.getIndex()
     triangles += (index ? index.count : obj.geometry.getAttribute('position').count) / 3
   })
@@ -125,10 +148,11 @@ function flatten(root: Object3D, material: ShaderMaterial): number {
 }
 
 /** Loads the scan if there is one. Resolves to it once it stands in for the drawn room, else to null. */
-export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLSearchParams): Promise<Scan | null> {
+export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLSearchParams, quality: Quality): Promise<Scan | null> {
   if (params.get('scan') === '0') return null
-  const scan = await scanSource()
-  if (!scan) return null
+  const source = await scanSource()
+  const url = source && scanUrl(source, quality)
+  if (!source || !url) return null
   try {
     // Loaded only when there is a scan, so builds without one stay small.
     const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
@@ -136,21 +160,21 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
       import('three/addons/libs/meshopt_decoder.module.js'),
     ])
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
-    const gltf = await loader.loadAsync(scan.url)
+    const gltf = await loader.loadAsync(url)
     const box = new Box3().setFromObject(gltf.scene)
-    const material = scanMaterial(placeScan(box.min.toArray(), box.max.toArray(), scan.fit).cut)
-    const triangles = flatten(gltf.scene, material)
-    if (triangles > TRIANGLE_BUDGET) {
+    const cut = { value: DEFAULT_CUT_M }
+    const triangles = flatten(gltf.scene, cut)
+    if (triangles > TRIANGLE_BUDGET[quality]) {
       console.warn(
-        `room scan: ${Math.round(triangles)} triangles, over the Pi budget of ${TRIANGLE_BUDGET}. ` +
-          'Shrink it: npx @gltf-transform/cli simplify room.glb room.glb --ratio 0.25 && npx @gltf-transform/cli meshopt room.glb room.glb',
+        `room scan: ${Math.round(triangles)} triangles, over the ${quality} budget of ${TRIANGLE_BUDGET[quality]}. ` +
+          'Shrink it: npm run scan:prep -- <file.glb> --max 100000',
       )
     }
     const holder = new Group()
     holder.add(gltf.scene)
     view.scene.add(holder)
     const handle: Scan = {
-      fit: scan.fit,
+      fit: source.fit,
       apply(fit) {
         handle.fit = fit
         const p = placeScan(box.min.toArray(), box.max.toArray(), fit)
@@ -158,13 +182,15 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
         holder.scale.setScalar(p.scale)
         holder.rotation.y = p.yaw
         holder.position.set(...p.outer)
-        material.uniforms.uCut.value = p.cut
+        cut.value = p.cut
         view.requestRender()
       },
+      bounds: () => new Box3().setFromObject(holder),
     }
-    handle.apply(scan.fit)
+    handle.apply(source.fit)
     drawnRoom.visible = false
     view.host.dataset.scan = 'loaded'
+    view.host.dataset.scanFile = url.split('/').pop()
     return handle
   } catch (err) {
     console.warn('room scan: could not load, keeping the drawn room.', err)
