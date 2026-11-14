@@ -47,8 +47,9 @@ def errors(msg, schema=None):
 def check_lines(lines, schema=None):
     """Check JSON lines. Returns (message count, [(line no, error)], [(line no, warning)]).
 
-    Messages don't name their sender, so a seq that follows any counter of the same src is fine
-    (sim uses one counter); else it is compared with the last seq of its type (plus rx and kind for rssi).
+    A producer (one sending socket) keeps one seq counter across all its types, but lines don't name
+    the socket. So a seq that follows any counter of the same src is fine; otherwise it is compared
+    with the last seq of its type (plus rx and kind for rssi), which always comes from one producer.
     """
     count, failures, warnings, last = 0, [], [], {}
     for no, line in enumerate(lines, 1):

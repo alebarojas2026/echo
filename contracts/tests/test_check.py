@@ -16,6 +16,7 @@ INVALID = [
     "$.kind",                       # link says wifi, kind says ble
     "'rssi' was unexpected",        # field not in the contract
     "$.zone",                       # clipped but zone set
+    "$.motion",                     # nobody there but motion set
     "$.state",                      # cam state paused
     "$.text",                       # more than 16 words
     "$.pred.probs",                 # 4 probs, not 5
