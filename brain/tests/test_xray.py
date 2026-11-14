@@ -211,11 +211,51 @@ def test_object_mid_square_has_no_near_node():
     assert out["events"][0]["info"]["node"] is None
 
 
-def test_static_needs_a_steady_raw_std_under_0_8_db():
-    xr = xray.Xray()
-    run(xr, 0, 8, lambda t, link: 6.0, noise_db=1.2)   # steady on average, noisy readings
+def test_steadiness_uses_the_std_of_half_second_means():
+    xr = xray.Xray()   # noisy readings (raw std about 1.2 dB) around a steady 6 dB: static
+    run(xr, 0, 8, lambda t, link: 6.0, noise_db=1.2)
+    assert xr.update(8000, "none")["xray"]["static_db"] != [0.0] * 100
+    xr = xray.Xray()   # a level swinging +/-2 dB every 2 s: never static
+    run(xr, 0, 8, lambda t, link: 6.0 + 2.0 * np.sin(np.pi * t), noise_db=0.3)
     out = xr.update(8000, "none")
     assert max(out["xray"]["static_db"]) == 0.0 and out["objects"] == []
+
+
+def sim_run(name, noise_db=1.1, kind_from_labels=True):
+    """Feed a sim path through Xray with one update every 0.1 s.
+
+    kind follows the camera labels (person when present), like a classifier
+    that agrees with the camera. Returns ({t: out}, {link: raw drops})."""
+    base = {fake.link_id(*lk): fake.baseline(*lk) for lk in fake.LINKS}
+    xr, kind, tick, outs, raw = xray.Xray(), "none", 0, {}, {}
+    for e in fake.simulate(fake.load_path(name), noise_db=noise_db):
+        while tick / 10 < e["t"]:
+            outs[tick / 10] = xr.update(tick * 100, kind)
+            tick += 1
+        if e["type"] == "label" and kind_from_labels:
+            kind = "person" if e["present"] else "none"
+        elif e["type"] == "rssi":
+            xr.add(e["link"], e["t"] * 1000, base[e["link"]] - e["dbm"])
+            raw.setdefault(e["link"], []).append(base[e["link"]] - e["dbm"])
+    return outs, raw
+
+
+def first_object_on(outs):
+    return min((t for t, o in outs.items() if any(e["kind"] == "object_on" for e in o["events"])),
+               default=None)
+
+
+def test_sim_metal_object_is_an_object_within_6_s_and_a_still_person_never():
+    outs, raw = sim_run("metal_object")
+    assert np.std(raw["east>unoq:ble"]) > 0.8       # the raw readings alone would never pass
+    assert first_object_on(outs) <= 6.0
+    assert outs[max(outs)]["objects"][0]["near"] == "east"
+
+    outs, _ = sim_run("stand_still")                 # 15 s still on east>pi5:ble
+    assert first_object_on(outs) is None
+    assert all(o["objects"] == [] for o in outs.values())
+    outs, _ = sim_run("stand_still", kind_from_labels=False)   # without the freeze it would
+    assert first_object_on(outs) is not None
 
 
 def test_person_standing_still_never_becomes_an_object():

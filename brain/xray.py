@@ -11,7 +11,7 @@ path <= 0.1 m) and 0 otherwise. An image is P @ y, where y holds one value per
 link and P = (W^T W + alpha I)^-1 W^T.
 
 Per link (section 6): the static part is the drop that has held for 5 s with
-a raw std under 0.8 dB. It only updates while pred is not null and
+the std of its 0.5 s means under 0.8 dB. It only updates while pred is not null and
 pred.kind != person for the whole 5 s, so a person standing still never
 becomes an object. The people part is max(0, drop - static), where drop is the
 last 1 s median. static_db images the static parts, moving_db the people parts.
@@ -37,6 +37,7 @@ ALPHA_REL = 0.1        # default alpha = this x the mean squared row length of W
 DROP_WINDOW_S = 1.0    # a link's current drop is its median over this window
 STATIC_S = 5.0
 STATIC_STD_DB = 0.8
+STATIC_BIN_S = 0.5     # the std is taken over 0.5 s means (raw readings are too noisy)
 PEAK_FRAC = 0.8        # cells at or above this x the blob max give its position
 BLOB_FRAC = 0.5        # cells at or above this x the image max form blobs
 OBJECT_MIN_DB = 3.0    # an object needs a link with a static drop this big
@@ -120,17 +121,23 @@ def current_drop(t, v, now, window_s=DROP_WINDOW_S):
     return float(np.median(recent)) if recent.size else None
 
 
-def steady_level(t, v, now, span_s=STATIC_S, std_db=STATIC_STD_DB):
+def steady_level(t, v, now, span_s=STATIC_S, std_db=STATIC_STD_DB, bin_s=STATIC_BIN_S):
     """Median drop over the last span_s if the link held steady, else None.
 
-    Steady means readings cover at least 90% of span_s and the std of the raw
-    readings is under std_db.
+    Steady means the history reaches back span_s, at least 80% of the bin_s
+    bins in the window have readings, and the std of the bin means is under
+    std_db.
     """
+    if t.size == 0 or t[0] > now - span_s:
+        return None
     keep = t > now - span_s
     t, v = t[keep], v[keep]
-    if v.size < 2 or t[-1] - t[0] < 0.9 * span_s or v.std() >= std_db:
+    k = ((t - (now - span_s)) // bin_s).astype(int)
+    counts = np.bincount(k)
+    if (counts > 0).sum() < max(2.0, 0.8 * span_s / bin_s):
         return None
-    return float(np.median(v))
+    means = np.bincount(k, weights=v)[counts > 0] / counts[counts > 0]
+    return float(np.median(v)) if means.std() < std_db else None
 
 
 def blobs(img, w, h, frac=BLOB_FRAC):
@@ -243,8 +250,8 @@ class Xray:
         fresh = 0
         for k, link in enumerate(self.links):
             hist = self._hist[link]
-            while hist and hist[0][0] <= now_s - STATIC_S:
-                hist.popleft()
+            while len(hist) > 1 and hist[1][0] <= now_s - STATIC_S:
+                hist.popleft()   # keeps one reading at or before the 5 s window
             t, v = np.array(hist).reshape(-1, 2).T
             if may_update:
                 level = steady_level(t, v, now_s)
