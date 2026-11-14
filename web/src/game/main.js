@@ -1,6 +1,6 @@
 // Page wiring for the crowd game: the brain's state socket in, taps on the zone buttons out.
 import { swap } from './fade.js'
-import { loadZones, zoneList } from './zones.js'
+import { compass, loadZones, zoneList } from './zones.js'
 import { addRound, counts, emptyTally, isState, judge, load, resultText, save, status, tallyText, truthCmd, undo, wsUrl, ZONES } from './tally.js'
 
 const $ = (id) => document.getElementById(id)
@@ -99,6 +99,7 @@ function renderFloor() {
       Object.assign(document.createElement('span'), { textContent: hint }))
     return button
   }))
+  $('compass').replaceChildren(...compass().map((text) => Object.assign(document.createElement('span'), { textContent: text })))
   const ids = zones.map((z) => z.id)
   $('hint').textContent = `Tap the zone, or press ${ids.length > 1 ? `${Math.min(...ids)} to ${Math.max(...ids)}` : ids[0]}.`
 }
@@ -110,7 +111,6 @@ document.addEventListener('keydown', (event) => {
   if (event.target.closest?.('input, textarea') || event.metaKey || event.ctrlKey || event.altKey) return
   if (ZONES[event.key]) play(Number(event.key))
 })
-loadZones().then((changed) => changed && renderFloor())
 $('undo').addEventListener('click', () => {
   tally = undo(tally)
   save(storage, tally)
@@ -137,10 +137,17 @@ $('reset').addEventListener('click', () => {
 
 showTally()
 showStatus()
-if (mock?.tap) {
+function mockTap() {
+  if (!mock?.tap) return
   const result = judge(state, 0, mock.tap)
   showResult(resultText(result), result.outcome)
 }
+mockTap()
+loadZones().then((changed) => {
+  if (!changed) return
+  renderFloor()
+  mockTap() // the mock's result in the zone names that just arrived
+})
 if (!mock) {
   setInterval(showStatus, 250)
   connect()

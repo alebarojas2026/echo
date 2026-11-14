@@ -28,6 +28,14 @@ export function zoneList() {
     .map((id) => ({ id, name: ZONES[id], hint: WORDS[CORNERS[id]] ? `Zone ${id}, ${WORDS[CORNERS[id]]}` : `Zone ${id}` }))
 }
 
+// The two words under the floor: which way is which. The square names the router's side; the desk strip
+// is a row of zones, so it names its ends.
+export function compass() {
+  const sides = Object.values(CORNERS)
+  if (sides.length && sides.every((c) => c === 'W' || c === 'E')) return ['West', 'East']
+  return ['South: the router', 'North is up']
+}
+
 // Fetch /nodes.json from the board (or the dev server) and use its zones. True if they were taken.
 export async function loadZones(fetchFn = globalThis.fetch) {
   try {

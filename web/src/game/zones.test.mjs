@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { CORNERS, loadZones, useZones, zoneList, ZONES } from './zones.js'
+import { compass, CORNERS, loadZones, useZones, zoneList, ZONES } from './zones.js'
 
 const saved = () => [{ ...ZONES }, { ...CORNERS }]
 const restore = ([z, c]) => {
@@ -16,6 +16,7 @@ test("main's nodes.json gives the contract's four zones in floor order", () => {
   assert.deepEqual(zoneList(), [
     { id: 1, name: 'Bed', hint: 'Zone 1, north-west' }, { id: 2, name: 'Chair', hint: 'Zone 2, north-east' },
     { id: 3, name: 'Hall', hint: 'Zone 3, south-west' }, { id: 4, name: 'Bathroom', hint: 'Zone 4, south-east' }])
+  assert.deepEqual(compass(), ['South: the router', 'North is up'])
   restore(before)
 })
 
@@ -38,5 +39,6 @@ test('the desk strip: zones with a side, west first', () => {
   const before = saved()
   useZones({ zones: [{ id: 2, side: 'E', name: 'Bathroom', still_alert_s: 10 }, { id: 1, side: 'W', name: 'Living room', still_alert_s: null }] })
   assert.deepEqual(zoneList(), [{ id: 1, name: 'Living room', hint: 'Zone 1, west' }, { id: 2, name: 'Bathroom', hint: 'Zone 2, east' }])
+  assert.deepEqual(compass(), ['West', 'East'])
   restore(before)
 })
