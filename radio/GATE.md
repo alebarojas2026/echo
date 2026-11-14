@@ -14,7 +14,7 @@ and `python -m radio.report_hci`) checks them.
 **Setup:**
 - Pi at south node (S-home), board at north node — both at 1.0 m height.
 - Pi's 5 GHz hotspot up (`sudo bash pi/ap.sh`).
-- Board joined to sensing hotspot, power saving off.
+- Board joined to sensing hotspot, power saving off (`sudo bash radio/wifi_join.sh`).
 - `python -m radio.wifi_rssi` running on the board.
 
 **Measured sample rate:** __ samples/s

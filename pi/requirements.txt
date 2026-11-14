@@ -1,0 +1,4 @@
+# pi package requirements
+# Pi radio node requires Python standard library only (raw HCI, UDP sockets).
+pytest>=8.0
+jsonschema>=4.18

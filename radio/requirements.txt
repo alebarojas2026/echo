@@ -1,0 +1,4 @@
+# radio package requirements
+# Core readers (wifi_rssi, hci_scan) require Python standard library only.
+pytest>=8.0
+jsonschema>=4.18
