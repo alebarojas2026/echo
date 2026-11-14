@@ -118,6 +118,12 @@
   text-transform: uppercase;
 }
 
+.room-label--xray {
+  translate: 0 -50%;
+  font-size: 22px;
+  font-weight: 600;
+}
+
 .room-label--spot {
   translate: -50% -50%;
   font-size: 22px;

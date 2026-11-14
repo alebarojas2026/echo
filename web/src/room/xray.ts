@@ -10,6 +10,55 @@ import type { RoomView } from './view'
 
 const DB_RANGE = 16 // a byte covers 0..16 dB, about 0.06 dB a step
 
+const UP = 4 // texture texels per grid cell, each way
+
+/** Catmull-Rom upsampling of a w x h grid (row by row from the south-west) by `f`, never below 0. */
+export function upsample(src: ArrayLike<number>, w: number, h: number, f: number): Float32Array {
+  const out = new Float32Array(w * f * h * f)
+  const at = (ix: number, iy: number) => src[Math.min(h - 1, Math.max(0, iy)) * w + Math.min(w - 1, Math.max(0, ix))]
+  const wts = (t: number) => [
+    ((-t + 2) * t - 1) * t * 0.5,
+    ((3 * t - 5) * t * t + 2) * 0.5,
+    ((-3 * t + 4) * t + 1) * t * 0.5,
+    (t - 1) * t * t * 0.5,
+  ]
+  for (let oy = 0; oy < h * f; oy++) {
+    const sy = (oy + 0.5) / f - 0.5 // in source cells, 0 = the first cell's centre
+    const y0 = Math.floor(sy)
+    const wy = wts(sy - y0)
+    for (let ox = 0; ox < w * f; ox++) {
+      const sx = (ox + 0.5) / f - 0.5
+      const x0 = Math.floor(sx)
+      const wx = wts(sx - x0)
+      let v = 0
+      for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) v += wy[j] * wx[i] * at(x0 - 1 + i, y0 - 1 + j)
+      out[oy * w * f + ox] = Math.max(0, v)
+    }
+  }
+  return out
+}
+
+/** Where the person's shadow is: the centre of the strongest people cells (at least 60% of the peak,
+ *  which must reach 1 dB), in contract metres. Null with no clear shadow. */
+export function shadowCentre(x: Xray | null): [number, number] | null {
+  if (!x || !x.w || !x.h) return null
+  const m = x.moving_db
+  let max = 0
+  for (let i = 0; i < x.w * x.h; i++) max = Math.max(max, m[i] ?? 0)
+  if (max < 1) return null
+  let sx = 0
+  let sy = 0
+  let sw = 0
+  for (let i = 0; i < x.w * x.h; i++) {
+    const v = m[i] ?? 0
+    if (v < 0.6 * max) continue
+    sx += v * (x.origin_m[0] + ((i % x.w) + 0.5) * x.cell_m)
+    sy += v * (x.origin_m[1] + (Math.floor(i / x.w) + 0.5) * x.cell_m)
+    sw += v
+  }
+  return [sx / sw, sy / sw]
+}
+
 export interface XrayPeak {
   db: number
   xy: [number, number]
@@ -59,14 +108,13 @@ const fragmentShader = /* glsl */ `
 
   float contour(float v, float level) {
     float w = max(fwidth(v), 1e-3);
-    return 1.0 - smoothstep(0.5 * w, 1.5 * w, abs(v - level));
+    return 1.0 - smoothstep(0.7 * w, 1.3 * w, abs(v - level)); // about 2 px wide
   }
 
   void main() {
     vec2 db = texture2D(uData, vUv).rg * uRange;
-    // People: olive contours at 1.5, 3 and 4.5 dB over a light olive fill that deepens with each band.
-    float people = 0.12 * above(db.r, 1.5) + 0.12 * above(db.r, 3.0) + 0.12 * above(db.r, 4.5);
-    people = max(people, 0.85 * max(contour(db.r, 1.5), max(contour(db.r, 3.0), contour(db.r, 4.5))));
+    // People: a filled olive shadow that deepens with the drop, edged by one 2 px line at 3 dB.
+    float people = max(0.6 * smoothstep(1.0, 6.0, db.r), 0.9 * contour(db.r, 3.0));
     // Objects: diagonal ink hatching from 1.5 dB, its strokes thickening with the drop.
     float stroke = mix(0.18, 0.5, clamp((db.g - 1.5) / 6.0, 0.0, 1.0));
     float t = fract((vFloor.x - vFloor.y) / 0.05);
@@ -86,6 +134,9 @@ export class XrayLayer {
   private shown = new Float32Array(0) // eased dB, moving then static
   private target = new Float32Array(0)
   private dims = ''
+  private w = 0
+  private h = 0
+  private readonly caption: HTMLElement
   private fade = 0
   private fadeTo = 0
 
@@ -111,11 +162,15 @@ export class XrayLayer {
     view.addAnimator((dt) => this.ease(dt))
     this.mirror.set('xray', { 'max-db': null, 'max-xy': null, 'max-layer': null }, 'no radio image')
     view.host.append(legend())
+    // On the floor, just south-west of the square, under the router spot tags.
+    this.caption = view.addLabel('Radio X-ray: where the links are dimmed', v3([0, -0.36, 0]), 'room-label--xray')
+    this.caption.hidden = true
   }
 
   /** `blind` hides the image: when the radio has failed, the picture means nothing. */
   update(x: Xray | null, blind: boolean) {
     this.fadeTo = x && !blind ? 1 : 0
+    this.caption.hidden = !x
     if (x && x.w > 0 && x.h > 0) {
       this.fit(x)
       const n = x.w * x.h
@@ -141,12 +196,14 @@ export class XrayLayer {
     if (dims === this.dims) return
     this.dims = dims
     const n = x.w * x.h
-    this.bytes = new Uint8Array(n * 2)
+    this.w = x.w
+    this.h = x.h
+    this.bytes = new Uint8Array(n * UP * UP * 2)
     this.shown = new Float32Array(n * 2)
     this.target = new Float32Array(n * 2)
     this.tex?.dispose()
-    // RG8: red = people, green = objects. Linear filtering turns the cells into smooth contours.
-    this.tex = new DataTexture(this.bytes, x.w, x.h, RGFormat, UnsignedByteType)
+    // RG8: red = people, green = objects, UP times finer than the grid so no cell corners show.
+    this.tex = new DataTexture(this.bytes, x.w * UP, x.h * UP, RGFormat, UnsignedByteType)
     this.tex.unpackAlignment = 1 // rows of 2*w bytes need not be a multiple of 4
     this.tex.magFilter = LinearFilter
     this.tex.minFilter = LinearFilter
@@ -164,16 +221,23 @@ export class XrayLayer {
     if (Math.abs(this.fadeTo - this.fade) < 0.01) this.fade = this.fadeTo
     let busy = this.fade !== this.fadeTo
     const n = this.shown.length / 2
-    for (let i = 0; i < n; i++) {
-      for (const j of [i, n + i]) {
-        const d = this.target[j] - this.shown[j]
-        if (Math.abs(d) > 0.02) busy = true
-        this.shown[j] += d * k
-        // Interleave for RG8: [moving0, static0, moving1, static1, ...]
-        this.bytes[2 * i + (j === i ? 0 : 1)] = Math.round(Math.min(1, this.shown[j] / DB_RANGE) * 255)
-      }
+    let moved = false
+    for (let j = 0; j < 2 * n; j++) {
+      const d = this.target[j] - this.shown[j]
+      if (Math.abs(d) > 0.02) busy = true
+      if (d !== 0) moved = true
+      this.shown[j] += d * k
     }
-    if (this.tex) this.tex.needsUpdate = true
+    if (moved && this.tex) {
+      const people = upsample(this.shown.subarray(0, n), this.w, this.h, UP)
+      const things = upsample(this.shown.subarray(n), this.w, this.h, UP)
+      // Interleave for RG8: [people0, objects0, people1, objects1, ...]
+      for (let i = 0; i < people.length; i++) {
+        this.bytes[2 * i] = Math.round(Math.min(1, people[i] / DB_RANGE) * 255)
+        this.bytes[2 * i + 1] = Math.round(Math.min(1, things[i] / DB_RANGE) * 255)
+      }
+      this.tex.needsUpdate = true
+    }
     this.mesh.material.uniforms.uFade.value = this.fade
     this.mesh.visible = this.fade > 0 && !!this.tex
     return busy
