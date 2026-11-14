@@ -1,6 +1,6 @@
 # Team rules for every worker
 
-Radio Sight: Wi-Fi that understands the room. Radio links between 4 nodes around a 2 x 2 m floor square show where a person is, whether they're moving, and what's an object vs a person. Everything runs on an Arduino UNO Q (Qualcomm Dragonwing QRB2210). A Raspberry Pi 5 is the router and drives the screen and runs no model.
+Radio Sight: Wi-Fi that understands the room. Radio links between 4 nodes around a 2 x 2 m floor square show where a person is, whether they're moving, and what's an object vs a person. Everything runs on an Arduino UNO Q (Qualcomm Dragonwing QRB2210). A Raspberry Pi 5 is the router and runs no model. The screen is any browser on our own network.
 
 **Re-read this file every time you pull. It changes during the event, and the "Right now" section is how the team lead redirects everyone.**
 
@@ -97,8 +97,9 @@ Motion: calm and meaningful, opacity and transform only.
   - bleak's default filters duplicates, which gives about one reading per beacon. Use a raw HCI scan as root, with duplicate filtering off, confirmed in btmon ("Filter duplicates: Disabled").
   - Match beacons by advertised data, never by MAC.
 - **Network:**
-  - The Pi's 5 GHz hotspot is the sensing link only. The board joins it locked to the Pi's BSSID, with power saving off.
-  - The Pi (192.168.77.1) and the board's hub (192.168.77.2) are joined by Ethernet. That cable carries everything else.
+  - The Pi's 5 GHz hotspot is the sensing link. The board joins it locked to the Pi's BSSID, with power saving off.
+  - The Pi (192.168.77.1) and the board's hub (192.168.77.2) are joined by ONE Ethernet cable. It carries the Pi's Bluetooth readings and the page data, so they never depend on the Wi-Fi link we block on purpose in the demo.
+  - The demo screen is a laptop's browser (no monitor, no Pi kiosk, no switch). The laptop joins the Pi's hotspot and opens http://192.168.77.2:8080/?src=ws ; the Pi forwards it to the board over the cable. Only light traffic may use the hotspot while the model runs: never copy files or bundles over it during a demo or a recording (it can starve the sensing link and show SENSOR BLIND).
   - The board has no internet once it is on the hotspot. Install things before it joins.
 - **No tape until the presentation hour.** During the build, the layout is measured and marked with loose markers. In the presentation room it gets taped, and the calibration, the 20 s baseline and the training are redone there. Never write instructions that assume tape is already on the floor.
 - **Phones as beacons:** they top out at about 10 adverts a second. ESP32s can go faster.
