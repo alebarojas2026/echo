@@ -213,9 +213,9 @@ class Brain:
     def on_cmd(self, msg: dict) -> None:
         """One command from the screen. Every command also goes to the bus, which records it."""
         cmd, args = msg.get("cmd"), msg.get("args") or {}
-        handler = getattr(self, f"_cmd_{cmd}", None)
-        if handler is None:
-            return
+        handler = getattr(self, f"_cmd_{cmd}", None) if isinstance(cmd, str) else None
+        if handler is None or not isinstance(args, dict):
+            return   # not a command we know, or args that aren't an object: dropped
         self._cmd_seq += 1
         self.to_bus({"v": 2, "type": "cmd", "t": self.now(), "seq": self._cmd_seq, "src": self.src,
                      "cmd": cmd, "args": args})
@@ -346,8 +346,11 @@ class Brain:
             return
         self.label_mode = mode
         if self.mode_file:  # the camera teacher reads its mode from this file
-            with open(self.mode_file, "w", encoding="utf-8") as f:
-                f.write(mode + "\n")
+            try:
+                with open(self.mode_file, "w", encoding="utf-8") as f:
+                    f.write(mode + "\n")
+            except OSError as e:   # a bad path must not stop the baseline that asked for "off"
+                logging.getLogger("brain").warning("could not write label mode %r to %s: %s", mode, self.mode_file, e)
 
     def _cmd_router_moved(self, args):
         self.router = args.get("spot") or "moved"
