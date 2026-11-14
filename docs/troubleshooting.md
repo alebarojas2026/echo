@@ -37,6 +37,8 @@ Do not call this state empty. The screen needs a current state message before it
 
 At least one classifier link is stale or has an unexplained signal jump. Predictions stay null and alert timers pause until health recovers.
 
+A steady below-baseline drop is treated as an object, not a broken link. If a tray or other object appears and the screen becomes blind, inspect `health.blind` for the actual failed link instead of treating the object's steady change as a fault.
+
 1. Read the named entries in `health.blind` and match them to the link list.
 2. For `pi5>unoq:wifi`, confirm the Pi hotspot is running, the board is joined to it, and Wi-Fi power saving is off.
 3. For a Bluetooth link received by the UNO Q, confirm `radio-sight-hci-scan.service` is active.
@@ -81,6 +83,7 @@ Do not send `router_home` while the tray or Pi is still away from the home marke
 
 ## A no-movement alert will not clear
 
+- The still timer uses smoothed decisions. Brief motion noise does not reset it: the model must produce five moving decisions in a row. A different zone or kind resets the timer only after it holds the majority of the last ten decisions.
 - A check-in or `reset_alert` clears the alert.
 - A zone change does not clear an active alert by itself.
 - `reset` is the between-judges command; it clears the alert, still timer, check-in, advice, and narration.

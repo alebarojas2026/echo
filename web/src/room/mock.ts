@@ -1,4 +1,4 @@
-import type { Advice, CmdMsg, LinkState, ObjectMark, Pred, StateMsg, Xray } from './contract'
+import type { Advice, Alert, Checkin, CmdMsg, LinkState, ObjectMark, Pred, StateMsg, Teacher, Xray } from './contract'
 import type { Transport } from './feed'
 import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
 
@@ -6,9 +6,12 @@ import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
 // src is "sim" so nothing here can pass for live, and measured numbers (train time, ms per decision,
 // before/after dBm) stay null so the panels show "__".
 //
-// ?mock= tour (default) | still | between | object | blind | empty | waiting | stall
+// ?mock= tour (default) | still | checkin | camera | between | object | blind | empty | waiting | stall
 //   tour    someone walks a loop through the four zones, pausing in each
-//   still   someone stays still in zone 4 and the no-movement alert counts up
+//   still   someone stays still in zone 4, the no-movement alert counts up to 10 s and fires, and after
+//           14 s a wave check-in clears it; this repeats
+//   checkin someone stands still in zone 4 for 5 s, then waves (a check-in) and the count stops; every 15 s
+//   camera  the tour with the camera on and its label (teacher) following for 8 s, then the camera off; every 16 s
 //   between someone stands on the line between zones 3 and 4, so zone_set has both
 //   object  an object sits next to the router, with advice to move the router
 //   blind   the radio fails: health blind, pred null
@@ -16,7 +19,8 @@ import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
 //   waiting the brain is up but no link has a reading yet: links [], pred and xray null
 //   stall   states for 1 s, then nothing (NO DATA)
 
-export type MockScenario = 'tour' | 'still' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall'
+export type MockScenario =
+  | 'tour' | 'still' | 'checkin' | 'camera' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall'
 
 const SEG_MS = 5000 // tour: 3 s walking, 2 s still, per zone
 const XRAY = { w: 10, h: 10, cell_m: 0.24, origin_m: [-0.2, -0.2] as [number, number] }
@@ -70,9 +74,37 @@ function zoneSet(xy: [number, number]): number[] {
   return set
 }
 
-export function mockState(scenario: MockScenario, seq: number, tMs: number, router = HOME_SPOT): StateMsg {
-  const standing: Partial<Record<MockScenario, [number, number]>> = { still: [1.5, 0.5], between: [1.06, 0.55] }
-  const person = scenario === 'tour' ? tourAt(tMs) : standing[scenario] ? { xy: standing[scenario]!, moving: false } : null
+const CHECKIN_LINK = 'pi5>unoq:wifi'
+
+/** The no-movement count and the last check-in at tMs. Check-in times come from `start` (epoch ms when
+ *  the mock began), so each one appears once and then stays the same, like the board's last check-in. */
+export function stillTimeline(scenario: MockScenario, tMs: number, start: number): { alert: Alert; checkin: Checkin | null; stillS: number } {
+  const none: Alert = { state: 'none', zone: null, still_s: 0, limit_s: null }
+  const wave = (t: number): Checkin => ({ t: Math.round(t), link: CHECKIN_LINK })
+  if (scenario === 'still') {
+    const k = Math.floor(tMs / 14000)
+    const stillS = (tMs % 14000) / 1000
+    const alert: Alert = { state: stillS >= 10 ? 'check_on' : 'counting', zone: 4, still_s: Number(stillS.toFixed(1)), limit_s: 10 }
+    return { alert, checkin: k > 0 ? wave(start + k * 14000) : null, stillS }
+  }
+  if (scenario === 'checkin') {
+    const k = Math.floor(tMs / 15000)
+    const phase = tMs % 15000
+    if (phase < 5000) {
+      const stillS = phase / 1000
+      const alert: Alert = { state: 'counting', zone: 4, still_s: Number(stillS.toFixed(1)), limit_s: 10 }
+      return { alert, checkin: k > 0 ? wave(start + (k - 1) * 15000 + 5000) : null, stillS }
+    }
+    return { alert: none, checkin: wave(start + k * 15000 + 5000), stillS: 0 }
+  }
+  return { alert: none, checkin: null, stillS: 0 }
+}
+
+export function mockState(scenario: MockScenario, seq: number, tMs: number, router = HOME_SPOT, start = Date.now() - tMs): StateMsg {
+  const standing: Partial<Record<MockScenario, [number, number]>> = { still: [1.5, 0.5], checkin: [1.5, 0.5], between: [1.06, 0.55] }
+  const walking = scenario === 'tour' || scenario === 'camera'
+  const person = walking ? tourAt(tMs) : standing[scenario] ? { xy: standing[scenario]!, moving: false } : null
+  const { alert, checkin, stillS } = stillTimeline(scenario, tMs, start)
   const object = scenario === 'object' ? OBJECT_XY : null
   const blind = scenario === 'blind'
 
@@ -111,7 +143,7 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
       zone_set: set,
       probs,
       motion: person ? (person.moving ? 'moving' : 'still') : null, // present:false -> motion null
-      still_s: scenario === 'still' ? (tMs / 1000) % 14 : 0,
+      still_s: Number(stillS.toFixed(1)),
       why: person ? top.slice(0, 2).map((l) => l.id) : [],
     }
   }
@@ -134,19 +166,18 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
           text: 'An object next to the router is blocking its link to the receiver. Move the router 30 cm west.',
         }
       : null
-  const stillS = pred?.still_s ?? 0
+  const camOn = scenario === 'camera' && tMs % 16000 < 8000
+  const teacher: Teacher | null =
+    camOn && pred ? { present: pred.present, zone: pred.zone, motion: pred.motion } : null
 
   if (scenario === 'waiting') {
     return { ...emptyState(seq, router), links: [] }
   }
   return {
-    v: 2, type: 'state', t: Date.now(), seq, src: 'sim', cam: 'off', router, links,
+    v: 2, type: 'state', t: Date.now(), seq, src: 'sim', cam: camOn ? 'on' : 'off', router, links,
     health: blind ? { status: 'blind', blind: ['east>unoq:ble'], reason: 'rate' } : { status: 'ok', blind: [], reason: null },
     pred, objects, xray,
-    alert: scenario === 'still'
-      ? { state: stillS >= 10 ? 'check_on' : 'counting', zone: 4, still_s: Number(stillS.toFixed(1)), limit_s: 10 }
-      : { state: 'none', zone: null, still_s: 0, limit_s: null },
-    checkin: null, advice, narration: null, teacher: null,
+    alert, checkin, advice, narration: null, teacher,
     model: UNTRAINED,
     board: NO_BOARD,
   }
@@ -158,12 +189,13 @@ export function createMockSource(scenario: MockScenario): Transport {
   return {
     start(deliver, setConnected) {
       const t0 = performance.now()
+      const start = Date.now()
       let seq = 0
       setConnected(true)
       const id = setInterval(() => {
         const t = performance.now() - t0
         if (scenario === 'stall' && t > 1000) return clearInterval(id)
-        deliver(mockState(scenario, ++seq, t, router))
+        deliver(mockState(scenario, ++seq, t, router, start))
       }, 100)
     },
     send(msg: CmdMsg) {

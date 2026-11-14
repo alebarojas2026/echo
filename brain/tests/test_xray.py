@@ -307,3 +307,38 @@ def test_moving_the_router_30_cm_west_rebuilds_p():
     assert x_mid == pytest.approx(0.85, abs=0.08)   # the link now leans west
     xr.set_router("S-home")
     assert np.allclose(xr.P, home_P)
+
+
+# --- a removed object doesn't stay as a ghost (#235) ----------------------
+
+def test_removed_tray_is_gone_within_3_s_even_with_a_person_walking_nearby():
+    t1 = xray.TRAY_SPOTS["T1"]
+    walker = walk((0.3, 1.6), (1.7, 1.6), 18.0, 30.0)   # crosses the far side from 18 s on
+
+    def drop(t, link):
+        tray = body_drop(t1, link, 10.0, 0.25) if 2.0 <= t < 20.0 else 0.0
+        return tray + body_drop(walker(t), link, 8.0, 0.2)
+
+    def kind(t):   # the person who takes the tray away is read as a person from 18 s
+        return "person" if t >= 18.0 else "none"
+
+    xr = xray.Xray()
+    outs = run(xr, 0, 30, drop, kind)
+    assert len(outs[17.9]["objects"]) == 1
+    off = [t for t, o in sorted(outs.items()) for e in o["events"] if e["kind"] == "object_off" and t > 10]
+    assert len(off) == 1 and 20.0 < off[0] <= 23.0   # removed at 20 s
+    assert all(o["objects"] == [] for t, o in outs.items() if t > 23.0)
+    assert max(outs[29.9]["xray"]["static_db"]) < 0.5
+
+
+def test_a_short_fade_does_not_release_the_static_part():
+    t1 = xray.TRAY_SPOTS["T1"]
+
+    def drop(t, link):   # the tray's drop dips by 6 dB for 0.6 s at 12 s
+        level = 4.0 if 12.0 <= t < 12.6 else 10.0
+        return body_drop(t1, link, level, 0.25) if t >= 2.0 else 0.0
+
+    xr = xray.Xray()
+    outs = run(xr, 0, 20, drop, lambda t: "none")
+    assert [e for t, o in outs.items() if t > 10 for e in o["events"]] == []   # settled by 10 s; the dip is at 12 s
+    assert len(outs[11.9]["objects"]) == 1 and len(outs[19.9]["objects"]) == 1

@@ -165,3 +165,93 @@ def test_reset_also_forgets_the_check_in_but_reset_alert_keeps_it():
     assert watch.checkin is not None
     watch.reset()
     assert watch.checkin is None and watch.alert_block()["state"] == "none"
+
+
+# ---- smoothing before the still timer (#220) ----
+
+STILL = {"present": True, "zone": 4, "zone_set": [4], "kind": "person", "motion": "still"}
+
+
+def stand(blips, seconds=12):
+    """A still stand in zone 4 at 10 decisions a second; blips maps a decision index to another pred.
+    Returns (watch, seconds at which the alert came on, or None)."""
+    watch = Watch(LIMITS, Led())
+    on_at = None
+    for i in range(seconds * 10 + 1):
+        watch.on_pred(T0 + i * 100, blips.get(i, STILL))
+        if on_at is None and watch.alerting:
+            on_at = i / 10
+    return watch, on_at
+
+
+def test_one_moving_blip_does_not_restart_the_still_timer():
+    _, on_at = stand({50: dict(STILL, motion="moving")})
+    assert on_at == 10.0
+
+
+def test_one_flipped_zone_or_dropped_person_does_not_restart_it():
+    gone = {"present": False, "zone": 0, "zone_set": [], "kind": "none", "motion": None}
+    watch, on_at = stand({40: dict(STILL, zone=3, zone_set=[3]), 70: gone,
+                          85: dict(STILL, kind="object")})
+    assert on_at == 10.0 and watch.alert_zone == 4
+    assert ("show_zone", 3) in watch.led.calls and ("show_zone", 0) in watch.led.calls   # the grid shows each decision
+
+
+def test_a_second_of_real_walking_resets_the_timer():
+    walking = {i: dict(STILL, motion="moving") for i in range(50, 60)}
+    watch, on_at = stand(walking, seconds=14)
+    assert on_at is None                           # 5 s + 8 s apart never reach 10 s
+    watch, on_at = stand(walking, seconds=17)
+    assert 15.5 <= on_at <= 16.0                   # 10 s after the walking ended
+
+
+def test_a_real_zone_change_resets_the_timer_and_counts_in_the_new_zone():
+    moved = {i: dict(STILL, zone=1, zone_set=[1]) for i in range(60, 200)}
+    watch, on_at = stand(moved, seconds=15)
+    assert on_at is None and watch.zone == 1       # zone 1's limit is 60 s
+    assert 8 < watch.alert_block()["still_s"] < 9.5 and watch.alert_block()["limit_s"] == 60
+
+
+def test_walking_out_clears_the_count():
+    gone = {"present": False, "zone": 0, "zone_set": [], "kind": "none", "motion": None}
+    watch, on_at = stand({i: gone for i in range(50, 200)}, seconds=15)
+    assert on_at is None and watch.still_ms == 0 and watch.alert_block()["state"] == "none"
+
+
+def mixed(counts, seconds=4):
+    """4 s still in zone 4, then 10 decisions mixed as given ((pred, how many) pairs, interleaved)."""
+    watch = Watch(LIMITS, Led())
+    i = 0
+    for i in range(seconds * 10):
+        watch.on_pred(T0 + i * 100, STILL)
+    before = watch.still_ms
+    rest = [p for p, n in counts for _ in range(n)]
+    order = sorted(range(len(rest)), key=lambda k: (k % 3, k))    # shuffle them a little
+    for j, k in enumerate(order):
+        watch.on_pred(T0 + (i + 1 + j) * 100, rest[k])
+    return watch, before
+
+
+def test_no_zone_takes_over_without_6_of_the_last_10():
+    gone = {"present": False, "zone": 0, "zone_set": [], "kind": "none", "motion": None}
+    watch, before = mixed([(STILL, 3), (dict(STILL, zone=3, zone_set=[3]), 4), (gone, 3)])
+    assert watch.zone == 4 and watch.still_ms > before      # 4 of 10 is the most common, not a majority
+
+
+def test_no_kind_takes_over_without_6_of_the_last_10():
+    thing = dict(STILL, kind="object")
+    nothing = dict(STILL, kind="none")
+    watch, before = mixed([(STILL, 4), (thing, 3), (nothing, 3)])
+    assert watch._kind == "person" and watch.still_ms > before   # object and none are different kinds
+    watch, before = mixed([(STILL, 2), (thing, 2), (nothing, 6)])
+    assert watch._kind == "none" and watch.still_ms == 0         # 6 of 10 does take over
+
+
+def test_a_single_flipped_zone_still_cancels_a_wave_in_progress():
+    watch = Watch(LIMITS, Led())
+    watch.on_pred(T0, STILL)
+    marks = []
+    watch.checkin_rule.zone_changed = marks.append
+    watch.on_pred(T0 + 100, dict(STILL, zone=3, zone_set=[3]))   # one flipped decision
+    watch.on_pred(T0 + 200, STILL)
+    assert marks == [T0 + 100, T0 + 200] and watch.zone == 4     # raw changes reach the check-in rule

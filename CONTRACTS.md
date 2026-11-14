@@ -66,6 +66,7 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
 {"v":2,"type":"narration","t":1763149513000,"seq":9,"src":"live","text":"Someone just walked into zone 2.",
  "event_id":"e123","event_kind":"enter","gen_ms":6120,"source":"llm","model":"<model name>"}
    // source = llm | template. model is null when source is template.
+   // event_kind "recap" = the end-of-demo recap, sent just before a reset clears things (up to 45 words, see section 6).
 {"v":2,"type":"meta","t":1763149500000,"seq":1,"src":"live","session":"s12","purpose":"heldout","walker":"w3"}
    // Sent on record_start. purpose = train | heldout | object | crowd | demo
 ```
@@ -94,6 +95,7 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
  "teacher":{"present":true,"zone":3,"motion":"still"},                       // null when the camera is off
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
         // training is null unless a fit is running; while it runs: {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
+        // train_s and ms_per_decision are null when nothing was measured (the fake brain), even when trained is true.
  "board":{"cpu_temp_c":57.0,"cpu_mhz":2016,"cpu_pct":61}}
 {"v":2,"type":"event","t":1763149512200,"seq":120,"src":"live","id":"e123","kind":"enter","info":{"zone":2}}
    // kinds: enter, exit, zone_change, checkin, object_on, object_off, advice, advice_result, router_moved, router_home,
@@ -155,6 +157,7 @@ X-ray:
 - Static means "appeared since the baseline", never walls.
 Advice:
 - Fires when an object persists >= 5 s and its static_db peak lies within 0.5 m of pi5>unoq:wifi.
+- Only while pi5>unoq:wifi is dropping now: its drop_db in state.links is at least 3 dB. No row, or a null drop, means no advice.
 - Picks the router spot (not S-home) whose new link has the lowest summed static_db along its ellipse.
 - The text is built from the result, never a fixed string.
 - before_dbm = median of pi5>unoq:wifi over the last 3 s: kept current while the advice shows, frozen at router_moved, never null.
@@ -163,7 +166,7 @@ Router: take the tray off and put the Pi back on S-home BEFORE sending router_ho
   for 3 s; otherwise the board runs an automatic 20 s baseline ("recalibrating").
 Narration:
 - At most one sentence every 8 s. Only for an event <= 3 s old.
-- At most 16 words. A banned word -> use the template sentence instead.
+- At most 16 words (a recap: at most 3 sentences and 45 words). A banned word -> use the template sentence instead.
 Screen: NO DATA (grey) when the last state is > 1 s old (the feed is stale). SENSOR BLIND when health is blind
   (the radio failed). These are different states.
 ```

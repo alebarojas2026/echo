@@ -12,7 +12,7 @@ import {
   Vector3,
 } from 'three'
 import { NODES, SQUARE_M, ZONES, nodePosition, toScene, type NodeId, type Vec3 } from './frame'
-import { CARD, INK, LINE } from './palette'
+import { EDGE, FLOOR, SQUARE, TEXT } from './palette'
 import type { RoomView } from './view'
 
 // The still parts of the room: floor, the 2 x 2 m square and its zones, two back walls, and the four nodes.
@@ -43,7 +43,7 @@ function buildShell(): { room: Group; square: Group } {
   const hi = SQUARE_M + MARGIN_M
   const size = hi - lo
   const mid = SQUARE_M / 2
-  const card = new MeshBasicMaterial({ color: CARD })
+  const card = new MeshBasicMaterial({ color: FLOOR })
 
   const floor = new Mesh(new PlaneGeometry(size, size), card)
   floor.rotation.x = -Math.PI / 2
@@ -64,12 +64,12 @@ function buildShell(): { room: Group; square: Group } {
   const walls: Vec3[] = [[lo, hi, w], [hi, hi, w], [lo, lo, w], [lo, hi, w], [lo, hi, 0], [lo, hi, w],
     [hi, hi, 0], [hi, hi, w], [lo, lo, 0], [lo, lo, w]]
   const floorEdge = outline([[lo, lo, 0], [hi, lo, 0], [hi, hi, 0], [lo, hi, 0]])
-  g.add(segments([...floorEdge, ...walls], new LineBasicMaterial({ color: LINE })))
+  g.add(segments([...floorEdge, ...walls], new LineBasicMaterial({ color: EDGE })))
 
   // The sensing square and its four zones.
   const s = SQUARE_M
-  sq.add(segments(outline([[0, 0, 0], [s, 0, 0], [s, s, 0], [0, s, 0]]), new LineBasicMaterial({ color: INK })))
-  const dash = new LineDashedMaterial({ color: LINE, dashSize: 0.06, gapSize: 0.05 })
+  sq.add(segments(outline([[0, 0, 0], [s, 0, 0], [s, s, 0], [0, s, 0]]), new LineBasicMaterial({ color: SQUARE })))
+  const dash = new LineDashedMaterial({ color: EDGE, dashSize: 0.06, gapSize: 0.05 })
   sq.add(segments([[mid, 0, 0], [mid, s, 0], [0, mid, 0], [s, mid, 0]], dash))
   return { room: g, square: sq }
 }
@@ -80,6 +80,7 @@ function outline(pts: Vec3[]): Vec3[] {
 }
 
 const HEAD_M = 0.08
+const ZONE_IN_X = 0.1 // zone names start (west zones) or end (east zones) this far in from the side
 
 /** What each node is called on screen and which side of its cube the name goes. */
 const NODE_LABELS: Record<NodeId, { text: string; side: 'above' | 'right' | 'left' }> = {
@@ -110,7 +111,7 @@ export class Stage {
 
     // Zone names sit in each zone's outer corner, clear of the links that cross the middle. West zones read
     // from their west edge, east zones end at their east edge.
-    const inX = 0.1
+    const inX = ZONE_IN_X
     const inY = 0.2
     for (const z of ZONES) {
       const east = z.id === 2 || z.id === 4
@@ -120,8 +121,8 @@ export class Stage {
     }
 
     const headGeom = new BoxGeometry(HEAD_M, HEAD_M, HEAD_M)
-    const ink = new MeshBasicMaterial({ color: INK })
-    const postMat = new LineBasicMaterial({ color: LINE })
+    const ink = new MeshBasicMaterial({ color: TEXT })
+    const postMat = new LineBasicMaterial({ color: EDGE })
     const postGeom = new BufferGeometry()
     postGeom.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3))
     for (const info of Object.values(NODES)) {
@@ -150,7 +151,15 @@ export class Stage {
     this.view.requestRender()
   }
 
-  /** Olive zone names for the zones the radio is weighing (pred.zone_set). */
+  /** Where the alert's word sits: in line with the zone's name, on the side away from the node names
+   *  (toward the north edge for north zones, just above the name for south zones). */
+  alertWordAt(zone: number): Vec3 {
+    const east = zone === 2 || zone === 4
+    const north = zone === 1 || zone === 2
+    return [east ? SQUARE_M - ZONE_IN_X : ZONE_IN_X, north ? SQUARE_M - 0.07 : 0.34, 0]
+  }
+
+  /** Amber zone names for the zones the radio is weighing (pred.zone_set). */
   markZones(zones: readonly number[]) {
     for (const [id, el] of this.zoneLabels) el.classList.toggle('room-label--zone-set', zones.includes(id))
   }

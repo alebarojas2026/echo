@@ -54,20 +54,23 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 | `train` | Trains on the kept sessions with purpose `train` or `object`, off the loop. Then `trained`. |
 | `relearn` | Drops the model and trains again. |
 | `label_mode` | Writes the mode to `--mode-file` (or `TEACHER_MODE_FILE`), which the camera teacher reads. |
-| `router_moved`, `router_home` | Sets `router`; `pred` is null while it is off S-home. |
+| `router_moved` | Sets `router`, moves the x-ray's geometry and freezes the advice's `before_dbm`. `pred` is null while the router is off S-home. 5 s later `after_dbm` is filled (the median over 3 s, starting 2 s after the move) and `advice_result` goes out. |
+| `router_home` | Back on S-home: clears the advice and the x-ray, then checks for 3 s that every pi5 link sits within 1 dB of its base (`pred` stays null meanwhile). If one doesn't, it sends `recalibrating` and runs an automatic 20 s baseline; if that baseline moved a link by more than 1 dB it sends `drift`, which is the cue for `relearn`. |
 | `reset_alert` | Clears the alert and restarts the still timer. |
 | `reset` | Between judges: clears the alert, still timer, check-in and narration. Then `reset`. |
 | `truth` | Kept for the crowd game. |
 
 `brain/core.py` holds the rules with no sockets, so tests drive it with a fake clock.
-Link health (`brain/health.py`), the x-ray and objects (`brain/xray.py`) and the check-in and alert (`brain/alert.py`) are fed from here: every reading goes to all three, and their output fills `links`, `health`, `xray`, `objects`, `alert` and `checkin`. `pred` is null while health is blind, and the LED grid then shows "?". Still sent empty: `advice`.
+Link health (`brain/health.py`), the x-ray and objects (`brain/xray.py`) and the check-in and alert (`brain/alert.py`) are fed from here: every reading goes to all three, and their output fills `links`, `health`, `xray`, `objects`, `alert` and `checkin`. `pred` is null while health is blind, and the LED grid then shows "?". `advice` comes from `advisor.advise` while the router is on S-home; the brain adds `before_dbm` (the median of `pi5>unoq:wifi` over the last 3 s, kept current) and sends an `advice` event when a new one appears.
+
+The automatic baseline after `router_home` also runs with the camera unplugged; with the camera on it must still see nobody. A baseline asked for with the `baseline` cmd always needs the camera.
 
 ## Check-in and no-movement alert (`brain/alert.py`)
 
 `Watch` holds both section 6 rules. Give it every rssi message (`on_rssi`) and every decision (`on_pred`); it returns the state's `alert` block (`alert_block()`), the last `checkin`, and `alert_on`, `alert_off` and `checkin` events (`pop_events()`).
 
 - **Check-in:** 4 alternating crossings of +/-1.5 dB around the 1 s rolling median on `pi5>unoq:wifi` within 2.5 s, with the zone unchanged, a person present and no other link changing by more than 3 dB. Readings are averaged 3 at a time first, so plain noise can't cross. One wave is one check-in.
-- **Alert:** `still_s` counts while a person stays still in one zone. `check_on` at the zone's `still_alert_s` from `radio/nodes.json`; zones with null never alert, and objects never alert. Only a check-in or `reset_alert` clears it (`Watch.reset_alert()`); the `reset` cmd is `Watch.reset()`, which also forgets the last check-in. The timer pauses while `pred` is null.
+- **Alert:** `still_s` counts while a person stays still in one zone. Decisions are smoothed first: the zone and kind are the majority of the last 10 decisions, and the timer resets only after 5 "moving" decisions in a row, so one blip doesn't restart a 10 s count. `check_on` at the zone's `still_alert_s` from `radio/nodes.json`; zones with null never alert, and objects never alert. Only a check-in or `reset_alert` clears it (`Watch.reset_alert()`); the `reset` cmd is `Watch.reset()`, which also forgets the last check-in. The timer pauses while `pred` is null.
 - **LED grid:** `show_zone(n)` when the shown zone changes (`-1`, the "?", while `pred` is null or spans 2 or more zones), `alert(on)` when the alert turns on or off, `smile()` on a check-in. `led_grid()` gives the Bridge version on the board and a stand-in elsewhere.
 
 The constants at the top of the file are what gate 8 tunes.

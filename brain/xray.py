@@ -43,6 +43,8 @@ BLOB_FRAC = 0.5        # cells at or above this x the image max form blobs
 OBJECT_MIN_DB = 3.0    # an object needs a link with a static drop this big
 OBJECT_MATCH_M = 0.5   # a peak this close to a known object is the same object
 OBJECT_GRACE_S = 2.0   # an object stays listed this long after it last showed
+RELEASE_DB = 2.0       # a link's static part comes down once its drop sits this far under it
+RELEASE_S = 1.0        # ... for this long (also while a person is around)
 NEAR_M = 0.5           # "near" names a node only this close, else null
 
 
@@ -235,6 +237,8 @@ class Xray:
         self.static_link_db = np.zeros(len(self.links))
         self._objects = []
         self._frozen_t = float("-inf")   # last tick with pred null or a person
+        self._below_since = [None] * len(self.links)   # when each link's drop fell under its static part
+        self._released_t = float("-inf")               # last time a static part came down
 
     def add(self, link, t_ms, drop_db):
         hist = self._hist.get(link)
@@ -260,6 +264,17 @@ class Xray:
             drop = current_drop(t, v, now_s)
             if drop is not None:
                 fresh += 1
+                # The object went away: follow the link back down. Raising the static part
+                # waits for the person freeze; lowering it doesn't, or whoever takes the tray
+                # away leaves a ghost object behind.
+                if drop <= self.static_link_db[k] - RELEASE_DB:
+                    if self._below_since[k] is None:
+                        self._below_since[k] = now_s
+                    elif now_s - self._below_since[k] >= RELEASE_S:
+                        self.static_link_db[k] = max(drop, 0.0)
+                        self._below_since[k], self._released_t = None, now_s
+                else:
+                    self._below_since[k] = None
                 people[k] = max(0.0, drop - self.static_link_db[k])
         return people, np.maximum(self.static_link_db, 0.0), fresh
 
@@ -318,8 +333,9 @@ class Xray:
             else:
                 self._objects.append(dict(f, first=now, last=now))
                 events.append(self._event("object_on", f))
+        released = now - self._released_t <= OBJECT_GRACE_S   # a link just let go: no grace
         for o in free:
-            if now - o["last"] > OBJECT_GRACE_S:
+            if released or now - o["last"] > OBJECT_GRACE_S:
                 self._objects.remove(o)
                 events.append(self._event("object_off", o))
         return events

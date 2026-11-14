@@ -13,13 +13,13 @@ import {
 } from 'three'
 import type { ObjectMark, Pred, Xray } from './contract'
 import { SQUARE_M, zoneAt, zoneCenter } from './frame'
-import { INK, OLIVE } from './palette'
+import { OBJECT, PERSON } from './palette'
 import { v3 } from './stage'
 import { shadowCentre } from './xray'
 import type { RoomView } from './view'
 
-// Where the radio thinks the person is: an olive ghost in pred.zone, a faint olive tile under each zone in
-// zone_set (two ghosts when the brain can't pick between two zones), and ink box markers for state.objects.
+// Where the radio thinks the person is: an amber ghost in pred.zone, a faint amber tile under each zone in
+// zone_set (two ghosts when the brain can't pick between two zones), and grey-blue box markers for state.objects.
 // Nothing is drawn while pred is null.
 
 export interface GhostSpot {
@@ -66,6 +66,8 @@ interface Ghost {
 }
 
 export class Presence {
+  /** True while a wave check-in shows: the ghost's label reads "Wave seen". */
+  wave = false
   private readonly ghosts: Ghost[] = []
   private readonly tiles: { mesh: Mesh<PlaneGeometry, MeshBasicMaterial>; to: number }[] = []
   private readonly boxes: { mesh: LineSegments; label: HTMLElement }[] = []
@@ -74,7 +76,7 @@ export class Presence {
     const half = SQUARE_M / 4
     for (let zone = 1; zone <= 4; zone++) {
       const [x, y] = zoneCenter(zone)!
-      const mesh = new Mesh(new PlaneGeometry(half * 2, half * 2), new MeshBasicMaterial({ color: OLIVE, transparent: true, opacity: 0, depthWrite: false }))
+      const mesh = new Mesh(new PlaneGeometry(half * 2, half * 2), new MeshBasicMaterial({ color: PERSON, transparent: true, opacity: 0, depthWrite: false }))
       mesh.rotation.x = -Math.PI / 2
       mesh.position.copy(v3([x, y, 0.001]))
       mesh.renderOrder = -2
@@ -85,7 +87,7 @@ export class Presence {
     const body = new CapsuleGeometry(0.12, 0.62, 4, 12)
     const head = new SphereGeometry(0.1, 16, 12)
     for (let i = 0; i < 2; i++) {
-      const mats = [0, 1].map(() => new MeshBasicMaterial({ color: OLIVE, transparent: true, opacity: 0, depthWrite: false }))
+      const mats = [0, 1].map(() => new MeshBasicMaterial({ color: PERSON, transparent: true, opacity: 0, depthWrite: false }))
       const group = new Group()
       const b = new Mesh(body, mats[0])
       b.position.y = 0.43
@@ -112,7 +114,9 @@ export class Presence {
       g.to.copy(v3([x, y, 0]))
       if (!g.placed) g.at.copy(g.to) // the first sighting appears in place; later ones glide
       g.placed = true
-      g.label.textContent = spots.length > 1 ? `zone ${spot.zone}?` : pred!.motion === 'still' ? 'still' : 'moving'
+      const waving = this.wave && spots.length === 1
+      g.label.textContent = waving ? 'Wave seen' : spots.length > 1 ? `zone ${spot.zone}?` : pred!.motion === 'still' ? 'still' : 'moving'
+      g.label.classList.toggle('room-label--wave', waving)
     })
     if (!spots.length) for (const g of this.ghosts) g.placed = false
     const inSet = new Set(spots.map((s) => s.zone))
@@ -126,7 +130,7 @@ export class Presence {
 
   private placeObjects(objects: ObjectMark[]) {
     while (this.boxes.length < objects.length) {
-      const mesh = new LineSegments(new EdgesGeometry(new BoxGeometry(0.16, 0.16, 0.16)), new LineBasicMaterial({ color: INK }))
+      const mesh = new LineSegments(new EdgesGeometry(new BoxGeometry(0.16, 0.16, 0.16)), new LineBasicMaterial({ color: OBJECT }))
       this.view.scene.add(mesh)
       this.boxes.push({ mesh, label: this.view.addLabel('object', new Vector3(), 'room-label--object') })
     }
