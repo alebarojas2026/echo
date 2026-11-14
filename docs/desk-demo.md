@@ -14,11 +14,11 @@ Each line is one timed step: what the presenter says, what the judge does, and w
 |---|---|---|---|
 | 0:00-0:20 | "This is Radio Sight: Wi-Fi that understands the room. The radio links between these nodes show where a person is and whether they're moving. Every decision runs on this UNO Q, on the Dragonwing CPU, and no image is ever saved." | Stands at the desk. | "Nobody is here", LIVE, Camera on. |
 | 0:20-0:45 | "Step into the sensing area and walk around." | Steps in and walks. | Their figure appears in their zone and follows them; the headline says "Moving" and the zone. |
-| 0:45-1:00 | "Now walk to the bathroom corner." | Walks to the Bathroom zone. | The figure glides there; "Moving in the bathroom". |
-| 1:00-1:25 | "Stand still, as if you'd stopped moving. In the bathroom the board waits ten seconds." | Stands still. | "Still in the bathroom", the count, then the no-movement alert with the words "No movement". |
-| 1:25-1:45 | "Give it a wave, like this." | Waves without leaving the zone. | The check-in with its word, and the alert clears. |
-| 1:45-2:20 | "The camera only taught the radio during setup. Pull its cable." | Pulls the camera's cable. | "Camera unplugged · radio only"; the figure keeps following them. |
-| 2:20-2:45 | "Walk out of the area." | Walks out. | "Nobody is here", on radio alone. |
+| 0:45-1:10 | "Now go to the bathroom corner and stand still there, as if you'd stopped moving. In the bathroom the board waits ten seconds." | Walks to the Bathroom zone and stands still. | "Still in the bathroom", the count, then the no-movement alert with the words "No movement". |
+| 1:10-1:30 | "Give it a wave, like this." | Waves without leaving the zone. | The check-in with its word, and the alert clears. |
+| 1:30-2:10 | "Step over to the chair; nothing counts there. The camera only taught the radio during setup, so I'll pull its cable." | Moves to the Chair zone and around it. | "Camera unplugged · radio only"; the figure keeps following them. |
+| 2:10-2:30 | "Walk out of the area." | Walks out. | "Nobody is here", on radio alone. |
+| 2:30-2:45 | "Every decision you saw was made on this board, on our own network." | Looks at the screen. | "Nobody is here". |
 | 2:45-3:00 | "Zone accuracy on walkers it never trained on: __. One decision takes __ ms on the board. Images stored: __. Bytes sent off our network: __. Radio Sight: room-aware, and private by design." | Looks at the proof strip. | The proof strip, with `__` for anything not yet measured. |
 
 Before the cable moment, check the screen says "Camera on". If it doesn't yet (it was plugged back in during the reset), skip the pull and say the camera only taught the radio during setup. If a moment doesn't show (NO DATA or SENSOR BLIND), say what the screen says and move to the next line; never call it an empty room. Recovery steps are in `demo-runbook.md`.

@@ -52,7 +52,7 @@ class DeskDemoTest(unittest.TestCase):
 
     def test_the_four_fast_moments_in_order(self):
         said = " ".join(" ".join(cells) for _, _, cells in self.script).lower()
-        beats = ("step into the sensing area", "stand still", "no-movement alert", "give it a wave", "pull its cable", "proof strip")
+        beats = ("step into the sensing area", "stand still", "no-movement alert", "give it a wave", "pull its cable", "walk out", "proof strip")
         positions = [said.index(beat) for beat in beats]
         self.assertEqual(positions, sorted(positions))
 
