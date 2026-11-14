@@ -9,6 +9,7 @@ export function mockFeed(params: URLSearchParams) {
   const state: ScreenState = {
     v: 2, type: 'state', t, seq: 0,
     src: source === 'live' || source === 'replay' ? source : 'sim',
+    links: source === 'live' ? [{ rate_hz: 1 }] : [],
     cam: camera === 'on' || camera === 'stalled' ? camera : 'off',
     router: 'S-home',
     health: { status: params.has('blind') ? 'blind' : 'ok' },

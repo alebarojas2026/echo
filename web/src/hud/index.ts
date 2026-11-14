@@ -1,4 +1,5 @@
 import './hud.css'
+import { connectHud, type HudFeed } from './feed'
 import type { HudState } from './state'
 
 function measurement(value: number | null | undefined, unit = '') {
@@ -99,4 +100,8 @@ export function renderHud(root: HTMLElement, state: HudState) {
     if (field && field.textContent !== value) field.textContent = value
   }
   root.dataset.movement = state.checkin ? 'check-in' : state.movement
+}
+
+export function mountHud(root: HTMLElement, feed: HudFeed | null) {
+  return connectHud(root, feed, renderHud)
 }

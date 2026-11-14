@@ -76,3 +76,13 @@ test('controls emit v2 commands with selected arguments', async ({ page }) => {
     ['router_home', {}], ['reset_alert', {}], ['reset', {}],
   ].map(([cmd, args]) => ({ v: 2, type: 'cmd', cmd, args })))
 })
+
+test('mounts in a stale state when the shell has no feed', async ({ page }) => {
+  await page.goto('/src/hud/index.html')
+  await page.evaluate(async () => {
+    const { mountHud } = await import('/src/hud/index.ts')
+    mountHud(document.querySelector('main'), null)
+  })
+  await expect(page.getByTestId('no-data')).toBeVisible()
+  await expect(page.getByTestId('pred-kind')).toHaveText('__')
+})

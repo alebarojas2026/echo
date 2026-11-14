@@ -6,6 +6,7 @@ export type ScreenState = {
   t: number
   seq: number
   src: FeedSource
+  links?: { rate_hz: number | null }[]
   cam: 'on' | 'off' | 'stalled'
   router: string
   health: { status: 'ok' | 'degraded' | 'blind' }
@@ -20,7 +21,7 @@ export type ScreenState = {
   checkin: { t: number; link: string } | null
   advice: { text: string; before_dbm: number | null; after_dbm: number | null } | null
   narration: { text: string; source: 'llm' | 'template' } | null
-  model: { train_s: number | null; ms_per_decision: number | null }
+  model: { train_s: number | null; ms_per_decision: number | null } | null
 }
 
 type Score = { correct: number | null; total: number | null }
@@ -45,25 +46,25 @@ function agreement(score: Score | null | undefined) {
   return Math.round(100 * score.correct / score.total)
 }
 
-export function adaptHudState(state: ScreenState, proof: Proof | null, receivedAt = Date.now(), now = Date.now()) {
-  const feedStatus = now - receivedAt > 1000 ? 'stale' : state.health.status
+export function adaptHudState(state: ScreenState | null, proof: Proof | null, receivedAt = Date.now(), now = Date.now()) {
+  const feedStatus = !state || now - receivedAt > 1000 ? 'stale' : state.health.status
   return {
     feedStatus,
-    source: sourceLabels[state.src],
-    camera: cameraLabels[state.cam],
-    movement: state.alert.state,
-    alert: alertLabels[state.alert.state],
-    alertZone: state.alert.state === 'none' ? null : state.alert.zone,
-    checkin: state.alert.state === 'none' && state.checkin !== null,
-    narration: state.narration,
-    advice: state.advice,
-    router: state.router,
-    prediction: feedStatus === 'blind' || feedStatus === 'stale' ? null : state.pred,
+    source: state?.src === 'live' && !state.links?.some(link => (link.rate_hz ?? 0) > 0) ? '__' : state ? sourceLabels[state.src] : '__',
+    camera: state ? cameraLabels[state.cam] : '__',
+    movement: state?.alert.state ?? 'none',
+    alert: alertLabels[state?.alert.state ?? 'none'],
+    alertZone: state && state.alert.state !== 'none' ? state.alert.zone : null,
+    checkin: state?.alert.state === 'none' && state.checkin !== null,
+    narration: state?.narration ?? null,
+    advice: state?.advice ?? null,
+    router: state?.router ?? '__',
+    prediction: feedStatus === 'blind' || feedStatus === 'stale' ? null : state?.pred ?? null,
     proof: {
       agreement: agreement(proof?.zone),
       personObjectScore: agreement(proof?.person_vs_object),
-      trainSeconds: proof ? proof.train_s : state.model.train_s,
-      decisionMs: proof ? proof.ms_per_decision?.p50 ?? null : state.model.ms_per_decision,
+      trainSeconds: proof ? proof.train_s : state?.model?.train_s ?? null,
+      decisionMs: proof ? proof.ms_per_decision?.p50 ?? null : state?.model?.ms_per_decision ?? null,
       watts: proof?.watts?.radio_only ?? null,
       bytesOut: proof?.bytes_out ?? null,
       images: proof?.images_stored ?? null,

@@ -128,3 +128,13 @@
 
 .hud-details { margin-top: .75rem; }
 .hud-card [data-testid="no-data"] { color: var(--hud-secondary); }
+
+.hud-shell-panels { pointer-events: none; }
+.hud-shell-panels .radio-hud { margin-inline: 0 auto; max-width: min(26rem, 100%); }
+.hud-shell-panels .hud-grid, .hud-shell-panels .hud-proof dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.hud-shell-panels .hud-card { padding: .65rem; }
+.hud-shell-panels .hud-narrator { grid-area: auto / 1 / auto / -1; }
+.hud-shell-panels .hud-card p { font-size: 1.2rem; }
+.hud-shell-controls { pointer-events: auto; width: fit-content; background: #faf7ef; }
