@@ -56,6 +56,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     set('judge-headline', headline)
     set('judge-detail', detail)
     set('source-badge', state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO')
+    field('cam-status').hidden = Object.keys(extraPanels).some(path => path.includes('camera'))
     set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] : '')
     set('narrator-text', !stale ? state?.narration?.text ?? '' : '')
     field('narrator-text').hidden = !field('narrator-text').textContent
@@ -84,3 +85,5 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const timer = setInterval(refresh, 30000)
   return () => { disposed = true; clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
+import.meta.glob('./judge-layout.css', { eager: true })
+
