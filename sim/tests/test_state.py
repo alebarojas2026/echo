@@ -9,9 +9,14 @@ from sim.wire import encoder
 STATE_KEYS = {"type", "t", "cam", "router", "links", "health", "pred", "objects", "xray", "alert", "checkin",
               "advice", "narration", "teacher", "model", "board"}
 IDLE = {"state": "none", "zone": None, "still_s": 0, "limit_s": None}
-# The schema wants numbers here once trained is true; the fake brain measures nothing, so it sends
-# null (contract issue #184 asks for the schema to allow that). Nothing else may fail.
-UNMEASURED = {"$.model.train_s: None is not of type 'number'", "$.model.ms_per_decision: None is not of type 'number'"}
+# Known gaps between what the fake brain sends and the schemas on main. Nothing else may fail.
+# - The schema wants numbers once trained is true; the fake brain measures nothing, so it sends null
+#   (contract issue #184).
+# - CONTRACTS.md now says pred.motion and near can be null; the schemas catch up in #173.
+UNMEASURED = {"$.model.train_s: None is not of type 'number'", "$.model.ms_per_decision: None is not of type 'number'",
+              "$.pred.motion: None is not one of ['moving', 'still']",
+              "$.objects[0].near: None is not one of ['unoq', 'pi5', 'east', 'west']",
+              "$.advice.near: None is not one of ['unoq', 'pi5', 'east', 'west']"}
 
 
 def run(name):
@@ -69,7 +74,8 @@ def test_zone_tour_predictions_events_and_narration():
     s = at(states, 4)
     assert s["pred"]["kind"] == "person" and s["pred"]["motion"] == "still" and s["pred"]["still_s"] > 2
     assert s["pred"]["why"] == ["west>pi5:ble"] and abs(sum(s["pred"]["probs"]) - 1) < 1e-9
-    assert at(states, 30)["pred"]["kind"] == "none"
+    gone = at(states, 30)["pred"]
+    assert (gone["kind"], gone["present"], gone["zone"], gone["zone_set"], gone["motion"]) == ("none", False, 0, [], None)
     assert kinds(events)[2:] == ["enter", "zone_change", "zone_change", "zone_change", "exit"]
     told = at(states, 10)["narration"]
     assert (told["text"], told["source"], told["event_id"]) == ("Someone moved to zone 4.", "template", events[3]["id"])
@@ -148,3 +154,19 @@ def test_reset_alert_and_reset_commands():
     assert before["checkin"] and before["narration"] and before["pred"]["still_s"] > 10
     assert (after["checkin"], after["narration"], after["advice"]) == (None, None, None)
     assert after["pred"]["still_s"] < 0.5 and after["alert"]["still_s"] < 0.5
+
+
+def test_object_far_from_every_node_has_no_near_but_still_gets_advice():
+    middle = {"name": "m", "duration_s": 12, "person": None, "objects": [{"x": 1.0, "y": 1.0, "drop_db": 8, "t_on": 2}]}
+    msgs = list(state.run(middle))
+    states, events = [m for m in msgs if m["type"] == "state"], [m for m in msgs if m["type"] == "event"]
+    encode = encoder(1763149500000)
+    assert all(set(errors(json.loads(encode(m)))) <= UNMEASURED for m in msgs)
+    s = at(states, 10)
+    assert s["objects"][0]["near"] is None and s["advice"]["near"] is None
+    assert s["advice"]["text"] == ("On the router's link, an obstruction is blocking its link to the receiver. "
+                                   "Move the router 30 cm west.")
+    assert isinstance(s["advice"]["before_dbm"], float)
+    assert [(e["kind"], e["info"].get("node", "-")) for e in events[2:]] == [("object_on", "-"), ("advice", "-")]   # no node to name
+    assert at(states, 5)["narration"]["text"] == "Something new is sitting in the room."
+    assert state.near(fake.NODES, (1.0, 0.2)) == "pi5" and state.near(fake.NODES, (1.0, 0.6)) is None

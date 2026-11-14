@@ -26,6 +26,7 @@ BASELINE_AT_S, TRAINED_AT_S = 1.0, 2.0
 STALE_RATIO, BLIND_AFTER_S, CLEAR_AFTER_S = 0.4, 3.0, 3.0   # section 6, link health
 OBJECT_AFTER_S, STATIC_AFTER_S, CHECKIN_AFTER_S = 2.0, 5.0, 1.25
 ADVICE_WITHIN_M, RESULT_WAIT_S, MEDIAN_S = 0.5, 2.0, 3.0    # section 6, advice
+NEAR_M = 0.5   # section 5: near is the closest node within this distance, else null
 WIFI = "pi5>unoq:wifi"
 IDLE_ALERT = {"state": "none", "zone": None, "still_s": 0, "limit_s": None}
 SENTENCES = {   # template narration, one short sentence per event kind
@@ -38,8 +39,9 @@ SENTENCES = {   # template narration, one short sentence per event kind
     "advice": "Something is blocking the router's link, so try moving the router.",
     "advice_result": "The router's link went from {before_dbm} to {after_dbm} dBm.",
     "router_moved": "The router was moved.", "router_home": "The router is back home.",
-    "cam_on": "The camera is on.", "cam_off": "The camera is off.", "cam_stalled": "The camera has stalled.",
+    "cam_on": "The camera is on.", "cam_stalled": "The camera has stalled.", "cam_off": "The camera is off.",
 }
+NO_NODE = {"object_on": "Something new is sitting in the room.", "object_off": "The new object is gone."}
 
 
 def blob(points) -> list:
@@ -52,6 +54,12 @@ def blob(points) -> list:
             out.append(round(sum(p * math.exp(-((cx - x) ** 2 + (cy - y) ** 2) / (2 * 0.3 ** 2))
                                  for x, y, p in points), 1))
     return out
+
+
+def near(nodes: dict, xy):
+    """The closest node within NEAR_M of xy, or None when no node is that close."""
+    node = min(nodes, key=lambda n: math.dist(nodes[n], xy))
+    return node if math.dist(nodes[node], xy) <= NEAR_M else None
 
 
 def object_drop(o: dict, a, b) -> float:
@@ -70,7 +78,7 @@ class Brain:
         self.checkin = self.narration = self.advice = None
         self.waves_done, self.moved_at, self.advice_off = set(), None, False
         self.before = {"present": False, "zone": 0, "alert": "none", "cam": "on", "spot": "S-home",
-                       "blind": set(), "objects": set(), "baseline": False, "trained": False}
+                       "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
 
     def see(self, event: dict) -> None:
@@ -125,33 +133,35 @@ class Brain:
     def _advise(self, t: float, things: list, spot: str, nodes: dict) -> None:
         """Section 6: an object that stays 5 s within 0.5 m of the router link gets advice."""
         home = fake.NODES
-        near = [o for o in things if t - o.get("t_on", 0.0) >= STATIC_AFTER_S
+        close = [o for o in things if t - o.get("t_on", 0.0) >= STATIC_AFTER_S
                 and fake.dist_to_link((o["x"], o["y"]), home["pi5"], home["unoq"]) <= ADVICE_WITHIN_M]
         if spot != "S-home" and self.moved_at is None:
             self.moved_at = t
         if spot == "S-home":
-            if self.moved_at is not None or not near:   # back home, or nothing in the way any more
+            if self.moved_at is not None or not close:   # back home, or nothing in the way any more
                 self.advice, self.advice_off = None, False
             self.moved_at = None
-        if self.advice is None and near and spot == "S-home" and not self.advice_off:
-            o = near[0]
+        if self.advice is None and close and spot == "S-home" and not self.advice_off:
+            o = close[0]
             # the spot whose new link the object blocks least; west wins a tie
             to = min(("S-W30", "S-E30"), key=lambda s: round(object_drop(o, fake.ROUTER_SPOTS[s], home["unoq"]), 3))
             dx, dy = (round(a - b, 2) for a, b in zip(fake.ROUTER_SPOTS[to], home["pi5"]))
-            node = min(home, key=lambda n: math.dist(home[n], (o["x"], o["y"])))
-            where = "the router" if node == "pi5" else f"the {node} node"
+            node = near(home, (o["x"], o["y"]))
+            where = {None: "On the router's link, an obstruction", "pi5": "An obstruction next to the router"}.get(
+                node, f"An obstruction next to the {node} node")
             self.advice = {
                 "id": f"a{self.n_events + 1}", "cause": "obstruction", "near": node, "xy_m": [o["x"], o["y"]],
                 "link": WIFI, "to_spot": to, "move_m": [dx, dy],
                 "dist_change_m": round(math.dist(fake.ROUTER_SPOTS[to], home["unoq"])
                                        - math.dist(home["pi5"], home["unoq"]), 2),
-                "text": f"An obstruction next to {where} is blocking its link to the receiver. "
+                "text": f"{where} is blocking its link to the receiver. "
                         f"Move the router {round(abs(dx) * 100)} cm {'west' if dx < 0 else 'east'}.",
                 "before_dbm": None, "after_dbm": None,
                 "why": [fake.link_id(*l) for l in fake.LINKS if object_drop(o, home[l[0]], home[l[1]]) > 1.0]}
             self._event(t, "advice", link=WIFI, node=node)
         if self.advice and self.moved_at is None:      # before the move: the last 3 s
-            self.advice["before_dbm"] = self._median(WIFI, t - MEDIAN_S, t + 1e-9)
+            recent = self._median(WIFI, t - MEDIAN_S, t + 1e-9)   # never null: fall back to the last level
+            self.advice["before_dbm"] = self.last_dbm.get(WIFI) if recent is None else recent
         elif (self.advice and self.advice["after_dbm"] is None
               and t >= self.moved_at + RESULT_WAIT_S + MEDIAN_S):   # 3 s, starting 2 s after the move
             self.advice["after_dbm"] = self._median(WIFI, self.moved_at + RESULT_WAIT_S, t + 1e-9)
@@ -209,7 +219,7 @@ class Brain:
             probs = [0.03] * 5
             probs[zone] = 0.88
             pred = {"present": bool(pos), "kind": kind, "zone": zone, "zone_set": [zone] if pos else [],
-                    "probs": probs, "motion": "moving" if moving else "still",
+                    "probs": probs, "motion": ("moving" if moving else "still") if pos else None,
                     "still_s": round(self.still_s, 1), "why": why}
         alert = dict(IDLE_ALERT)
         if pred and still and limit:
@@ -217,7 +227,7 @@ class Brain:
                      "still_s": round(self.alert_s, 1), "limit_s": limit}
 
         objects = [{"xy_m": [o["x"], o["y"]],
-                    "near": min(nodes, key=lambda n: math.dist(nodes[n], (o["x"], o["y"]))),
+                    "near": near(nodes, (o["x"], o["y"])),
                     "since_s": round(t - o.get("t_on", 0.0), 1),
                     "drop_db": round(max(object_drop(o, nodes[l[0]], nodes[l[1]]) for l in fake.LINKS), 1)}
                    for o in things] if baseline else []
@@ -228,7 +238,7 @@ class Brain:
                 "n_links": len(links) - len(blind)} if baseline else None
 
         self._diff(t, {"present": bool(pos), "zone": zone, "alert": alert["state"], "cam": cam, "spot": spot,
-                       "blind": set(blind), "objects": {o["near"] for o in objects},
+                       "blind": set(blind), "objects": {tuple(o["xy_m"]): o["near"] for o in objects},
                        "baseline": baseline, "trained": trained}, pred is not None)
         return {"type": "state", "t": t, "cam": cam, "router": spot, "links": links, "health": health,
                 "pred": pred, "objects": objects, "xray": xray, "alert": alert, "checkin": self.checkin,
@@ -240,9 +250,11 @@ class Brain:
                 "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None}}
 
     def _event(self, t: float, kind: str, **info) -> None:
+        info = {k: v for k, v in info.items() if v is not None}   # an unknown node is left out, not sent as null
         self.n_events += 1
         self.events.append({"type": "event", "t": t, "id": f"e{self.n_events}", "kind": kind, "info": info})
-        self.narration = {"text": SENTENCES[kind].format(**info), "event_id": f"e{self.n_events}",
+        sentence = NO_NODE[kind] if kind in NO_NODE and info.get("node") is None else SENTENCES[kind]
+        self.narration = {"text": sentence.format(**info), "event_id": f"e{self.n_events}",
                           "t": self._ms(t), "source": "template", "gen_ms": 0}
 
     def _diff(self, t: float, now: dict, has_pred: bool) -> None:
@@ -264,11 +276,14 @@ class Brain:
             self._event(t, "cam_" + now["cam"])
         if now["spot"] != was["spot"]:
             self._event(t, "router_home" if now["spot"] == "S-home" else "router_moved")
-        for kind, a, b, key in (("blind_on", now, was, "link"), ("blind_off", was, now, "link"),
-                                ("object_on", now, was, "node"), ("object_off", was, now, "node")):
-            field = "blind" if key == "link" else "objects"
-            for item in sorted(a[field] - b[field]):
-                self._event(t, kind, **{key: item})
+        for link in sorted(now["blind"] - was["blind"]):
+            self._event(t, "blind_on", link=link)
+        for link in sorted(was["blind"] - now["blind"]):
+            self._event(t, "blind_off", link=link)
+        for xy in sorted(now["objects"].keys() - was["objects"].keys()):   # objects are told apart by where they are
+            self._event(t, "object_on", node=now["objects"][xy])
+        for xy in sorted(was["objects"].keys() - now["objects"].keys()):
+            self._event(t, "object_off", node=was["objects"][xy])
 
 
 def run(path: dict, rate: float = 15.0, seed: int = 0, state_hz: float = 10.0, start_ms: int = 0, brain=None):
