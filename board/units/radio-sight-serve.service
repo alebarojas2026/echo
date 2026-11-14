@@ -1,0 +1,18 @@
+[Unit]
+Description=Radio Sight web server for the screen (port 8080)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=@PYTHON@ @REPO@/board/serve.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

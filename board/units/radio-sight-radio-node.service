@@ -1,0 +1,19 @@
+[Unit]
+Description=Radio Sight Pi radio node (root for raw HCI)
+After=network-online.target bluetooth.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=@PYTHON@ -m pi.radio_node
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -63,7 +63,7 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
    // From teacher/camwatch.py: every 1 s and at once on any change. state = on | off | stalled.
 {"v":2,"type":"narration","t":1763149513000,"seq":9,"src":"live","text":"Someone just walked into zone 2.",
  "event_id":"e123","event_kind":"enter","gen_ms":6120,"source":"llm","model":"<model name>"}
-   // source = llm | template
+   // source = llm | template. model is null when source is template.
 {"v":2,"type":"meta","t":1763149500000,"seq":1,"src":"live","session":"s12","purpose":"heldout","walker":"w3"}
    // Sent on record_start. purpose = train | heldout | object | crowd | demo
 ```
@@ -96,6 +96,14 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
    // reset (after the reset cmd), recording (info: {on, session}) after record_start/record_stop.
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
 ```
+Before readings, a baseline or training exists, the brain still sends state at about 10/s with these values:
+- links: [] until readings arrive (never null);
+- xray: null before the first baseline;
+- objects: [], advice: null, checkin: null, narration: null until each exists;
+- alert: {"state":"none","zone":null,"still_s":0,"limit_s":null} when nothing is counting;
+- model: {"trained":false,"ver":null,"train_s":null,"ms_per_decision":null,"windows":0,"train_sessions":[],"training":null} before training;
+- board: any field it can't read is null.
+
 **Screen -> brain:**
 ```jsonc
 {"v":2,"type":"cmd","cmd":"train|baseline|reset_alert|reset|record_start|record_stop|label_mode|router_moved|router_home|relearn|truth","args":{}}

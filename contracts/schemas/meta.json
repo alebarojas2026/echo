@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/meta.json",
+  "$comment": "Section 4. Sent on record_start.",
+  "$ref": "common.json#/$defs/envelope",
+  "properties": {
+    "type": {"const": "meta"},
+    "session": {"type": "string"},
+    "purpose": {"$ref": "common.json#/$defs/purpose"},
+    "walker": {"type": "string"}
+  },
+  "required": ["session", "purpose", "walker"],
+  "unevaluatedProperties": false
+}
