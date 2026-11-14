@@ -18,7 +18,7 @@ import type { RoomView } from './view'
 // The still parts of the room: floor, the 2 x 2 m square and its zones, two back walls, and the four nodes.
 
 const MARGIN_M = 0.5
-const WALL_M = 1.1
+const WALL_M = 0.35 // low walls edge the floor without framing the scene in long diagonals
 
 export function v3(p: Vec3): Vector3 {
   const [x, y, z] = toScene(p)

@@ -30,10 +30,25 @@ export function viewOptions(params: URLSearchParams): ViewOptions {
   }
 }
 
-const VIEW_DIR = new Vector3(0.26, 1.2, 1).normalize()
-// Framing for the contract's 2 m square; both scale with the square from nodes.json.
-const TARGET_Y_M = 0.25
-const FIT_RADIUS_M = 2.0
+// North straight up the screen, seen from the south and about 63 degrees up, so the zones read 1 2 / 3 4.
+// Framing is for the contract's 2 m square and scales with the square from nodes.json.
+const VIEW_DIR = new Vector3(0, 2.0, 1).normalize()
+const TARGET_M = new Vector3(0, 0.45, 0.05)
+const FIT_RADIUS_M = 1.5
+
+/** Points the camera at the square and backs off until it fits the narrower field of view. */
+export function fitCamera(camera: PerspectiveCamera, width: number, height: number) {
+  camera.aspect = width / height
+  const vfov = (camera.fov * Math.PI) / 180
+  const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect)
+  const scale = SQUARE_M / 2
+  const target = TARGET_M.clone().multiplyScalar(scale)
+  const dist = (FIT_RADIUS_M * scale) / Math.sin(Math.min(vfov, hfov) / 2)
+  camera.position.copy(VIEW_DIR).multiplyScalar(dist).add(target)
+  camera.lookAt(target)
+  camera.updateProjectionMatrix()
+  camera.updateMatrixWorld()
+}
 
 export class RoomView {
   readonly renderer: WebGLRenderer
@@ -108,16 +123,7 @@ export class RoomView {
     this.width = w
     this.height = h
     this.renderer.setSize(w, h, false)
-    this.camera.aspect = w / h
-    // Fit the room in whichever of the two fields of view is narrower.
-    const vfov = (this.camera.fov * Math.PI) / 180
-    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect)
-    const scale = SQUARE_M / 2
-    const target = new Vector3(0, TARGET_Y_M * scale, 0)
-    const dist = (FIT_RADIUS_M * scale) / Math.sin(Math.min(vfov, hfov) / 2)
-    this.camera.position.copy(VIEW_DIR).multiplyScalar(dist).add(target)
-    this.camera.lookAt(target)
-    this.camera.updateProjectionMatrix()
+    fitCamera(this.camera, w, h)
     for (const fn of this.resizeHooks) fn(w, h)
     this.labelsDirty = true
     this.requestRender()

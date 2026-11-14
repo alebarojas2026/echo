@@ -1,8 +1,18 @@
+/* The room fills everything right of the panels' 640 px rail. On narrow screens it takes the whole width. */
 .room {
   position: fixed;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 640px;
+  right: 0;
   overflow: hidden;
   background: #f4f0e6;
+}
+
+@media (max-width: 1100px) {
+  .room {
+    left: 0;
+  }
 }
 
 .room-canvas {
