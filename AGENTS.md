@@ -39,7 +39,14 @@ CONTRACTS.md, contracts/, AGENTS.md, CLAUDE.md and README.md are changed only by
 5. If a task needs hardware or a person, comment exactly what's needed on the issue, then take the next one.
 6. No issues left with your tag? Add tests, then open a new issue with your tag for the most useful next step and do it.
 
+## Style (every screen, page and diagram)
+- Background #F4F0E6, cards #FAF7EF, text #1C1B17, secondary text #55524A, lines #8F8A7E.
+- The ONLY accent is olive #4F5E2E.
+- Headlines in Newsreader, body in Hanken Grotesk (self-hosted fonts are in web/src/hud/fonts/).
+- No glow, bloom, gradients, purple, emoji or neon. Motion is calm.
+
 ## Hard rules
+- **Open every PR against main.** Never base a PR on another PR's branch: when that branch merges and is deleted, your PR closes. If you need unmerged work, wait for it to merge, or build against main with a small stub.
 - **No images or video, ever.** Never write a camera frame to disk. Never commit image or video files (test screenshots in web/tests/ are the only exception).
 - **No secrets or device identifiers in the repo.** No passwords, keys, MAC addresses, BSSIDs, personal device names, or IP addresses other than the ones in CONTRACTS.md. Local values go in `.env` (gitignored).
 - **No invented numbers.** Every number on screen or in docs is measured and has a PROOF.md row. Until then, show `__`.
