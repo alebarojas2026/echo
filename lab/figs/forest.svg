@@ -1,40 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="520" height="300" viewBox="0 0 520 300" font-family="Hanken Grotesk, sans-serif" font-size="11" fill="#1C1B17">
-<rect width="520" height="300" fill="#F4F0E6"/>
-<rect x="58" y="46" width="446" height="206" fill="#FAF7EF" stroke="#8F8A7E"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="300" viewBox="0 0 520 300" font-family="Hanken Grotesk, sans-serif" font-size="11" fill="#E6E8EB">
+<rect width="520" height="300" fill="#111316"/>
+<rect x="58" y="46" width="446" height="206" fill="#1A1D21" stroke="#6B7480"/>
 <text x="58" y="20" font-family="Newsreader, serif" font-size="15">Held-out zone accuracy vs forest size</text>
-<text x="58" y="36" fill="#55524A">SIMULATED (lab/, dev only). Not a measurement.</text>
-<text x="281" y="290" text-anchor="middle" fill="#55524A">trees per forest</text>
-<text transform="translate(14 149) rotate(-90)" text-anchor="middle" fill="#55524A">share of windows right</text>
-<line x1="58" x2="504" y1="252.0" y2="252.0" stroke="#8F8A7E" stroke-opacity="0.35"/>
-<text x="52" y="256.0" text-anchor="end" fill="#55524A">0.4</text>
-<line x1="58" x2="504" y1="207.0" y2="207.0" stroke="#8F8A7E" stroke-opacity="0.35"/>
-<text x="52" y="211.0" text-anchor="end" fill="#55524A">0.55</text>
-<line x1="58" x2="504" y1="162.0" y2="162.0" stroke="#8F8A7E" stroke-opacity="0.35"/>
-<text x="52" y="166.0" text-anchor="end" fill="#55524A">0.7</text>
-<line x1="58" x2="504" y1="117.0" y2="117.0" stroke="#8F8A7E" stroke-opacity="0.35"/>
-<text x="52" y="121.0" text-anchor="end" fill="#55524A">0.85</text>
-<line x1="58" x2="504" y1="72.0" y2="72.0" stroke="#8F8A7E" stroke-opacity="0.35"/>
-<text x="52" y="76.0" text-anchor="end" fill="#55524A">1</text>
-<text x="70.0" y="268" text-anchor="middle" fill="#55524A">10</text>
-<text x="146.7" y="268" text-anchor="middle" fill="#55524A">30</text>
-<text x="261.8" y="268" text-anchor="middle" fill="#55524A">60</text>
-<text x="492.0" y="268" text-anchor="middle" fill="#55524A">120</text>
-<polyline fill="none" stroke="#4F5E2E" stroke-width="2" stroke-dasharray="" points="70.0,161.8 146.7,158.7 261.8,158.7 492.0,158.3"/>
-<circle cx="70.0" cy="161.8" r="2.5" fill="#4F5E2E"/>
-<circle cx="146.7" cy="158.7" r="2.5" fill="#4F5E2E"/>
-<circle cx="261.8" cy="158.7" r="2.5" fill="#4F5E2E"/>
-<circle cx="492.0" cy="158.3" r="2.5" fill="#4F5E2E"/>
-<polyline fill="none" stroke="#55524A" stroke-width="2" stroke-dasharray="5 3" points="70.0,155.8 146.7,152.4 261.8,151.6 492.0,150.4"/>
-<circle cx="70.0" cy="155.8" r="2.5" fill="#55524A"/>
-<circle cx="146.7" cy="152.4" r="2.5" fill="#55524A"/>
-<circle cx="261.8" cy="151.6" r="2.5" fill="#55524A"/>
-<circle cx="492.0" cy="150.4" r="2.5" fill="#55524A"/>
-<polyline fill="none" stroke="#8F8A7E" stroke-width="2" stroke-dasharray="2 3" points="70.0,157.0 146.7,152.2 261.8,150.8 492.0,149.8"/>
-<circle cx="70.0" cy="157.0" r="2.5" fill="#8F8A7E"/>
-<circle cx="146.7" cy="152.2" r="2.5" fill="#8F8A7E"/>
-<circle cx="261.8" cy="150.8" r="2.5" fill="#8F8A7E"/>
-<circle cx="492.0" cy="149.8" r="2.5" fill="#8F8A7E"/>
-<line x1="66" x2="84" y1="58" y2="58" stroke="#4F5E2E" stroke-width="2" stroke-dasharray=""/><text x="88" y="62">depth 6</text>
-<line x1="145" x2="163" y1="58" y2="58" stroke="#55524A" stroke-width="2" stroke-dasharray="5 3"/><text x="167" y="62">depth 12</text>
-<line x1="231" x2="249" y1="58" y2="58" stroke="#8F8A7E" stroke-width="2" stroke-dasharray="2 3"/><text x="253" y="62">depth None</text>
+<text x="58" y="36" fill="#9AA3AD">SIMULATED (lab/, dev only). Not a measurement.</text>
+<text x="281" y="290" text-anchor="middle" fill="#9AA3AD">trees per forest</text>
+<text transform="translate(14 149) rotate(-90)" text-anchor="middle" fill="#9AA3AD">share of windows right</text>
+<line x1="58" x2="504" y1="252.0" y2="252.0" stroke="#353B43"/>
+<text x="52" y="256.0" text-anchor="end" fill="#9AA3AD">0.4</text>
+<line x1="58" x2="504" y1="207.0" y2="207.0" stroke="#353B43"/>
+<text x="52" y="211.0" text-anchor="end" fill="#9AA3AD">0.55</text>
+<line x1="58" x2="504" y1="162.0" y2="162.0" stroke="#353B43"/>
+<text x="52" y="166.0" text-anchor="end" fill="#9AA3AD">0.7</text>
+<line x1="58" x2="504" y1="117.0" y2="117.0" stroke="#353B43"/>
+<text x="52" y="121.0" text-anchor="end" fill="#9AA3AD">0.85</text>
+<line x1="58" x2="504" y1="72.0" y2="72.0" stroke="#353B43"/>
+<text x="52" y="76.0" text-anchor="end" fill="#9AA3AD">1</text>
+<text x="70.0" y="268" text-anchor="middle" fill="#9AA3AD">10</text>
+<text x="146.7" y="268" text-anchor="middle" fill="#9AA3AD">30</text>
+<text x="261.8" y="268" text-anchor="middle" fill="#9AA3AD">60</text>
+<text x="492.0" y="268" text-anchor="middle" fill="#9AA3AD">120</text>
+<polyline fill="none" stroke="#FF9F43" stroke-width="2" stroke-dasharray="" points="70.0,161.8 146.7,158.7 261.8,158.7 492.0,158.3"/>
+<circle cx="70.0" cy="161.8" r="2.5" fill="#FF9F43"/>
+<circle cx="146.7" cy="158.7" r="2.5" fill="#FF9F43"/>
+<circle cx="261.8" cy="158.7" r="2.5" fill="#FF9F43"/>
+<circle cx="492.0" cy="158.3" r="2.5" fill="#FF9F43"/>
+<polyline fill="none" stroke="#9AA3AD" stroke-width="2" stroke-dasharray="5 3" points="70.0,155.8 146.7,152.4 261.8,151.6 492.0,150.4"/>
+<circle cx="70.0" cy="155.8" r="2.5" fill="#9AA3AD"/>
+<circle cx="146.7" cy="152.4" r="2.5" fill="#9AA3AD"/>
+<circle cx="261.8" cy="151.6" r="2.5" fill="#9AA3AD"/>
+<circle cx="492.0" cy="150.4" r="2.5" fill="#9AA3AD"/>
+<polyline fill="none" stroke="#9AA3AD" stroke-width="2" stroke-dasharray="2 3" points="70.0,157.0 146.7,152.2 261.8,150.8 492.0,149.8"/>
+<circle cx="70.0" cy="157.0" r="2.5" fill="#9AA3AD"/>
+<circle cx="146.7" cy="152.2" r="2.5" fill="#9AA3AD"/>
+<circle cx="261.8" cy="150.8" r="2.5" fill="#9AA3AD"/>
+<circle cx="492.0" cy="149.8" r="2.5" fill="#9AA3AD"/>
+<line x1="66" x2="84" y1="58" y2="58" stroke="#FF9F43" stroke-width="2" stroke-dasharray=""/><text x="88" y="62">depth 6</text>
+<line x1="145" x2="163" y1="58" y2="58" stroke="#9AA3AD" stroke-width="2" stroke-dasharray="5 3"/><text x="167" y="62">depth 12</text>
+<line x1="231" x2="249" y1="58" y2="58" stroke="#9AA3AD" stroke-width="2" stroke-dasharray="2 3"/><text x="253" y="62">depth None</text>
 </svg>
