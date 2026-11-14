@@ -1,4 +1,227 @@
-import { describe, expect, it } from 'vitest'
+import { Box3, BoxGeometry, Mesh, Object3D, Vector3 } from 'three'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import {
+  DEVICE_BOUNDS,
+  DISPLAY_SCALE,
+  NODE_HEIGHT_M,
+  createDevice,
+  deviceLabelPoint,
+  deviceMaterials,
+  devicesLoaded,
+  setDeviceHeight,
+  type DeviceKind,
+} from './devices'
+
+// The real model files, read from disk: vite turns './assets/x.glb?url' into '/src/room/assets/x.glb'.
+// Node's file reader is imported by name, so this browser project's tsconfig needn't know node's types.
+const fsModule = 'node:fs/promises'
+const { readFile } = (await import(/* @vite-ignore */ fsModule)) as { readFile(path: URL): Promise<Uint8Array<ArrayBuffer>> }
+const WEB = new URL('../../', import.meta.url)
+
+beforeAll(() => {
+  vi.stubGlobal('fetch', async (url: string) => {
+    try {
+      return new Response(await readFile(new URL(`.${url}`, WEB)))
+    } catch {
+      return new Response(null, { status: 404 })
+    }
+  })
+})
+afterAll(() => vi.unstubAllGlobals())
+
+const KINDS: DeviceKind[] = ['unoq', 'pi5', 'phone']
+
+/** Builds a device and waits until its model has been drawn into it. */
+async function ready(kind: DeviceKind): Promise<{ device: Object3D; loaded: boolean }> {
+  let loaded = false
+  const device = await new Promise<Object3D>((resolve) => {
+    const d = createDevice(kind, (ok) => {
+      loaded = ok
+      resolve(d)
+    })
+  })
+  return { device, loaded }
+}
+
+function meshes(root: Object3D): Mesh[] {
+  const out: Mesh[] = []
+  root.traverse((o) => {
+    if (o instanceof Mesh) out.push(o)
+  })
+  return out
+}
+
+function triangles(root: Object3D): number {
+  return meshes(root).reduce((n, m) => n + (m.geometry.index?.count ?? m.geometry.getAttribute('position').count) / 3, 0)
+}
+
+/** The device's model (not its stand) in real metres around its anchor, whatever the nodes above it do. */
+function modelBox(device: Object3D): Box3 {
+  const head = device.getObjectByName('head')!
+  device.updateMatrixWorld(true)
+  const toHead = head.matrixWorld.clone().invert()
+  const box = new Box3()
+  for (const m of meshes(head)) {
+    m.geometry.computeBoundingBox()
+    box.union(m.geometry.boundingBox!.clone().applyMatrix4(toHead.clone().multiply(m.matrixWorld)))
+  }
+  return box
+}
+
+describe('createDevice', () => {
+  it('returns an object right away, origin on the floor, anchor at the node height', () => {
+    const device = createDevice('pi5')
+    device.updateMatrixWorld(true)
+    expect(device.name).toBe('device-pi5')
+    const anchor = device.getObjectByName('anchor')!
+    expect(anchor.getWorldPosition(new Vector3()).toArray()).toEqual([0, NODE_HEIGHT_M, 0])
+  })
+
+  it.each(KINDS)('loads %s from its file with the shared materials', async (kind) => {
+    const { device, loaded } = await ready(kind)
+    expect(loaded).toBe(true)
+    const shared = Object.values(deviceMaterials())
+    const parts = meshes(device)
+    expect(parts.length).toBeGreaterThanOrEqual(3) // the model, the foot and the pole
+    for (const m of parts) {
+      expect(shared).toContain(m.material)
+      expect(m.geometry.getAttribute('uv')).toBeUndefined()
+      expect(m.geometry.getAttribute('color')).toBeDefined() // the baked occlusion
+    }
+    expect(device.getObjectByName('anchor')).toBeDefined()
+    expect(device.getObjectByName('mount')).toBeUndefined()
+  })
+
+  it('shares geometry between copies, so the two phones cost one', async () => {
+    const [a, b] = await Promise.all([ready('phone'), ready('phone')])
+    const ga = meshes(a.device).map((m) => m.geometry)
+    const gb = meshes(b.device).map((m) => m.geometry)
+    expect(ga).toEqual(gb)
+    for (let i = 0; i < ga.length; i++) expect(ga[i]).toBe(gb[i])
+  })
+
+  it.each(KINDS)('keeps %s under the triangle budget', async (kind) => {
+    const { device } = await ready(kind)
+    expect(triangles(device.getObjectByName('head')!)).toBeLessThanOrEqual(1500)
+  })
+
+  it('keeps the stand light too', async () => {
+    const { device } = await ready('unoq')
+    const head = device.getObjectByName('head')!
+    expect(triangles(device) - triangles(head)).toBeLessThanOrEqual(600)
+  })
+})
+
+describe('the models', () => {
+  it.each(KINDS)('match DEVICE_BOUNDS for %s within a millimetre', async (kind) => {
+    const { device } = await ready(kind)
+    const box = modelBox(device)
+    const { min, max } = DEVICE_BOUNDS[kind]
+    for (let i = 0; i < 3; i++) {
+      expect(box.min.getComponent(i)).toBeCloseTo(min[i], 3)
+      expect(box.max.getComponent(i)).toBeCloseTo(max[i], 3)
+    }
+  })
+
+  it('are real size: the UNO Q board, the Pi 5 case and the phone', async () => {
+    const size = async (kind: DeviceKind) => modelBox((await ready(kind)).device).getSize(new Vector3()).multiplyScalar(1000)
+    const unoq = await size('unoq')
+    expect(unoq.x).toBeCloseTo(68.58 + 0.6, 0) // the board, plus the USB-C shell standing 0.6 mm proud
+    const pi5 = await size('pi5')
+    expect(pi5.x).toBeCloseTo(70.3, 0)
+    expect(pi5.z).toBeCloseTo(98.5, 0)
+    const phone = await size('phone')
+    expect(phone.x).toBeGreaterThan(71.5) // the body, plus its side buttons
+    expect(phone.x).toBeLessThan(74)
+  })
+
+  it('lean back, so their faces turn towards the front (+z) and up', async () => {
+    for (const kind of ['unoq', 'phone'] as DeviceKind[]) {
+      const head = (await ready(kind)).device.getObjectByName('head')!
+      // the highest point of a leaning board or phone is behind its centre
+      let top = new Vector3(0, -Infinity, 0)
+      for (const m of meshes(head)) {
+        const pos = m.geometry.getAttribute('position')
+        for (let i = 0; i < pos.count; i++) {
+          if (pos.getY(i) > top.y) top = new Vector3().fromBufferAttribute(pos, i)
+        }
+      }
+      expect(top.z).toBeLessThan(0)
+    }
+  })
+})
+
+describe('setDeviceHeight', () => {
+  it('moves the anchor to the height and stretches the pole to the mount', async () => {
+    const { device } = await ready('phone')
+    setDeviceHeight(device, 1.2)
+    device.updateMatrixWorld(true)
+    expect(device.getObjectByName('anchor')!.getWorldPosition(new Vector3()).y).toBeCloseTo(1.2, 6)
+    const pole = device.getObjectByName('pole') as Mesh
+    const foot = device.getObjectByName('foot') as Mesh
+    const poleBox = new Box3().setFromObject(pole)
+    const headBox = new Box3().setFromObject(device.getObjectByName('head')!)
+    expect(poleBox.min.y).toBeCloseTo(0, 6)
+    // the pole ends a few millimetres into the device's socket, the lowest part of the device
+    expect(poleBox.max.y - headBox.min.y).toBeGreaterThan(0)
+    expect(poleBox.max.y - headBox.min.y).toBeLessThan(0.02)
+    expect(new Box3().setFromObject(foot).min.y).toBeCloseTo(0, 6)
+    expect(foot.scale.x).toBe(DISPLAY_SCALE)
+  })
+
+  it('takes a height set before the file has loaded, as the stage does', async () => {
+    const device = await new Promise<Object3D>((resolve) => {
+      const d = createDevice('unoq', () => resolve(d))
+      setDeviceHeight(d, 0.8)
+    })
+    device.updateMatrixWorld(true)
+    expect(device.getObjectByName('anchor')!.getWorldPosition(new Vector3()).y).toBeCloseTo(0.8, 6)
+    const poleTop = new Box3().setFromObject(device.getObjectByName('pole')!).max.y
+    const headBottom = new Box3().setFromObject(device.getObjectByName('head')!).min.y
+    expect(poleTop - headBottom).toBeGreaterThan(0)
+    expect(poleTop - headBottom).toBeLessThan(0.02)
+  })
+})
+
+describe('deviceLabelPoint', () => {
+  it('puts a name above the device or just past its side, whichever way it faces', () => {
+    const device = createDevice('phone')
+    device.position.set(1, 0, 0)
+    device.rotation.y = -Math.PI / 2 // the east phone, facing the centre (west)
+    const right = deviceLabelPoint(device, 'right')
+    const left = deviceLabelPoint(device, 'left')
+    const above = deviceLabelPoint(device, 'above')
+    const { min, max } = DEVICE_BOUNDS.phone
+    expect(right.y).toBeCloseTo(NODE_HEIGHT_M, 6)
+    expect(right.x).toBeCloseTo(1 - min[2] * DISPLAY_SCALE, 6) // its back faces east
+    expect(left.x).toBeCloseTo(1 - max[2] * DISPLAY_SCALE, 6)
+    expect(above.toArray()).toEqual([1, NODE_HEIGHT_M + max[1] * DISPLAY_SCALE, 0])
+  })
+})
+
+describe('when a file is missing', () => {
+  it('draws a plain box of the right size and says so', async () => {
+    vi.resetModules()
+    vi.stubGlobal('fetch', async () => new Response(null, { status: 404 }))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fresh = await import('./devices')
+    let device: Object3D | null = null
+    const loaded = await new Promise<boolean>((resolve) => {
+      device = fresh.createDevice('unoq', resolve)
+    })
+    expect(loaded).toBe(false)
+    expect(warn).toHaveBeenCalled()
+    device!.updateMatrixWorld(true)
+    const box = meshes(device!.getObjectByName('head')!)[0]
+    expect(box.geometry).toBeInstanceOf(BoxGeometry)
+    const size = new Box3().setFromObject(box).getSize(new Vector3()).divideScalar(DISPLAY_SCALE)
+    const { min, max } = fresh.DEVICE_BOUNDS.unoq
+    expect(size.x).toBeCloseTo(max[0] - min[0], 6)
+    await fresh.devicesLoaded()
+    warn.mockRestore()
+  })
+})
+
 import type { HallLink } from './contract'
 import { hallHeard, trayText } from './devices'
 import { HALL_BEACONS, applyLayout } from './frame'

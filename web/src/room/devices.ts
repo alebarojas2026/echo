@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferGeometry, Float32BufferAttribute, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, Plane, Raycaster, Vector2, Vector3 } from 'three'
+import { Color, CylinderGeometry, Group, Object3D, ShaderMaterial, type Material, BoxGeometry, BufferGeometry, Float32BufferAttribute, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import type { HallLink } from './contract'
 import { HALL_BEACONS, SIZE_M, type HallBeacon, type Vec3 } from './frame'
 import { fade, Held } from './motion'
@@ -227,4 +227,264 @@ export class HallBeacons {
     }
     return busy
   }
+}
+
+import { DEVICE, DEVICE_DETAIL, WALL_SHADE } from './palette'
+import { LIGHT } from './shade'
+import phoneUrl from './assets/phone.glb?url'
+import pi5Url from './assets/pi5.glb?url'
+import standUrl from './assets/stand.glb?url'
+import unoqUrl from './assets/unoq.glb?url'
+
+// The four radio nodes as small scale models: the UNO Q board, the Pi 5 router in its case and the two
+// beacon phones, each on a slim pole with a round foot. The models are web/src/room/assets/*.glb, built by
+// tools/devices/build.py: real-size meshes with ambient occlusion baked into vertex colours, no textures.
+//
+// createDevice() returns an Object3D whose origin is the floor under its stand. It faces +z, so the caller
+// turns it (rotation.y) to face the square's centre. Its child "anchor" is the node's radio centre: it sits
+// at the node's height (1 m, or whatever setDeviceHeight says), straight above the origin, so the links,
+// which end at the node's position, end on the device.
+//
+// Every device shares two materials and every copy of a model shares its geometry. They are unlit like the
+// rest of the room: each surface takes a tone between a dark and a light grey from one fixed light up and to
+// the north-west (the same light as the room's baked shading), times its baked occlusion.
+
+export type DeviceKind = 'unoq' | 'pi5' | 'phone'
+type ModelName = DeviceKind | 'stand'
+
+/** How much bigger than life the devices and their stands are drawn, so they read from across the room.
+ *  Heights don't scale: a device's anchor still sits at its node's real height. */
+export const DISPLAY_SCALE = 2.5
+
+/** A node's radio height when nodes.json doesn't say otherwise, in metres. */
+export const NODE_HEIGHT_M = 1.0
+
+
+/** Each model's extent around its anchor, in real metres: x across (to your right as you face it), y up,
+ *  z out of its front. devices.test.ts checks these against the model files; labels and stand-ins use them. */
+export const DEVICE_BOUNDS: Record<DeviceKind, { min: Vec3; max: Vec3 }> = {
+  unoq: { min: [-0.0349, -0.0231, -0.0243], max: [0.0343, 0.0227, 0.0248] },
+  pi5: { min: [-0.0351, -0.03, -0.0492], max: [0.0352, 0.0166, 0.0492] },
+  phone: { min: [-0.0366, -0.09, -0.0306], max: [0.0366, 0.069, 0.0437] },
+}
+
+const URLS: Record<ModelName, string> = { unoq: unoqUrl, pi5: pi5Url, phone: phoneUrl, stand: standUrl }
+
+const VERTEX = /* glsl */ `
+  #include <common>
+  #include <color_pars_vertex>
+  varying vec3 vNormalW;
+  void main() {
+    #include <color_vertex>
+    vNormalW = mat3(modelMatrix) * normal;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }`
+
+const FRAGMENT = /* glsl */ `
+  uniform vec3 uLight;
+  uniform vec3 uDark;
+  uniform vec3 uLightDir;
+  uniform float uTop;
+  varying vec3 vNormalW;
+  #include <color_pars_fragment>
+  void main() {
+    float k = min(1.0, max(0.0, dot(normalize(vNormalW), uLightDir)) / uTop);
+    float occlusion = 1.0;
+    #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
+      occlusion = vColor.r;
+    #endif
+    gl_FragColor = vec4(mix(uDark, uLight, k) * occlusion, 1.0);
+    #include <colorspace_fragment>
+  }`
+
+/** A material whose surfaces run from `dark` (facing away from the light) to `light` (facing up). */
+function toneMaterial(light: number, darkMix: number): ShaderMaterial {
+  return new ShaderMaterial({
+    name: 'device-tone',
+    uniforms: {
+      uLight: { value: new Color(light) },
+      uDark: { value: new Color(light).lerp(new Color(WALL_SHADE), darkMix) },
+      uLightDir: { value: LIGHT.clone() },
+      uTop: { value: LIGHT.y }, // what a surface facing straight up receives: it takes the light tone
+    },
+    vertexShader: VERTEX,
+    fragmentShader: FRAGMENT,
+    vertexColors: true,
+  })
+}
+
+let materials: Record<'device' | 'detail', ShaderMaterial> | null = null
+
+/** The two materials every device shares, by the names the model files give them. */
+export function deviceMaterials(): Record<'device' | 'detail', ShaderMaterial> {
+  materials ??= { device: toneMaterial(DEVICE, 0.5), detail: toneMaterial(DEVICE_DETAIL, 0.55) }
+  return materials
+}
+
+interface Model {
+  root: Object3D
+  /** Where the pole meets the device, metres below the anchor (real size, so negative). */
+  mount: number
+}
+
+const models = new Map<ModelName, Promise<Model | null>>()
+
+/** Loads a model file once and swaps its materials for the shared ones. Resolves null if it can't load. */
+function loadModel(name: ModelName): Promise<Model | null> {
+  let p = models.get(name)
+  if (!p) {
+    p = (async () => {
+      try {
+        const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js')
+        const res = await fetch(URLS[name])
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const gltf = await new GLTFLoader().parseAsync(await res.arrayBuffer(), '')
+        const shared = deviceMaterials()
+        gltf.scene.traverse((o) => {
+          if (!(o instanceof Mesh)) return
+          const old = o.material as Material
+          o.material = old.name === 'detail' ? shared.detail : shared.device
+          old.dispose()
+        })
+        const mount = gltf.scene.getObjectByName('mount')?.position.y ?? 0
+        for (const point of ['anchor', 'mount']) gltf.scene.getObjectByName(point)?.removeFromParent()
+        return { root: gltf.scene, mount }
+      } catch (err) {
+        console.warn(`devices: could not load ${name}, drawing a plain stand-in.`, err)
+        return null
+      }
+    })()
+    models.set(name, p)
+  }
+  return p
+}
+
+/** Resolves once every device file has loaded (or failed and fallen back to a stand-in). */
+export function devicesLoaded(): Promise<void> {
+  return Promise.all((Object.keys(URLS) as ModelName[]).map(loadModel)).then(() => undefined)
+}
+
+interface DeviceParts {
+  kind: DeviceKind
+  head: Group
+  foot: Object3D | null
+  pole: Object3D | null
+  mount: number
+  heightM: number
+}
+
+/** Each device's parts, kept beside it rather than in userData, which three.js copies as JSON on clone. */
+const deviceParts = new WeakMap<Object3D, DeviceParts>()
+
+function parts(device: Object3D): DeviceParts {
+  const p = deviceParts.get(device)
+  if (!p) throw new Error('not a device made by createDevice()')
+  return p
+}
+
+/** Stretches the pole from the floor to the device's mount point. */
+function fitPole(p: DeviceParts) {
+  if (!p.pole) return
+  p.pole.scale.set(DISPLAY_SCALE, Math.max(0.01, p.heightM + DISPLAY_SCALE * p.mount), DISPLAY_SCALE)
+}
+
+let fallbackGeometry: Record<DeviceKind, BufferGeometry> | null = null
+
+/** The plain box drawn when a model file can't load: the device's size, so the room still reads. */
+function standIn(kind: DeviceKind): Mesh {
+  fallbackGeometry ??= Object.fromEntries(
+    (Object.keys(DEVICE_BOUNDS) as DeviceKind[]).map((k) => {
+      const { min, max } = DEVICE_BOUNDS[k]
+      const g = new BoxGeometry(max[0] - min[0], max[1] - min[1], max[2] - min[2])
+      g.translate((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2)
+      return [k, unshaded(g)]
+    }),
+  ) as Record<DeviceKind, BufferGeometry>
+  return new Mesh(fallbackGeometry[kind], deviceMaterials().device)
+}
+
+let fallbackPole: { pole: BufferGeometry; foot: BufferGeometry } | null = null
+
+function unshaded(g: BufferGeometry): BufferGeometry {
+  g.setAttribute('color', new Float32BufferAttribute(new Float32Array(g.getAttribute('position').count * 3).fill(1), 3))
+  return g
+}
+
+/**
+ * A device on its stand, origin on the floor under the stand, facing +z. The model files load in the
+ * background (once for all devices); onReady(true) runs when this one is drawn from its file, onReady(false)
+ * when it fell back to a plain box. Either way the caller should draw a new frame then.
+ */
+export function createDevice(kind: DeviceKind, onReady?: (loaded: boolean) => void): Object3D {
+  const device = new Group()
+  device.name = `device-${kind}`
+  const head = new Group()
+  head.name = 'head'
+  head.scale.setScalar(DISPLAY_SCALE)
+  const anchor = new Object3D()
+  anchor.name = 'anchor'
+  head.add(anchor)
+  device.add(head)
+  const p: DeviceParts = { kind, head, foot: null, pole: null, mount: 0, heightM: NODE_HEIGHT_M }
+  deviceParts.set(device, p)
+  head.position.y = p.heightM
+
+  void Promise.all([loadModel(kind), loadModel('stand')]).then(([model, stand]) => {
+    if (model) {
+      head.add(model.root.clone())
+      p.mount = model.mount
+    } else {
+      head.add(standIn(kind))
+      p.mount = DEVICE_BOUNDS[kind].min[1]
+    }
+    const foot = stand?.root.getObjectByName('foot')
+    const pole = stand?.root.getObjectByName('pole')
+    if (foot && pole) {
+      p.foot = foot.clone()
+      p.pole = pole.clone()
+    } else {
+      fallbackPole ??= {
+        pole: unshaded(new CylinderGeometry(0.0035, 0.0035, 1, 12, 1, true).translate(0, 0.5, 0)),
+        foot: unshaded(new CylinderGeometry(0.0145, 0.0145, 0.004, 24).translate(0, 0.002, 0)),
+      }
+      p.foot = new Mesh(fallbackPole.foot, deviceMaterials().detail)
+      p.pole = new Mesh(fallbackPole.pole, deviceMaterials().detail)
+    }
+    p.foot.scale.setScalar(DISPLAY_SCALE)
+    p.foot.position.set(0, 0, 0)
+    p.pole.position.set(0, 0, 0)
+    device.add(p.foot, p.pole)
+    fitPole(p)
+    onReady?.(Boolean(model && stand))
+  })
+  return device
+}
+
+/** Puts the device's anchor (its radio's centre) this many metres above the floor; the pole follows. */
+export function setDeviceHeight(device: Object3D, heightM: number) {
+  const p = parts(device)
+  p.heightM = heightM
+  p.head.position.y = heightM
+  fitPole(p)
+}
+
+const Y_AXIS = new Vector3(0, 1, 0)
+const corner = new Vector3()
+
+/**
+ * Where a node's name goes, in the device's parent's frame: just above the device ('above'), or level with
+ * its anchor just past its right or left side as the room's camera sees it (+x or -x). Uses the device's
+ * current position, height and turn, and its size from DEVICE_BOUNDS, so it is right before the file loads.
+ */
+export function deviceLabelPoint(device: Object3D, side: 'above' | 'right' | 'left'): Vector3 {
+  const p = parts(device)
+  const { min, max } = DEVICE_BOUNDS[p.kind]
+  const at = device.position.clone().setY(device.position.y + p.heightM)
+  if (side === 'above') return at.setY(at.y + max[1] * DISPLAY_SCALE)
+  let reach = side === 'right' ? -Infinity : Infinity
+  for (let i = 0; i < 4; i++) {
+    corner.set(i & 1 ? max[0] : min[0], 0, i & 2 ? max[2] : min[2]).applyAxisAngle(Y_AXIS, device.rotation.y)
+    reach = side === 'right' ? Math.max(reach, corner.x) : Math.min(reach, corner.x)
+  }
+  return at.setX(at.x + reach * DISPLAY_SCALE)
 }

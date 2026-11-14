@@ -5,7 +5,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 // fixed light up and to the north-west, written into vertex colours. The GPU draws it with MeshBasicMaterial
 // (no lights, no shadow maps), so a shaded room costs the Pi 5 what a flat one does.
 
-const LIGHT = new Vector3(-0.45, 1, -0.3).normalize()
+/** The room's one light, up and to the north-west. The devices (devices.ts) shade by it too. */
+export const LIGHT = new Vector3(-0.45, 1, -0.3).normalize()
 const TOP = LIGHT.y // what a face pointing straight up receives
 
 export interface Part {
