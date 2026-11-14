@@ -6,7 +6,7 @@ _Start with the room display and hardware visible._
 
 _Point to the board, then the Pi._
 
-> Everything runs locally on the Arduino UNO Q's Dragonwing CPU. The Pi is only the router and screen. A camera labeled zones during setup. The camera is now unplugged, no image is saved, and live sensing uses radio alone.
+> Everything runs locally on the Arduino UNO Q's Dragonwing CPU. The Pi is only the router and screen. A camera labeled zones during setup.
 
 _Invite the judge into the marked square._
 
@@ -20,9 +20,13 @@ _Place the metal tray at its marked spot._
 
 > Now we place the metal tray by the router. Radio Sight separates its stable object pattern from the person and explains the changed link. The advisor recommends a tested router position. Before the move, the link measures __ dBm.
 
-_Move the router to the recommended floor mark and wait for the result._
+_Move the router to the recommended west or east floor mark and wait for the result._
 
 > After the move, the same link measures __ dBm. Dead-zone improvement is __. That is measured, not estimated.
+
+_Unplug the camera in view of the judge._
+
+> The camera is now unplugged, no image is saved, and live sensing uses radio alone.
 
 _Finish on the proof strip while the unplugged camera cable remains visible._
 
