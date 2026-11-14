@@ -6,18 +6,28 @@ from pathlib import Path
 import subprocess
 import sys
 
-from proof.score import load_session
+from proof.score import from_this_place, load_session, place_start
 
 
-def plan(folder, output, baseline, document, on_board=False):
+def plan(folder, output, baseline, document, on_board=False, left_out=None):
+    """left_out: a list that collects the sessions recorded before the current place began."""
     folder, output = Path(folder), Path(output)
+    start, open_session = place_start(baseline)
     groups = {"train": [], "heldout": [], "object": []}
     sessions = []
     missing = []
     for path in sorted(folder.glob("*.jsonl")):
         if path.name.endswith((".states.jsonl", ".events.jsonl")):
             continue
-        session = load_session(path)
+        try:
+            session = load_session(path)
+        except ValueError as e:   # one bad file must not stop the others from being scored
+            missing.append(f"readable session file: {path} ({e})")
+            continue
+        if not from_this_place(session, start, open_session):
+            if left_out is not None:
+                left_out.append(str(path))
+            continue
         purpose = session["meta"].get("purpose")
         if purpose in groups:
             groups[purpose].append(str(path))
@@ -108,7 +118,10 @@ def main():
     parser.add_argument("--on-board", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    commands, missing = plan(args.sessions, args.output, args.baseline, args.document, args.on_board)
+    left_out = []
+    commands, missing = plan(args.sessions, args.output, args.baseline, args.document, args.on_board, left_out)
+    for path in left_out:
+        print("left out, recorded before the current baseline: " + path)
     for command in commands:
         if args.dry_run:
             print(json.dumps(command))

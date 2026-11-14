@@ -208,6 +208,35 @@ def read_baseline(path):
     return data["base_dbm"], data["expected_hz"]
 
 
+def place_start(baseline_path):
+    """(epoch ms when the current place began, the session open during its baseline), or (None, None).
+
+    The brain writes place.json next to baseline.json when a baseline asked for by hand finishes.
+    Recordings from before it belong to another room or layout and are never scored.
+    Without place.json the baseline's own t is the cut-off.
+    """
+    baseline_path = Path(baseline_path)
+    try:
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None, None
+    if not isinstance(baseline, dict):
+        return None, None
+    try:
+        t = json.loads(baseline_path.with_name("place.json").read_text(encoding="utf-8"))["t"]
+    except (OSError, ValueError, KeyError, TypeError):
+        t = baseline.get("t")
+    if isinstance(t, bool) or not isinstance(t, (int, float)):
+        return None, None
+    return t, baseline.get("session")
+
+
+def from_this_place(session, start, open_session=None):
+    """True when a loaded session was recorded in the current place."""
+    meta = session["meta"]
+    return start is None or meta["recv_t"] >= start or (open_session and meta.get("session") == open_session)
+
+
 def merge_scored(proof, report):
     from proof.provenance import prepare_update
     out = prepare_update(proof, report["commit"], report["measured_at"])
@@ -242,6 +271,10 @@ def main():
         parser.error("training inputs must have train or object purpose")
     if {s["meta"]["session"] for s in training} & {s["meta"]["session"] for s in heldout}:
         parser.error("training and heldout sessions overlap")
+    start, open_session = place_start(args.baseline)
+    old = [s["meta"]["session"] for s in training + heldout if not from_this_place(s, start, open_session)]
+    if old:
+        parser.error("recorded before the current baseline (another place): " + ", ".join(sorted(old)))
     if not args.allow_sim and any(m.get("src") != "live" for s in training for m in s["messages"]):
         parser.error("synthetic training cannot produce measured proof")
     from brain.train import Model
