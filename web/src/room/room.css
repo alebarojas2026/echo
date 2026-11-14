@@ -78,6 +78,11 @@
   text-transform: uppercase;
 }
 
+.room-label--spot {
+  translate: -50% -50%;
+  font-size: 0.7rem;
+}
+
 .room-legend {
   position: absolute;
   left: 1.25rem;
