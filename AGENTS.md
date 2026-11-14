@@ -42,18 +42,29 @@ CONTRACTS.md, contracts/, AGENTS.md, CLAUDE.md and README.md are changed only by
 6. No issues left with your tag? Add tests, then open a new issue with your tag for the most useful next step and do it.
 
 ## Style (every screen: room, HUD, game page)
-Dark instrument look. Each colour means one thing and nothing else:
+**The look (Ivan's pick): a pro, technical instrument, as clean as a Tesla car screen.** The 3D room is the hero. Very little text, each piece of it large and certain. Dark background. People are simple, faceless 3D figures.
+
+Colours: each one means one thing and nothing else.
 - Page and canvas #111316. Floor and cards #1A1D21. Edges and lines #353B43. The sensing square's outline #6B7480.
 - Text #E6E8EB. Secondary text #9AA3AD.
 - link #858E99: a healthy radio link. Neutral on purpose: only the links behind the decision turn person amber.
-- person #FF9F43: the one accent. The person (the X-ray heat scale up to #FFD29A, the ghost, the links behind the decision, zone names).
+- person #FF9F43: the one accent. The person (the figure, the X-ray heat up to #FFD29A, the links behind the decision, zone names).
 - object #A9B4C2: objects (hatching, markers).
-- action #3DD68C: the router advice arrow and the check-in.
+- action #34B277: the router advice arrow and the check-in.
 - fault #F2555A: a broken link and the no-movement alert.
-- Green (action) and red (fault) are status only, and always come with a word ("Wave seen", "No movement", "no signal"). Never colour alone.
-- Take colours from the shared tokens (web/src/room/palette.ts and the CSS variables), never a hard-coded hex. The look may still be tuned after Ivan's UI review.
-- Headlines in Newsreader, body in Hanken Grotesk (self-hosted fonts are in web/src/hud/fonts/).
-- No glow, bloom, gradients, purple, emoji or neon, and no pure black or pure white. Motion is calm: opacity and transform only.
+- Green and red are status only, and always come with a word ("Wave seen", "No movement", "no signal"). Never colour alone.
+- Take colours from the shared tokens (web/src/room/palette.ts and the CSS variables), never a hard-coded hex.
+
+Type: Hanken Grotesk only (self-hosted in web/src/hud/fonts/). No serif.
+- One headline per moment, built from the state (instant, never waits on the narrator): 600 weight, 56-84 px. Examples: "Still in the bathroom", "An object, not a person", "Nobody is here".
+- Anything a judge needs to read is at least 28 px. Numbers use tabular figures.
+- Plain words, never ids on screen: "East to UNO Q, Bluetooth", not east>unoq:ble.
+- Operator controls and debug values are hidden from judges (shown with the O key or ?op=1).
+
+Motion: calm and meaningful, opacity and transform only.
+- Text changes: old text out in 100 ms, new text in over 140 ms starting 40 ms later, in the same spot. Nothing jumps or reflows.
+- The person moves only once a new zone has held for 200 ms, then glides (critically damped, about 650 ms, no overshoot). Nothing teleports.
+- No loops, pulses, glow, bloom, gradients, purple, emoji or neon; no pure black or pure white.
 
 ## Hard rules
 - **Open every PR against main.** Never base a PR on another PR's branch: when that branch merges and is deleted, your PR closes. If you need unmerged work, wait for it to merge, or build against main with a small stub.
