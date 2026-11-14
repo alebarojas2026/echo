@@ -1,0 +1,19 @@
+[Unit]
+Description=Radio Sight camera watcher
+After=network-online.target radio-sight-bus.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+Environment=PYTHONUNBUFFERED=1
+SupplementaryGroups=video
+ExecStart=@PYTHON@ -m teacher.camwatch
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
