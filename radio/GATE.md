@@ -31,14 +31,14 @@ and `python -m radio.report_hci`) checks them.
 
 ## Gate 2 — Bluetooth raw scan (#20)
 
-**Pass criteria:** the Pi beacon ≥ 20 adverts/s at the board; each phone beacon ≥ 7 adverts/s
-at the board and at the Pi.
+**Pass criteria:** the Pi beacon ≥ 20 adverts/s at the board; the E and W beacons ≥ 7 adverts/s
+each, at the board and at the Pi.
 
 **Setup:**
 - Pi advertising as beacon S (manufacturer data `FFFF525353`): `radio-sight-radio-node` running on the Pi.
-- East and west phones advertising in nRF Connect as beacons E and W
-  (`FFFF525345`, `FFFF525357`). They must be Android phones: an iPhone can't put manufacturer
-  data in its adverts (#289).
+- The E and W beacons (the two XIAO ESP32-S3 boards with the beacon/ firmware) powered and
+  advertising at the east and west spots (`FFFF525345`, `FFFF525357`). Phones are out: an iPhone
+  can't put manufacturer data in its adverts (#289).
 - On the board, `sudo systemctl stop radio-sight-hci-scan` first (one scanner at a time), then
   `sudo python -m radio.hci_scan --node unoq --seconds 60`. Its summary gives the three `>unoq` rows.
   Start the service again afterwards.

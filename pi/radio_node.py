@@ -188,7 +188,7 @@ def status_line(counts: dict, seconds: float, bus: BusSender, redone: int) -> st
 
 def summary(seen: dict, windows: dict, seconds: float) -> str:
     """One line per Pi link for the Gate 2 table: readings, adverts/s over the run, the lowest and
-    median 10 s rate (a phone that slows down shows up here), and the median dBm."""
+    median 10 s rate (a beacon that slows down or drops out shows up here), and the median dBm."""
     lines = [f"{'link':<14} {'n':>6} {'adverts/s':>10} {'lowest 10s':>11} {'median 10s':>11} {'median dBm':>11}"]
     for link in PI_LINKS:
         values, rates = seen.get(link, []), windows.get(link, [])
