@@ -40,7 +40,7 @@ def test_a_broken_beat_fails_by_name(capsys, monkeypatch):
     results = rehearse.rehearse((broken, commands, beats))
     failed = {name for name, passed, _ in results if not passed}
     assert "wave check-in" in failed and "no-movement alert" not in failed
-    monkeypatch.setattr(rehearse, "rehearse", lambda: results)
+    monkeypatch.setattr(rehearse, "rehearse", lambda *a, **k: results)
     assert rehearse.main([]) == 1
     out = capsys.readouterr().out
     assert "FAIL  wave check-in" in out and "PASS  no-movement alert  shown after" in out
@@ -60,3 +60,18 @@ def test_recap_reaches_the_screen_through_bus_and_brain():
     text = recaps.pop()
     assert text.startswith("Someone visited the Hall, Bathroom, Chair and Bed zones.")
     assert "no-movement alert" in text and "dBm" in text
+
+
+def test_the_desk_visit_fits_its_script():
+    results = rehearse.rehearse(rehearse.desk_script())
+    failed = [name for name, passed, _ in results if not passed]
+    assert failed == [], failed
+    shown = {name: s for name, _, s in results}
+    assert 45 + shown["no-movement alert"] <= 70          # the alert shows inside 0:45-1:10 of docs/desk-demo.md
+
+
+def test_desk_flag_runs_the_desk_visit(capsys, monkeypatch):
+    seen = []
+    monkeypatch.setattr(rehearse, "rehearse", lambda script=None: seen.append(script) or [("a beat", True, 1.0)])
+    assert rehearse.main(["--desk"]) == 0
+    assert seen[0][0]["name"] == "desk" and "1 of 1 beats passed" in capsys.readouterr().out
