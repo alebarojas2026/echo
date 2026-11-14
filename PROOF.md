@@ -20,5 +20,5 @@ Every number shown on screen or in the pitch has a row here: what was measured, 
 - **Train/test split (everyone):** decide before recording which sessions are for training and which are held out for testing. Never test on training sessions.
 
 ## Honest limits
-- Detects presence, zone and movement. It is a no-movement alert, not fall detection.
+- Detects presence, zone and movement. The no-movement alert notices that someone has stopped moving, not why.
 - Trained and tested in one room layout; accuracy in other rooms is not measured.
