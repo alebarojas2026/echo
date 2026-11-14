@@ -1,4 +1,4 @@
-# LE Advertising Report (7.7.65.2): one advert from the east phone, RSSI -61
+# LE Advertising Report (7.7.65.2): one advert from the east beacon (the ESP32-S3 layout: Flags, then the manufacturer data), RSSI -61
 04 3e 16          # event packet, LE Meta, 22 parameter bytes
 02 01             # subevent 0x02, Num_Reports 1
 03                # Event_Type ADV_NONCONN_IND
