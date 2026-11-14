@@ -133,6 +133,7 @@ class Brain:
         self.windower: Optional[F.Windower] = None
         self.window: Optional[dict] = None
         self.capture: Optional[dict] = None   # a running baseline capture
+        self._wait_said = ()                  # what the log last said the capture is waiting for
         self.model: Optional[Model] = None
         self.model_n = 0
         self.training: Optional[dict] = None
@@ -487,23 +488,43 @@ class Brain:
         The automatic baseline after router_home also runs with the camera unplugged (the demo
         unplugs it before the router moves); with the camera on it must still see nobody.
         """
+        return self._capture_wait(now) is None
+
+    def _capture_wait(self, now) -> Optional[str]:
+        """What the baseline is waiting for, in words for the log; None when every condition holds."""
         lb = self.label
         cam_on = bool(self.cam and self.cam[1] == "on" and now - self.cam[0] <= CAM_SILENT_MS)
-        camera_ok = (cam_on and lb is not None and now - lb["recv_t"] <= TEACHER_FRESH_MS
-                     and (lb.get("persons_in_frame") or 0) == 0)
-        return bool((camera_ok or (self.recalibrating and not cam_on))
-                    and self.label_mode == "off" and self._health_ok and not self.health.blind
-                    and all(now - self._last_seen.get(link, -10**15) <= LINK_FRESH_MS for link in self.links))
+        if not cam_on:
+            if not self.recalibrating:
+                return "the camera is not on"
+        elif lb is None or now - lb["recv_t"] > TEACHER_FRESH_MS:
+            return "no camera labels in the last second"
+        elif (lb.get("persons_in_frame") or 0) != 0:
+            return "the camera sees somebody"
+        if self.label_mode != "off":
+            return f"label mode is {self.label_mode}, not off"
+        quiet = [link for link in self.links if now - self._last_seen.get(link, -10**15) > LINK_FRESH_MS]
+        if quiet:
+            return "no readings in the last second from " + ", ".join(quiet)
+        if not self._health_ok or self.health.blind:
+            return "link health is not ok"
+        return None
 
     def _tick(self):
         now = self.now()
         if self.capture:
-            if not self._capture_ok(now):
+            wait = self._capture_wait(now)
+            if wait != self._wait_said:             # said once per reason, not on every message
+                self._wait_said = wait
+                log = logging.getLogger("brain")
+                log.warning("baseline is waiting: %s", wait) if wait else log.info("baseline: capturing 20 s")
+            if wait:
                 self._start_capture()               # a condition broke: the 20 s start again
             elif self.capture["start"] is None:
                 self.capture["start"] = now
             elif now - self.capture["start"] >= BASELINE_MS:
                 msgs, new_place, self.capture = self.capture["messages"], self.capture["new_place"], None
+                self._wait_said = ()
                 expected = {link: round(sum(1 for m in msgs if m["link"] == link) / (BASELINE_MS / 1000), 1)
                             for link in self.links}
                 self._set_baseline(F.baseline(msgs), expected)
