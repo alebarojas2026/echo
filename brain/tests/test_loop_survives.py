@@ -28,8 +28,8 @@ def test_a_malformed_reading_and_a_failed_tick_do_not_stop_the_loop(caplog):
 
         async with connect(f"ws://127.0.0.1:{ports['ws']}/ws") as ws:
             for _ in range(5):
-                send(dbm=None)                       # a reader bug: no number
-                send(dbm="loud")
+                send(dbm=-50, recv_t="soon")         # a sender bug: recv_t is not a time
+                send(dbm="loud")                     # no number: dropped without a word
             send(dbm=-50, recv_t=T0_MS + 100)        # and a good one after them
             real_state, calls = brain.state, {"n": 0}
 
@@ -55,3 +55,22 @@ def test_a_malformed_reading_and_a_failed_tick_do_not_stop_the_loop(caplog):
     said = [r.getMessage() for r in caplog.records]
     assert sum("a state tick failed" in t for t in said) == 1          # logged, but not on every tick
     assert sum("could not be used" in t for t in said) == 1
+
+
+def test_a_reading_that_is_not_a_finite_number_never_reaches_the_baseline():
+    import math
+
+    from brain.core import Brain
+    from brain.tests.simdata import sim_to_v2
+    from brain.tests.test_core import cmd
+
+    brain = Brain()
+    brain.on_cmd(cmd("baseline"))
+    for i, m in enumerate(sim_to_v2("empty_room", seed=1)):
+        if m["type"] == "rssi" and i % 7 == 0:          # a reader gone wrong, mixed into the feed
+            brain.on_message(dict(m, dbm=[float("nan"), None, "x", True, float("inf")][i % 5]))
+        brain.on_message(m)
+    assert brain.capture is None and len(brain.base) == 6
+    assert all(math.isfinite(v) for v in brain.base.values())
+    state = brain.state()
+    assert all(math.isfinite(link["dbm"]) and math.isfinite(link["base_dbm"]) for link in state["links"])

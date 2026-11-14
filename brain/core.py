@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import pickle
 import statistics
@@ -85,6 +86,10 @@ def last_meta(path) -> Optional[dict]:
 
 def _same_object(a, b) -> bool:
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 <= SAME_OBJECT_M
+
+
+def _is_reading(dbm) -> bool:
+    return isinstance(dbm, (int, float)) and not isinstance(dbm, bool) and math.isfinite(dbm)
 
 
 def now_ms() -> int:
@@ -168,6 +173,8 @@ class Brain:
         t, kind = msg.get("recv_t"), msg.get("type")
         if t is None:
             return
+        if kind == "rssi" and not _is_reading(msg.get("dbm")):
+            return   # no number, or NaN (JSON lets it through): one such reading in a baseline would poison it
         self.feed_t = max(self.feed_t, int(t))
         if kind == "rssi":
             # state.src mirrors the radio feed. The camera and the bus's meta say "live"
