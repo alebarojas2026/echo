@@ -3,6 +3,7 @@ import type { Advice } from './contract'
 import { HOME_SPOT, ROUTER_SPOTS, spotName } from './frame'
 import { ACTION, EDGE, TEXT } from './palette'
 import { v3 } from './stage'
+import { fade } from './motion'
 import type { RoomView } from './view'
 
 // Floor marks for the router spots (contract section 3) and, while advice is set, a green arrow on the
@@ -40,6 +41,7 @@ export class RouterSpots {
   /** Spot tags stay hidden until there is advice; then only the advised spot says where to put the router. */
   private readonly tags = new Map<string, HTMLElement>()
   private grow = 0 // 0..1, the arrow draws itself in
+  private opacityTo = 0.9
   private growTo = 0
 
   constructor(private readonly view: RoomView) {
@@ -86,7 +88,7 @@ export class RouterSpots {
         this.arrow.rotation.z = end.x < start.x ? Math.PI : 0
         this.grow = 0
       }
-      this.arrow.material.opacity = arrow.done ? 0.4 : 0.9
+      this.opacityTo = arrow.done ? 0.4 : 0.9
     }
     this.view.requestRender()
   }
@@ -97,6 +99,8 @@ export class RouterSpots {
     if (Math.abs(this.growTo - this.grow) < 0.005) this.grow = this.growTo
     this.arrow.visible = this.grow > 0
     this.arrow.scale.set(Math.max(this.grow, 0.001), 1, 1)
-    return this.grow !== this.growTo
+    const m = this.arrow.material
+    m.opacity = fade(m.opacity, this.opacityTo, dt)
+    return this.grow !== this.growTo || m.opacity !== this.opacityTo
   }
 }

@@ -66,7 +66,8 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     beams.update(state)
     xray.update(state.xray, state.health?.status === 'blind')
     presence.update(state.pred, state.objects ?? [], state.xray, state.router)
-    stage.markZones(state.pred?.zone_set ?? [], state.alert?.state === 'check_on' ? state.alert.zone : null)
+    // Zone names follow the zones the figure shows (held), so one wrong decision never flashes a name.
+    stage.markZones(presence.shownZones(), state.alert?.state === 'check_on' ? state.alert.zone : null)
     spots.update(state.router, state.advice)
   })
   return { view, stage }

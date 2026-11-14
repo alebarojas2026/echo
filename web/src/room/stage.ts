@@ -11,7 +11,8 @@ import {
   PlaneGeometry,
   Vector3,
 } from 'three'
-import { NODES, SQUARE_M, ZONES, nodePosition, toScene, type NodeId, type Vec3 } from './frame'
+import { HOME_SPOT, NODES, SQUARE_M, ZONES, nodePosition, toScene, type NodeId, type Vec3 } from './frame'
+import { Glide3 } from './motion'
 import { EDGE, FLOOR, SQUARE, TEXT } from './palette'
 import type { RoomView } from './view'
 
@@ -103,6 +104,7 @@ export class Stage {
   readonly drawnRoom: Group
   private readonly nodes: NodeMesh[] = []
   private readonly zoneLabels = new Map<number, HTMLElement>()
+  private readonly routerGlide = new Glide3(nodePosition('pi5', HOME_SPOT))
 
   constructor(private readonly view: RoomView) {
     const { room, square } = buildShell()
@@ -132,14 +134,24 @@ export class Stage {
       const label = view.addLabel(NODE_LABELS[info.id].text, new Vector3(), `room-label--node room-label--${NODE_LABELS[info.id].side}`)
       this.nodes.push({ id: info.id, head, post, label })
     }
-    this.placeNodes('S-home')
+    this.putNodes()
+    view.addAnimator((dt) => {
+      const moving = this.routerGlide.step(dt)
+      if (moving) this.putNodes()
+      return moving
+    })
     view.scene.add(this.group)
   }
 
-  /** Puts every node at its spot; the router follows state.router. */
+  /** Puts every node at its spot; the router glides (600 ms) to the spot in state.router. */
   placeNodes(router: string | null | undefined) {
+    this.routerGlide.set(nodePosition('pi5', router))
+    this.view.requestRender()
+  }
+
+  private putNodes() {
     for (const n of this.nodes) {
-      const p = nodePosition(n.id, router)
+      const p = n.id === 'pi5' ? this.routerGlide.now() : nodePosition(n.id, null)
       const top = v3(p)
       n.head.position.copy(top)
       n.post.position.copy(v3([p[0], p[1], 0]))

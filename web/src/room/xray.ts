@@ -221,7 +221,7 @@ export class XrayLayer {
   }
 
   private ease(dt: number): boolean {
-    const k = 1 - Math.exp(-dt / 120)
+    const k = 1 - Math.exp(-dt / 300) // noisy 10 Hz data: slow enough to hide the noise
     this.fade += (this.fadeTo - this.fade) * k
     if (Math.abs(this.fadeTo - this.fade) < 0.01) this.fade = this.fadeTo
     let busy = this.fade !== this.fadeTo

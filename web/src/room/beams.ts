@@ -3,8 +3,9 @@ import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import type { LinkState, StateMsg } from './contract'
-import { LINK_IDS, SQUARE_M, nodePosition, parseLinkId, type Vec3 } from './frame'
+import { LINK_IDS, SQUARE_M, nodePosition, parseLinkId, type NodeId, type Vec3 } from './frame'
 import type { Mirror } from './mirror'
+import { follow, Glide3, Held, TAU } from './motion'
 import { ACTION, FAULT, LINK, PERSON } from './palette'
 import { v3 } from './stage'
 import type { RoomView } from './view'
@@ -50,6 +51,8 @@ interface Beam {
   look: BeamLook
   amber: number // 0..1, eased toward the person colour
   green: number // 0..1, eased toward the check-in colour
+  /** In pred.why, as shown: lights after 300 ms in the list, lets go after 800 ms out of it. */
+  why: Held<boolean>
 }
 
 /** The two nodes a link joins, in a fixed order, so twin links (wifi and ble) share one key. */
@@ -65,6 +68,8 @@ export class Beams {
   /** Shown instead of any per-link label while state.links is still empty (no readings yet). */
   private readonly waiting: HTMLElement
   private router: string | null = null
+  /** The router's head glides to a new spot (600 ms); the links that end on it follow. */
+  private readonly pi5 = new Glide3(nodePosition('pi5', 'S-home'))
   /** The link that just carried a wave check-in, drawn green and wide while the wave shows. */
   private waveLink: string | null = null
 
@@ -79,7 +84,8 @@ export class Beams {
         label.hidden = true
         this.pairLabels.set(pair, label)
       }
-      this.beams.push({ id, pair, line, mat, look: beamLook(undefined, false, new Set()), amber: 0, green: 0 })
+      this.beams.push({ id, pair, line, mat, look: beamLook(undefined, false, new Set()), amber: 0, green: 0,
+        why: new Held<boolean>(false, (on) => (on ? 300 : 800)) })
     }
     this.waiting = view.addLabel('Waiting for radio readings', v3([SQUARE_M / 2, SQUARE_M / 2, 0]), 'room-label--caption')
     this.waiting.hidden = true
@@ -87,7 +93,8 @@ export class Beams {
       for (const b of this.beams) b.mat.resolution.set(w, h)
     })
     view.addAnimator((dt) => this.ease(dt))
-    this.place('S-home')
+    this.router = 'S-home'
+    this.placeAt(nodePosition('pi5', 'S-home'))
   }
 
   setWave(link: string | null) {
@@ -96,15 +103,19 @@ export class Beams {
     this.view.requestRender()
   }
 
-  update(state: StateMsg) {
-    if (state.router !== this.router) this.place(state.router)
+  update(state: StateMsg, nowMs = performance.now()) {
+    if (state.router !== this.router) {
+      this.router = state.router
+      this.pi5.set(nodePosition('pi5', state.router))
+      this.view.requestRender()
+    }
     const blind = new Set(state.health?.blind ?? [])
     const why = new Set(state.pred?.why ?? [])
     const waiting = state.links.length === 0
     const brokenPairs = new Set<string>()
     for (const b of this.beams) {
       const link = state.links.find((l) => l.id === b.id)
-      b.look = beamLook(link, why.has(b.id), blind)
+      b.look = beamLook(link, b.why.update(why.has(b.id), nowMs), blind)
       if (b.mat.dashed !== b.look.broken) b.mat.dashed = b.look.broken
       if (b.look.broken) brokenPairs.add(b.pair)
       const drop = link?.drop_db
@@ -119,13 +130,14 @@ export class Beams {
     this.view.requestRender()
   }
 
-  /** Puts every line between its nodes. Two links between the same nodes sit side by side. */
-  private place(router: string) {
-    this.router = router
+  /** Puts every line between its nodes, with the router's head at `pi5`. Two links between the same nodes
+   *  sit side by side. */
+  private placeAt(pi5: Vec3) {
+    const at = (id: NodeId) => (id === 'pi5' ? pi5 : nodePosition(id, this.router))
     for (const b of this.beams) {
       const parts = parseLinkId(b.id)!
-      const a = nodePosition(parts.tx, router)
-      const z = nodePosition(parts.rx, router)
+      const a = at(parts.tx)
+      const z = at(parts.rx)
       const twin = LINK_IDS.filter((id) => id !== b.id && id.startsWith(`${parts.tx}>${parts.rx}:`)).length > 0
       const shift = twin ? (parts.kind === 'wifi' ? 0.035 : -0.035) : 0
       const [ax, ay, az] = offset(a, z, shift)
@@ -142,11 +154,17 @@ export class Beams {
 
   /** Eases width, opacity and colour toward each link's look. Returns true while still moving. */
   private ease(dt: number): boolean {
-    const k = 1 - Math.exp(-dt / 160)
+    // Dimming follows the noisy drop slowly; the colour and width change at the pace of new words.
+    const kData = follow(dt, TAU.data)
+    const k = follow(dt, TAU.in)
     let busy = false
+    if (this.pi5.step(dt)) {
+      this.placeAt(this.pi5.now())
+      busy = true
+    }
     for (const b of this.beams) {
       const { mat, look } = b
-      mat.opacity += (look.opacity - mat.opacity) * k
+      mat.opacity += (look.opacity - mat.opacity) * kData
       const wave = b.id === this.waveLink && !look.broken
       const width = wave ? 7 : look.width
       mat.linewidth += (width - mat.linewidth) * k
