@@ -112,8 +112,8 @@ export interface Scene {
   checkin: Checkin | null
   stillS: number
   cam: 'on' | 'off'
-  /** Advice about the object by the router: hidden, showing, or showing with the result after the move. */
-  advice: 'none' | 'show' | 'result'
+  /** Advice about the object by the router. It only reaches the state while the Wi-Fi link is dropping. */
+  advice: boolean
   narration: Narration | null
 }
 
@@ -129,7 +129,7 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
     person, object, router, alert, checkin, stillS,
     blind: scenario === 'blind',
     cam: scenario === 'camera' && tMs % 16000 < 8000 ? 'on' : 'off',
-    advice: object && router === HOME_SPOT ? 'show' : 'none',
+    advice: !!object,
     narration: null,
   })
 }
@@ -193,14 +193,16 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
   const wifiNow = links.find((l) => l.id === 'pi5>unoq:wifi')!.dbm!
   // before_dbm is frozen when the router moves: the reading at S-home with the object there.
   const wifiHome = Number((-58 - linkDrop('pi5>unoq:wifi', 0, null, object, HOME_SPOT, 0)).toFixed(1))
+  // Contract section 6: advice only while pi5>unoq:wifi is dropping by 3 dB or more.
+  const wifiDrop = links.find((l) => l.id === 'pi5>unoq:wifi')!.drop_db ?? 0
   const advice: Advice | null =
-    object && scene.advice !== 'none'
+    object && scene.advice && wifiDrop >= 3
       ? {
           id: 'a1', cause: 'obstruction', near: 'pi5', xy_m: object, link: 'pi5>unoq:wifi', to_spot: 'S-W30',
-          // before_dbm and after_dbm are this mock's own wifi readings; dist_change_m comes from the spot geometry.
+          // before_dbm is this mock's own wifi reading; dist_change_m comes from the spot geometry.
           move_m: [-0.3, 0], dist_change_m: spotDistanceChange('S-W30'), why: ['pi5>unoq:wifi'],
           before_dbm: router === HOME_SPOT ? wifiNow : wifiHome,
-          after_dbm: scene.advice === 'result' ? wifiNow : null,
+          after_dbm: null,
           text: 'An object next to the router is blocking its link to the receiver. Move the router 30 cm west.',
         }
       : null
@@ -251,7 +253,8 @@ function emptyState(seq: number, router: string): StateMsg {
   }
 }
 
-/** Training time and decision time are measurements, so the mock says "not trained" and leaves them null. */
+/** Training time and decision time are measurements, so the mock says "not trained" and leaves them null.
+ *  (The contract now also allows trained with null timings; the schema in contracts/ doesn't yet.) */
 const UNTRAINED = { trained: false, ver: null, train_s: null, ms_per_decision: null, windows: 0, train_sessions: [], training: null }
 
 /** The board's readings are measurements; the mock has none. */

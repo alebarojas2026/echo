@@ -14,7 +14,8 @@ import type { Scene } from './mock'
 //   48     the tray goes on T1 next to the router: an object, not a person
 //   57     advice: move the router 30 cm west
 //   62     the router is moved (pred pauses while it's off S-home)
-//   67     the result is in
+//   62+    the link no longer drops, so the advice clears; the result comes in the narration (73 s)
+//   82     a recap sentence closes the loop
 //   90     the loop starts again
 
 export const DEMO_MS = 90_000
@@ -40,6 +41,8 @@ const LINES: [number, string, string][] = [
   [40, 'cam_off', 'Setup is done; sensing now runs on radio alone.'],
   [54, 'object_on', 'An object, not a person, is next to the router.'],
   [73, 'advice_result', 'Moving the router made its link to the receiver stronger.'],
+  // A recap may run to 45 words (contract), but the schema in contracts/ still caps narration at 16.
+  [82, 'recap', 'Recap: walked in, held still, waved, camera off, tray told from a person, router moved.'],
 ]
 
 export function demoScene(tMs: number, start: number): Scene {
@@ -76,7 +79,8 @@ export function demoScene(tMs: number, start: number): Scene {
     checkin,
     stillS: still,
     cam: s < 34 ? 'on' : 'off',
-    advice: s >= 67 ? 'result' : s >= 57 ? 'show' : 'none',
+    // Advice shows from 57 s; once the router moves the link stops dropping and the advice clears (contract).
+    advice: s >= 57,
     narration,
   }
 }

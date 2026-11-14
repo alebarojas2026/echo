@@ -36,21 +36,25 @@ describe('self-playing demo', () => {
     expect(tray.advice).toBeNull()
   })
 
-  it('gives advice, moves the router (pred pauses), and reports a stronger link', () => {
-    expect(at(58).advice?.to_spot).toBe('S-W30')
+  it('gives advice while the wifi link drops, moves the router (pred pauses), and the advice clears', () => {
+    const advised = at(58)
+    expect(advised.advice?.to_spot).toBe('S-W30')
+    expect(advised.links.find((l) => l.id === 'pi5>unoq:wifi')!.drop_db!).toBeGreaterThanOrEqual(3)
     const moved = at(63)
     expect(moved.router).toBe('S-W30')
     expect(moved.pred).toBeNull()
-    expect(moved.advice!.after_dbm).toBeNull()
-    const result = at(70).advice!
-    expect(result.after_dbm).not.toBeNull()
-    expect(result.after_dbm!).toBeGreaterThan(result.before_dbm!)
+    expect(moved.links.find((l) => l.id === 'pi5>unoq:wifi')!.drop_db!).toBeLessThan(3)
+    expect(moved.advice).toBeNull() // contract: advice only while the link drops by 3 dB or more
+    expect(at(74).narration!.text).toContain('stronger')
   })
 
   it('narrates each beat with a template sentence about 6 s late, and loops', () => {
     expect(at(9).narration).toBeNull()
     expect(at(11).narration).toMatchObject({ source: 'template', text: expect.stringContaining('zone 4') })
     expect(at(41).narration!.text).toContain('radio alone')
+    const recap = at(85).narration!.text
+    expect(recap.split(/\s+/).length).toBeLessThanOrEqual(45)
+    expect(recap.split('. ').length).toBeLessThanOrEqual(3)
     const again = mockState('demo', 1, DEMO_MS + 2000, 'S-home', start)
     expect(again.pred!.present).toBe(false)
     expect(again.router).toBe('S-home')
