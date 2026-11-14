@@ -73,6 +73,20 @@ class CreditsDocTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.text)
 
+    def test_current_board_manifest_dependencies_are_credited(self):
+        rows = {
+            columns[0].strip(): columns
+            for line in self.text.splitlines()
+            if line.startswith("|")
+            for columns in ([column.strip() for column in line.split("|")[1:-1]],)
+            if columns
+        }
+
+        for library in ("NumPy", "scikit-learn"):
+            row = rows[library]
+            self.assertEqual(row[1], "Unpinned")
+            self.assertIn("`board/`", row[4])
+
     def test_app_lab_bricks_are_credited(self):
         for phrase in (
             "Arduino App Bricks",

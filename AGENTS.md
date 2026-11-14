@@ -10,6 +10,8 @@ Radio Sight: Wi-Fi that understands the room. Radio links between 4 nodes around
 3. Fix review comments on your open PRs before starting new work.
 4. **All hands-on hardware is Alexander's.** That means the board, the Pi, the webcam, the phones, tape, mounting and flashing. When a task needs it, comment `needs Alexander:` on the issue with the exact commands and what to look for, then take your next issue. Never ask Izet, Ivan or Alejandro to do hardware.
 5. Alexander's radio worker: start with the "Board bring-up" issue before the gate tests. Walk him through it step by step.
+6. Brain: #220 (the still timer) and #222 (SENSOR BLIND on the tray) come before every other brain issue. They decide whether the no-movement alert and the tray beat work in the demo.
+7. Lanes moved: advisor/ is now Izet's (Alexander is on hardware full time); narrator/ and teacher/ are now Alejandro's. Take those tags too.
 
 ## Lanes (stay in yours)
 | Tag | Folders | Owner |
@@ -17,14 +19,14 @@ Radio Sight: Wi-Fi that understands the room. Radio links between 4 nodes around
 | room | web/src/room/, web shell (web/index.html, web/src/main.ts, web/package.json) | Ivan |
 | hud | web/src/hud/, web/tests/, scripts/ | Ivan |
 | radio | radio/, pi/ | Alexander |
-| advisor | advisor/ | Alexander |
+| advisor | advisor/ | Izet |
 | board | board/, mcu/, bus/ | Alexander |
 | brain | brain/ | Izet |
-| teacher | teacher/ | Izet |
+| teacher | teacher/ | Alejandro |
 | proof | proof/, PROOF.md | Izet |
 | sim | sim/ | Alejandro |
 | docs | docs/, web/src/game/ | Alejandro |
-| narrator | narrator/ | Ivan |
+| narrator | narrator/ | Alejandro |
 
 CONTRACTS.md, contracts/, AGENTS.md, CLAUDE.md and README.md are changed only by Ivan. Need a format change? Open an issue labeled `contract` and keep going with the current format.
 

@@ -3,7 +3,7 @@ import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import type { LinkState, StateMsg } from './contract'
-import { LINK_IDS, nodePosition, parseLinkId, type Vec3 } from './frame'
+import { LINK_IDS, SQUARE_M, nodePosition, parseLinkId, type Vec3 } from './frame'
 import type { Mirror } from './mirror'
 import { INK, INK_2, OLIVE } from './palette'
 import { v3 } from './stage'
@@ -43,26 +43,42 @@ const OLIVE_C = new Color(OLIVE)
 
 interface Beam {
   id: string
+  pair: string
   line: Line2
   mat: LineMaterial
-  label: HTMLElement
   look: BeamLook
   olive: number // 0..1, eased
 }
 
+/** The two nodes a link joins, in a fixed order, so twin links (wifi and ble) share one key. */
+export function nodePair(id: string): string {
+  const p = parseLinkId(id)
+  return p ? [p.tx, p.rx].sort().join('-') : id
+}
+
 export class Beams {
   private readonly beams: Beam[] = []
+  /** One "no signal" label per node pair, however many links run between the two nodes. */
+  private readonly pairLabels = new Map<string, HTMLElement>()
+  /** Shown instead of any per-link label while state.links is still empty (no readings yet). */
+  private readonly waiting: HTMLElement
   private router: string | null = null
 
   constructor(private readonly view: RoomView, private readonly mirror: Mirror) {
     for (const id of LINK_IDS) {
       const mat = new LineMaterial({ color: INK, linewidth: 1.5, transparent: true, dashSize: 0.08, gapSize: 0.09 })
       const line = new Line2(new LineGeometry(), mat)
-      const label = view.addLabel('no signal', new Vector3(), 'room-label--beam')
-      label.hidden = true
       view.scene.add(line)
-      this.beams.push({ id, line, mat, label, look: beamLook(undefined, false, new Set()), olive: 0 })
+      const pair = nodePair(id)
+      if (!this.pairLabels.has(pair)) {
+        const label = view.addLabel('no signal', new Vector3(), 'room-label--beam')
+        label.hidden = true
+        this.pairLabels.set(pair, label)
+      }
+      this.beams.push({ id, pair, line, mat, look: beamLook(undefined, false, new Set()), olive: 0 })
     }
+    this.waiting = view.addLabel('Waiting for radio readings', v3([SQUARE_M / 2, SQUARE_M / 2, 0]), 'room-label--caption')
+    this.waiting.hidden = true
     view.onResize((w, h) => {
       for (const b of this.beams) b.mat.resolution.set(w, h)
     })
@@ -74,11 +90,13 @@ export class Beams {
     if (state.router !== this.router) this.place(state.router)
     const blind = new Set(state.health?.blind ?? [])
     const why = new Set(state.pred?.why ?? [])
+    const waiting = state.links.length === 0
+    const brokenPairs = new Set<string>()
     for (const b of this.beams) {
       const link = state.links.find((l) => l.id === b.id)
       b.look = beamLook(link, why.has(b.id), blind)
       if (b.mat.dashed !== b.look.broken) b.mat.dashed = b.look.broken
-      b.label.hidden = !b.look.broken
+      if (b.look.broken) brokenPairs.add(b.pair)
       const drop = link?.drop_db
       this.mirror.set(
         `beam-${b.id}`,
@@ -86,6 +104,8 @@ export class Beams {
         `${b.id}: ${b.look.status}${drop == null ? '' : `, drop ${drop.toFixed(1)} dB`}${b.look.why ? ', explains the prediction' : ''}`,
       )
     }
+    for (const [pair, label] of this.pairLabels) label.hidden = waiting || !brokenPairs.has(pair)
+    this.waiting.hidden = !waiting
     this.view.requestRender()
   }
 
@@ -104,7 +124,8 @@ export class Beams {
       const q = v3([zx, zy, zz])
       ;(b.line.geometry as LineGeometry).setPositions([p.x, p.y, p.z, q.x, q.y, q.z])
       b.line.computeLineDistances()
-      this.view.moveLabel(b.label, p.clone().lerp(q, 0.5).setY(p.y + 0.06))
+      // A pair's label sits on the middle of its unshifted link, so twins share one spot.
+      if (!twin || parts.kind === 'wifi') this.view.moveLabel(this.pairLabels.get(b.pair)!, v3(a).lerp(v3(z), 0.5))
     }
     this.view.requestRender()
   }

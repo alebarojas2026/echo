@@ -34,7 +34,7 @@ export interface Pred {
   zone: number
   zone_set: number[]
   probs: number[] // [empty, z1, z2, z3, z4]
-  motion: 'moving' | 'still'
+  motion: 'moving' | 'still' | null // null when present is false
   still_s: number
   why: string[]
 }
@@ -88,7 +88,7 @@ export interface Narration {
   gen_ms: number | null
 }
 
-export interface Teacher { present: boolean; zone: number; motion: 'moving' | 'still' }
+export interface Teacher { present: boolean; zone: number; motion: 'moving' | 'still' | null }
 
 export interface Model {
   trained: boolean

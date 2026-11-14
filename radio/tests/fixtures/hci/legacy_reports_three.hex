@@ -1,0 +1,5 @@
+# LE Advertising Report (7.7.65.2) with three reports: west, someone else's device, the Pi
+04 3e 37 02 03    # LE Meta, 55 parameter bytes, subevent 0x02, Num_Reports 3
+03 01 b1 b2 b3 b4 b5 b6 07 06 ff ff ff 52 53 57 ba            # west ("W"), RSSI -70
+00 00 c1 c2 c3 c4 c5 c6 09 02 01 06 05 ff 59 00 01 02 ce      # ADV_IND, other company (0x0059), RSSI -50
+03 01 d1 d2 d3 d4 d5 d6 07 06 ff ff ff 52 53 53 b0            # the Pi ("S"), RSSI -80
