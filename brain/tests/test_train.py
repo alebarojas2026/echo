@@ -64,7 +64,7 @@ def test_empty_room_predicts_empty(model, base):
     ws = list(F.windows(sim_to_v2("empty_room", seed=7), base))
     preds = [model.predict(w) for w in ws]
     assert sum(not p["present"] for p in preds) / len(preds) > 0.9
-    assert all(p["zone"] is None for p in preds if not p["present"])
+    assert all(p["zone"] == 0 for p in preds if not p["present"])   # 0 = empty, never null
 
 
 def test_object_is_not_a_person(model, base):
