@@ -102,6 +102,9 @@ def jobs_for(stage: str, n: int = None) -> list:
         for s in range(n or 100):
             for v in (5.0, 10.0):
                 add(f"train_still_s {v}", 7000 + s, ranges={}, proto={"train_still_s": v}, replays=["alert", "xray"])
+    elif stage == "xrayfix":
+        for s in range(n or 150):
+            add("nominal", 8000 + s, ranges={}, replays=["xrayfix"])
     elif stage == "person":
         for s in range(n or 40):
             for v in (0.4, 0.7, 1.0, 1.3, 1.6):
