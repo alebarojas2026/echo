@@ -21,7 +21,7 @@ from pathlib import Path
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
-from brain.core import Brain, now_ms
+from brain.core import NODES_JSON, Brain, now_ms
 
 WS_HOSTS = ("127.0.0.1", "192.168.77.2")
 STATE_EVERY_S = 0.1
@@ -37,7 +37,7 @@ def board_stats() -> dict:
             return None
     try:
         pct = round(min(100.0, 100.0 * os.getloadavg()[0] / (os.cpu_count() or 1)))
-    except OSError:
+    except (OSError, AttributeError):   # Windows has no getloadavg
         pct = None
     return {"cpu_temp_c": read("/sys/class/thermal/thermal_zone0/temp", 1000),
             "cpu_mhz": read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", 1000),
@@ -58,7 +58,7 @@ class _BusIn(asyncio.DatagramProtocol):
 
 
 async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=WS_HOSTS, ws_port=8765,
-              mode_file=None, feed_clock=False, ready=None, stop=None):
+              mode_file=None, feed_clock=False, nodes_file=NODES_JSON, ready=None, stop=None):
     """Run until `stop` (an asyncio.Event) is set. `ready` gets the ports actually bound."""
     loop = asyncio.get_running_loop()
     out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -70,8 +70,17 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
         except OSError as e:
             log.warning("could not reach the bus: %s", e)
 
+    def spawn(fit, done):
+        """Only the fit runs on the executor; done() runs back here on the loop."""
+        def finish(fut):
+            if fut.exception():
+                log.error("training failed: %s", fut.exception())
+            done(None if fut.exception() else fut.result())
+        loop.run_in_executor(None, fit).add_done_callback(finish)
+
+    nodes = json.loads(Path(nodes_file).read_text(encoding="utf-8"))
     brain = Brain(clock=None if feed_clock else now_ms, to_bus=to_bus, mode_file=mode_file,
-                  spawn=lambda job: loop.run_in_executor(None, job), board_stats=board_stats)
+                  spawn=spawn, board_stats=board_stats, nodes=nodes)
     udp, _ = await loop.create_datagram_endpoint(lambda: _BusIn(brain), local_addr=bus_in)
 
     async def screen(ws):
@@ -127,12 +136,14 @@ def main(argv=None) -> None:
     ap.add_argument("--ws-host", action="append", help="address to listen on (repeatable)")
     ap.add_argument("--mode-file", default=os.environ.get("TEACHER_MODE_FILE"),
                     help="file the camera teacher reads its label mode from")
+    ap.add_argument("--nodes", default=str(NODES_JSON), help="radio/nodes.json (nodes, links, zones)")
     ap.add_argument("--feed-clock", action="store_true")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     try:
         asyncio.run(run(bus_in=("127.0.0.1", args.bus_port), ws_hosts=tuple(args.ws_host or WS_HOSTS),
-                        ws_port=args.ws_port, mode_file=args.mode_file, feed_clock=args.feed_clock))
+                        ws_port=args.ws_port, mode_file=args.mode_file, feed_clock=args.feed_clock,
+                        nodes_file=args.nodes))
     except KeyboardInterrupt:
         pass
 

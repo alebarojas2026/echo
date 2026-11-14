@@ -57,8 +57,10 @@ async def _scenario():
         await play("empty_room", seed=1)
         await until(lambda m: m["type"] == "event" and m["kind"] == "baseline_done")
 
+        await send("record_start", session="s01", purpose="train", walker=None)
         await play("empty_room", seed=2, meta={"session": "s01", "purpose": "train", "walker": None})
         await send("record_stop")
+        await send("record_start", session="s02", purpose="train", walker="w1")
         await play("zone_tour", seed=3, meta={"session": "s02", "purpose": "train", "walker": "w1"})
         await send("record_stop")
         await send("train")
@@ -88,7 +90,7 @@ async def _scenario():
             got.append(json.loads(bus.recv(65535)))
         except BlockingIOError:
             break
-    assert [m["cmd"] for m in got] == ["baseline", "record_stop", "record_stop", "train"]
+    assert [m["cmd"] for m in got] == ["baseline", "record_start", "record_stop", "record_start", "record_stop", "train"]
     assert all(m["v"] == 2 and m["type"] == "cmd" for m in got)
 
     stop.set()

@@ -37,6 +37,7 @@ Install: `pip install -r brain/requirements.txt` (scikit-learn, since onnxruntim
 ```
 python -m brain.main                 # on the board
 python -m brain.main --feed-clock    # with a recorded file played faster than real time
+python -m brain.main --nodes radio/nodes.json   # nodes, links and zones (this is the default)
 ```
 
 - Reads bus messages on UDP 127.0.0.1:5601.
