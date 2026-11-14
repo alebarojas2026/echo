@@ -4,16 +4,22 @@ Radio Sight was built at MadHacks 2026 for the Qualcomm / N+1 track, following t
 
 ## Libraries
 
-The project currently uses these third-party packages. An entry marked `Not yet in a manifest` is imported by code on `main`, but its owning module has not declared a version yet.
+The project currently uses these third-party packages. An entry marked `Not pinned in this repository` is imported by code on `main`, but its owning module has not declared a version yet.
 
-| Library | Version | License | Used by | Project link |
-|---|---|---|---|---|
-| pytest | Unpinned | MIT | `bus/`, `sim/`, `narrator/` | [pytest](https://pytest.org/) |
-| websockets | `>=12` | BSD-3-Clause | `narrator/` | [websockets](https://websockets.readthedocs.io/) |
-| NumPy | Not yet in a manifest | BSD-3-Clause | `advisor/` | [NumPy](https://numpy.org/) |
-| OpenCV (`cv2`) | Not yet in a manifest | Apache-2.0 | `teacher/` | [OpenCV](https://opencv.org/) |
-
-`pytest` is development and test tooling. `websockets`, NumPy, and OpenCV are runtime libraries.
+| Library | Version | License | Role | Used by | Project link |
+|---|---|---|---|---|---|
+| pytest | Unpinned | MIT | Test | `bus/`, `sim/`, `narrator/` | [pytest](https://pytest.org/) |
+| websockets | `>=12` | BSD-3-Clause | Runtime | `narrator/` | [websockets](https://websockets.readthedocs.io/) |
+| NumPy | Unpinned | BSD-3-Clause | Runtime | `advisor/`, `brain/` | [NumPy](https://numpy.org/) |
+| OpenCV (`cv2`) | Not pinned in this repository | Apache-2.0 | Runtime | `teacher/` | [OpenCV](https://opencv.org/) |
+| jsonschema | `>=4.18` | MIT | Test and CI | `contracts/` | [jsonschema](https://python-jsonschema.readthedocs.io/) |
+| referencing | Transitive, unpinned | MIT | Validation support | `contracts/` | [referencing](https://referencing.readthedocs.io/) |
+| three | `^0.187.0` | MIT | Runtime | `web/` | [three.js](https://threejs.org/) |
+| Vite | `^8.3.8` | MIT | Build and development | `web/` | [Vite](https://vite.dev/) |
+| Vitest | `^5.1.0` | MIT | Test | `web/` | [Vitest](https://vitest.dev/) |
+| TypeScript | `^7.0.2` | Apache-2.0 | Type checking | `web/` | [TypeScript](https://www.typescriptlang.org/) |
+| `@types/three` | `^0.187.0` | MIT | Development types | `web/` | [DefinitelyTyped](https://github.com/DefinitelyTyped/DefinitelyTyped) |
+| Arduino App Bricks | Not pinned in this repository | MPL-2.0 | Runtime | `teacher/applab/` | [app-bricks-py](https://github.com/arduino/app-bricks-py) |
 
 As implementation dependencies land, this table should list every direct third-party library with its declared version, license, project link, and the Radio Sight module that uses it. The checked-in manifest in each module remains the source of truth.
 
