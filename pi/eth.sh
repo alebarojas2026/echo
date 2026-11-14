@@ -22,25 +22,37 @@ elif [[ -f "/etc/deadzone.env" ]]; then
     source "/etc/deadzone.env"
 fi
 
-: "${ETH_IFACE:?set ETH_IFACE in .env}"
+# The Pi 5's only wired port. Set ETH_IFACE in .env for anything else.
+ETH_IFACE="${ETH_IFACE:-eth0}"
 
 CON_NAME="deadzone-eth"
 
 nmcli connection delete "$CON_NAME" 2>/dev/null || true
 
+# Priority 50 beats any other profile for the same port (NetworkManager's
+# "Wired connection 1", a laptop link-local profile), which sit at 0, so this
+# one is what comes up after a reboot or a replug.
 nmcli connection add \
     type ethernet \
     ifname "$ETH_IFACE" \
     con-name "$CON_NAME" \
     autoconnect yes \
     -- \
+    connection.autoconnect-priority 50 \
     ipv4.method manual \
     ipv4.addresses 192.168.77.1/24 \
     ipv4.gateway "" \
+    ipv4.never-default yes \
     ipv4.dns "" \
     ipv6.method disabled
 
-nmcli connection up "$CON_NAME"
+if ! nmcli connection up "$CON_NAME"; then
+    # Usually no carrier: cable out or board off. The profile is saved with
+    # autoconnect, so NetworkManager brings it up as soon as the link appears.
+    echo "Ethernet profile $CON_NAME saved on $ETH_IFACE, but it isn't up yet (cable out or board off?)."
+    echo "It comes up by itself at 192.168.77.1/24 once the link is there; check with: ip -4 addr show dev $ETH_IFACE"
+    exit 0
+fi
 echo "Ethernet $ETH_IFACE up at 192.168.77.1/24"
 
 # Quick reachability check to board hub (may not be connected yet).
