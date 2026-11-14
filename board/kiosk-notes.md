@@ -1,6 +1,21 @@
-# Kiosk on the Pi
+# The screen
 
-The Pi's screen shows the board's web page, http://192.168.77.2:8080/?src=ws, full screen from boot. `?src=ws` makes the screen read the brain's live WebSocket; without it the screen shows its built-in mock states. These steps are for Raspberry Pi OS with desktop (Bookworm or Trixie) running Wayland with labwc, the default on a Pi 5. Do them once, on the Pi, as the user that logs in to the desktop.
+## At the demo: a laptop's browser on the Pi's hotspot
+The demo screen is a laptop's browser (AGENTS.md: no monitor, no Pi kiosk). The laptop joins the Pi's 5 GHz hotspot and opens http://192.168.77.2:8080/?src=ws. `?src=ws` makes the page read the brain's live WebSocket; without it the page shows its built-in mock states.
+
+How it gets there: the laptop's default route is the Pi (10.42.0.1). The Pi forwards 192.168.77.2 over the Ethernet cable, and its hotspot profile (`ipv4.method shared`, pi/ap.sh) rewrites the laptop's address to the Pi's own on the way, so the board answers over the cable too. The board's Wi-Fi only carries the Pi's frames for the pi5>unoq:wifi reading.
+
+1. Before the laptop joins: the cable is up (`sudo bash pi/eth.sh` on the Pi, `sudo bash board/eth.sh` on the board) and `python3 -m radio.check` on the board has no `FAIL` on Ethernet.
+2. Join the laptop to the Pi's hotspot (the SSID and passphrase in the Pi's `.env`; never on GitHub).
+3. Open http://192.168.77.2:8080/?src=ws full screen. Works: the page loads and its source badge says LIVE once readings flow.
+4. While the model runs, keep the laptop's traffic on the hotspot light: just the page. Never copy files or bundles over it during a demo or a recording: it can starve the sensing link and show SENSOR BLIND.
+
+If the page doesn't load: `ping 10.42.0.1` from the laptop (the hotspot), then `ping 192.168.77.2` (the Pi forwarding to the board). If the first works and the second doesn't, check the cable and `board/eth.sh`.
+
+## Not used at the demo: a kiosk on the Pi
+The steps below put the same page full screen on a monitor plugged into the Pi. They're kept for a build-room screen only.
+
+The Pi's screen shows the board's web page, http://192.168.77.2:8080/?src=ws, full screen from boot. These steps are for Raspberry Pi OS with desktop (Bookworm or Trixie) running Wayland with labwc, the default on a Pi 5. Do them once, on the Pi, as the user that logs in to the desktop.
 
 ## Before you start
 - The Ethernet link is up (`sudo bash pi/eth.sh` on the Pi and `sudo bash board/eth.sh` on the board), and the board is serving: `curl -sI http://192.168.77.2:8080/` answers `200`.
