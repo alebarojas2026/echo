@@ -66,7 +66,7 @@ describe('mock timelines', () => {
 })
 
 describe('alert word', () => {
-  it('sits just outside the square on the alert zone's own side, level with its name', () => {
+  it('sits just outside the square on the side of the alert zone, level with its name', () => {
     const [[x4, y4], west4] = alertWordAt(4)
     expect(x4).toBeGreaterThan(2)
     expect(y4).toBeLessThan(1)
