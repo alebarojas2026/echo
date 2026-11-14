@@ -61,6 +61,23 @@
   text-transform: uppercase;
 }
 
+.room-label--ghost {
+  translate: -50% -100%;
+  color: #4f5e2e;
+  font-weight: 600;
+}
+
+.room-label--object {
+  translate: -50% -100%;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid #8f8a7e;
+  background: #faf7ef;
+  color: #1c1b17;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .room-legend {
   position: absolute;
   left: 1.25rem;

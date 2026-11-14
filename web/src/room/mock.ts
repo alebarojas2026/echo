@@ -6,15 +6,16 @@ import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
 // src is "sim" so nothing here can pass for live, and measured numbers (train time, ms per decision,
 // before/after dBm) stay null so the panels show "__".
 //
-// ?mock= tour (default) | still | object | blind | empty | stall
+// ?mock= tour (default) | still | between | object | blind | empty | stall
 //   tour    someone walks a loop through the four zones, pausing in each
 //   still   someone stays still in zone 4 and the no-movement alert counts up
+//   between someone stands on the line between zones 3 and 4, so zone_set has both
 //   object  an object sits next to the router, with advice to move the router
 //   blind   the radio fails: health blind, pred null
 //   empty   nobody in the room
 //   stall   states for 1 s, then nothing (NO DATA)
 
-export type MockScenario = 'tour' | 'still' | 'object' | 'blind' | 'empty' | 'stall'
+export type MockScenario = 'tour' | 'still' | 'between' | 'object' | 'blind' | 'empty' | 'stall'
 
 const SEG_MS = 5000 // tour: 3 s walking, 2 s still, per zone
 const XRAY = { w: 10, h: 10, cell_m: 0.24, origin_m: [-0.2, -0.2] as [number, number] }
@@ -69,7 +70,8 @@ function zoneSet(xy: [number, number]): number[] {
 }
 
 export function mockState(scenario: MockScenario, seq: number, tMs: number, router = HOME_SPOT): StateMsg {
-  const person = scenario === 'tour' ? tourAt(tMs) : scenario === 'still' ? { xy: [1.5, 0.5] as [number, number], moving: false } : null
+  const standing: Partial<Record<MockScenario, [number, number]>> = { still: [1.5, 0.5], between: [1.06, 0.55] }
+  const person = scenario === 'tour' ? tourAt(tMs) : standing[scenario] ? { xy: standing[scenario]!, moving: false } : null
   const object = scenario === 'object' ? OBJECT_XY : null
   const blind = scenario === 'blind'
 
