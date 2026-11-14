@@ -16,7 +16,7 @@ and `python -m radio.report_hci`) checks them.
 - Pi's 5 GHz hotspot up (`sudo bash pi/ap.sh` on the Pi).
 - Board joined to the hotspot, locked to the Pi's BSSID, power saving off: `sudo bash radio/wifi_join.sh`
   on the board, with `SENSING_SSID`, `SENSING_PSK` and `SENSING_BSSID` in the board's `.env` (the BSSID
-  is the `addr` line of `iw dev <hotspot interface> info` on the Pi). It must print `joined`.
+  is the `addr` line of `/usr/sbin/iw dev <hotspot interface> info` on the Pi; the full path works in any shell). It must print `joined`.
 - On the board, from the repo, no sudo: `python -m radio.wifi_rssi --gate`. It pings the Pi 50 times a
   second (beacons alone are too few frames), walks through the three runs (line clear, then
   someone standing in the middle of the line, 10 s each) and prints the rate, rows and result below,

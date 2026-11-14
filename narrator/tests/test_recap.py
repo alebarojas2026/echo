@@ -199,3 +199,27 @@ def test_recap_and_sentence_on_two_threads_never_share_a_seq_or_the_gap():
     assert sorted(m["seq"] for m in sent) == [1, 2, 3, 4]
     times = sorted(m["t"] for m in sent)
     assert all(b - a >= 200 for a, b in zip(times, times[1:]))
+
+
+def test_recap_check_prints_a_model_recap_and_fails_on_the_template(capsys, monkeypatch):
+    replies = [(GOOD.split(" Moving")[0], "test-model")]
+    monkeypatch.setattr(n.LlamaServer, "__call__", lambda self, msgs: replies[0])
+    assert r.main(["--timeout", "2"]) == 0
+    out = capsys.readouterr()
+    msg = __import__("json").loads(out.out)
+    assert (msg["event_kind"], msg["source"], msg["src"]) == ("recap", "llm", "sim")
+    assert "recap: llm in" in out.err
+
+    def down(self, msgs):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(n.LlamaServer, "__call__", down)
+    assert r.main(["--timeout", "2"]) == 1
+    msg = __import__("json").loads(capsys.readouterr().out)
+    assert msg["source"] == "template" and r.problem(msg["text"], r.facts(r.sample(NOW)), True) is None
+
+
+def test_sample_demo_gives_facts_without_numbers_beyond_the_times():
+    lines = r.facts(r.sample(NOW))
+    assert len(lines) == 9 and lines[0] == "0:00 someone walked into the Hall zone"
+    assert "dBm" not in " ".join(lines)

@@ -105,7 +105,7 @@ def test_loop_keeps_seq_and_event_ids_going():
     assert len({e["id"] for e in events}) == len(events)
 
 
-def test_reset_command_clears_checkin_and_narration():
+def test_reset_command_clears_checkin_and_shows_the_recap():
     async def client(url, server):
         async with websockets.connect(url + "/ws") as sock:
             sent = False
@@ -119,4 +119,5 @@ def test_reset_command_clears_checkin_and_narration():
                 elif sent and m["checkin"] is None:
                     return m["narration"], [c["cmd"] for c in server.commands]
 
-    assert asyncio.run(session(fake.load_path("wave_checkin"), client)) == (None, ["reset"])
+    narration, commands = asyncio.run(session(fake.load_path("wave_checkin"), client))
+    assert commands == ["reset"] and narration["text"].startswith("Someone visited")   # the recap
