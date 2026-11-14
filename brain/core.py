@@ -3,10 +3,10 @@
 No sockets here (brain/main.py has them), so every rule can be tested with a
 fake clock. Times are board epoch ms, the same clock as the bus's recv_t.
 
-Link health (brain/health.py) and the x-ray and objects (brain/xray.py) are
-separate modules; this file feeds them and puts their output into the state.
-Still to come, each with its own issue: check-in and the alert, recalibration
-and drift, advice, and the narrator's enter/exit events.
+Link health (brain/health.py), the x-ray and objects (brain/xray.py) and the
+check-in and alert (brain/alert.py) are separate modules; this file feeds them
+and puts their output into the state. Still to come, each with its own issue:
+recalibration and drift, advice, and the narrator's enter/exit events.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from brain import features as F
+from brain.alert import Watch
 from brain.health import Health
 from brain.train import Model
 from brain.xray import Xray
@@ -25,7 +26,6 @@ from brain.xray import Xray
 BASELINE_MS = 20_000
 HOME = "S-home"
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
-NO_ALERT = {"state": "none", "zone": None, "still_s": 0, "limit_s": None}
 CAM_SILENT_MS = 3_000
 TEACHER_FRESH_MS = 1_000
 TRAIN_PURPOSES = ("train", "object")
@@ -38,16 +38,17 @@ def now_ms() -> int:
 
 class Brain:
     def __init__(self, clock: Optional[Callable[[], int]] = None, to_bus=None, mode_file=None,
-                 spawn=None, board_stats=None, links=F.LINKS, nodes=None):
+                 spawn=None, board_stats=None, links=F.LINKS, nodes=None, led=None):
         """clock None = follow the feed (latest recv_t), for recorded files played fast.
         to_bus(msg) forwards a command to the bus.
         spawn(fit, done) runs fit() off the loop, then done(model) back on it.
-        nodes is radio/nodes.json, already parsed (default: the repo's copy)."""
+        nodes is radio/nodes.json, already parsed (default: the repo's copy).
+        led is the LED grid (brain/alert.py); None = no lights."""
         nodes = nodes or json.loads(NODES_JSON.read_text(encoding="utf-8"))
         self.health = Health.from_nodes(nodes)
         self.xray = Xray.from_nodes(nodes)
-        self._still_since: Optional[int] = None
-        self._heard = False                   # any reading yet
+        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
+        self._heard = set()                   # links with at least one reading
         self.want_session: Optional[str] = None   # the id from record_start
         self.raw_kind: Optional[str] = None   # the classifier's kind, even while pred is withheld
         self._raw: Optional[dict] = None
@@ -114,7 +115,8 @@ class Brain:
             elif msg.get("link") in self.links:
                 link, dbm = msg["link"], float(msg["dbm"])
                 self.health.add(link, t, dbm)
-                self._heard = True
+                self.watch.on_rssi(msg)
+                self._heard.add(link)
                 if link in self.base:
                     self.xray.add(link, t, self.base[link] - dbm)
                 if self.capture:
@@ -169,11 +171,14 @@ class Brain:
         self._cmd_train(args)
 
     def _cmd_reset_alert(self, args):
-        self._still_since = None
+        self.watch.reset_alert()
+        self._watch_events()
 
     def _cmd_reset(self, args):
         """Between judges: clear the alert, still timer, check-in, advice and narration."""
-        self._still_since = self.narration = None
+        self.watch.reset()
+        self.narration = None
+        self._watch_events()
         self.emit("reset", {})
 
     def _cmd_record_start(self, args):
@@ -218,6 +223,10 @@ class Brain:
         except KeyError:
             pass                         # not a spot in nodes.json
 
+    def _watch_events(self):
+        for kind, info in self.watch.pop_events():
+            self.emit(kind, info)
+
     def _start_capture(self):
         self.capture = {"start": None, "messages": []}
 
@@ -240,7 +249,8 @@ class Brain:
 
     def _decide(self, now):
         if not (self.model and self.window):
-            self.pred = self.raw_kind = self._still_since = None
+            self.pred = self.raw_kind = None
+            self.watch.on_pred(now, None)
             return
         if not self.window.get("decided"):   # the classifier runs on every new window
             t0 = time.perf_counter()
@@ -250,18 +260,15 @@ class Brain:
             self.raw_kind = self._raw["kind"]   # health wants this even while pred is hidden
             self._fresh = True
         if self.capture or self.router != HOME or self.health.blind:
-            self.pred = self._still_since = None   # hidden; SENSOR BLIND never reads as "empty"
+            self.pred = None                 # hidden; SENSOR BLIND never reads as "empty"
+            self.watch.on_pred(now, None)    # the alert timer pauses, the LED shows "?"
             return
         if not self._fresh:
             return
         self._fresh = False
         pred = dict(self._raw)
-        still = pred["kind"] == "person" and pred["motion"] == "still"
-        if not still or (self.pred and self.pred["zone"] != pred["zone"]):
-            self._still_since = None
-        if still and self._still_since is None:
-            self._still_since = self.window["end"]
-        pred["still_s"] = round((self.window["end"] - self._still_since) / 1000, 1) if still else 0.0
+        self.watch.on_pred(self.window["end"], pred)
+        pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
 
     def emit(self, kind: str, info: dict) -> None:
@@ -291,15 +298,18 @@ class Brain:
         now = self.now()
         self._tick()
         health = self.health.update(now, self.raw_kind, self.router == HOME, self.capture is not None)
-        if self.health.blind:
-            self.pred = self._still_since = None
+        if self.health.blind and self.pred is not None:
+            self.pred = None
+            self.watch.on_pred(now, None)
         # Section 5: xray is null before the first baseline, links are [] before any reading.
         xray = self.xray.update(now, self.pred["kind"] if self.pred else None) if self.base else \
             {"xray": None, "objects": [], "events": []}
         for e in health["events"] + xray["events"]:
             self.emit(e["kind"], e["info"])
+        self._watch_events()
         weights = self._why_weights()
-        links = [dict(row, why=weights.get(row["id"], 0.0)) for row in health["links"]] if self._heard else []
+        links = [dict(row, why=weights.get(row["id"], 0.0)) for row in health["links"]
+                 if row["id"] in self._heard]   # a link is listed once it has a reading
         self._seq += 1
         cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
         lb = self.label
@@ -314,5 +324,5 @@ class Brain:
                 "cam": cam, "router": self.router, "links": links,
                 "health": health["health"],
                 "pred": self.pred, "objects": xray["objects"], "xray": xray["xray"],
-                "alert": dict(NO_ALERT), "checkin": None, "advice": None, "narration": self.narration, "teacher": teacher,
+                "alert": self.watch.alert_block(), "checkin": self.watch.checkin, "advice": None, "narration": self.narration, "teacher": teacher,
                 "model": model, "board": self.board_stats()}

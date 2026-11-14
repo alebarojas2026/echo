@@ -139,7 +139,7 @@ def test_still_s_counts_while_standing(ready):
     feed.play("stand_still", seed=5, each=lambda m: seen.append(brain.pred["still_s"]) if brain.pred else None)
     assert max(seen) > 5
     brain.on_cmd(cmd("reset_alert"))
-    assert brain._still_since is None
+    assert brain.watch.still_ms == 0
 
 
 def test_router_off_home_means_no_pred(ready):
@@ -267,3 +267,37 @@ def test_only_the_meta_for_our_record_start_opens_a_session():
 def test_a_failed_fit_leaves_the_old_model_and_clears_training():
     brain, _ = taught(spawn=lambda fit, done: done(None))
     assert brain.model is None and brain.training is None and brain.events[-1]["kind"] != "trained"
+
+
+def test_standing_still_alerts_and_a_wave_checks_in():
+    led_calls = []
+
+    class Led:
+        def show_zone(self, n): led_calls.append(("show_zone", n))
+        def alert(self, on): led_calls.append(("alert", on))
+        def smile(self): led_calls.append(("smile",))
+
+    brain, feed = taught(led=Led())
+    brain.pop_events()
+    del led_calls[:]
+    states = []
+    feed.play("wave_checkin", seed=1, states=states)    # still in zone 4 from 1 s, waves at 14-16.5 s
+    assert at(states, 6)["alert"]["state"] == "counting" and at(states, 6)["alert"]["limit_s"] == 10
+    assert at(states, 13.5)["alert"] == dict(at(states, 13.5)["alert"], state="check_on", zone=4)
+    assert at(states, 13.5)["pred"]["still_s"] >= 10
+    after = at(states, 18)
+    assert after["alert"]["state"] == "counting" and after["checkin"]["link"] == "pi5>unoq:wifi"
+    got = [k for k in kinds(brain) if k in ("alert_on", "checkin", "alert_off")]
+    assert got == ["alert_on", "checkin", "alert_off"]
+    assert [c for c in led_calls if c[0] != "show_zone"] == [("alert", True), ("smile",), ("alert", False)]
+    brain.on_cmd(cmd("reset"))
+    assert brain.state()["checkin"] is None
+
+
+def test_a_link_is_listed_once_it_has_a_reading():
+    brain = Brain()
+    msgs = [m for m in sim_to_v2("empty_room") if m["type"] == "rssi"]
+    brain.on_message(next(m for m in msgs if m["link"] == "east>pi5:ble"))
+    links = brain.state()["links"]
+    assert [l["id"] for l in links] == ["east>pi5:ble"]
+    assert links[0]["dbm"] is not None and links[0]["base_dbm"] is None and links[0]["drop_db"] is None
