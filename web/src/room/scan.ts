@@ -31,7 +31,7 @@ export function placeScan(min: [number, number, number], max: [number, number, n
   const scale = fit.scale && fit.scale > 0 ? fit.scale : 1
   return {
     inner: [-(min[0] + max[0]) / 2, -min[1], -(min[2] + max[2]) / 2],
-    outer: [dx, -0.01, -dy], // a centimetre under our floor marks, so they never fight with a bumpy scan floor
+    outer: [dx, -0.03, -dy], // 3 cm under our floor marks, so a bumpy scanned floor never pokes through them
     yaw: ((fit.yaw_deg ?? 0) * Math.PI) / 180,
     scale,
     cut: fit.cut_m ?? 1.4,
