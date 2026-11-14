@@ -346,10 +346,11 @@ def session(seed=0, env=None, cfg=None, live_person=None, wave=None, smoke=False
     out = {"seed": seed, "env": env.to_dict(), "cfg": cfg, "proto": plan["proto"], "live_person": plan["held"][0],
            "metrics": metrics, "sources": SOURCES}
     if replays and res["trained"]:   # True = all; or a list such as ["alert"]
-        from lab import replay
+        from lab import fixes, replay
         for name in ("checkin", "health", "xray", "alert", "xrayfix"):
             if (replays is True and name != "xrayfix") or (replays is not True and name in replays):
-                out[f"{name}_grid"] = getattr(replay, f"replay_{name}")(res, plan)
+                fn = getattr(replay, f"replay_{name}", None) or getattr(fixes, f"replay_{name}")
+                out[f"{name}_grid"] = fn(res, plan)
     out["timing"] = {"simulate_s": round(t1 - t0, 2), "brain_s": round(t2 - t1, 2),
                      "replay_s": round(time.perf_counter() - t2, 2), "messages": len(msgs),
                      "sim_minutes": round(tl.T / 60, 2)}
