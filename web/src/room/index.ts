@@ -4,6 +4,7 @@ import type { Feed } from './feed'
 import { Mirror } from './mirror'
 import { Stage } from './stage'
 import { RoomView } from './view'
+import { XrayLayer } from './xray'
 
 export interface Room {
   view: RoomView
@@ -17,6 +18,7 @@ export function mountRoom(host: HTMLElement, feed: Feed): Room {
   const stage = new Stage(view)
   const mirror = new Mirror(host)
   const beams = new Beams(view, mirror)
+  const xray = new XrayLayer(view, mirror)
 
   let router: string | null = null
   feed.subscribe(({ state, stale }) => {
@@ -29,6 +31,7 @@ export function mountRoom(host: HTMLElement, feed: Feed): Room {
       stage.placeNodes(router)
     }
     beams.update(state)
+    xray.update(state.xray, state.health?.status === 'blind')
   })
   return { view, stage }
 }
