@@ -30,6 +30,8 @@ class TroubleshootingDocTest(unittest.TestCase):
             "neither state means that the room is empty",
             "predictions stay null",
             "alert timers pause",
+            "a steady below-baseline drop is treated as an object",
+            "not a broken link",
         ):
             self.assertIn(phrase, self.lower)
 
@@ -65,6 +67,15 @@ class TroubleshootingDocTest(unittest.TestCase):
             "keep the square clear",
             "redo the camera calibration",
             "keep the value as `__`",
+        ):
+            self.assertIn(phrase, self.lower)
+
+    def test_no_movement_recovery_explains_smoothed_decisions(self):
+        for phrase in (
+            "the still timer uses smoothed decisions",
+            "brief motion noise does not reset it",
+            "five moving decisions in a row",
+            "the majority of the last ten decisions",
         ):
             self.assertIn(phrase, self.lower)
 
