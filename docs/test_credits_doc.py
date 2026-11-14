@@ -19,7 +19,7 @@ class CreditsDocTest(unittest.TestCase):
             "`bus/`",
             "`sim/`",
             "`narrator/`",
-            "development and test tooling",
+            "| Test |",
         ):
             self.assertIn(phrase, self.text)
 
@@ -31,9 +31,38 @@ class CreditsDocTest(unittest.TestCase):
             "NumPy",
             "OpenCV (`cv2`)",
             "Apache-2.0",
-            "Not yet in a manifest",
+            "Not pinned in this repository",
             "`advisor/`",
+            "`brain/`",
             "`teacher/`",
+        ):
+            self.assertIn(phrase, self.text)
+
+    def test_contract_and_web_dependencies_are_credited(self):
+        for phrase in (
+            "jsonschema",
+            "`>=4.18`",
+            "referencing",
+            "three",
+            "`^0.187.0`",
+            "Vite",
+            "`^8.3.8`",
+            "Vitest",
+            "`^5.1.0`",
+            "TypeScript",
+            "`^7.0.2`",
+            "`@types/three`",
+            "`contracts/`",
+            "`web/`",
+        ):
+            self.assertIn(phrase, self.text)
+
+    def test_app_lab_bricks_are_credited(self):
+        for phrase in (
+            "Arduino App Bricks",
+            "MPL-2.0",
+            "`teacher/applab/`",
+            "https://github.com/arduino/app-bricks-py",
         ):
             self.assertIn(phrase, self.text)
 
