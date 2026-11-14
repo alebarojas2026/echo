@@ -199,6 +199,7 @@ rounds count as practice because the source is `sim`.
 
 ```
 python -m sim.rehearse          # PASS/FAIL per beat, exit 1 if any beat fails
+python -m sim.rehearse --desk   # the 3-minute desk visit in docs/desk-demo.md
 ```
 
 Plays the whole demo, in runbook order, through the real bus and brain code and checks that each

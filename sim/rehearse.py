@@ -1,6 +1,7 @@
 """Demo rehearsal: play the whole demo through the real bus and brain and check every beat.
 
     python -m sim.rehearse          # PASS/FAIL per beat, exit 1 if any beat fails
+    python -m sim.rehearse --desk   # the same for the 3-minute desk visit
 
 The fake feed goes into the real bus code (bus.core.Bus), which stamps recv_t and forwards to
 the real brain (brain.core.Brain); the brain's state and events are what the screen would get.
@@ -101,6 +102,46 @@ def no_model(messages):
     raise ConnectionRefusedError("no model in the rehearsal")
 
 
+def wander(zone: int, start: float, end: float, step_s: float = 1.5) -> list:
+    """Waypoints that keep walking inside one zone (so it reads as moving), from start to end."""
+    x, y = Z[zone]
+    corners, out, t, i = [(x - 0.2, y - 0.2), (x + 0.2, y + 0.2)], [], start, 0
+    while t <= end:
+        out.append({"t": t, "x": corners[i % 2][0], "y": corners[i % 2][1]})
+        t, i = t + step_s, i + 1
+    return out
+
+
+def desk_script():
+    """The 3-minute desk visit in docs/desk-demo.md, at its times: the judge walks in at 0:20 and
+    around, goes to the bathroom at 0:45 and stands still until the alert, waves at 1:10, moves to
+    the chair (no alert there) while the camera cable is pulled, and walks out at 2:10."""
+    wave, cam_off, leave, finish = 70.0, 95.0, 130.0, 155.0
+    at = lambda zone, t: {"t": t, "x": Z[zone][0], "y": Z[zone][1]}   # noqa: E731
+    person = ([{"t": 0, "x": None}, {"t": 20.0, "x": 0.0, "y": 0.5}, at(3, 22.0), at(1, 25.0), at(2, 28.0)]
+              + wander(2, 29.0, 43.0) + [at(4, 47.0), at(4, wave + 4), at(2, wave + 6)] + wander(2, wave + 7, leave - 2)
+              + [{"t": leave, "x": 2.0, "y": 1.5}, {"t": leave + 0.1, "x": None}])
+    path = {"name": "desk", "duration_s": finish, "person": person,
+            "waves": [{"t_on": wave + 1, "t_off": wave + 3.5}],
+            "camera": [{"t": 0, "state": "on"}, {"t": cam_off, "state": "off"}],
+            "router": [{"t": 0, "spot": "S-home"}]}
+
+    def pred(s, **want):
+        return s["pred"] is not None and all(s["pred"][k] == v for k, v in want.items())
+
+    beats = [
+        ("nobody before the judge", 0, 20, "state", lambda s: pred(s, present=False)),
+        ("judge walks in", 20, 45, "state", lambda s: pred(s, present=True, kind="person")),
+        ("still in the bathroom", 45, wave, "state", lambda s: pred(s, present=True, zone=4, motion="still")),
+        ("no-movement alert", 45, wave, "event", lambda e: e["kind"] == "alert_on"),
+        ("wave check-in", wave, 90, "event", lambda e: e["kind"] == "checkin"),
+        ("camera pulled, radio only", cam_off, leave, "state",
+         lambda s: s["cam"] == "off" and s["teacher"] is None and pred(s, present=True, zone=2)),
+        ("walks out: nobody is here", leave, finish, "state", lambda s: pred(s, present=False)),
+    ]
+    return path, [], beats
+
+
 class Stack:
     """The real bus and the real brain, joined in one process, on the feed's clock."""
 
@@ -187,7 +228,12 @@ def rehearse(script=None, seed: int = 0) -> list:
 
 
 def main(argv=None) -> int:
-    results = rehearse()
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Play the demo through the real bus and brain, beat by beat.")
+    ap.add_argument("--desk", action="store_true", help="the 3-minute desk visit (docs/desk-demo.md) instead")
+    args = ap.parse_args(argv)
+    results = rehearse(desk_script()) if args.desk else rehearse()
     for name, passed, shown in results:
         took = "" if shown is None else f"  shown after {shown:.1f} s"
         print(f"{'PASS' if passed else 'FAIL'}  {name}{took}")
