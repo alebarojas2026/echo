@@ -71,3 +71,15 @@ Use the short name: `python -m sim.fake zone_tour`.
 | `stand_still` | Walk into zone 3, stand still 15 s, walk out | 24 s |
 | `empty_room` | Nobody there, noise only | 30 s |
 | `metal_object` | Empty room, metal object next to `n1`: a steady drop on `n1`'s three links | 30 s |
+
+## Replay a recording
+
+```
+python -m sim.fake zone_tour --fast > data/sessions/tour.jsonl   # record
+python -m sim.replay data/sessions/tour.jsonl                    # play at real speed
+python -m sim.replay data/sessions/tour.jsonl --speed 4 --loop
+```
+
+Replay prints the lines unchanged and waits between them according to their
+timestamps. It works on real recorded sessions too; timestamps do not need to
+start at zero. `data/sessions/` is git-ignored, so recordings stay local.
