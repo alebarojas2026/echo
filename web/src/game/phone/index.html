@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Radio Sight: caregiver</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="../../room/room.css">
+    <style>
+      /* Colours come from the shared tokens in room.css. Each one means one thing, and always has a word.
+         Everything someone reads is at least 28 px (1.75rem). */
+      @font-face { font-family: 'Hanken Grotesk'; src: url('../../hud/fonts/hanken-grotesk.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font: 1.1rem/1.45 'Hanken Grotesk', system-ui, sans-serif;
+      }
+      main {
+        min-height: 100dvh; display: flex; flex-direction: column; gap: 1rem;
+        padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+      }
+      .card {
+        flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 1rem;
+        padding: 1.5rem; background: var(--floor); border: 2px solid var(--edge); border-radius: 0.75rem;
+      }
+      .label { margin: 0; font-size: 1.75rem; font-weight: 700; letter-spacing: 0.08em; color: var(--text-2); }
+      .title {
+        margin: 0; font: 600 clamp(2.2rem, 10.5vw, 3.4rem)/1.08 'Hanken Grotesk', system-ui, sans-serif;
+        letter-spacing: -0.01em; text-wrap: balance;
+      }
+      .zone { color: var(--person); }
+      .detail { margin: 0; min-height: 2.4rem; color: var(--text-2); font-size: 1.75rem; line-height: 1.3; }
+      body[data-mode='alert'] .card { border-color: var(--fault); }
+      body[data-mode='alert'] .label { color: var(--fault); }
+      body[data-mode='blind'] .label { color: var(--fault); }
+      body[data-mode='nodata'] .card, body[data-mode='waiting'] .card { border-style: dashed; }
+      body[data-mode='nodata'] .title, body[data-mode='waiting'] .title { color: var(--text-2); }
+      .foot { display: flex; flex-direction: column; gap: 0.75rem; }
+      .checkin { margin: 0; font-size: 1.75rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+      .checkin[data-has='yes'] { color: var(--action); }
+      .sound {
+        min-height: 3.5rem; padding: 0.75rem 1rem; border: 2px solid var(--square); border-radius: 0.5rem;
+        background: transparent; color: var(--text); font: inherit; font-size: 1.75rem; font-weight: 600; touch-action: manipulation;
+      }
+      .sound:disabled { border-color: var(--edge); color: var(--text-2); }
+      .sound:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+    </style>
+  </head>
+  <body data-mode="nodata">
+    <main>
+      <section class="card" aria-live="assertive">
+        <p class="label" id="label" data-testid="phone-label">NO DATA</p>
+        <h1 class="title" id="title" data-testid="phone-title">No data from the board.</h1>
+        <p class="detail" id="detail" data-testid="phone-detail"></p>
+      </section>
+      <div class="foot">
+        <p class="checkin" id="checkin" data-testid="phone-checkin">No check-in yet</p>
+        <button class="sound" id="sound" type="button">Tap to turn on sound</button>
+      </div>
+    </main>
+    <script type="module" src="./phone.js"></script>
+  </body>
+</html>
