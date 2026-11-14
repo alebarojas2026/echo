@@ -1,26 +1,30 @@
 import {
   BoxGeometry,
-  CapsuleGeometry,
+  DirectionalLight,
   EdgesGeometry,
-  Group,
+  HemisphereLight,
   LineBasicMaterial,
   LineSegments,
   Mesh,
   MeshBasicMaterial,
   PlaneGeometry,
-  SphereGeometry,
   Vector3,
 } from 'three'
 import type { ObjectMark, Pred, Xray } from './contract'
+import { createFigure, FIGURE_HEIGHT_M, type Figure } from './figure'
 import { HOME_SPOT, SQUARE_M, nodePosition, zoneAt, zoneCenter } from './frame'
 import { OBJECT, PERSON } from './palette'
 import { v3 } from './stage'
 import { shadowCentre } from './xray'
 import type { RoomView } from './view'
 
-// Where the radio thinks the person is: an amber ghost in pred.zone, a faint amber tile under each zone in
-// zone_set (two ghosts when the brain can't pick between two zones), and grey-blue box markers for state.objects.
+// Where the radio thinks the person is: an amber figure in pred.zone, a faint amber tile under each zone in
+// zone_set (two figures when the brain can't pick between two zones), and grey-blue box markers for state.objects.
 // Nothing is drawn while pred is null.
+//
+// The figure says only what the radio knows: where (zone and floor point), and moving or still. It is a simple,
+// faceless figure (figure.ts) that stands while the person is still and walks while they move, facing the way the
+// floor point last travelled.
 
 export interface GhostSpot {
   zone: number
@@ -50,19 +54,22 @@ export function ghostFloor(zone: number, shadow: [number, number] | null): [numb
   return [clamp(shadow[0], centre[0]), clamp(shadow[1], centre[1])]
 }
 
-const GHOST_ALPHA = 0.85
+const GHOST_ALPHA = 1
 const TILE_INSET_M = 0.15
 const TILE_ALPHA = 0.09
+/** The floor point has to travel this far before the figure turns to face the new way, so jitter can't spin it. */
+const HEADING_STEP_M = 0.08
 
 interface Ghost {
-  group: Group
-  mats: MeshBasicMaterial[]
+  figure: Figure
   label: HTMLElement
   at: Vector3
   to: Vector3
   alpha: number
   alphaTo: number
   placed: boolean
+  /** Where the heading was last taken from. */
+  anchor: Vector3
 }
 
 export class Presence {
@@ -84,22 +91,22 @@ export class Presence {
       this.tiles.push({ mesh, to: 0 })
     }
 
-    const body = new CapsuleGeometry(0.12, 0.62, 4, 12)
-    const head = new SphereGeometry(0.1, 16, 12)
     for (let i = 0; i < 2; i++) {
-      const mats = [0, 1].map(() => new MeshBasicMaterial({ color: PERSON, transparent: true, opacity: 0, depthWrite: false }))
-      const group = new Group()
-      const b = new Mesh(body, mats[0])
-      b.position.y = 0.43
-      const h = new Mesh(head, mats[1])
-      h.position.y = 0.98
-      group.add(b, h)
-      group.visible = false
-      view.scene.add(group)
+      const figure = createFigure((loaded) => {
+        this.view.host.dataset.figure = loaded ? 'loaded' : 'capsule'
+        this.view.requestRender()
+      })
+      figure.object.visible = false
+      view.scene.add(figure.object)
       const label = view.addLabel('', new Vector3(), 'room-label--ghost')
       label.hidden = true
-      this.ghosts.push({ group, mats, label, at: new Vector3(), to: new Vector3(), alpha: 0, alphaTo: 0, placed: false })
+      this.ghosts.push({ figure, label, at: new Vector3(), to: new Vector3(), alpha: 0, alphaTo: 0, placed: false, anchor: new Vector3() })
     }
+    // Only the figure is lit; everything else in the room is unlit, so these lights touch nothing else.
+    const sky = new HemisphereLight(0xffffff, 0x1a1612, 0.9)
+    const key = new DirectionalLight(0xffffff, 2.4)
+    key.position.set(-1.2, 3, 2.2)
+    view.scene.add(sky, key)
     view.addAnimator((dt) => this.ease(dt))
   }
 
@@ -112,8 +119,20 @@ export class Presence {
       if (!spot) return
       const [x, y] = spots.length === 1 ? ghostFloor(spot.zone, shadow) : zoneCenter(spot.zone)!
       g.to.copy(v3([x, y, 0]))
-      if (!g.placed) g.at.copy(g.to) // the first sighting appears in place; later ones glide
+      if (!g.placed) {
+        g.at.copy(g.to) // the first sighting appears in place; later ones glide
+        g.anchor.copy(g.to)
+      }
       g.placed = true
+      // Face the way the floor point has travelled; hold the last heading while it stays put.
+      const dx = g.to.x - g.anchor.x
+      const dz = g.to.z - g.anchor.z
+      if (spots.length > 1) g.anchor.copy(g.to) // two-zone guesses jump between zone centres: not a walk
+      else if (Math.hypot(dx, dz) > HEADING_STEP_M) {
+        g.figure.setHeading(Math.atan2(dx, dz))
+        g.anchor.copy(g.to)
+      }
+      g.figure.setMoving(spots.length === 1 && pred!.motion === 'moving')
       const waving = this.wave && spots.length === 1
       g.label.textContent = waving ? 'Wave seen' : spots.length > 1 ? `zone ${spot.zone}?` : pred!.motion === 'still' ? 'still' : 'moving'
       g.label.classList.toggle('room-label--wave', waving)
@@ -157,11 +176,12 @@ export class Presence {
       g.alpha += (g.alphaTo - g.alpha) * k
       if (Math.abs(g.alphaTo - g.alpha) < 0.004) g.alpha = g.alphaTo
       busy ||= g.alpha !== g.alphaTo || g.at.distanceTo(g.to) > 0.002
-      g.group.position.copy(g.at)
-      g.group.visible = g.alpha > 0
-      for (const m of g.mats) m.opacity = g.alpha
+      g.figure.object.position.copy(g.at)
+      g.figure.object.visible = g.alpha > 0
+      g.figure.setOpacity(g.alpha)
+      busy ||= g.figure.update(dt) && g.figure.object.visible
       g.label.hidden = g.alphaTo === 0
-      if (!g.label.hidden) this.view.moveLabel(g.label, g.at.clone().setY(1.18))
+      if (!g.label.hidden) this.view.moveLabel(g.label, g.at.clone().setY(FIGURE_HEIGHT_M + 0.1))
     }
     for (const t of this.tiles) {
       const m = t.mesh.material

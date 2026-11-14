@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Pred } from './contract'
+import { turn } from './figure'
 import { ghostFloor, ghostSpots } from './ghost'
 
 const pred = (over: Partial<Pred>): Pred => ({
@@ -41,5 +42,13 @@ describe('ghost floor point', () => {
   it('stands in the zone centre with no shadow, or a shadow in another zone', () => {
     expect(ghostFloor(2, null)).toEqual([1.5, 1.5])
     expect(ghostFloor(2, [0.4, 0.4])).toEqual([1.5, 1.5])
+  })
+})
+
+describe('figure heading', () => {
+  it('turns the short way round', () => {
+    expect(turn(0, Math.PI / 2)).toBeCloseTo(Math.PI / 2)
+    expect(turn(Math.PI * 0.9, -Math.PI * 0.9)).toBeCloseTo(Math.PI * 0.2)
+    expect(turn(-Math.PI * 0.9, Math.PI * 0.9)).toBeCloseTo(-Math.PI * 0.2)
   })
 })
