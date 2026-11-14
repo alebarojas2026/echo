@@ -17,7 +17,8 @@ def test_every_beat_is_checked_in_runbook_order(results):
         "setup: baseline", "setup: training", "empty room", "walk in", "tour: zone 3 Hall",
         "tour: zone 4 Bathroom", "tour: zone 2 Chair", "tour: zone 1 Bed", "no-movement alert", "wave check-in",
         "camera unplugged, radio only", "tray near the router", "advice to move the router", "router moved",
-        "router back home", "reset between judges"]
+        "router back home", "reset between judges",
+        "recap after the reset"]
 
 
 def test_every_beat_shows_up(results):
@@ -44,3 +45,18 @@ def test_a_broken_beat_fails_by_name(capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "FAIL  wave check-in" in out and "PASS  no-movement alert  shown after" in out
     assert "failed: " in out.splitlines()[-1] and "wave check-in" in out.splitlines()[-1]
+
+
+def test_recap_reaches_the_screen_through_bus_and_brain():
+    import tempfile
+
+    path, commands, _ = rehearse.demo_script()
+    with tempfile.TemporaryDirectory() as folder:
+        stack = rehearse.Stack(folder)
+        stack.calibrate()
+        stack.play(path, commands)
+    recaps = {s["narration"]["text"] for s in stack.states if s["narration"]}
+    assert len(recaps) == 1                                      # one recap, after the reset only
+    text = recaps.pop()
+    assert text.startswith("Someone visited the Hall, Bathroom, Chair and Bed zones.")
+    assert "no-movement alert" in text and "dBm" in text
