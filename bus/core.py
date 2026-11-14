@@ -17,7 +17,8 @@ record_stop, so a bus that crashed or was restarted carries on appending to the
 same file (if it was written to in the last RESUME_WITHIN_S seconds) and says so.
 
 Every 30 s the log has a line per producer (received, lost, restarts) and one line with the rssi
-rate of each link in radio/nodes.json, naming the links that sent nothing.
+rate of each link in radio/nodes.json, naming the links that sent nothing. A link that was flowing
+and goes QUIET_S without a reading gets a warning at once, and one line when it's back.
 
 A producer is one sending socket (address and port). Each process should send
 from a single socket for its whole life, or its seq gaps can't be counted.
@@ -38,6 +39,7 @@ SESSIONS_DIR = REPO / "data" / "sessions"
 SESSION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 PURPOSES = {"train", "heldout", "object", "crowd", "demo"}
 MAX_DATAGRAM = 65535
+QUIET_S = 3.0
 OPEN_MARK = ".open"
 RESUME_WITHIN_S = 600
 
@@ -174,6 +176,8 @@ class Bus:
         self._warned = set()
         self.link_ids = load_link_ids()
         self.link_counts: dict = {}
+        self.link_last: dict = {}     # link -> recv_t of its last reading
+        self.link_quiet: set = set()  # links said to be quiet, not back yet
 
     def lost(self) -> int:
         return sum(p.lost for p in self.producers.values())
@@ -200,7 +204,12 @@ class Bus:
         if producer is None:
             producer = self.producers[key] = Producer(msg["type"], msg.get("src"))
         if msg["type"] == "rssi" and isinstance(msg.get("link"), str):
-            self.link_counts[msg["link"]] = self.link_counts.get(msg["link"], 0) + 1
+            link = msg["link"]
+            self.link_counts[link] = self.link_counts.get(link, 0) + 1
+            if link in self.link_quiet:
+                self.link_quiet.discard(link)
+                log.info("%s back after %.0f s", link, (recv_t - self.link_last[link]) / 1000)
+            self.link_last[link] = recv_t
         gap = producer.see(msg.get("seq"))
         if gap:
             log.info("%s (%s) lost %d before seq %s", key, producer.type, gap, msg.get("seq"))
@@ -251,6 +260,13 @@ class Bus:
                  self.recorder.session, self.recorder.lines, self.lost() - self._lost_at_start)
         self.recorder.stop()
 
+    def watch_links(self, now_ms: int) -> None:
+        """Warn once when a link that was flowing has sent nothing for QUIET_S."""
+        for link, last in self.link_last.items():
+            if link not in self.link_quiet and now_ms - last >= QUIET_S * 1000:
+                self.link_quiet.add(link)
+                log.warning("%s quiet for %g s", link, QUIET_S)
+
     def link_report(self, seconds: float) -> str:
         """rssi per link since the last call, nodes.json order first, then the links that sent nothing."""
         counts, self.link_counts = self.link_counts, {}
@@ -284,6 +300,7 @@ def serve(bus: Bus, sock: socket.socket, stop=None, stats_every: float = 30.0) -
     """Receive until stop (a threading.Event) is set, or forever."""
     sock.settimeout(0.25)
     next_report = time.monotonic() + stats_every
+    next_watch = 0.0
     while stop is None or not stop.is_set():
         try:
             data, addr = sock.recvfrom(MAX_DATAGRAM)
@@ -292,6 +309,9 @@ def serve(bus: Bus, sock: socket.socket, stop=None, stats_every: float = 30.0) -
             pass
         except ConnectionResetError:
             pass  # Windows reports an earlier unreachable send this way; harmless
+        if time.monotonic() >= next_watch:
+            next_watch = time.monotonic() + 0.5
+            bus.watch_links(now_ms())
         if time.monotonic() >= next_report:
             next_report += stats_every
             for line in bus.report():

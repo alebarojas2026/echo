@@ -148,7 +148,8 @@ def test_reset_alert_and_reset_commands():
     assert at(states, 11.9)["alert"]["state"] == "check_on" and at(states, 12.5)["alert"]["state"] == "counting"
     before, after = at(states, 17.9), at(states, 18.1)
     assert before["checkin"] and before["narration"] and before["pred"]["still_s"] > 10
-    assert (after["checkin"], after["narration"], after["advice"]) == (None, None, None)
+    assert (after["checkin"], after["advice"]) == (None, None)
+    assert after["narration"]["text"].startswith("Someone visited the Bathroom zone.")   # the recap, not the last sentence
     assert after["pred"]["still_s"] < 0.5 and after["alert"]["still_s"] < 0.5
 
 
@@ -272,3 +273,23 @@ def test_no_wifi_row_or_a_null_drop_means_no_advice():
     assert brain.advice
     brain._advise(10.1, obj, "S-home", fake.NODES, [{"id": "pi5>unoq:wifi", "drop_db": 1.0}])
     assert brain.advice is None   # the link recovered, so the advice goes, as in the brain
+
+
+def test_reset_sends_the_reset_event_and_the_template_recap():
+    brain = state.Brain(fake.load_path("demo"))
+    msgs = []
+    for m in state.run(brain.path, brain=brain):
+        msgs.append(m)
+        if m["type"] == "state" and m["t"] == 60.0:
+            brain.command({"cmd": "reset"})
+    encode = encoder(1763149500000)
+    assert all(set(errors(json.loads(encode(m)))) <= UNMEASURED for m in msgs)
+    events = [m for m in msgs if m["type"] == "event"]
+    reset = next(e for e in events if e["kind"] == "reset")
+    after = next(m for m in msgs if m["type"] == "state" and m["t"] > 60.0)
+    recap = after["narration"]
+    assert recap["event_id"] == reset["id"] and recap["source"] == "template"
+    assert recap["text"].startswith("Someone ") and len(recap["text"].split()) <= 45
+    # the next reset only tells what happened since this one
+    brain.command({"cmd": "reset"})
+    assert brain.narration is None or brain.narration["text"] != recap["text"]

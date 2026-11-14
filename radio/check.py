@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from . import link_stats
 from .wifi_rssi import REPO, find_tool, iw_path, load_env_file
@@ -36,6 +37,23 @@ def check_tools(which=find_tool):
         return False, (f"tools: {', '.join(missing)} missing -> sudo apt-get install -y iw iputils-ping "
                        "network-manager, while the board still has internet")
     return True, "tools: iw, ping, nmcli"
+
+
+def check_radios(root="/sys/class/rfkill"):
+    """Neither Bluetooth nor Wi-Fi blocked by rfkill (readable without root)."""
+    blocked = []
+    for entry in sorted(Path(root).glob("rfkill*")):
+        try:
+            kind = (entry / "type").read_text().strip()
+            soft, hard = ((entry / f).read_text().strip() == "1" for f in ("soft", "hard"))
+        except OSError:
+            continue
+        if kind in ("bluetooth", "wlan") and (soft or hard):
+            blocked.append(f"{kind} ({'hard: a switch or the firmware' if hard else 'soft'})")
+    if blocked:
+        return False, (f"radios: {', '.join(blocked)} blocked -> sudo rfkill unblock all, "
+                       "then sudo bluetoothctl power on")
+    return True, "radios: Bluetooth and Wi-Fi not blocked"
 
 
 def check_ethernet(run=sh):
@@ -99,7 +117,7 @@ def main(argv=None) -> None:
     args = ap.parse_args(argv)
     load_env_file(REPO / ".env")  # WIFI_IFACE, as the reader's service sees it
     iface = os.environ.get("WIFI_IFACE") or "wlan0"
-    results = [check_tools(), check_ethernet(), check_wifi(iface), check_services(),
+    results = [check_tools(), check_radios(), check_ethernet(), check_wifi(iface), check_services(),
                check_links(args.seconds)]
     for ok, text in results:
         print(f"{'ok  ' if ok else 'FAIL'}  {text}")

@@ -190,8 +190,9 @@ python -m sim.ws demo --loop             # ws://127.0.0.1:8765/ws
 ```
 
 Every connected screen gets the same messages at real speed. `cmd` messages from the screen are
-read: `reset_alert` clears the alert, `reset` also clears the still timer, check-in, advice and
-narration, and the rest are accepted and ignored. Options: `--host`, `--port`, `--rate`, `--seed`,
+read: `reset_alert` clears the alert, `reset` also clears the still timer, check-in and advice,
+sends the `reset` event and shows the narrator's template recap of the demo since the last reset,
+and the rest are accepted and ignored. Options: `--host`, `--port`, `--rate`, `--seed`,
 `--speed`, `--loop`. The crowd game page can point at it with `?ws=ws://127.0.0.1:8765/ws`; its
 rounds count as practice because the source is `sim`.
 

@@ -38,6 +38,7 @@ SETTLE_MS = 3_000        # after router_home, pi5 links must sit near base this 
 SETTLE_DB = 1.0          # ... within this of base, else an automatic baseline runs
 ADVICE_MEDIAN_MS = 3_000 # before_dbm and after_dbm are medians over this long
 AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
+SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
 ZONE_HOLD = 5            # decisions in a row (0.5 s) before enter, exit or zone_change is said
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
@@ -82,6 +83,10 @@ def last_meta(path) -> Optional[dict]:
     return found
 
 
+def _same_object(a, b) -> bool:
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 <= SAME_OBJECT_M
+
+
 def now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -106,7 +111,7 @@ class Brain:
         self.nodes = nodes
         self._recent: Dict[str, deque] = {link: deque() for link in links}   # (recv_t, dbm), last 10 s
         self.advice: Optional[dict] = None
-        self._dismissed: Optional[str] = None     # the id of an advice that reset cleared
+        self._dismissed: Optional[list] = None    # xy_m of an advice that reset cleared
         self._moved_t: Optional[int] = None       # when router_moved came
         self.settle: Optional[int] = None         # when router_home came, while its 3 s check runs
         self.recalibrating = False                # the automatic baseline after a failed check
@@ -267,7 +272,7 @@ class Brain:
     def _cmd_reset(self, args):
         """Between judges: clear the alert, still timer, check-in, advice and narration."""
         self.watch.reset()
-        self._dismissed = self.advice["id"] if self.advice else None
+        self._dismissed = self.advice["xy_m"] if self.advice else None
         self.narration = self.advice = None
         self._watch_events()
         self.emit("reset", {})
@@ -423,15 +428,19 @@ class Brain:
             if adv is None or before is None:
                 self.advice = self._dismissed = None
                 return
-            if adv["id"] == self._dismissed:      # cleared by reset: stays away until it changes
-                self.advice = None
+            if self._dismissed and _same_object(adv["xy_m"], self._dismissed):
+                self.advice = None                # cleared by reset: stays away while that object stays
                 return
             self._dismissed = None
-            adv["before_dbm"] = before            # kept current while the advice shows
-            new = self.advice is None or self.advice["id"] != adv["id"]
+            # One object, one advice. The two spots tie for a tray on the centre line and noise
+            # would flip the pick (and the sentence on screen) several times a minute, so the
+            # first answer stays until the advice goes away or is about another object.
+            if self.advice is not None and _same_object(adv["xy_m"], self.advice["xy_m"]):
+                self.advice["before_dbm"] = before    # kept current while the advice shows
+                return
+            adv["before_dbm"] = before
             self.advice = adv
-            if new:
-                self.emit("advice", {"link": WIFI, "node": adv["near"], "before_dbm": before})
+            self.emit("advice", {"link": WIFI, "node": adv["near"], "before_dbm": before})
         elif self.advice and self.advice["after_dbm"] is None and self._moved_t is not None \
                 and now >= self._moved_t + AFTER_START_MS + ADVICE_MEDIAN_MS:
             start = self._moved_t + AFTER_START_MS

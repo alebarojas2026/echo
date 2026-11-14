@@ -1,5 +1,5 @@
 /// <reference types="vitest/config" />
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineConfig, type Plugin } from 'vite'
@@ -45,23 +45,66 @@ async function boardJson(req: IncomingMessage, res: ServerResponse, next: () => 
   res.end(body)
 }
 
+const ROOM_JSON = new URL('./public/models/room.json', import.meta.url)
+
 // The room scan is optional: only a build that finds web/public/models/room.glb asks for it, so the kiosk
 // never logs a 404 for a missing file. Its alignment, if any, is web/public/models/room.json.
 function roomScan() {
   if (!existsSync(new URL('./public/models/room.glb', import.meta.url))) return null
   let fit = {}
   try {
-    fit = JSON.parse(readFileSync(new URL('./public/models/room.json', import.meta.url), 'utf8'))
+    fit = JSON.parse(readFileSync(ROOM_JSON, 'utf8'))
   } catch {
     // no alignment file: the scan is centred on the square
   }
   return { url: 'models/room.glb', fit }
 }
 
+/** Only the four alignment numbers, each finite and in a sane range, or null. */
+export function cleanFit(body: unknown): Record<string, unknown> | null {
+  if (!body || typeof body !== 'object') return null
+  const { offset_m, yaw_deg, scale, cut_m } = body as Record<string, unknown>
+  const num = (v: unknown, lo: number, hi: number) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi
+  if (!Array.isArray(offset_m) || offset_m.length !== 2 || !offset_m.every((v) => num(v, -100, 100))) return null
+  if (!num(yaw_deg, -360, 360) || !num(scale, 0.25, 4) || !num(cut_m, 0, 20)) return null
+  return { offset_m, yaw_deg, scale, cut_m }
+}
+
+// Under `vite` only: the screen asks here for the scan on every load (GET), so a new room.glb or room.json
+// shows on reload without a restart, and align mode's S saves room.json here (POST).
+function roomScanApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
+  if (req.url?.split('?')[0] !== '/__room-scan') return next()
+  res.setHeader('content-type', 'application/json')
+  res.setHeader('cache-control', 'no-store')
+  if (req.method !== 'POST') return void res.end(JSON.stringify(roomScan()))
+  let body = ''
+  req.on('data', (chunk: Buffer) => {
+    body += chunk
+    if (body.length > 4096) req.destroy()
+  })
+  req.on('end', () => {
+    let fit = null
+    try {
+      fit = cleanFit(JSON.parse(body))
+    } catch {
+      // not JSON
+    }
+    if (!fit) {
+      res.statusCode = 400
+      return void res.end(JSON.stringify({ error: 'expected offset_m, yaw_deg, scale and cut_m' }))
+    }
+    writeFileSync(ROOM_JSON, `${JSON.stringify(fit, null, 2)}\n`)
+    res.end(JSON.stringify({ saved: 'web/public/models/room.json' }))
+  })
+}
+
 function boardFiles(): Plugin {
   return {
     name: 'board-files',
-    configureServer: (server) => void server.middlewares.use(boardJson),
+    configureServer: (server) => {
+      server.middlewares.use(roomScanApi)
+      server.middlewares.use(boardJson)
+    },
     configurePreviewServer: (server) => void server.middlewares.use(boardJson),
   }
 }
