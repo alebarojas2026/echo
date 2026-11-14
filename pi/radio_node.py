@@ -108,6 +108,8 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
     emitter = make_bus_emitter(bus_sock, (bus_host, bus_port), rx="pi5")
     start_advertising(dev)
     scanner = BeaconScanner(dev, rx="pi5")
+    scanner.ext = False
+    scanner.mode = "legacy"
     try:
         return run_scan(scanner, emitter, seconds=seconds, stop=stop, seen=seen)
     finally:

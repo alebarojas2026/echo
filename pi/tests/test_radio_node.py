@@ -116,3 +116,18 @@ def test_startup_sequence_and_packet_forwarding():
 
     # 5. On exit, scan and advertising are turned off
     assert fake.sent[-1] == hci.command_packet(LE_SET_ADV_ENABLE, bytes([0x00]))
+
+
+def test_controller_with_ext_scan_uses_legacy_opcodes_only():
+    """Even when controller supports extended scanning (read_supported_commands_ext.hex),
+    Pi must stay strictly legacy to avoid mixing advertising and scan command families."""
+    fake = FakeController(ext=True)
+    dev = hci.Hci(fake)
+
+    run(dev, seconds=0.01, stop=lambda: True)
+
+    assert hci.LE_SET_EXT_SCAN_PARAMS not in fake.opcodes
+    assert hci.LE_SET_EXT_SCAN_ENABLE not in fake.opcodes
+    assert hci.LE_SET_SCAN_PARAMS in fake.opcodes
+    assert hci.LE_SET_SCAN_ENABLE in fake.opcodes
+
