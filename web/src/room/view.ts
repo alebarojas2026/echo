@@ -228,6 +228,8 @@ export class RoomView {
     this.width = w
     this.height = h
     this.renderer.setSize(w, h, false)
+    // How big the room is drawn next to the 1280 px canvas it was laid out for; the zone names scale with it.
+    this.host.style.setProperty('--room-k', String(Math.min(1, w / 1280)))
     fitCamera(this.camera, w, h, this.shotNow())
     for (const fn of this.resizeHooks) fn(w, h)
     this.labelsDirty = true

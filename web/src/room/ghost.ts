@@ -13,7 +13,7 @@ import {
 import type { ObjectMark, Pred, Xray } from './contract'
 import { createFigure, FIGURE_HEIGHT_M, type Figure } from './figure'
 import { EASE_CSS, fade, GHOST_OMEGA, Held, MOTION, springStep } from './motion'
-import { HOME_SPOT, SQUARE_M, nodePosition, zoneAt, zoneCenter } from './frame'
+import { SQUARE_M, zoneAt, zoneCenter } from './frame'
 import { OBJECT, PERSON } from './palette'
 import { v3 } from './stage'
 import { shadowCentre } from './xray'
@@ -90,6 +90,15 @@ const TURN_SPEED_MPS = 0.12
 
 const zonesKey = (spots: GhostSpot[]) => spots.map((s) => s.zone).sort().join(',')
 
+/**
+ * Where an object's tag goes: centred 0.3 m north of it, or 0.3 m south when that would reach the north zone
+ * names. Zone names fill the square's outer rows and the router's name sits level with its head (about 0.8 m
+ * into the square, as seen from the camera), so this lane between them stays clear on any canvas size.
+ */
+export function objectTagAt([x, y]: [number, number]): [number, number, number] {
+  return [x, y + 0.3 <= SQUARE_M - 0.45 ? y + 0.3 : y - 0.3, 0.08]
+}
+
 export class Presence {
   /** True while a wave check-in shows: the figure's label reads "Wave seen". */
   wave = false
@@ -151,7 +160,7 @@ export class Presence {
     return this.placed && this.zones.value ? this.zones.value.split(',').map(Number) : []
   }
 
-  update(pred: Pred | null, objects: ObjectMark[], xray: Xray | null = null, router: string = HOME_SPOT, nowMs = performance.now()) {
+  update(pred: Pred | null, objects: ObjectMark[], xray: Xray | null = null, nowMs = performance.now()) {
     const spots = ghostSpots(pred)
     let lone: [number, number] | null = null
     if (!spots.length) {
@@ -188,7 +197,7 @@ export class Presence {
     }
     const lit = new Set(this.shownZones())
     this.tiles.forEach((t, i) => (t.to = lit.has(i + 1) ? TILE_ALPHA : 0))
-    this.placeObjects(objects, router)
+    this.placeObjects(objects)
     this.view.host.dataset.ghost = this.shownZones().join(',')
     this.view.host.dataset.ghostXy = lone ? `${lone[0].toFixed(2)},${lone[1].toFixed(2)}` : ''
     this.view.requestRender()
@@ -213,7 +222,7 @@ export class Presence {
     }
   }
 
-  private placeObjects(objects: ObjectMark[], router: string) {
+  private placeObjects(objects: ObjectMark[]) {
     while (this.boxes.length < objects.length) {
       const mesh = new LineSegments(new EdgesGeometry(new BoxGeometry(0.16, 0.16, 0.16)), new LineBasicMaterial({ color: OBJECT, transparent: true, opacity: 0 }))
       mesh.visible = false
@@ -227,11 +236,7 @@ export class Presence {
       b.to = o ? 1 : 0
       if (!o) return
       b.mesh.position.copy(v3([o.xy_m[0], o.xy_m[1], 0.08]))
-      // The tag sits 0.3 m from the object on the side away from the router, so it never lands on the router
-      // or its name (the router moves west on advice), and 0.15 m north, clear of the south zone names.
-      const east = nodePosition('pi5', router)[0] < o.xy_m[0]
-      b.label.classList.toggle('room-label--object-east', east)
-      this.view.moveLabel(b.label, v3([o.xy_m[0] + (east ? 0.3 : -0.3), o.xy_m[1] + 0.15, 0.08]))
+      this.view.moveLabel(b.label, v3(objectTagAt(o.xy_m)))
     })
     this.view.host.dataset.objects = String(objects.length)
   }

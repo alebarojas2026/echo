@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Pred } from './contract'
 import { turn } from './figure'
-import { ghostFloor, ghostSpots } from './ghost'
+import { ghostFloor, ghostSpots, objectTagAt } from './ghost'
 
 const pred = (over: Partial<Pred>): Pred => ({
   present: true, kind: 'person', zone: 2, zone_set: [2], probs: [0.02, 0.08, 0.81, 0.07, 0.02],
@@ -50,5 +50,13 @@ describe('figure heading', () => {
     expect(turn(0, Math.PI / 2)).toBeCloseTo(Math.PI / 2)
     expect(turn(Math.PI * 0.9, -Math.PI * 0.9)).toBeCloseTo(Math.PI * 0.2)
     expect(turn(-Math.PI * 0.9, Math.PI * 0.9)).toBeCloseTo(-Math.PI * 0.2)
+  })
+})
+
+describe('object tags', () => {
+  it('sit centred 0.3 m north of the object, or south when north would reach the north zone names', () => {
+    expect(objectTagAt([1.0, 0.2])).toEqual([1.0, 0.5, 0.08]) // the tray by the router
+    expect(objectTagAt([0.4, 1.25])[1]).toBeCloseTo(1.55)
+    expect(objectTagAt([0.4, 1.6])[1]).toBeCloseTo(1.3)
   })
 })
