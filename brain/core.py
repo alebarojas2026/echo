@@ -606,7 +606,9 @@ class Brain:
     def state(self) -> dict:
         now = self.now()
         self._tick()
-        health = self.health.update(now, self.raw_kind, self.router == HOME, self.capture is not None)
+        # A baseline asked for by hand measures the rates again; the old ones don't judge it.
+        health = self.health.update(now, self.raw_kind, self.router == HOME, self.capture is not None,
+                                    rates_known=not (self.capture and self.capture["new_place"]))
         self._health_ok = health["health"]["status"] == "ok"
         if self.health.blind and self.pred is not None:
             self.pred = None
