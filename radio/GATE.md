@@ -12,10 +12,15 @@ and `python -m radio.report_hci`) checks them.
 3 out of 3 runs.
 
 **Setup:**
-- Pi at south node (S-home), board at north node — both at 1.0 m height.
-- Pi's 5 GHz hotspot up (`sudo bash pi/ap.sh`).
-- Board joined to sensing hotspot, power saving off (`sudo bash radio/wifi_join.sh`).
-- `python -m radio.wifi_rssi` running on the board.
+- Pi at south node (S-home), board at north node — both at 1.0 m height. Nobody else in the square.
+- Pi's 5 GHz hotspot up (`sudo bash pi/ap.sh` on the Pi).
+- Board joined to the hotspot, locked to the Pi's BSSID, power saving off: `sudo bash radio/wifi_join.sh`
+  on the board, with `SENSING_SSID`, `SENSING_PSK` and `SENSING_BSSID` in the board's `.env` (the BSSID
+  is the `addr` line of `iw dev <hotspot interface> info` on the Pi). It must print `joined`.
+- On the board, from the repo, no sudo: `python -m radio.wifi_rssi --gate`. It pings the Pi 50 times a
+  second (beacons alone are too few frames), walks through the three runs (line clear, then
+  someone standing in the middle of the line, 10 s each) and prints the rate, rows and result below,
+  ready to paste. Then `python -m radio.report_wifi` must print `GATE 1 PASS`.
 
 **Measured sample rate:** __ samples/s
 
@@ -31,14 +36,14 @@ and `python -m radio.report_hci`) checks them.
 
 ## Gate 2 — Bluetooth raw scan (#20)
 
-**Pass criteria:** the Pi beacon ≥ 20 adverts/s at the board; each phone beacon ≥ 7 adverts/s
-at the board and at the Pi.
+**Pass criteria:** the Pi beacon ≥ 20 adverts/s at the board; each of the E and W beacons ≥ 7
+adverts/s at the board and at the Pi.
 
 **Setup:**
 - Pi advertising as beacon S (manufacturer data `FFFF525353`): `radio-sight-radio-node` running on the Pi.
-- East and west phones advertising in nRF Connect as beacons E and W
-  (`FFFF525345`, `FFFF525357`). They must be Android phones: an iPhone can't put manufacturer
-  data in its adverts (#289).
+- The E and W beacons (ESP32-S3, #305) powered at the east and west spots, advertising
+  `FFFF525345` and `FFFF525357` in the advertising data (legacy, non-connectable). Phones aren't
+  used: an iPhone can't put manufacturer data in its adverts (#289).
 - On the board, `sudo systemctl stop radio-sight-hci-scan` first (one scanner at a time), then
   `sudo python -m radio.hci_scan --node unoq --seconds 60`. Its summary gives the three `>unoq` rows.
   Start the service again afterwards.
