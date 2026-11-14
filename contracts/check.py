@@ -37,7 +37,7 @@ def errors(msg, schema=None):
             return [f"unknown type {schema!r} (expected one of {', '.join(TYPES)})"]
     found = sorted(VALIDATORS[schema].iter_errors(msg), key=lambda e: e.json_path)
     out = [f"{e.json_path}: {e.message[:160]}" for e in found]
-    if schema == "state" and not out:
+    if schema == "state" and not out and msg["xray"] is not None:
         x = msg["xray"]
         out += [f"$.xray.{k}: has {len(x[k])} cells, w*h is {x['w'] * x['h']}"
                 for k in ("moving_db", "static_db") if len(x[k]) != x["w"] * x["h"]]

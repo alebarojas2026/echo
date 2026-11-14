@@ -22,6 +22,9 @@ INVALID = [
     "$.model",                      # llm sentence without a model
     "$.pred.probs",                 # 4 probs, not 5
     "w*h is 25",                    # xray size does not match w x h
+    "$.links",                      # links is [] before readings, never null
+    "$.alert.zone",                 # counting with no zone
+    "$.model.ver",                  # trained but no version
     "$.kind",                       # unknown event kind
     "$.args.mode",
     "unknown type 'ping'",
