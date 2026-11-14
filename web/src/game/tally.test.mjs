@@ -1,7 +1,7 @@
 // Run with: node --test web/src/game/
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { addRound, emptyTally, judge, load, resultText, save, STORE_KEY, tallyText, truthCmd, undo, wsUrl } from './tally.js'
+import { addRound, emptyTally, isState, judge, load, resultText, save, STORE_KEY, tallyText, truthCmd, undo, wsUrl } from './tally.js'
 
 const state = (pred, extra = {}) => ({ v: 2, type: 'state', src: 'live', health: { status: 'ok' }, pred, ...extra })
 const person = (zone) => ({ present: true, kind: 'person', zone, zone_set: [zone], motion: 'still' })
@@ -77,4 +77,13 @@ test('truth command and socket address follow the contract', () => {
   assert.deepEqual(truthCmd(3), { v: 2, type: 'cmd', cmd: 'truth', args: { zone: 3 } })
   assert.equal(wsUrl({ hostname: '192.168.77.2', search: '' }), 'ws://192.168.77.2:8765/ws')
   assert.equal(wsUrl({ hostname: 'x', search: '?ws=ws://127.0.0.1:9000/ws' }), 'ws://127.0.0.1:9000/ws')
+})
+
+test('only a v2 state message is read', () => {
+  assert.equal(isState(state(person(1))), true)
+  assert.equal(isState({ ...state(person(1)), v: 1 }), false)
+  assert.equal(isState({ ...state(person(1)), v: undefined }), false)
+  assert.equal(isState({ v: 2, type: 'event' }), false)
+  assert.equal(isState(null), false)
+  assert.equal(isState('state'), false)
 })

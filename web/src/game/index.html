@@ -8,7 +8,7 @@
     <style>
       :root {
         --page: #f4f0e6; --card: #faf7ef; --text: #1c1b17; --soft: #55524a; --line: #8f8a7e;
-        --accent: #4f5e2e; --found: #4f5e2e; --hid: #8a3b12;
+        --accent: #4f5e2e;
       }
       * { box-sizing: border-box; }
       body {
@@ -32,10 +32,10 @@
         border-radius: 50%; background: var(--line);
       }
       .status[data-kind='ok']::before { background: var(--accent); }
-      .status[data-kind='practice']::before { background: #b58a1b; }
+      .status[data-kind='practice']::before { background: transparent; box-shadow: inset 0 0 0 2px var(--line); }
       .result { min-height: 3.2rem; margin: .6rem 0 1.2rem; font-size: 1.2rem; font-weight: 600; }
-      .result[data-outcome='found'] { color: var(--found); }
-      .result[data-outcome='hidden'] { color: var(--hid); }
+      .result[data-outcome='found'] { color: var(--accent); }
+      .result[data-outcome='hidden'] { color: var(--text); }
       h2 { margin: 0 0 .2rem; font-size: 1rem; font-weight: 700; }
       .hint { margin: 0 0 .8rem; color: var(--soft); font-size: .9rem; }
       .floor {

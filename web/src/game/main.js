@@ -1,5 +1,5 @@
 // Page wiring for the crowd game: the brain's state socket in, taps on the zone buttons out.
-import { addRound, emptyTally, judge, load, resultText, save, STALE_MS, tallyText, truthCmd, undo, wsUrl } from './tally.js'
+import { addRound, emptyTally, isState, judge, load, resultText, save, STALE_MS, tallyText, truthCmd, undo, wsUrl } from './tally.js'
 
 const $ = (id) => document.getElementById(id)
 const tallyEl = $('tally')
@@ -52,7 +52,7 @@ function connect() {
     } catch {
       return
     }
-    if (msg?.type !== 'state') return
+    if (!isState(msg)) return
     state = msg
     stateAt = performance.now()
     showStatus()

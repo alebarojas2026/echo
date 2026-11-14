@@ -5,6 +5,11 @@ export const ZONES = { 1: 'Bed', 2: 'Chair', 3: 'Hall', 4: 'Bathroom' }
 export const STALE_MS = 1000 // contract section 6: NO DATA when the last state is older than 1 s
 export const STORE_KEY = 'radio-sight-hide-tally'
 
+// The contract says to check v and type at runtime: only a v2 state message counts.
+export function isState(msg) {
+  return Boolean(msg) && msg.v === 2 && msg.type === 'state'
+}
+
 export function emptyTally() {
   return { found: 0, hidden: 0, rounds: [] }
 }
