@@ -15,6 +15,13 @@ export function connectHud(
   const panels = document.createElement('div')
   const controls = document.createElement('details')
   controls.className = 'hud-shell-controls'
+  controls.hidden = new URLSearchParams(location.search).get('op') != '1'
+  const onKey = (event: KeyboardEvent) => {
+    if ((event.target as HTMLElement)?.closest('input, textarea, select')) return
+    if (event.key.toLowerCase() === 'o') controls.hidden = !controls.hidden
+    if (event.key === 'Escape') controls.hidden = true
+  }
+  window.addEventListener('keydown', onKey)
   const summary = document.createElement('summary')
   summary.textContent = 'Controls'
   const content = document.createElement('div')
@@ -42,6 +49,7 @@ export function connectHud(
   void refresh()
   const timer = setInterval(refresh, 30_000)
   return () => {
+    window.removeEventListener('keydown', onKey)
     clearInterval(timer)
     disposed = true
     unsubscribe?.()

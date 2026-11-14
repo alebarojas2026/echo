@@ -103,6 +103,9 @@ test('mounted controls send commands and proof refresh stops on disposal', async
     })
   })
   await expect(page.getByTestId('bytes-out')).toHaveText('1 bytes out')
+  await expect(page.locator('.hud-shell-controls')).toBeHidden()
+  await page.keyboard.press('o')
+  await expect(page.locator('.hud-shell-controls')).toBeVisible()
   await page.locator('summary').click()
   await page.getByTestId('train-button').click()
   expect(await page.evaluate(() => window.sent)).toEqual([{ cmd: 'train', args: {} }])
@@ -113,3 +116,15 @@ test('mounted controls send commands and proof refresh stops on disposal', async
   expect(count).toBe(2)
 })
 
+
+test('operator URL reveals mounted controls', async ({ page }) => {
+  await page.goto(path + '?op=1')
+  await page.evaluate(async () => {
+    const { mountHud } = await import('/src/hud/index.ts')
+    document.body.innerHTML = '<main></main>'
+    mountHud(document.querySelector('main'), null)
+  })
+  await expect(page.locator('.hud-shell-controls')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.hud-shell-controls')).toBeHidden()
+})
