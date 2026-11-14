@@ -75,11 +75,14 @@ After moving into the presentation room, place the final tape, redo the camera c
 This is expected while the router is away from home.
 
 1. Complete the advised measurement and record only the before and after values the system produces.
-2. Return the router to `S-home` before sending `router_home`.
-3. If the home links do not settle back to baseline, let the automatic baseline finish.
-4. Continue only after predictions resume and radio health is `ok`.
+2. Ask Alexander to remove the tray.
+3. Wait until the object marker and static change clear.
+4. Ask Alexander to return the Pi to `S-home` before sending `router_home`.
+5. Send `router_home` only after Alexander confirms both physical steps.
+6. If the home links do not settle back to baseline, let the automatic baseline finish.
+7. Continue only after predictions resume and radio health is `ok`, then send `reset` before the next judge.
 
-Do not send `router_home` while the tray or Pi is still away from the home marker.
+Do not send `router_home` while the tray is present or the Pi is away from its home marker.
 
 ## A no-movement alert will not clear
 
