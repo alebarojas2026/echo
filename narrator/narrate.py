@@ -39,7 +39,7 @@ NODES = {"unoq": "receiver", "pi5": "router", "east": "east beacon", "west": "we
 
 # Things the screen must never say. The camera is added once it is off.
 BANNED = re.compile(
-    r"\b(fall|falls|fallen|falling|fell|security|surveillance|spy|spying|intruders?|npu"
+    r"\b(fall|falls|fallen|falling|fell|security|surveillance|monitor\w*|spy|spying|intruders?|npu|vitals?"
     # identity
     r"|identity|identif\w*|recogni[sz]\w*|faces?|facial|names?|named|he|she|him|his|her|hers"
     r"|himself|herself|man|men|woman|women|boy|girl|guy|lady|child|kid|elderly"
@@ -47,7 +47,7 @@ BANNED = re.compile(
     r"|health\w*|diagnos\w*|injur\w*|hurt|unconscious|collaps\w*|faint\w*|sick|ill|illness"
     r"|unwell|medical|emergency|ambulance|heart|breath\w*|stroke|seizure|pain|dizzy|accident"
     r"|dead|death|died|dying|asleep|sleep\w*|lying)\b"
-    r"|through\s+(the\s+)?walls?",
+    r"|\bsee(s|ing)?\s+through|through\s+(the\s+)?walls?",
     re.IGNORECASE,
 )
 CAMERA = re.compile(r"\bcam(era)?s?\b", re.IGNORECASE)
@@ -122,7 +122,7 @@ def template(kind: str, info: dict) -> str | None:
 SYSTEM = (
     "You write captions for the screen of a Wi-Fi sensing demo. The room has four zones: "
     "zone 1 (Bed), zone 2 (Chair), zone 3 (Hall) and zone 4 (Bathroom). "
-    "Rewrite the facts as one short, friendly sentence of at most 12 words. "
+    "Rewrite the facts as one short, friendly sentence of at most 10 words. "
     "Use only the facts given. Call a person someone. Say no movement when nobody moves. "
     "Reply with the sentence only."
 )
@@ -130,7 +130,7 @@ EXAMPLES = (
     ("enter", "Someone just walked into zone 2 (Chair).",
      "Someone just stepped into zone 2, by the chair."),
     ("advice_result", "After the move, the router's Wi-Fi went from -71 to -63 dBm.",
-     "Moving the router lifted its Wi-Fi from -71 to -63 dBm."),
+     "The router move lifted Wi-Fi from -71 to -63 dBm."),
 )
 
 
@@ -154,7 +154,7 @@ class LlamaServer:
         self.timeout_s = timeout_s
 
     def __call__(self, messages: list[dict]) -> tuple[str, str | None]:
-        body = {"messages": messages, "max_tokens": 40, "temperature": 0.2,
+        body = {"messages": messages, "max_tokens": 32, "temperature": 0.2,
                 "stop": ["\n"], "cache_prompt": True}
         req = urllib.request.Request(self.url, data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
@@ -323,7 +323,8 @@ async def serve(messages, narrator: Narrator, poll_s: float = 0.1) -> None:
 
 
 def warm_up(llm) -> None:
-    """One throwaway request so llama-server caches the fixed part of the prompt."""
+    """One throwaway request so llama-server caches the fixed part of the prompt.
+    Give it a long timeout: a cold prompt on the board can take longer than 8 s."""
     try:
         llm(prompt("enter", template("enter", {"zone": 2})))
     except Exception as e:
@@ -348,7 +349,7 @@ def main(argv=None) -> int:
         print(json.dumps(narrator.narrate(event)), flush=True)
         return 0
 
-    threading.Thread(target=warm_up, args=(llm,), daemon=True).start()
+    threading.Thread(target=warm_up, args=(LlamaServer(args.llm, 120),), daemon=True).start()
     asyncio.run(serve(brain_messages(args.ws), Narrator(llm, udp_sender(args.bus))))
     return 0
 

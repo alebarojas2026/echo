@@ -123,6 +123,7 @@ def test_templates_use_zone_names_and_no_movement_wording():
     "Great home security for zone 2.", "The NPU spotted someone in zone 2.",
     "She just walked into zone 2.", "A man just walked into zone 2.",
     "Someone looks unwell in zone 2.", "Someone is sleeping in zone 2.",
+    "Wi-Fi can see through the curtain in zone 2.", "It monitors zone 2 for you.",
     "Someone just walked into zone 3.",   # made-up number
 ])
 def test_banned_words_fall_back_to_the_template(reply):
