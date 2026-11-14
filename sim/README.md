@@ -91,7 +91,7 @@ Optional extras, all timed in seconds from the start:
 | `outages` | `[{"node": "east", "t_on": 10, "t_off": 20}]` | A node (or one `"link"`) sends nothing in that window |
 | `waves` | `[{"t_on": 14, "t_off": 16.5, "link": "pi5>unoq:wifi", "amp_db": 4, "hz": 2}]` | A waving hand: the link swings up and down |
 | `camera` | `[{"t": 14, "state": "off"}]` | Camera state (`on`, `off`, `stalled`); labels stop unless it is `on` |
-| `clipped` | `[{"t_on": 6, "t_off": 9}]` | The camera cannot see the person's feet: labels have `clipped: true` with `zone` and `foot_m` null |
+| `clipped` | `[{"t_on": 6, "t_off": 9}]` | The camera cannot see the person's feet: labels have `clipped: true` with `zone`, `foot_m` and `motion` null |
 
 ## Tests
 
