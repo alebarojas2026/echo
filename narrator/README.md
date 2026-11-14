@@ -126,5 +126,5 @@ directly from the same facts is sent instead when the model is slow (over 25 s),
 long, adds a number that is not in the facts, or uses a banned word. Signal levels appear only when
 an `advice_result` event carried them. A reset with nothing to tell sends nothing.
 
-The contract schema does not yet allow `recap` or 45 words in a narration (contract issue #265),
-so `contracts.check` reports the recap message until that is decided.
+The recap keeps the 8 s spacing: it goes out no sooner than 8 s after the last sentence, and the
+next judge's first sentence waits 8 s after it. The schema allows `recap` and 45 words (#280).
