@@ -51,14 +51,14 @@ export function feedFrom(source: FeedSource, transport: Transport, now = () => p
 
   const publish = (next: Partial<FeedSnapshot>) => {
     snap = { ...snap, ...next }
-    for (const fn of listeners) fn(snap)
+    for (const fn of listeners) isolated(fn, snap)
   }
 
   transport.start(
     (msg) => {
       if (!isMsg(msg)) return
       if (msg.type === 'state') publish({ state: msg as StateMsg, receivedAt: now(), stale: false })
-      else if (msg.type === 'event') for (const fn of eventListeners) fn(msg as EventMsg)
+      else if (msg.type === 'event') for (const fn of eventListeners) isolated(fn, msg as EventMsg)
     },
     (up) => {
       if (up !== snap.connected) publish({ connected: up })
@@ -88,6 +88,18 @@ export function feedFrom(source: FeedSource, transport: Transport, now = () => p
   }
 }
 
+/** Calls one subscriber. If it throws, the error is rethrown on its own so it shows in the console
+ *  without stopping the room or the other subscribers from getting this message. */
+function isolated<T>(fn: (value: T) => void, value: T) {
+  try {
+    fn(value)
+  } catch (err) {
+    setTimeout(() => {
+      throw err
+    })
+  }
+}
+
 function isMsg(msg: unknown): msg is { v: number; type: string } {
   return typeof msg === 'object' && msg !== null && (msg as { v?: unknown }).v === 2
 }
@@ -106,11 +118,13 @@ export function wsTransport(url: string): Transport {
           setConnected(true)
         }
         ws.onmessage = (e) => {
+          let msg: unknown
           try {
-            deliver(JSON.parse(String(e.data)))
+            msg = JSON.parse(String(e.data))
           } catch {
-            // A message that isn't JSON is dropped; the next state replaces it anyway.
+            return // a message that isn't JSON is dropped; the next state replaces it anyway
           }
+          deliver(msg) // outside the try: an error in a subscriber must reach the console
         }
         ws.onclose = () => {
           setConnected(false)

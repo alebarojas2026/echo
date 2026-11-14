@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CmdMsg } from './contract'
-import { feedFrom, type Transport } from './feed'
+import { feedFrom, wsTransport, type Transport } from './feed'
 import { mockState } from './mock'
 
 function fakeTransport() {
@@ -63,5 +63,28 @@ describe('feed', () => {
     expect(seen.mock.calls.at(-1)![0].connected).toBe(true)
     feed.send('router_moved', { spot: 'S-W30' })
     expect(t.sent).toEqual([{ v: 2, type: 'cmd', cmd: 'router_moved', args: { spot: 'S-W30' } }])
+  })
+})
+
+describe('websocket transport', () => {
+  it('drops bad JSON but lets a subscriber error reach the console', () => {
+    let sock: { onmessage?: (e: { data: string }) => void } = {}
+    vi.stubGlobal(
+      'WebSocket',
+      class {
+        static OPEN = 1
+        constructor() {
+          sock = this
+        }
+      },
+    )
+    const deliver = vi.fn((msg: unknown) => {
+      if ((msg as { boom?: boolean }).boom) throw new Error('subscriber failed')
+    })
+    wsTransport('ws://test/ws').start(deliver, () => {})
+    expect(() => sock.onmessage!({ data: 'not json' })).not.toThrow()
+    expect(deliver).not.toHaveBeenCalled()
+    expect(() => sock.onmessage!({ data: '{"boom":true}' })).toThrow('subscriber failed')
+    vi.unstubAllGlobals()
   })
 })
