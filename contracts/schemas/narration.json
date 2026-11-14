@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/narration.json",
+  "$comment": "Section 4.",
+  "$ref": "common.json#/$defs/envelope",
+  "properties": {
+    "type": {"const": "narration"},
+    "text": {"$ref": "common.json#/$defs/narration_text"},
+    "event_id": {"type": "string"},
+    "event_kind": {"$ref": "common.json#/$defs/event_kind"},
+    "gen_ms": {"type": "number", "minimum": 0},
+    "source": {"$ref": "common.json#/$defs/narration_source"},
+    "model": {"type": "string"}
+  },
+  "required": ["text", "event_id", "event_kind", "gen_ms", "source", "model"],
+  "unevaluatedProperties": false
+}

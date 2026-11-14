@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/event.json",
+  "$comment": "Section 5. info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.",
+  "$ref": "common.json#/$defs/envelope",
+  "properties": {
+    "type": {"const": "event"},
+    "id": {"type": "string"},
+    "kind": {"$ref": "common.json#/$defs/event_kind"},
+    "info": {
+      "type": "object",
+      "properties": {
+        "zone": {"$ref": "common.json#/$defs/zone"},
+        "link": {"$ref": "common.json#/$defs/link"},
+        "node": {"$ref": "common.json#/$defs/node"},
+        "before_dbm": {"type": "number"},
+        "after_dbm": {"type": "number"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["id", "kind", "info"],
+  "unevaluatedProperties": false
+}
