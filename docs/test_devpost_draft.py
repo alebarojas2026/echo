@@ -71,15 +71,18 @@ class DevpostDraftTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.text)
 
-    def test_shipped_recap_and_future_phone_page_are_accurate(self):
+    def test_shipped_recap_and_phone_page_are_accurate(self):
         accomplishments = self.text.split("## Accomplishments", 1)[1].split(
             "## What we learned", 1
         )[0]
         whats_next = self.text.split("## What's next", 1)[1]
         self.assertIn("end-of-demo recap", accomplishments.lower())
+        self.assertIn("caregiver phone page", accomplishments.lower())
         self.assertNotIn("end-of-demo recap", whats_next.lower())
-        self.assertIn("caregiver phone page", whats_next.lower())
+        self.assertIn("run the caregiver page on a real phone", whats_next.lower())
         self.assertNotIn("finishing an end-of-demo recap", self.lower)
+        self.assertNotIn("finishing a caregiver phone page", self.lower)
+        self.assertNotIn("until it merges", self.lower)
 
     def test_screen_path_matches_the_live_demo(self):
         self.assertIn("a laptop browser shows that interface", self.lower)

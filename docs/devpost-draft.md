@@ -19,6 +19,7 @@ Radio Sight reads how people and objects change Wi-Fi and Bluetooth links around
 - make a person-vs-object decision without identifying the person;
 - keep persistent object change separate from fresh human activity;
 - raise a no-movement alert after the configured still period;
+- mirror that alert on a caregiver phone page, chime once, and return to calm after a check-in;
 - recognize a deliberate wave check-in without a phone or button;
 - use a dead-zone advisor to recommend a router position and compare the link before and after the move; and
 - use an on-board narrator to explain fresh events and recap the demo in plain language.
@@ -60,6 +61,8 @@ The full path had to agree on one contract: radio collection, temporary camera l
 
 We built a complete local loop from signal change to action. Radio Sight learns a room, runs after the camera is unplugged, distinguishes person and object patterns, tracks presence and movement, recognizes a check-in, raises a no-movement alert, explains events with an on-board narrator, recommends a placement change, records the result of that move, and produces a short end-of-demo recap from the run's real events.
 
+We also built a caregiver phone page that chimes once when the no-movement alert fires and returns to calm after a check-in. Its real-phone audio and layout check still remains.
+
 Privacy is part of the architecture. The camera is temporary, images are never saved, live sensing is radio-only, and no cloud service is required for the model or display. When data is stale or a classifier link is blind, the system says so and pauses its prediction instead of claiming the room is empty.
 
 We also built honest proof into the interface. Unmeasured results stay `__`, simulation never becomes a public result, and each final claim points back to the method in [PROOF.md](../PROOF.md).
@@ -74,7 +77,7 @@ Shared contracts mattered as much as any individual algorithm. They let the radi
 
 ## What's next
 
-We are finishing a caregiver phone page that can chime once for a no-movement alert and return to calm after a check-in. Until it merges and passes its checks, it remains a next step rather than a shipped claim.
+Next, we will run the caregiver page on a real phone to check its chime and layout in the presentation setup.
 
 After the hackathon, we want to test more room shapes, materials, furniture layouts, and radio environments. We will expand held-out proof, strengthen calibration, quantify uncertainty, and compare more candidate router placements.
 
