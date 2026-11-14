@@ -1,7 +1,7 @@
 // Run with: node --test web/src/game/
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { addRound, emptyTally, isState, judge, load, resultText, save, STORE_KEY, tallyText, truthCmd, undo, wsUrl } from './tally.js'
+import { addRound, counts, emptyTally, isState, judge, load, resultText, save, status, STORE_KEY, tallyText, truthCmd, undo, wsUrl } from './tally.js'
 
 const state = (pred, extra = {}) => ({ v: 2, type: 'state', src: 'live', health: { status: 'ok' }, pred, ...extra })
 const person = (zone) => ({ present: true, kind: 'person', zone, zone_set: [zone], motion: 'still' })
@@ -86,4 +86,27 @@ test('only a v2 state message is read', () => {
   assert.equal(isState({ v: 2, type: 'event' }), false)
   assert.equal(isState(null), false)
   assert.equal(isState('state'), false)
+})
+
+test('big counts show __ until a live round is played', () => {
+  assert.deepEqual(counts(emptyTally()), { found: '__', hidden: '__' })
+  assert.deepEqual(counts({ found: 0, hidden: 1, rounds: ['hidden'] }), { found: '0', hidden: '1' })
+  const practice = addRound(emptyTally(), judge(state(person(1), { src: 'sim' }), 10, 1))
+  assert.deepEqual(counts(practice), { found: '__', hidden: '__' })
+})
+
+test('status uses the screen words: NO DATA, SENSOR BLIND, LIVE, SIM, and the camera', () => {
+  const links = [{ id: 'east>pi5:ble', rate_hz: 9 }]
+  assert.deepEqual(status(null, 0), { source: 'NO DATA', kind: 'off', cam: '', note: 'Waiting for the board.' })
+  assert.equal(status(state(person(1), { links }), 1001).source, 'NO DATA')
+  assert.deepEqual(status(state(null, { links, cam: 'off', health: { status: 'blind' } }), 10),
+    { source: 'SENSOR BLIND', kind: 'fault', cam: 'Camera unplugged · radio only', note: 'Rounds wait until the radio is back.' })
+  assert.deepEqual(status(state(person(1), { links, cam: 'on' }), 10),
+    { source: 'LIVE', kind: 'ok', cam: 'Camera on', note: 'Ready for the next round.' })
+  assert.equal(status(state(person(1), { links: [] }), 10).source, 'NO RADIO')
+  assert.equal(status(state(null, { links }), 10).note, 'The radio is not ready yet.')
+  for (const [src, word] of [['sim', 'SIM'], ['replay', 'REPLAY']]) {
+    assert.deepEqual(status(state(person(1), { src, links }), 10).source, word)
+    assert.equal(status(state(person(1), { src, links }), 10).kind, 'practice')
+  }
 })
