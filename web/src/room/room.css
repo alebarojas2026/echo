@@ -1,3 +1,18 @@
+/* The room's colour tokens (AGENTS.md Style). The same values drive the 3D scene from palette.ts. */
+:root {
+  --bg: #111316;
+  --floor: #1a1d21;
+  --edge: #353b43;
+  --square: #6b7480;
+  --text: #e6e8eb;
+  --text-2: #9aa3ad;
+  --link: #858e99;
+  --person: #ff9f43;
+  --object: #a9b4c2;
+  --action: #3dd68c;
+  --fault: #f2555a;
+}
+
 /* The room fills everything right of the panels' 640 px rail. On narrow screens it takes the whole width. */
 .room {
   position: fixed;
@@ -6,7 +21,7 @@
   left: 640px;
   right: 0;
   overflow: hidden;
-  background: #111316;
+  background: var(--bg);
 }
 
 @media (max-width: 1100px) {
@@ -44,7 +59,7 @@
   top: 0;
   left: 0;
   white-space: nowrap;
-  color: #9aa3ad;
+  color: var(--text-2);
   font: 500 20px/1.1 'Hanken Grotesk', system-ui, sans-serif;
   will-change: transform;
 }
@@ -62,11 +77,11 @@
 }
 
 .room-label--zone-set {
-  color: #ff9f43;
+  color: var(--person);
 }
 
 .room-label--node {
-  color: #e6e8eb;
+  color: var(--text);
   font-size: 24px;
   font-weight: 600;
 }
@@ -86,8 +101,8 @@
 .room-label--beam {
   translate: -50% -50%;
   padding: 2px 6px;
-  background: #1a1d21;
-  color: #f2555a;
+  background: var(--floor);
+  color: var(--fault);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -96,14 +111,14 @@
 .room-label--caption {
   translate: -50% -50%;
   padding: 4px 10px;
-  background: #1a1d21;
+  background: var(--floor);
   font-size: 28px;
   font-weight: 600;
 }
 
 .room-label--ghost {
   translate: -50% -100%;
-  color: #ff9f43;
+  color: var(--person);
   font-size: 28px;
   font-weight: 700;
 }
@@ -111,9 +126,9 @@
 .room-label--object {
   translate: -100% -50%;
   padding: 4px 8px;
-  border: 1px solid #4a515b;
-  background: #1a1d21;
-  color: #e6e8eb;
+  border: 1px solid var(--square);
+  background: var(--floor);
+  color: var(--text);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -136,9 +151,17 @@
   bottom: 32px;
   display: flex;
   gap: 24px;
-  color: #9aa3ad;
+  color: var(--text-2);
   font: 500 20px/1 'Hanken Grotesk', system-ui, sans-serif;
   pointer-events: none;
+}
+
+.room-swatch--person {
+  color: var(--person);
+}
+
+.room-swatch--object {
+  color: var(--object);
 }
 
 .room-legend span {
@@ -152,9 +175,9 @@
   top: 24px;
   right: 24px;
   padding: 6px 10px;
-  border: 1px solid #4a515b;
-  background: #1a1d21;
-  color: #e6e8eb;
+  border: 1px solid var(--square);
+  background: var(--floor);
+  color: var(--text);
   font: 600 20px/1 'Hanken Grotesk', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
