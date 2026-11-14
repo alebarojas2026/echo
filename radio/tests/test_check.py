@@ -112,3 +112,15 @@ def test_link_stats_capture_refuses_while_recording(tmp_path, monkeypatch):
     monkeypatch.setattr(link_stats, "capture", lambda *a, **k: pytest.fail("captured"))
     with pytest.raises(SystemExit, match="recording held1"):
         link_stats.main(["--capture", "5"])
+
+
+def test_main_checks_the_interface_named_in_env(monkeypatch):
+    monkeypatch.delenv("WIFI_IFACE", raising=False)
+    monkeypatch.setattr(check, "load_env_file", lambda path: monkeypatch.setenv("WIFI_IFACE", "wlan1"))
+    seen = []
+    monkeypatch.setattr(check, "check_wifi", lambda iface: seen.append(iface) or (True, "wifi"))
+    for name in ("check_tools", "check_ethernet", "check_services"):
+        monkeypatch.setattr(check, name, lambda: (True, name))
+    monkeypatch.setattr(check, "check_links", lambda seconds: (True, "links"))
+    check.main([])
+    assert seen == ["wlan1"]
