@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { WAVE_MS, WaveClock, alertLook } from './alert'
+import { WAVE_MS, WaveClock, alertLook, alertWordAt } from './alert'
 import type { Alert } from './contract'
 import { stillTimeline } from './mock'
 import { FAULT, PERSON } from './palette'
@@ -62,5 +62,18 @@ describe('mock timelines', () => {
     expect(a.alert.state).toBe('none')
     expect(a.checkin).toEqual(b.checkin)
     expect(stillTimeline('checkin', 21000, start).checkin!.t).toBe(start + 20000)
+  })
+})
+
+describe('alert word', () => {
+  it('sits just outside the square on the alert zone's own side, level with its name', () => {
+    const [[x4, y4], west4] = alertWordAt(4)
+    expect(x4).toBeGreaterThan(2)
+    expect(y4).toBeLessThan(1)
+    expect(west4).toBe(false)
+    const [[x1, y1], west1] = alertWordAt(1)
+    expect(x1).toBeLessThan(0)
+    expect(y1).toBeGreaterThan(1)
+    expect(west1).toBe(true)
   })
 })

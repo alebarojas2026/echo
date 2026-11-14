@@ -91,6 +91,7 @@
   top: 50%;
   left: 50%;
   translate: -50% -50%;
+  width: max-content;
   max-width: 80%;
   padding: 32px 48px;
   border: 1px solid var(--square);
@@ -143,19 +144,14 @@
   color: var(--action);
 }
 
-.room-label--zone-east {
-  text-align: right;
-}
-
-.room-label__alert {
-  display: none;
-  margin-top: 4px;
+.room-label--alert {
+  translate: 0 -50%;
   color: var(--fault);
-  font: 700 28px/1.1 'Hanken Grotesk', system-ui, sans-serif;
+  font-weight: 700;
 }
 
-.room-label--zone-alert .room-label__alert {
-  display: block;
+.room-label--alert-west {
+  translate: -100% -50%;
 }
 
 .room-label--caption {

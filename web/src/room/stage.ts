@@ -117,11 +117,7 @@ export class Stage {
       const east = z.id === 2 || z.id === 4
       const north = z.id === 1 || z.id === 2
       const at = v3([east ? SQUARE_M - inX : inX, north ? SQUARE_M - inY : inY, 0])
-      const label = view.addLabel('', at, `room-label--zone${east ? ' room-label--zone-east' : ''}`)
-      // The second line only shows while the no-movement alert is on in this zone: red always comes with a word.
-      label.innerHTML = '<span></span><span class="room-label__alert">No movement</span>'
-      label.firstElementChild!.textContent = `${z.id} ${z.name}`
-      this.zoneLabels.set(z.id, label)
+      this.zoneLabels.set(z.id, view.addLabel(`${z.id} ${z.name}`, at, `room-label--zone${east ? ' room-label--zone-east' : ''}`))
     }
 
     const headGeom = new BoxGeometry(HEAD_M, HEAD_M, HEAD_M)
