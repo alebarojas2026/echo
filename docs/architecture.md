@@ -1,13 +1,15 @@
 # Radio Sight Architecture
 
-Radio Sight keeps sensing, learned decisions, and explanation on the Arduino UNO Q. The Raspberry Pi supplies the private sensing hotspot, one radio receiver, and the display; it runs no model.
+Radio Sight keeps sensing, learned decisions, and explanation on the Arduino UNO Q. The Raspberry Pi supplies the private sensing hotspot, one radio receiver, and the route to the board; it runs no model. A laptop browser shows the local interface.
 
 ```mermaid
 flowchart LR
     subgraph PI["Raspberry Pi"]
         PI_RADIO["Pi radio node<br/>Bluetooth beacon S and east/west readings"]
-        SCREEN["Browser screen<br/>Pi-driven display"]
+        HOTSPOT["Private hotspot<br/>sensing and light browser traffic"]
     end
+
+    SCREEN["Laptop browser<br/>local demo screen"]
 
     subgraph UNO["Arduino UNO Q — Dragonwing CPU"]
         WIFI["Wi-Fi RSSI reader"]
@@ -34,6 +36,7 @@ flowchart LR
     end
 
     PI_RADIO -->|"Bluetooth rssi over Ethernet<br/>192.168.77.2:5600"| BUS
+    HOTSPOT -->|"laptop connection"| SCREEN
     WIFI -->|"rssi<br/>127.0.0.1:5600"| BUS
     BLE -->|"rssi<br/>127.0.0.1:5600"| BUS
     TEACHER -->|"label<br/>msgpack-rpc-router:5600"| BUS
@@ -53,7 +56,7 @@ flowchart LR
     CHECKIN -->|"state and event"| SCREEN
     ALERT -->|"state and event"| SCREEN
     ADVISOR -->|"state and event"| SCREEN
-    SERVE -->|"page and proof data"| SCREEN
+    SERVE -->|"page and proof via Pi route<br/>and Ethernet cable"| SCREEN
     SCREEN -->|"cmd over the same WebSocket"| MODEL
 
     MODEL -->|"events"| NARRATOR
@@ -85,7 +88,7 @@ If a required classifier link is blind, the brain sends a blind health state and
 
 ## Screen, narration, and LED grid
 
-The brain publishes contract-v2 `state` and `event` messages on `ws://192.168.77.2:8765/ws`. The Pi-driven browser loads the page and proof data from `http://192.168.77.2:8080`, renders the live state, and sends commands back over the WebSocket.
+The brain publishes contract-v2 `state` and `event` messages on `ws://192.168.77.2:8765/ws`. The laptop joins the Pi hotspot and opens `http://192.168.77.2:8080/?src=ws`; the Pi routes the page, proof data, state, and commands over its direct Ethernet cable to the board. Only light browser traffic uses the hotspot during a demo or recording.
 
 Brain events also feed the on-board narrator. For generated explanations, `python -m narrator.narrate` calls the local `llama-server` at `http://127.0.0.1:8091`; the template path stays on the same board when generation is unavailable. The narrator returns a `narration` message to the local bus at `127.0.0.1:5600`, so both explanation paths rejoin the same ordered state path.
 
@@ -95,5 +98,5 @@ For the physical display, the board host calls the `arduino` Bridge package with
 
 - All trained models and learned decisions run on the UNO Q's Dragonwing CPU.
 - The camera teacher is for setup labels only and saves no image or video.
-- The Pi provides network, radio, and display functions and runs no model.
+- The Pi provides network and radio functions, routes the laptop browser to the board, and runs no model.
 - Runtime services bind only to the local addresses defined in `CONTRACTS.md`; the system uses its own network, not venue Wi-Fi or a cloud service.

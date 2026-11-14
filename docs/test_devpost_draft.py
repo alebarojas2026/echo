@@ -71,10 +71,20 @@ class DevpostDraftTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.text)
 
-    def test_unmerged_extras_are_described_as_next_steps(self):
+    def test_shipped_recap_and_future_phone_page_are_accurate(self):
+        accomplishments = self.text.split("## Accomplishments", 1)[1].split(
+            "## What we learned", 1
+        )[0]
         whats_next = self.text.split("## What's next", 1)[1]
-        self.assertIn("end-of-demo recap", whats_next.lower())
+        self.assertIn("end-of-demo recap", accomplishments.lower())
+        self.assertNotIn("end-of-demo recap", whats_next.lower())
         self.assertIn("caregiver phone page", whats_next.lower())
+        self.assertNotIn("finishing an end-of-demo recap", self.lower)
+
+    def test_screen_path_matches_the_live_demo(self):
+        self.assertIn("a laptop browser shows that interface", self.lower)
+        self.assertIn("routes it to the board over the direct ethernet cable", self.lower)
+        self.assertNotIn("drives the screen", self.lower)
 
     def test_story_beats_match_pitch_and_runbook(self):
         pitch = PITCH.read_text(encoding="utf-8").lower()

@@ -18,6 +18,7 @@ class BuildDocTest(unittest.TestCase):
             "powered usb-c hub with ethernet and power delivery",
             "usb webcam",
             "two esp32-s3 boards",
+            "laptop for the demo browser",
             "tape for the final presentation-hour layout",
             "stands",
         ):
@@ -47,11 +48,15 @@ class BuildDocTest(unittest.TestCase):
         for phrase in (
             "all learned work runs locally",
             "it runs no model",
+            "laptop browser shows the local interface",
+            "do not copy files or bundles over the hotspot",
             "[network guide](network.md)",
             "do not plan around venue wi-fi",
             "no image or video is saved",
         ):
             self.assertIn(phrase, self.lower)
+
+        self.assertNotIn("drives the display", self.lower)
 
     def test_east_and_west_beacons_are_not_phones(self):
         for phrase in (

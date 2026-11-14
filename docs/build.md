@@ -1,6 +1,6 @@
 # Build Radio Sight
 
-Radio Sight uses radio links around one room to map signal change, locate real dead zones, and classify presence, movement, and objects. All learned work runs locally on the Arduino UNO Q's Dragonwing CPU; the Raspberry Pi provides the sensing network and screen and runs no model.
+Radio Sight uses radio links around one room to map signal change, locate real dead zones, and classify presence, movement, and objects. All learned work runs locally on the Arduino UNO Q's Dragonwing CPU; the Raspberry Pi provides the sensing network and a radio node and runs no model. A laptop browser shows the local interface.
 
 ## Parts
 
@@ -10,7 +10,7 @@ Radio Sight uses radio links around one room to map signal change, locate real d
 - Ethernet cable between the Pi and the UNO Q's hub
 - USB webcam for setup labels only
 - two ESP32-S3 boards configured as the east and west Bluetooth beacons
-- display, keyboard, and pointing device for setup
+- laptop for the demo browser and setup controls
 - stands that hold every radio node at the same height
 - loose floor markers for building and testing
 - tape for the final presentation-hour layout
@@ -20,7 +20,8 @@ The demo uses its own equipment and private network. Do not plan around venue Wi
 ## What each part does
 
 - **UNO Q:** receives radio readings and runs the bus, signal health, model training and inference, radio X-ray, check-in logic, no-movement alert logic, advisor, narration, and web service.
-- **Pi:** creates the private sensing hotspot, acts as a radio node, and drives the display. It runs no model.
+- **Pi:** creates the private sensing hotspot, acts as a radio node, and routes the laptop browser to the board over the direct Ethernet cable. It runs no model.
+- **Laptop:** joins the Pi hotspot and displays the board's local web interface. Keep its hotspot traffic to the live page; do not copy files or bundles during a demo or recording.
 - **ESP32-S3 beacons:** advertise the east and west beacon patterns. The software matches advertised data, not device identity; phones are not used as beacons.
 - **Webcam:** supplies temporary person, zone, and motion labels for calibration and training. Disconnect it for the live radio-only demonstration; no image or video is saved.
 
@@ -28,7 +29,7 @@ The demo uses its own equipment and private network. Do not plan around venue Wi
 
 1. Power the UNO Q through the powered hub and connect the webcam and hub Ethernet.
 2. Connect the hub Ethernet directly to the Pi's Ethernet port. This cable carries the bus, model state, web page, and setup traffic.
-3. Connect the Pi to the demo display.
+3. Join the demo laptop to the Pi hotspot and open `http://192.168.77.2:8080/?src=ws` in its browser.
 4. Put the UNO Q at the north marker, the Pi at the south marker, and the ESP32-S3 beacons at the east and west markers. The contract layout is a square with every node at `1.0 m` high.
 5. Keep cables outside the walking area and keep the router at its home mark before calibration.
 
@@ -50,7 +51,7 @@ Mount the webcam where it sees the whole marked square without moving. Calibrate
 
 ### Start the Pi's private hotspot
 
-Start the Pi's sensing hotspot, then join the UNO Q to it and keep Wi-Fi power saving off. The hotspot carries sensing traffic only; all other traffic stays on the direct Ethernet cable described in the [network guide](network.md).
+Start the Pi's sensing hotspot, then join the UNO Q and demo laptop to it and keep board Wi-Fi power saving off. The hotspot carries the sensing link and light browser traffic; the Pi-to-board application path stays on the direct Ethernet cable described in the [network guide](network.md). Do not copy files or bundles over the hotspot during a demo or recording.
 
 ### Run the signal test
 

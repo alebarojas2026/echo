@@ -18,7 +18,7 @@ All model training and inference, signal health checks, the radio X-ray, check-i
 
 ## Why is there a Raspberry Pi too?
 
-The Pi provides the private sensing hotspot, receives radio samples, and drives the display. It runs no model; the UNO Q remains the computing hub for every learned decision.
+The Pi provides the private sensing hotspot, receives radio samples, and routes the laptop browser to the board. It runs no model; the UNO Q remains the computing hub for every learned decision.
 
 ## How do you protect privacy?
 

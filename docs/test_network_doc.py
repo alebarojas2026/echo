@@ -32,9 +32,14 @@ class NetworkDocTest(unittest.TestCase):
             "message bus",
             "websocket",
             "demo screen",
+            "laptop browser",
+            "one ethernet cable",
+            "do not copy files or bundles over the hotspot",
             "camera teacher",
         ):
             self.assertIn(phrase, self.lower)
+
+        self.assertNotIn("browser in kiosk mode", self.lower)
 
     def test_private_device_identifiers_are_absent(self):
         self.assertIsNone(

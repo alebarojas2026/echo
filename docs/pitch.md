@@ -6,7 +6,7 @@ _Start with the room display and hardware visible._
 
 _Point to the UNO Q, then the Pi._
 
-> Every learned decision runs locally on the UNO Q’s Dragonwing CPU. The Pi provides the sensing network and screen, and runs no model.
+> Learned decisions run on the UNO Q’s Dragonwing CPU. This laptop shows the local interface. The Pi supplies network and radio but runs no model.
 
 _Judge walks in._
 

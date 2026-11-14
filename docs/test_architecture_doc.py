@@ -23,8 +23,8 @@ class ArchitectureDocTest(unittest.TestCase):
             "Router advisor",
             "Narrator",
             "llama-server",
-            "Browser screen",
             "LED grid",
+            "Laptop browser",
         ):
             self.assertIn(phrase, self.text)
 
@@ -60,12 +60,14 @@ class ArchitectureDocTest(unittest.TestCase):
     def test_compute_and_privacy_boundaries_are_clear(self):
         for phrase in (
             "all trained models and learned decisions run on the uno q's dragonwing cpu",
-            "the pi provides network, radio, and display functions and runs no model",
+            "the pi provides network and radio functions, routes the laptop browser to the board, and runs no model",
             "the camera teacher is for setup labels only and saves no image or video",
             "the arduino router bridge carries that small command",
             "not venue wi-fi or a cloud service",
         ):
             self.assertIn(phrase, self.lower)
+
+        self.assertNotIn("pi-driven display", self.lower)
 
 
 if __name__ == "__main__":

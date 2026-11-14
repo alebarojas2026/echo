@@ -41,6 +41,7 @@ class JudgeFaqTest(unittest.TestCase):
         for phrase in (
             "dragonwing cpu",
             "pi provides the private sensing hotspot",
+            "routes the laptop browser to the board",
             "it runs no model",
             "stores no camera images",
             "no-movement alert",

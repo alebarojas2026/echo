@@ -12,7 +12,7 @@
 
 **Picture:** Clean close shots of the Arduino UNO Q, Pi, radio nodes, and live display.
 
-**Voiceover:** "Radio Sight is Wi-Fi that understands the room. Every learned decision runs locally on the Dragonwing CPU; the Pi is the router and screen."
+**Voiceover:** "Radio Sight is Wi-Fi that understands the room. Every learned decision runs locally on the Dragonwing CPU; the Pi is the router and radio node, and the laptop shows the local interface."
 
 **On screen:** `Local · Room-aware · No cloud`
 
