@@ -139,6 +139,10 @@
   text-transform: uppercase;
 }
 
+.room-label--ghost.room-label--ghost-west {
+  translate: -100% -50%;
+}
+
 .room-label--ghost.room-label--wave {
   color: var(--action);
 }
@@ -162,7 +166,7 @@
 }
 
 .room-label--ghost {
-  translate: -50% -100%;
+  translate: 0 -50%;
   color: var(--person);
   font-size: 36px;
   font-weight: 700;

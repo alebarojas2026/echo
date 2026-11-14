@@ -252,7 +252,13 @@ export class Presence {
     // The label fades with the figure rather than popping in at full strength.
     this.label.style.opacity = this.alpha.toFixed(3)
     this.label.hidden = this.alpha === 0 || !this.labelText
-    if (!this.label.hidden) this.view.moveLabel(this.label, this.at.clone().setY(FIGURE_HEIGHT_M + 0.1))
+    if (!this.label.hidden) {
+      // Beside the chest, not over the head, so it never reaches up into a zone name. It goes on the east side
+      // unless the figure is near the east edge, then on the west.
+      const west = this.at.x > SQUARE_M / 2 - 0.35
+      this.label.classList.toggle('room-label--ghost-west', west)
+      this.view.moveLabel(this.label, this.at.clone().set(this.at.x + (west ? -0.2 : 0.2), FIGURE_HEIGHT_M * 0.62, this.at.z))
+    }
 
     for (const t of this.tiles) {
       const m = t.mesh.material
