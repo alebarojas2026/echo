@@ -21,6 +21,10 @@ from radio.wifi_rssi import (
     Stats,
     _make_message,
     _read_station_info,
+    gate,
+    gate_block,
+    gate_rows,
+    load_env_file,
     main,
     parse_station_output,
     poll_loop,
@@ -339,15 +343,26 @@ class TestSettings:
         cfg = settings({"WIFI_IFACE": "wlan1", "SENSING_BSSID": "<b>", "WIFI_PING_HZ": "0", "RATE_HZ": "30"})
         assert (cfg["iface"], cfg["bssid"], cfg["ping_hz"], cfg["rate_hz"]) == ("wlan1", "<b>", 0.0, 30.0)
 
+    def test_env_file_fills_only_what_is_unset(self, tmp_path):
+        env_file = tmp_path / "env"
+        env_file.write_text("# comment\nA=1\nexport B=\"two\"\nC='x y'\nWIFI_IFACE=wlan9\n\nnot a line\n")
+        environ = {"WIFI_IFACE": "wlan1"}
+        load_env_file(env_file, environ)
+        assert environ == {"WIFI_IFACE": "wlan1", "A": "1", "B": "two", "C": "x y"}
+        load_env_file(tmp_path / "missing", environ)   # no file: nothing changes, no error
+        assert len(environ) == 4
+
     def test_main_says_how_to_get_iw(self):
-        with mock.patch("radio.wifi_rssi.shutil.which", return_value=None):
+        with mock.patch("radio.wifi_rssi.shutil.which", return_value=None), \
+             mock.patch("radio.wifi_rssi.load_env_file"):
             with pytest.raises(SystemExit, match="apt install iw"):
                 main([])
 
     def test_main_needs_the_bssid(self, monkeypatch):
         monkeypatch.delenv("WIFI_BSSID", raising=False)
         monkeypatch.delenv("SENSING_BSSID", raising=False)
-        with mock.patch("radio.wifi_rssi.shutil.which", return_value="/usr/sbin/iw"):
+        with mock.patch("radio.wifi_rssi.shutil.which", return_value="/usr/sbin/iw"), \
+             mock.patch("radio.wifi_rssi.load_env_file"):
             with pytest.raises(SystemExit, match="WIFI_BSSID"):
                 main([])
 
@@ -430,3 +445,66 @@ class TestReportWifi:
         failures = check(data)
         assert any("measured sample rate" in f for f in failures)
         assert any("not yet measured" in f for f in failures)
+
+
+class TestGateRows:
+    RATE = "**Measured sample rate:** 24.6 samples/s\n\n"
+
+    def rows(self, *cells):
+        return parse_gate_md(self.RATE + "\n".join(f"| {i} | {c} |" for i, c in enumerate(cells, 1)))
+
+    def test_blank_dbm_cells_never_pass(self):
+        failures = check(self.rows(*["__ | __ | 6 | PASS"] * 3))
+        assert failures == [f"run {i}: not yet measured" for i in (1, 2, 3)]
+
+    def test_drop_is_worked_out_from_the_dbm_cells(self):
+        failures = check(self.rows("-62 | -63 | 6 | PASS", "-62 | -68 | 6.0 | PASS", "-61 | -66 | -5 | PASS"))
+        assert any(f.startswith("run 1: drop 1 dB < 3 dB") for f in failures)
+        assert any(f.startswith("run 1: Drop cell 6") for f in failures)
+        assert not any(f.startswith("run 2") for f in failures)
+        assert any(f.startswith("run 3: Drop cell -5") for f in failures)   # a sign slip
+
+    def test_a_fail_result_fails(self):
+        failures = check(self.rows("-62 | -68 | 6 | PASS", "-62 | -68 | 6 | FAIL", "-62 | -68 | 6 | PASS"))
+        assert failures == ["run 2: Result is FAIL"]
+
+
+class TestGate:
+    def run_gate(self, clear_dbm, blocked_dbm, runs=3):
+        """A gate on a test clock: the reader gives clear_dbm until Enter is pressed for the blocked half."""
+        t, prompts, level, rx = [0.0], [], [clear_dbm], [0]
+
+        def station(iface, bssid):
+            t[0] += 0.004
+            rx[0] += 2
+            return level[0], rx[0]
+
+        def ask(prompt):
+            prompts.append(prompt)
+            level[0] = blocked_dbm if "stand in" in prompt else clear_dbm
+
+        reader = Reader("wlan0", TEST_BSSID, read=station, say=quiet)
+        block = gate(reader, Pinger("10.42.0.1", 0), rate_hz=25, runs=runs, window_s=10.0, ask=ask,
+                     say=quiet, clock=lambda: t[0], sleep=lambda s: t.__setitem__(0, t[0] + s))
+        return block, prompts
+
+    def test_a_good_link_prints_rows_that_pass_the_check(self):
+        block, prompts = self.run_gate(-61, -67)
+        assert len(prompts) == 6
+        assert "| 1   | -61         | -67        | 6.0     | PASS   |" in block
+        assert "**Overall Gate 1:** PASS" in block
+        data = parse_gate_md(block)
+        assert data["rate_hz"] == pytest.approx(25, abs=0.5)
+        assert check(data) == []
+
+    def test_a_small_drop_fails(self):
+        block, _ = self.run_gate(-61, -63)
+        assert "**Overall Gate 1:** FAIL" in block
+        assert any("< 3 dB" in f for f in check(parse_gate_md(block)))
+
+    def test_no_readings_give_blank_rows_and_fail(self):
+        assert gate_rows([([], [-60])]) == [{"run": 1, "baseline": None, "blocked": None, "drop": None,
+                                            "result": "FAIL"}]
+        block = gate_block(0.0, gate_rows([([], [])] * 3))
+        assert "**Overall Gate 1:** FAIL" in block
+        assert any("not yet measured" in f for f in check(parse_gate_md(block)))

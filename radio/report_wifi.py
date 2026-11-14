@@ -57,12 +57,19 @@ def check(data: dict) -> list[str]:
         failures.append(f"only {len(rows)} run(s) recorded; need 3")
     else:
         for row in rows[:3]:
-            if row["result"].strip().upper() == "__" or row["drop"].strip() == "__":
-                failures.append(f"run {row['run']}: not yet measured")
+            run = row["run"]
+            if "__" in (row["baseline"], row["blocked"]):
+                failures.append(f"run {run}: not yet measured")
                 continue
-            drop = float(row["drop"])
+            # The drop is worked out from the two dBm cells, so a typo or a sign slip can't pass.
+            drop = float(row["baseline"]) - float(row["blocked"])
             if drop < 3.0:
-                failures.append(f"run {row['run']}: drop {drop} dB < 3 dB")
+                failures.append(f"run {run}: drop {drop:g} dB < 3 dB")
+            if row["drop"] == "__" or abs(float(row["drop"]) - drop) > 0.5:
+                failures.append(f"run {run}: Drop cell {row['drop']} isn't "
+                                f"{row['baseline']} - ({row['blocked']}) = {drop:g} dB")
+            if row["result"].upper() != "PASS":
+                failures.append(f"run {run}: Result is {row['result']}")
     return failures
 
 
