@@ -6,16 +6,17 @@ import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
 // src is "sim" so nothing here can pass for live, and measured numbers (train time, ms per decision,
 // before/after dBm) stay null so the panels show "__".
 //
-// ?mock= tour (default) | still | between | object | blind | empty | stall
+// ?mock= tour (default) | still | between | object | blind | empty | waiting | stall
 //   tour    someone walks a loop through the four zones, pausing in each
 //   still   someone stays still in zone 4 and the no-movement alert counts up
 //   between someone stands on the line between zones 3 and 4, so zone_set has both
 //   object  an object sits next to the router, with advice to move the router
 //   blind   the radio fails: health blind, pred null
 //   empty   nobody in the room
+//   waiting the brain is up but no link has a reading yet: links [], pred and xray null
 //   stall   states for 1 s, then nothing (NO DATA)
 
-export type MockScenario = 'tour' | 'still' | 'between' | 'object' | 'blind' | 'empty' | 'stall'
+export type MockScenario = 'tour' | 'still' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall'
 
 const SEG_MS = 5000 // tour: 3 s walking, 2 s still, per zone
 const XRAY = { w: 10, h: 10, cell_m: 0.24, origin_m: [-0.2, -0.2] as [number, number] }
@@ -127,22 +128,27 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
     object && router === HOME_SPOT
       ? {
           id: 'a1', cause: 'obstruction', near: 'pi5', xy_m: object, link: 'pi5>unoq:wifi', to_spot: 'S-W30',
-          move_m: [-0.3, 0], dist_change_m: null, before_dbm: null, after_dbm: null, why: ['pi5>unoq:wifi'],
+          // before_dbm is this mock's own wifi reading; dist_change_m comes from the spot geometry.
+          move_m: [-0.3, 0], dist_change_m: spotDistanceChange('S-W30'), after_dbm: null, why: ['pi5>unoq:wifi'],
+          before_dbm: links.find((l) => l.id === 'pi5>unoq:wifi')!.dbm!,
           text: 'An object next to the router is blocking its link to the receiver. Move the router 30 cm west.',
         }
       : null
   const stillS = pred?.still_s ?? 0
 
+  if (scenario === 'waiting') {
+    return { ...emptyState(seq, router), links: [] }
+  }
   return {
     v: 2, type: 'state', t: Date.now(), seq, src: 'sim', cam: 'off', router, links,
     health: blind ? { status: 'blind', blind: ['east>unoq:ble'], reason: 'rate' } : { status: 'ok', blind: [], reason: null },
     pred, objects, xray,
     alert: scenario === 'still'
       ? { state: stillS >= 10 ? 'check_on' : 'counting', zone: 4, still_s: Number(stillS.toFixed(1)), limit_s: 10 }
-      : { state: 'none', zone: null, still_s: null, limit_s: null },
+      : { state: 'none', zone: null, still_s: 0, limit_s: null },
     checkin: null, advice, narration: null, teacher: null,
-    model: { trained: true, ver: 'mock', train_s: null, ms_per_decision: null, windows: null, train_sessions: [], training: null },
-    board: null,
+    model: UNTRAINED,
+    board: NO_BOARD,
   }
 }
 
@@ -165,4 +171,28 @@ export function createMockSource(scenario: MockScenario): Transport {
       if (msg.cmd === 'router_home') router = HOME_SPOT
     },
   }
+}
+
+/** Before any reading: what the brain sends when it's up but the radios haven't reported. */
+function emptyState(seq: number, router: string): StateMsg {
+  return {
+    v: 2, type: 'state', t: Date.now(), seq, src: 'sim', cam: 'off', router, links: [],
+    health: { status: 'ok', blind: [], reason: null }, pred: null, objects: [], xray: null,
+    alert: { state: 'none', zone: null, still_s: 0, limit_s: null }, checkin: null, advice: null,
+    narration: null, teacher: null, board: NO_BOARD, model: UNTRAINED,
+  }
+}
+
+/** Training time and decision time are measurements, so the mock says "not trained" and leaves them null. */
+const UNTRAINED = { trained: false, ver: null, train_s: null, ms_per_decision: null, windows: 0, train_sessions: [], training: null }
+
+/** The board's readings are measurements; the mock has none. */
+const NO_BOARD = { cpu_temp_c: null, cpu_mhz: null, cpu_pct: null }
+
+/** How much longer the router-to-receiver link gets when the router moves from S-home to `spot`, in metres. */
+function spotDistanceChange(spot: string): number {
+  const [rx, ry] = nodePosition('unoq', HOME_SPOT)
+  const [hx, hy] = nodePosition('pi5', HOME_SPOT)
+  const [sx, sy] = nodePosition('pi5', spot)
+  return Number((Math.hypot(sx - rx, sy - ry) - Math.hypot(hx - rx, hy - ry)).toFixed(3))
 }

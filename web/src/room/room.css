@@ -94,6 +94,8 @@
 
 .room-label--caption {
   translate: -50% -50%;
+  padding: 4px 10px;
+  background: #faf7ef;
   font-size: 28px;
   font-weight: 600;
 }
