@@ -7,7 +7,7 @@ import re
 
 MEDIA_SUFFIX = re.compile(r"\.(?:png|jpe?g|webp|bmp|tiff?|gif|mp4|avi|mov|mkv|webm)$", re.I)
 WRITERS = {"imwrite", "imsave", "mimsave", "mimwrite", "VideoWriter", "savefig",
-           "write_videofile", "write_gif", "write_images", "write_frames", "write_image"}
+           "write_videofile", "write_gif", "write_images", "write_frames", "write_image", "tofile"}
 SAVE_MODULES = ("PIL", "matplotlib", "imageio", "skimage", "cv2", "moviepy")
 SKIP = {".git", ".venv", "venv", "node_modules", "__pycache__", "dist", ".pytest_cache"}
 
@@ -52,6 +52,11 @@ def python_violations(source, path):
             reason = "image/video writer: " + name
         elif terminal == "save" and name.startswith(SAVE_MODULES):
             reason = "image save: " + name
+        elif name.startswith("numpy.") and terminal in {"save", "savez", "savez_compressed", "savetxt"}:
+            names = [x.id.lower() for a in node.args for x in ast.walk(a) if isinstance(x, ast.Name)]
+            names += [x.id.lower() for a in node.keywords for x in ast.walk(a.value) if isinstance(x, ast.Name)]
+            if any(re.search(r"(?:frame|image|pixels)", n) for n in names):
+                reason = "raw image array output"
         elif terminal in {"run", "Popen", "call", "check_call", "check_output", "system"}:
             if any(isinstance(x, ast.Constant) and isinstance(x.value, str)
                    and re.search(r"\b(?:ffmpeg|avconv)\b", x.value) for x in ast.walk(node)):
@@ -92,6 +97,6 @@ def scan(root):
         relative = path.relative_to(root)
         if any(part in SKIP for part in relative.parts) or path.is_symlink():
             continue
-        if path.is_file() and path.suffix in {".py", ".js", ".ts", ".tsx", ".jsx", ".sh"}:
-            findings.extend(violations(path.read_text(), relative))
+        if path.is_file() and path.suffix in {".py", ".js", ".ts", ".tsx", ".jsx", ".sh", ".cjs", ".mjs", ".cts", ".mts"}:
+            findings.extend(violations(path.read_text(encoding="utf-8"), relative.as_posix()))
     return findings

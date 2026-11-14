@@ -19,6 +19,10 @@ from teacher.privacy import scan, violations
     "open('capture.jpg', 'wb')",
     "from pathlib import Path; Path('capture.png').write_bytes(pixels)",
     "import subprocess; subprocess.run(['ffmpeg', '-i', device, output])",
+    "import cv2; cv2.imencode('.jpg', frame)[1].tofile(p)",
+    "import numpy as np; np.save('frame.npy', frame)",
+    "import numpy as np; np.savez(p, data=image)",
+    "import numpy as np; np.savetxt(p, pixels)",
 ])
 def test_detects_writers_and_aliases(source):
     assert violations(source, "candidate.py")
@@ -30,6 +34,7 @@ def test_detects_writers_and_aliases(source):
     "handle.write(json.dumps(label))",
     "open('capture.jpg', 'rb')",
     "model.save(path)",
+    "import numpy as np; np.save(p, features)",
     "example = 'cv2.imwrite(path, frame)'",
 ])
 def test_reading_display_and_numeric_output_allowed(source):
@@ -46,6 +51,12 @@ def test_scan_reports_new_nested_file(tmp_path):
     nested.mkdir(parents=True)
     (nested / "record.py").write_text("import cv2; cv2.imwrite(path, pixels)")
     assert "other/component/record.py:1" in scan(tmp_path)[0]
+
+
+@pytest.mark.parametrize("suffix", [".cjs", ".mjs", ".cts", ".mts"])
+def test_scan_module_extensions(tmp_path, suffix):
+    (tmp_path / ("record" + suffix)).write_text("fs.writeFileSync('frame.png', pixels)", encoding="utf-8")
+    assert scan(tmp_path)
 
 
 def test_repository_has_no_image_or_video_writers():
