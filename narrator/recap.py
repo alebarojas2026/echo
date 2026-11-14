@@ -177,4 +177,6 @@ class Recap:
         msg = nar.send_spaced(text=text, event_id=reset.get("id"), event_kind="recap", gen_ms=gen_ms,
                               source=source, model=model, src=reset.get("src", "live"))
         n.log(f"{reset.get('id')} recap of {len(events)} events -> {source} {gen_ms} ms ({why}): {text}")
+        if nar.warm:   # the recap's prompt took the model's one cache slot: put the
+            nar.warm()     # sentence prompt back before the next judge's first sentence
         return msg

@@ -29,6 +29,7 @@ BUS = "127.0.0.1:5600"
 GAP_MS = 8000         # at most one sentence every 8 s
 MAX_AGE_MS = 3000     # only for events up to 3 s old
 LLM_TIMEOUT_S = 8.0   # slower than this -> template
+WARM_TIMEOUT_S = 120.0  # the warm-up writes the whole prompt into the cache; it may take longer
 MAX_WORDS = 16
 
 EVENT_KINDS = ("enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice",
@@ -177,10 +178,60 @@ class LlamaServer:
 
 def within(timeout_s: float, fn, *args):
     """fn(*args), or TimeoutError if it takes longer than timeout_s."""
+    future = POOL.submit(fn, *args)
     try:
-        return POOL.submit(fn, *args).result(timeout=timeout_s)
+        return future.result(timeout=timeout_s)
     except concurrent.futures.TimeoutError:
+        # Still waiting for a free worker: never send it. llama-server has one slot, so a call
+        # for an event that is already gone would only hold up the next sentence.
+        future.cancel()
         raise TimeoutError(f"no reply in {timeout_s:g} s") from None
+
+
+class Warmer:
+    """Keeps the sentence prompt cached in llama-server's single slot.
+
+    kick() starts one warm-up on a background thread, unless one is already running. It retries
+    until the model answers, because right after boot llama-server is still loading the model
+    (connection refused, or HTTP 503) and a single try would leave the cache cold. A cold prompt
+    can take longer than the 8 s a sentence gets, so the warm-up has its own, longer timeout.
+    Kicked at start, after the recap (its prompt replaces the cached one) and whenever a
+    sentence call fails (llama-server may have restarted and lost the cache).
+    """
+
+    def __init__(self, llm, retry_s: float = 2.0, give_up_s: float = 300.0,
+                 sleep=time.sleep, clock=time.monotonic):
+        self.llm, self.retry_s, self.give_up_s = llm, retry_s, give_up_s
+        self.sleep, self.clock = sleep, clock
+        self._busy = threading.Lock()
+
+    def kick(self) -> bool:
+        """Start a warm-up in the background. False if one is already running."""
+        if not self._busy.acquire(blocking=False):
+            return False
+        threading.Thread(target=self._run_and_release, daemon=True).start()
+        return True
+
+    def _run_and_release(self) -> None:
+        try:
+            self.run()
+        finally:
+            self._busy.release()
+
+    def run(self) -> bool:
+        """Warm up now, retrying until the model answers or give_up_s has passed."""
+        start = self.clock()
+        while True:
+            try:
+                self.llm(prompt("enter", template("enter", {"zone": 2})))
+                log("model warm")
+                return True
+            except Exception as e:
+                if self.clock() - start + self.retry_s > self.give_up_s:
+                    log("warm-up gave up:", e)
+                    return False
+                log("warm-up failed, retrying:", e)
+                self.sleep(self.retry_s)
 
 
 def clean(text: str) -> str:
@@ -219,6 +270,7 @@ class Narrator:
                  gap_ms=GAP_MS, max_age_ms=MAX_AGE_MS, sleep=time.sleep):
         self.llm, self.send, self.clock, self.sleep = llm, send, clock, sleep
         self.timeout_s, self.gap_ms, self.max_age_ms = timeout_s, gap_ms, max_age_ms
+        self.warm = None          # called when a model call fails (a Warmer's kick), if set
         self.pending = None       # the most important event not yet narrated
         self.cam = None           # on | off | stalled, from the brain
         self.seq = 0
@@ -232,6 +284,8 @@ class Narrator:
         """Take any message from the brain."""
         if msg.get("type") == "state" and "cam" in msg:
             self.cam = msg["cam"]
+        elif msg.get("type") == "event" and msg.get("kind") == "reset":
+            self.pending = None   # a new judge: the last demo's waiting event is not said, the recap is next
         elif msg.get("type") == "event" and msg.get("kind") in EVENT_KINDS:
             if msg["kind"] in ("cam_off", "cam_on"):
                 self.cam = msg["kind"][4:]
@@ -270,14 +324,20 @@ class Narrator:
         try:
             raw, model = within(self.timeout_s, self.llm, prompt(event["kind"], facts))
         except TimeoutError:
+            self._rewarm()
             return facts, "template", None, "model too slow"
         except Exception as e:
+            self._rewarm()
             return facts, "template", None, f"model unreachable ({e})"
         text = clean(raw)
         why = problem(text, facts, self.cam == "off")
         if why:
             return facts, "template", None, f"{why}: {raw.strip()!r}"
         return text, "llm", model, "ok"
+
+    def _rewarm(self) -> None:
+        if self.warm:
+            self.warm()
 
     def narrate(self, event: dict) -> dict:
         """Build, send and return the narration for one event."""
@@ -369,10 +429,7 @@ async def serve(messages, narrator: Narrator, poll_s: float = 0.1, recap=None) -
 
 def warm_up(llm) -> None:
     """One throwaway request so llama-server caches the fixed part of the prompt."""
-    try:
-        llm(prompt("enter", template("enter", {"zone": 2})))
-    except Exception as e:
-        log("warm-up failed:", e)
+    Warmer(llm, give_up_s=0).run()
 
 
 def main(argv=None) -> int:
@@ -393,10 +450,11 @@ def main(argv=None) -> int:
         print(json.dumps(narrator.narrate(event)), flush=True)
         return 0
 
-    threading.Thread(target=warm_up, args=(llm,), daemon=True).start()
     from narrator.recap import MAX_TOKENS, TIMEOUT_S, Recap   # here, because recap imports this module
 
     narrator = Narrator(llm, udp_sender(args.bus))
+    narrator.warm = Warmer(LlamaServer(args.llm, timeout_s=WARM_TIMEOUT_S)).kick
+    narrator.warm()
     recap = Recap(narrator, LlamaServer(args.llm, timeout_s=TIMEOUT_S, max_tokens=MAX_TOKENS))
     asyncio.run(serve(brain_messages(args.ws), narrator, recap=recap))
     return 0
