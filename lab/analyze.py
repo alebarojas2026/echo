@@ -209,7 +209,8 @@ def main():
         svg.scatter(FIGS / "checkin_tradeoff.svg", "Check-in: every threshold trades waves caught for false fires",
                     pts, "false check-ins per minute with someone in the square", "share of waves caught",
                     (0, max(2.0, min(10.0, max(p[0] for p in pts)))), (0, 1),
-                    mark=(cur["false_per_min"][0], cur["hit"][0], "contract default") if cur else None)
+                    mark=(cur["false_per_min"][0], cur["hit"][0], "contract default") if cur else None,
+                    color=svg.ACTION)
         h = grid_table(with_grids, "health_grid", ["stale_frac", "blind_after_s", "jump_db"],
                        ["hit", "latency_s", "short", "false", "false_jump"])
         md += ["### Link health replay", "",
@@ -224,14 +225,15 @@ def main():
         svg.lines(FIGS / "health_jump.svg", "False SENSOR BLIND per session vs the jump threshold",
                   [(f"blind after {b:g} s", jd, [h.get((0.4, b, j), {}).get("false", (None,))[0] for j in jd])
                    for b in (2.0, 3.0, 4.0)], "jump rule threshold, dB", "false blinds per session",
-                  ylim=(0, max(0.5, max((v["false"][0] or 0) for v in h.values()))))
+                  ylim=(0, max(0.5, max((v["false"][0] or 0) for v in h.values()))), color=svg.FAULT)
         from lab.protocol import best_spots   # "right" allows the +/-1 dB diffraction ripple
         for r in with_grids + load("alertfix"):
             ok = best_spots(r["metrics"]["tray_xy"], tol_db=1.5) if r["metrics"].get("tray_xy") else []
             for row in r.get("xray_grid", []):
                 row["advice_right"] = None if row.get("advice") is None else row["advice"] in ok
                 row["advice_fired"] = row.get("advice") is not None
-        x = grid_table(with_grids, "xray_grid", ["alpha_rel", "static_std_db"],
+        # X-ray steadiness changed on main (#150, 0.5 s means): score it on the current-main run only.
+        x = grid_table(nominal or with_grids, "xray_grid", ["alpha_rel", "static_std_db"],
                        ["detected", "detect_s", "loc_err_m", "fp_s", "still_obj", "advice_fired", "advice_right"])
         md += ["### X-ray and advisor replay", "",
                "| alpha rel | static std dB | tray found | seconds to find | position error m | ghost object s | still person -> object | advice appears | advice right |",
@@ -243,9 +245,10 @@ def main():
                 ("detected", "detect_s", "loc_err_m", "fp_s", "still_obj", "advice_fired", "advice_right")) + " |")
         md.append("")
         stds = sorted({k[1] for k in x})
-        svg.bars(FIGS / "xray_steady.svg", "The tray only shows up once the steadiness test loosens",
+        svg.bars(FIGS / "xray_steady.svg", "X-ray: how often the tray is found, by steadiness threshold",
                  [f"{s:g} dB" for s in stds], [x[(0.1, s)]["detected"][0] for s in stds],
-                 "X-ray static std threshold (contract: 0.8 dB)", "share of sessions the tray is found")
+                 "X-ray static std threshold on 0.5 s means (contract: 0.8 dB)", "share of sessions the tray is found",
+                 color=svg.OBJECT)
     alertfix = load("alertfix")
     for label, rows in (("all swept sessions, training stands 5 s", with_grids),
                         ("nominal room, training stands 5 s", [r for r in alertfix if r["tag"].endswith(" 5.0")]),
@@ -268,7 +271,7 @@ def main():
             svg.lines(FIGS / "alert_fix.svg", "No-movement alert: smoothing decides whether it ever fires",
                       [(f"zone/kind majority of {k}", hs, [a.get((h, k), {}).get("hit", (None,))[0] for h in hs])
                        for k in ks], "reset only after N moving decisions in a row (now N = 1)",
-                      "share of zone-4 alerts that fire", ylim=(0, 1))
+                      "share of zone-4 alerts that fire", ylim=(0, 1), color=svg.FAULT)
     keys = [("heldout_acc", "mean", "held-out zone"), ("live_zone_acc", "mean", "live zone"),
             ("live_empty_acc", "mean", "empty reads empty"), ("object_kind_frac", "mean", "tray = object"),
             ("alert_hit", "rate", "alert fires"), ("checkin_hit", "rate", "check-in"),
@@ -299,7 +302,8 @@ def main():
                       [(name, vs, [ci(values(groups.get(f"train_still_s {v}", []), key), kind)[0] for v in vs])
                        for name, key, kind in (("alert fires", "alert_hit", "rate"),
                                                ("held-out zone", "heldout_acc", "mean"))],
-                      "seconds standing on each marked spot during training", "share", ylim=(0, 1))
+                      "seconds standing on each marked spot during training", "share", ylim=(0, 1),
+                      color=svg.FAULT)
     if nominal or env:
         allr = nominal + env
         dist = [("near (<0.15 m)", "heldout_acc_near"), ("0.15-0.3 m", "heldout_acc_mid"), ("far (>0.3 m)", "heldout_acc_far")]
