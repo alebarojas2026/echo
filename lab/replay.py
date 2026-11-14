@@ -12,6 +12,7 @@ settings are compared on exactly the same room:
 from __future__ import annotations
 
 import math
+from collections import Counter
 
 from advisor.advise import advise
 from brain import alert as AL
@@ -93,25 +94,34 @@ def replay_health(res, plan, grid=HEALTH_GRID):
     return rows
 
 
-def replay_alert(res, plan, hyst=ALERT_HYST):
-    """Re-run the no-movement alert with a hysteresis on "moving" (1 = the rule as written)."""
+ALERT_SMOOTH = (1, 5, 10)   # zone and kind = the majority of the last k decisions
+
+
+def replay_alert(res, plan, hyst=ALERT_HYST, smooth=ALERT_SMOOTH):
+    """Re-run the no-movement alert with a hysteresis on "moving" and a majority filter on zone
+    and kind (hyst 1, smooth 1 = the rule as written)."""
     T0 = rf.T0_MS
     sp = plan["spans"]
     a0 = sp["alert4"][0][0]
     w1 = sp["wave"][0][1]
     rows = []
-    for h in hyst:
-        watch, run_len, on = AL.Watch(limits=LIMITS), 0, []
-        for x in res["ticks"]:
-            p = None if x[1] is None else {"present": x[1] > 0, "zone": x[1] or None, "kind": x[2], "motion": x[3]}
-            if p is not None and p["kind"] == "person":
-                run_len = run_len + 1 if p["motion"] == "moving" else 0
-                p["motion"] = "moving" if run_len >= h else "still"
-            watch.on_pred(x[0], p)
-            on += [(x[0] - T0) / 1000 for k, _ in watch.pop_events() if k == "alert_on"]
-        good = [a for a in on if a0 + 8.0 <= a <= w1 + 0.5]
-        rows.append({"hyst": h, "hit": bool(good), "latency_s": round(good[0] - a0, 2) if good else None,
-                     "false": len(on) - len(good)})
+    for k in smooth:
+        for h in hyst:
+            watch, run_len, on, last = AL.Watch(limits=LIMITS), 0, [], []
+            for x in res["ticks"]:
+                p = None if x[1] is None else {"present": x[1] > 0, "zone": x[1] or None, "kind": x[2], "motion": x[3]}
+                if p is not None and k > 1:
+                    last = (last + [(x[1], x[2])])[-k:]
+                    z, kind = Counter(last).most_common(1)[0][0]
+                    p.update(present=z > 0, zone=z or None, kind=kind)
+                if p is not None and p["kind"] == "person":
+                    run_len = run_len + 1 if p["motion"] == "moving" else 0
+                    p["motion"] = "moving" if run_len >= h else "still"
+                watch.on_pred(x[0], p)
+                on += [(x[0] - T0) / 1000 for e, _ in watch.pop_events() if e == "alert_on"]
+            good = [a for a in on if a0 + 8.0 <= a <= w1 + 0.5]
+            rows.append({"hyst": h, "smooth": k, "hit": bool(good),
+                         "latency_s": round(good[0] - a0, 2) if good else None, "false": len(on) - len(good)})
     return rows
 
 

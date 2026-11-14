@@ -127,7 +127,7 @@ def grid_table(rows, name, keys, cols):
     acc = defaultdict(lambda: defaultdict(list))
     for r in rows:
         for g in r.get(name, []):
-            k = tuple(g[x] for x in keys)
+            k = tuple(g.get(x, 1 if x == "smooth" else None) for x in keys)
             for c in cols:
                 if g.get(c) is not None:
                     acc[k][c].append(float(g[c]))
@@ -235,16 +235,29 @@ def main():
         svg.bars(FIGS / "xray_steady.svg", "The tray only shows up once the steadiness test loosens",
                  [f"{s:g} dB" for s in stds], [x[(0.1, s)]["detected"][0] for s in stds],
                  "X-ray static std threshold (contract: 0.8 dB)", "share of sessions the tray is found")
-        a = grid_table(with_grids, "alert_grid", ["hyst"], ["hit", "latency_s", "false"])
-        md += ["### No-movement alert replay (reset only after N moving decisions in a row)", "",
-               "| N | alert fires | latency s | false alerts / session |", "|---|---|---|---|"]
+    alertfix = load("alertfix")
+    for label, rows in (("all swept sessions, training stands 5 s", with_grids),
+                        ("nominal room, training stands 5 s", [r for r in alertfix if r["tag"].endswith(" 5.0")]),
+                        ("nominal room, training stands 10 s", [r for r in alertfix if r["tag"].endswith(" 10.0")])):
+        a = grid_table(rows, "alert_grid", ["hyst", "smooth"], ["hit", "latency_s", "false"])
+        if not a:
+            continue
+        md += [f"### No-movement alert replay: {label}", "",
+               "Reset the still timer only after N moving decisions in a row; zone and kind are the majority "
+               "of the last k decisions (N = 1, k = 1 is the rule as written).", "",
+               "| N | k | alert fires | latency s | false alerts / session | sessions |", "|---|---|---|---|---|---|"]
         for k in sorted(a):
-            md.append(f"| {k[0]} | " + " | ".join("n/a" if a[k][c][0] is None else f"{a[k][c][0]:.2f}"
-                                                   for c in ("hit", "latency_s", "false")) + " |")
+            md.append(f"| {k[0]} | {k[1]} | " + " | ".join(
+                "n/a" if a[k][c][0] is None else f"{a[k][c][0]:.2f}" for c in ("hit", "latency_s", "false"))
+                + f" | {a[k]['hit'][1]} |")
         md.append("")
-        svg.bars(FIGS / "alert_hysteresis.svg", "No-movement alert: one 'moving' blip resets the timer",
-                 [f"N = {k[0]}" for k in sorted(a)], [a[k]["hit"][0] for k in sorted(a)],
-                 "reset the still timer after N moving decisions in a row (now N = 1)", "share of alerts that fire")
+        if label.endswith("10 s"):
+            ks = sorted({k[1] for k in a})
+            hs = sorted({k[0] for k in a})
+            svg.lines(FIGS / "alert_fix.svg", "No-movement alert: smoothing decides whether it ever fires",
+                      [(f"zone/kind majority of {k}", hs, [a.get((h, k), {}).get("hit", (None,))[0] for h in hs])
+                       for k in ks], "reset only after N moving decisions in a row (now N = 1)",
+                      "share of zone-4 alerts that fire", ylim=(0, 1))
     keys = [("heldout_acc", "mean", "held-out zone"), ("live_zone_acc", "mean", "live zone"),
             ("live_empty_acc", "mean", "empty reads empty"), ("object_kind_frac", "mean", "tray = object"),
             ("alert_hit", "rate", "alert fires"), ("checkin_hit", "rate", "check-in"),
