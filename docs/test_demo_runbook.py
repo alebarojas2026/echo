@@ -42,5 +42,18 @@ class DemoRunbookTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.lower)
 
+    def test_finish_order_clears_tray_before_router_home(self):
+        steps = (
+            "remove the tray",
+            "object marker and static change clear",
+            "return the pi to `s-home`",
+            "send `router_home`",
+            "wait until prediction resumes",
+            "send `reset`",
+        )
+        positions = [self.lower.index(step) for step in steps]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("alexander handles the tray and pi", self.lower)
+
 if __name__ == "__main__":
     unittest.main()

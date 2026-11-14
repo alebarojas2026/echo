@@ -51,7 +51,14 @@ The camera supplies temporary setup labels only. The demo must not show or save 
 
 ## Finish the live demo
 
-8. **Return home:** Put the router back at `S-home` and send `router_home`. Wait until prediction resumes or the automatic baseline finishes.
+Alexander handles the tray and Pi. Keep software commands with the operator.
+
+1. Ask Alexander to remove the tray.
+2. Wait until the object marker and static change clear.
+3. Ask Alexander to return the Pi to `S-home`.
+4. Only then send `router_home`.
+5. Wait until prediction resumes or the automatic baseline finishes, then confirm health is `ok`.
+6. Stop any active recording and send `reset` before the next judge.
 
 Call the alert a `no-movement alert`. Reset it with a check-in or the reset control.
 

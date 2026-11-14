@@ -61,7 +61,8 @@ class TroubleshootingDocTest(unittest.TestCase):
 
     def test_router_and_calibration_recovery_match_v2(self):
         for phrase in (
-            "return the router to `s-home` before sending `router_home`",
+            "remove the tray",
+            "return the pi to `s-home` before sending `router_home`",
             "automatic baseline",
             "label mode is `off`",
             "keep the square clear",
@@ -69,6 +70,17 @@ class TroubleshootingDocTest(unittest.TestCase):
             "keep the value as `__`",
         ):
             self.assertIn(phrase, self.lower)
+
+        recovery = self.lower.split("## predictions disappear after moving the router", 1)[1]
+        steps = (
+            "remove the tray",
+            "object marker and static change clear",
+            "return the pi to `s-home`",
+            "send `router_home`",
+            "send `reset`",
+        )
+        positions = [recovery.index(step) for step in steps]
+        self.assertEqual(positions, sorted(positions))
 
     def test_no_movement_recovery_explains_smoothed_decisions(self):
         for phrase in (
