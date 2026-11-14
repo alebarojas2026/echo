@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -64,6 +67,44 @@ def test_grid_size_is_configurable():
     wide = xray.Grid(w=12, h=10)
     assert wide.cell_m == pytest.approx(0.24) and wide.origin_m[0] < -0.2
     assert wide.origin_m[1] == pytest.approx(-0.2)
+
+
+def contract_centre(xr_out, k):
+    """Centre of flat cell k by the section 5 rule: index = iy * w + ix."""
+    w, cell = xr_out["w"], xr_out["cell_m"]
+    ix, iy = k % w, k // w
+    return (xr_out["origin_m"][0] + (ix + 0.5) * cell, xr_out["origin_m"][1] + (iy + 0.5) * cell)
+
+
+def test_cells_go_row_by_row_from_the_south_edge():
+    xr = xray.Xray()
+    out = xr.update(0)["xray"]
+    for k in range(xr.grid.n):
+        assert xr.grid.centres[k] == pytest.approx(contract_centre(out, k))
+    assert xr.grid.centres[0] == pytest.approx((-0.08, -0.08))    # south-west
+    assert xr.grid.centres[9] == pytest.approx((2.08, -0.08))     # south-east
+    assert xr.grid.centres[90] == pytest.approx((-0.08, 2.08))    # north-west
+
+
+def test_object_at_t1_lands_in_the_cell_the_contract_gives():
+    t1 = xray.TRAY_SPOTS["T1"]
+    xr = xray.Xray()
+    feed(xr, 0, 8, lambda t, link: body_drop(t1, link, 6.0, 0.25))
+    out = xr.update(8000)["xray"]
+    k = int(np.argmax(out["static_db"]))
+    x, y = contract_centre(out, k)
+    assert np.hypot(x - t1[0], y - t1[1]) < 0.2    # (0.88 or 1.12, 0.16)
+    # read with x and y swapped, the same cell would be on the west side
+    assert k // out["w"] == 1 and k % out["w"] in (4, 5)
+
+
+def test_builds_from_radio_nodes_json():
+    doc = json.loads((Path(__file__).parents[2] / "radio" / "nodes.json").read_text())
+    xr = xray.Xray.from_nodes(doc)
+    assert xr.links == list(xray.LINKS)
+    assert np.allclose(xr.W, xray.Xray().W)
+    xr.set_router("S-E30")
+    assert xr.nodes["pi5"] == (1.3, 0.0)
 
 
 def test_projection_matches_the_formula():

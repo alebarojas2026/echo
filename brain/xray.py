@@ -10,9 +10,10 @@ Networks" (IEEE TMC, 2010). Each link is one row of W. A cell gets the weight
 path <= 0.1 m) and 0 otherwise. An image is P @ y, where y holds one value per
 link and P = (W^T W + alpha I)^-1 W^T.
 
-Cells are listed row by row from the south-west corner: index = j * w + i,
-where i counts east along x and j counts north along y. Cell (i, j) has its
-centre at origin_m + ((i + 0.5) * cell_m, (j + 0.5) * cell_m).
+Cell order (CONTRACTS.md section 5): row by row from the south edge,
+index = iy * w + ix, where ix counts east from origin_m[0] and iy counts north
+from origin_m[1]. Cell (ix, iy) has its centre at
+origin_m + ((ix + 0.5) * cell_m, (iy + 0.5) * cell_m).
 """
 import numpy as np
 
@@ -45,6 +46,15 @@ def link_ends(link_id):
     return tx, rx, kind
 
 
+def from_nodes_json(doc):
+    """(nodes, links, router_spots, square_m) from radio/nodes.json, already parsed."""
+    nodes = {n["id"]: tuple(n["xyz_m"][:2]) for n in doc["nodes"]}
+    links = [link["id"] for link in doc["links"]]
+    spots = {s["id"]: tuple(s["xyz_m"][:2]) for s in doc.get("router_spots", [])}
+    square_m = float(doc.get("frame", {}).get("size_m", [SQUARE_M])[0])
+    return nodes, links, spots or dict(ROUTER_SPOTS), square_m
+
+
 def zone_of(x, y, square_m=SQUARE_M):
     """Section 3 zone of a floor point: 1 NW, 2 NE, 3 SW, 4 SE."""
     half = square_m / 2
@@ -66,7 +76,7 @@ class Grid:
         self.origin_m = (mid - self.w * self.cell_m / 2, mid - self.h * self.cell_m / 2)
         xs = self.origin_m[0] + (np.arange(self.w) + 0.5) * self.cell_m
         ys = self.origin_m[1] + (np.arange(self.h) + 0.5) * self.cell_m
-        gx, gy = np.meshgrid(xs, ys)  # shape (h, w), so ravel gives j * w + i
+        gx, gy = np.meshgrid(xs, ys)  # shape (h, w), so ravel gives iy * w + ix
         self.centres = np.column_stack([gx.ravel(), gy.ravel()])
 
     @property
@@ -212,7 +222,7 @@ class _Ring:
 class Xray:
     """Per-link drop histories in, section 5 "xray" and "objects" out.
 
-        xr = Xray()                          # default nodes, links, 10 x 10
+        xr = Xray.from_nodes(nodes_doc)      # radio/nodes.json, 10 x 10
         xr.add(link, recv_t_ms, drop_db)     # every reading
         out = xr.update(now_ms)              # about 10 times a second
         state["xray"], state["objects"] = out["xray"], out["objects"]
@@ -221,14 +231,22 @@ class Xray:
     """
 
     def __init__(self, nodes=None, links=LINKS, w=10, h=10, alpha=None,
-                 excess_m=EXCESS_PATH_M):
+                 excess_m=EXCESS_PATH_M, router_spots=None, square_m=SQUARE_M):
         self.nodes = {k: (float(p[0]), float(p[1])) for k, p in (nodes or NODES).items()}
         self.links = list(links)
-        self.grid = Grid(w, h)
+        self.router_spots = dict(router_spots or ROUTER_SPOTS)
+        self.square_m = square_m
+        self.grid = Grid(w, h, square_m=square_m)
         self.alpha = alpha
         self.excess_m = excess_m
         self.rebuild()
         self.reset()
+
+    @classmethod
+    def from_nodes(cls, doc, **kw):
+        """Build from radio/nodes.json, already parsed. kw: w, h, alpha, excess_m."""
+        nodes, links, spots, square_m = from_nodes_json(doc)
+        return cls(nodes, links, router_spots=spots, square_m=square_m, **kw)
 
     def rebuild(self):
         """Recompute W and P from the current node positions."""
@@ -241,7 +259,7 @@ class Xray:
 
     def set_router(self, spot):
         """router_moved {spot} or router_home ("S-home"): move pi5 and rebuild P."""
-        self.move_node("pi5", ROUTER_SPOTS[spot])
+        self.move_node("pi5", self.router_spots[spot])
 
     def reset(self):
         """Forget histories, static levels and objects (after a new baseline)."""
@@ -328,9 +346,9 @@ class Xray:
                 events.append(self._event("object_off", o))
         return events
 
-    @staticmethod
-    def _event(kind, o):
+    def _event(self, kind, o):
         x, y = o["xy"]
         return {"kind": kind, "info": {"node": o["near"], "link": o["link"],
-                                       "zone": zone_of(x, y), "xy_m": [round(x, 2), round(y, 2)],
+                                       "zone": zone_of(x, y, self.square_m),
+                                       "xy_m": [round(x, 2), round(y, 2)],
                                        "drop_db": round(o["drop"], 1)}}
