@@ -148,6 +148,8 @@ X-ray:
 - P = (W^T W + alpha I)^-1 W^T, computed at startup and again on router_moved and router_home.
 - Per link, static_db = the drop that has held >= 5 s with the std of its 0.5 s means < 0.8 dB (raw readings are too noisy), updated ONLY while pred is not null and
   pred.kind != person (frozen while a person is present), so a person standing still never becomes an "object".
+- Lowering is not frozen: when a link's current drop (1 s median) has sat at least 2 dB under its static_db for 1 s, static_db
+  comes down to that drop, whatever pred says. An object whose link has just come down is dropped from objects at once.
 - The people part per link = max(0, drop_db - static_db). xray.static_db = the image of the static parts;
   xray.moving_db = the image of the people parts.
 - Static means "appeared since the baseline", never walls.

@@ -562,13 +562,34 @@ def test_recalibration_also_runs_with_the_camera_unplugged():
     assert brain.capture is not None
 
 
-def test_reset_clears_the_advice():
+def test_reset_clears_the_advice_and_it_stays_away_while_the_tray_is_down():
     brain, feed = taught()
     states = []
-    router_run(brain, feed, "tray_t1", moved_at=999, home_at=999, states=states)
-    assert at(states, 45)["advice"] is not None
+    t0 = feed.t
+    asked = []
+
+    def reset_at_40(m):
+        if not asked and m["recv_t"] - t0 >= 40_000:
+            asked.append(1)
+            brain.pop_events()
+            brain.on_cmd(cmd("reset"))
+
+    feed.play("tray_t1", seed=3, noise_db=0.4, each=reset_at_40, states=states)   # tray from 25 to 55 s
+    assert at(states, 39)["advice"] is not None
+    assert all(s["advice"] is None for t, s in states if t >= 40.05)             # not rebuilt by the next state
+    got = [e["kind"] for e in brain.pop_events() if e["kind"] in ("advice", "reset")]
+    assert got == ["reset"]                                                        # and not announced again
+
+
+def test_a_dismissed_advice_can_come_back_after_the_object_has_gone():
+    brain, feed = taught()
+    feed.play("tray_t1", seed=3, noise_db=0.4, states=[])
     brain.on_cmd(cmd("reset"))
-    assert brain.advice is None
+    brain.pop_events()
+    states = []
+    feed.play("tray_t1", seed=5, noise_db=0.4, states=states)    # the tray comes back later
+    assert at(states, 45)["advice"] is not None
+    assert "advice" in [e["kind"] for e in brain.pop_events()]
 
 
 # ---- the event stream for the narrator (#38) ----

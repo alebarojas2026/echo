@@ -65,6 +65,7 @@ class Brain:
         self.nodes = nodes
         self._recent: Dict[str, deque] = {link: deque() for link in links}   # (recv_t, dbm), last 10 s
         self.advice: Optional[dict] = None
+        self._dismissed: Optional[str] = None     # the id of an advice that reset cleared
         self._moved_t: Optional[int] = None       # when router_moved came
         self.settle: Optional[int] = None         # when router_home came, while its 3 s check runs
         self.recalibrating = False                # the automatic baseline after a failed check
@@ -210,6 +211,7 @@ class Brain:
     def _cmd_reset(self, args):
         """Between judges: clear the alert, still timer, check-in, advice and narration."""
         self.watch.reset()
+        self._dismissed = self.advice["id"] if self.advice else None
         self.narration = self.advice = None
         self._watch_events()
         self.emit("reset", {})
@@ -283,8 +285,12 @@ class Brain:
                 if xray["xray"] and self.settle is None and not self.capture else None
             before = self._median(WIFI, now - ADVICE_MEDIAN_MS)
             if adv is None or before is None:
+                self.advice = self._dismissed = None
+                return
+            if adv["id"] == self._dismissed:      # cleared by reset: stays away until it changes
                 self.advice = None
                 return
+            self._dismissed = None
             adv["before_dbm"] = before            # kept current while the advice shows
             new = self.advice is None or self.advice["id"] != adv["id"]
             self.advice = adv
