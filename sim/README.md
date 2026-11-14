@@ -95,6 +95,49 @@ Optional extras, all timed in seconds from the start:
 | `jumps` | `[{"link": "east>unoq:ble", "db": 9, "t_on": 5, "t_off": 12}]` | A link's level shifts by `db` with nothing in the room to explain it (`wobble_db` makes it unsteady) |
 | `flickers` | `[{"t_on": 7.0, "t_off": 7.3}]` | Fake brain only: its decision says moving for that long while the person stands still |
 
+## Hall links (optional, contract proposal in issue #358)
+
+Two beacons far outside the square, `h` and `j`, as tripwires: for each long link the screen says
+whether there is movement along that path. A hall link is a hall beacon heard by a receiver
+(`h>unoq:ble`, `j>pi5:ble`, ...). A path gets them with a `hall` block; a path without one gives
+exactly the output it always gave.
+
+```json
+"hall": {
+  "beacons": {"h": [3.0, 19.0], "j": [-14.0, 6.0]},
+  "walks": [{"tx": "h", "t_on": 20, "t_off": 23}, {"tx": "h", "rx": "unoq", "t_on": 62, "t_off": 65}]
+}
+```
+
+- `beacons`: where each one is, in the square's frame (metres; far outside it).
+- `walks`: somebody walks along a beacon's path between `t_on` and `t_off`. With `rx` only that
+  receiver's link sees it; without, all of that beacon's links do. `drop_db` (default 8) is how deep the dip gets.
+- `sent_hz` (default 25) and `heard` (default 0.3): each beacon sends that many adverts a second
+  and a receiver hears that share of them, at uneven moments and far weaker than the square's links.
+- `outages` with `"node": "j"` silence a hall beacon like any other node.
+
+`sim.fake` and `sim.send` then also send the hall links' `rssi` (their own random stream, so the
+core links' readings don't change). The fake brain (`sim.state`, `sim.ws`) adds `hall` to state:
+
+```json
+"hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[3.0,19.0],"activity":1.0,"moving":true,"rate_hz":6.5,"stale":false}]
+```
+
+Like the rest of the fake brain it reads the answer from the script: `moving` while a walk is on the
+link and for about 2 s after it, `stale` (with activity 0 and moving false) while the link has
+fewer than 4 readings in 2 s. The real rule is in brain/hall.py.
+
+The ready-made path is `hall/hall_walk` (75 s; it lives in `sim/paths/hall/`): quiet for 20 s, a
+walk along h's path at 20 s, along j's at 32 s, j silent from 44 s to 54 s (stale), and at 62 s a
+walk that only `h>unoq:ble` sees. A person stands in the square the whole time.
+
+```
+python -m sim.ws hall/hall_walk --loop       # the screen, with no board and no brain
+python -m sim.send hall/hall_walk --loop     # through the real bus and brain
+```
+
+Until issue #358 lands, `contracts.check` rejects the hall `rssi` lines and the `hall` field.
+
 ## Tests
 
 ```
