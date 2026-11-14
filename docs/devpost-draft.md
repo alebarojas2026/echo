@@ -4,68 +4,94 @@
 
 ## Inspiration
 
-Wi-Fi problems are usually described with a single signal-strength number, but rooms are not simple. Walls, furniture, people, and device placement all change how radio signals travel. A connection can look healthy near the router while failing exactly where someone needs it.
+Wi-Fi problems are usually reduced to one signal-strength bar, but rooms are not simple. Furniture, people, walls, and router placement reshape every radio path. A connection can look healthy beside the router while failing exactly where someone needs it.
 
-We wanted to dig into those invisible changes and make them useful. Radio Sight turns the Wi-Fi signals already crossing a room into a private, local picture of coverage, presence, and movement. It gives people a direct way to understand why a space behaves the way it does without adding a permanent camera or sending data to the cloud.
+We wanted to dig into those invisible changes and make them useful. Radio Sight turns the radio links already crossing a room into a private, local picture of coverage, presence, and movement. It explains what changed without a permanent camera or a cloud connection.
 
-We built Radio Sight at MadHacks 2026 for the Qualcomm / N+1 track and its theme, "Let's Dig In."
+We built Radio Sight at MadHacks twenty twenty-six for the Qualcomm / N+1 track and the theme “Let’s Dig In.”
 
 ## What it does
 
-Radio Sight reads how people and objects change the radio links in a room. It combines those changes into a live radio map that can:
+Radio Sight reads how people and objects change Wi-Fi and Bluetooth links around a room. It combines those changes into a live radio X-ray and a dark three-dimensional room display that can:
 
-- find real dead zones instead of guessing from a router's advertised range;
-- use a radio X-ray to separate moving activity from persistent changes since the room baseline;
-- distinguish a person from an object without identifying the person;
-- report whether someone is present and moving;
-- recognize a deliberate check-in motion without a phone or button;
-- raise a no-movement alert when the radio pattern remains still for the configured period; and
-- use an on-board narrator to explain what changed in plain language.
+- find a real dead zone and show the links behind it;
+- report presence, movement, and the predicted zone;
+- make a person-vs-object decision without identifying the person;
+- keep persistent object change separate from fresh human activity;
+- raise a no-movement alert after the configured still period;
+- recognize a deliberate wave check-in without a phone or button;
+- use a dead-zone advisor to recommend a router position and compare the link before and after the move; and
+- use an on-board narrator to explain fresh events in plain language.
 
-During setup, an attached camera provides temporary location labels so the on-board model can learn the room's radio patterns. The camera is then unplugged. No image is saved, and live operation uses radio data alone. Processing stays on the Arduino UNO Q, powered by Qualcomm Dragonwing, so room data does not need to leave the device.
+During setup, a camera provides temporary zone and motion labels. The model trains locally on the Arduino UNO Q, and the camera is then unplugged. No image is saved. Live inference uses radio alone, all learned decisions run on the Dragonwing CPU, and the Raspberry Pi runs no model.
 
-Our measured localization accuracy is __. Our measured person-vs-object accuracy is __. Our measured end-to-end update latency is __. Full methods and limits belong with those results so the demo stays honest.
+Our measured zone accuracy is __ ([method](../PROOF.md)). Our measured presence accuracy is __ ([method](../PROOF.md)). Our measured person-vs-object accuracy is __ ([method](../PROOF.md)). Our measured end-to-end update latency is __ ([method](../PROOF.md)). Our measured dead-zone improvement is __ ([method](../PROOF.md)). Our measured no-movement alert latency is __ ([method](../PROOF.md)).
+
+The demo tells one story:
+
+- **Judge walks in:** the radio state changes and the room reports a moving person and zone.
+- **Radio X-ray:** the display connects the prediction to the radio links behind it.
+- **No-movement alert:** the local still timer reaches the configured limit in an enabled zone.
+- **Wave check-in:** a practiced radio motion clears the alert without a phone or button.
+- **Tray vs person:** a metal tray becomes a stable object pattern, not a person.
+- **Router advice:** the advisor names a tested router position and preserves before-and-after readings.
+- **Camera unplug:** the setup teacher goes off while the live radio state keeps updating.
+- **Proof:** every missing measurement remains `__` instead of becoming an estimate.
 
 ## How we built it
 
-We placed small radio nodes around a floor zone: the Arduino UNO Q, a Raspberry Pi 5 acting as the router, and beacon nodes. Each node measures signal strength across the available links. A message contract keeps the radio readers, training pipeline, room display, advisor, and proof tools in sync.
+Radio nodes sit around a marked floor square: the Arduino UNO Q at one side, a Raspberry Pi acting as the router and screen, and beacon nodes on the other sides. The readers send signal-strength measurements into a versioned local message bus. The board joins them into time windows, checks link health, and feeds the trained person, object, zone, and motion model.
 
-The setup pipeline uses camera labels only as a temporary teacher. A small model trains on the UNO Q to associate link changes with locations. After setup, the camera is disconnected and the model predicts from radio measurements alone.
+The setup camera acts only as a teacher. It sends labels rather than saved images. Clipped or unlabeled windows are rejected, and training and inference run on the UNO Q. After training, the camera can be unplugged while the radio pipeline, room display, alert logic, advisor, and narrator continue.
 
-The board combines the link measurements into a radio X-ray of the room. Its moving layer compares the latest signal changes with the recent past. Its static layer shows persistent changes since the baseline; it does not label walls. The on-board model classifies presence, movement, location, and whether the pattern fits a person or an object.
+The radio X-ray separates persistent change since the room baseline from the fresh change associated with a person. A steady tray pattern can become an object and trigger placement advice near the router. Removing that object lets the static state come back down instead of leaving a ghost obstruction.
 
-A check-in rule recognizes a deliberate back-and-forth radio pattern while the predicted zone stays unchanged. The same local pipeline runs the no-movement alert and pauses that alert whenever a radio link is blind.
-
-A local web interface shows the room, radio links, X-ray layers, dead zones, presence and movement status, and plain-language explanations. The dead-zone advisor uses the measured obstruction and link geometry to recommend a tested router position, then records the signal before and after the move. An on-board narrator turns fresh events into short explanations and uses a local template if its language model cannot produce a safe result in time.
-
-Everything runs locally. The system does not require a cloud service for inference, storage, or the live display.
+The web interface shows the dark three-dimensional room, link health, the radio X-ray, predictions, alerts, advice, narration, and proof values. The Raspberry Pi provides the private sensing network and drives the screen; it does not train or run a model. Application traffic stays on the direct local link, and the demo does not depend on venue Wi-Fi.
 
 ## Challenges
 
-Radio data is noisy. Signal strength changes when a door moves, a chair shifts, another device transmits, or a person turns in place. We had to separate useful structure from ordinary variation without pretending the signal was cleaner than it was.
+Radio data is noisy. A door, chair, transmission burst, or small body turn can alter a link. We had to keep brief variation from resetting the no-movement timer, keep a steady object from looking like a failed sensor, and keep a broken link from looking like an empty room.
 
-The room also matters. A model trained against one layout cannot assume that every other space has the same radio paths. We designed setup as an explicit calibration step and kept the product focused on explaining the current room.
+The room also matters. A model trained in one layout cannot assume another room has the same paths. We made calibration explicit: mark the layout, calibrate the temporary teacher, capture an empty baseline, record training sessions, and repeat those steps in the presentation room.
 
-Integrating the full path was another challenge: radio collection, temporary camera labels, on-board learning, live predictions, check-in events, the room display, narration, advice, and proof all had to agree on timing and message formats. Running the pipeline on the Arduino UNO Q forced us to keep each part small and deliberate.
+The full path had to agree on one contract: radio collection, temporary camera labels, training, live predictions, check-ins, alerts, the room display, narration, advice, and proof. Running the learned work on the UNO Q forced us to keep every stage focused and observable.
 
 ## Accomplishments
 
-We built a complete local loop from measurement to action. Radio Sight collects real link data, learns a room, runs without the setup camera, identifies dead zones, distinguishes person and object patterns, tracks presence and movement, recognizes a check-in, explains events with its on-board narrator, recommends a placement change, and measures the result after the change.
+We built a complete local loop from signal change to action. Radio Sight learns a room, runs after the camera is unplugged, distinguishes person and object patterns, tracks presence and movement, recognizes a check-in, raises a no-movement alert, explains events with an on-board narrator, recommends a placement change, and records the result of that move.
 
-We are especially proud that privacy is part of the architecture, not a promise added at the end. Camera input is temporary, images are never saved, and the live system works with the camera unplugged. The Qualcomm Dragonwing platform gives us enough on-device capability to keep the experience responsive without a cloud dependency.
+Privacy is part of the architecture. The camera is temporary, images are never saved, live sensing is radio-only, and no cloud service is required for the model or display. When data is stale or a classifier link is blind, the system says so and pauses its prediction instead of claiming the room is empty.
 
-We also built proof into the project. The measured dead-zone improvement is __. The measured presence accuracy is __. The measured person-vs-object accuracy is __. The measured no-movement alert latency is __.
+We also built honest proof into the interface. Unmeasured results stay `__`, simulation never becomes a public result, and each final claim points back to the method in [PROOF.md](../PROOF.md).
 
 ## What we learned
 
-The strongest demo is not a visualization alone; it is a before-and-after result. Finding a weak area matters, but showing that a placement change improves the measured links makes the system useful.
+The strongest demo is a before-and-after result, not a visualization alone. Finding a weak area is useful; showing why it is weak, recommending a change, and measuring the same link again makes the system actionable.
 
-We learned that temporary camera supervision can teach a radio model without making the camera part of the final product. We also learned to treat calibration, uncertainty, and honest limits as product features. Radio sensing is most credible when the interface explains what the system knows, what changed, and what still needs verification.
+Temporary camera supervision can teach a radio model without making the camera part of the product. We also learned that calibration, link health, missing-data states, and honest limits deserve the same design attention as the model.
 
-Finally, shared contracts mattered as much as the model. A clear message format let the hardware, learning, interface, advisor, and measurement work advance independently and then connect.
+Shared contracts mattered as much as any individual algorithm. They let the radio, model, interface, advisor, narrator, and proof work advance independently and still connect into one room-aware experience.
 
 ## What's next
 
-Next, we want to test Radio Sight across more room shapes, materials, furniture layouts, and radio environments. We will strengthen the calibration flow, quantify uncertainty, and expand the proof report with repeatable methods for localization, latency, and coverage improvement.
+We are finishing an end-of-demo recap that turns the run’s real events into a short on-board summary, with a fact-based fallback when local generation is unavailable. We are also finishing a caregiver phone page that can chime once for a no-movement alert and return to calm after a check-in. Until those changes merge and pass their checks, they remain next steps rather than shipped claims.
 
-We also want the placement advisor to compare more candidate changes and make the reasoning behind each recommendation clearer. Longer term, Radio Sight could become a practical local tool for Wi-Fi setup, room-aware interfaces, and privacy-preserving occupancy features on edge hardware.
+After the hackathon, we want to test more room shapes, materials, furniture layouts, and radio environments. We will expand held-out proof, strengthen calibration, quantify uncertainty, and compare more candidate router placements.
+
+## Built with
+
+- Arduino UNO Q and Qualcomm Dragonwing
+- Python, NumPy, scikit-learn, OpenCV, and WebSockets
+- JSON Schema and referencing
+- Three.js, TypeScript, Vite, Vitest, and Playwright
+- glTF Transform and meshoptimizer
+- Arduino App Bricks
+
+The complete versions, licenses, and project links are in [credits.md](credits.md).
+
+## Team
+
+- **Alexander:** hardware, radio links, board services, and bring-up
+- **Izet:** on-board sensing model, router advisor, and proof
+- **Ivan:** contracts, dark room display, HUD, and web shell
+- **Alejandro:** simulation, setup teacher, narrator, docs, and demo story

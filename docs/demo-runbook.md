@@ -30,13 +30,14 @@ If the baseline or training fails, fix the failed preflight item and repeat the 
 
 ## Live demo sequence
 
-1. **Enter:** Ask the judge to walk into the marked square. Show `pred-kind` as `person`, `pred-motion` as `moving`, and the predicted zone.
-2. **Radio X-ray:** Point out the moving layer and the highlighted radio links. Describe the static layer as change since the baseline, never as a wall map.
-3. **Check-in:** Ask for the practiced back-and-forth motion without changing zones. Wait for the `checkin-toast`.
-4. **Object:** Place the demo object at the marked tray spot. Show the object marker only after the radio state reports it.
-5. **Advice:** Wait for the generated `advice-text`, then show the recommended router spot and the before value.
-6. **Router move:** Move the router to the recommended marked spot and send `router_moved` with that spot. A null prediction during the move is expected.
-7. **Verify:** Wait for the after value and the advice result. Report dead-zone improvement only from measured proof data; otherwise show `__`.
+1. **Judge walks in:** Ask the judge to enter the marked square. Show `pred-kind` as `person`, `pred-motion` as `moving`, and the predicted zone.
+2. **Radio X-ray:** Point out the fresh human layer and the highlighted radio links. Describe the static layer as change since the baseline, never as a wall map.
+3. **No-movement alert:** Ask the judge to remain still in a zone with a configured limit. Wait for the alert banner; do not call it anything else.
+4. **Wave check-in:** Ask for the practiced back-and-forth motion without changing zones. Wait for the `checkin-toast` and confirm the alert clears.
+5. **Tray vs person:** Place the metal tray at its marked spot. Show the object marker only after the radio state reports an object rather than a person.
+6. **Router advice:** Wait for the generated `advice-text`, show the recommended spot and before value, move the router there, and send `router_moved` with that spot. A null prediction during the move is expected. Wait for the after value and advice result; report improvement only from measured proof data, otherwise show `__`.
+7. **Camera unplug:** Follow the camera-unplug proof below and keep the disconnected cable visible.
+8. **Proof:** Finish on the proof strip. Every missing measurement must remain `__`.
 
 ## Camera-unplug proof
 
@@ -52,7 +53,7 @@ The camera supplies temporary setup labels only. The demo must not show or save 
 
 8. **Return home:** Put the router back at `S-home` and send `router_home`. Wait until prediction resumes or the automatic baseline finishes.
 
-For a no-movement alert demonstration, use a zone with a configured limit and remain still. Call it a `no-movement alert`. Reset it with a check-in or the reset control.
+Call the alert a `no-movement alert`. Reset it with a check-in or the reset control.
 
 ## Proof check
 
