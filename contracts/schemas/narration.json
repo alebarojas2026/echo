@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/narration.json",
-  "$comment": "Section 4.",
+  "$comment": "Section 4. model is null when source is template.",
   "$ref": "common.json#/$defs/envelope",
   "properties": {
     "type": {"const": "narration"},
@@ -10,8 +10,11 @@
     "event_kind": {"$ref": "common.json#/$defs/event_kind"},
     "gen_ms": {"type": "number", "minimum": 0},
     "source": {"$ref": "common.json#/$defs/narration_source"},
-    "model": {"type": "string"}
+    "model": {"type": ["string", "null"]}
   },
   "required": ["text", "event_id", "event_kind", "gen_ms", "source", "model"],
-  "unevaluatedProperties": false
+  "unevaluatedProperties": false,
+  "if": {"properties": {"source": {"const": "template"}}, "required": ["source"]},
+  "then": {"properties": {"model": {"type": "null"}}},
+  "else": {"properties": {"model": {"type": "string"}}}
 }

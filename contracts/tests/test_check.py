@@ -19,6 +19,7 @@ INVALID = [
     "$.motion",                     # nobody there but motion set
     "$.state",                      # cam state paused
     "$.text",                       # more than 16 words
+    "$.model",                      # llm sentence without a model
     "$.pred.probs",                 # 4 probs, not 5
     "w*h is 25",                    # xray size does not match w x h
     "$.kind",                       # unknown event kind
