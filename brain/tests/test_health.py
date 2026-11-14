@@ -77,17 +77,59 @@ def test_dropped_link_goes_stale_then_blind_then_clears():
     assert outs[15.7]["events"][0]["info"]["link"] == lost
 
 
+def wander(t):
+    """A broken link: far off base and not holding still (about +/-3 dB, a 1.3 s swing)."""
+    return -9.0 + 3.0 * np.sin(2 * np.pi * t / 1.3)
+
+
 def test_jump_off_base_with_nobody_there_is_blind():
     moved = "pi5>unoq:wifi"
 
     def level(t, link):
-        return -9.0 if link == moved and t >= 5.0 else 0.0
+        return wander(t) if link == moved and t >= 5.0 else 0.0
 
     outs = run(make(), 0, 12, level=level)
     first_blind = min(t for t, o in outs.items() if o["health"]["status"] == "blind")
     assert 8.0 <= first_blind <= 9.0          # median moves at about 5.5, then 3 s
     assert outs[11.9]["health"] == {"status": "blind", "blind": [moved], "reason": "jump"}
     assert kinds(outs) == [(first_blind, "blind_on")]
+
+
+def test_a_steady_drop_is_an_object_not_a_broken_link():
+    """#222: the tray at T1 holds pi5>unoq:wifi about 10 dB down, and the classifier says none."""
+    tray = "pi5>unoq:wifi"
+    outs = run(make(), 0, 15, level=lambda t, link: -10.0 if link == tray and t >= 5.0 else 0.0)
+    assert all(o["health"]["status"] == "ok" for o in outs.values())
+    assert kinds(outs) == [] and status(outs[14.9], tray) == "ok"
+    assert next(r["drop_db"] for r in outs[14.9]["links"] if r["id"] == tray) > 8
+
+
+def test_a_steady_rise_is_still_blind():
+    """Only a drop can be an object. A link reading 9 dB over its base is not one."""
+    moved = "pi5>unoq:wifi"
+    outs = run(make(), 0, 12, level=lambda t, link: 9.0 if link == moved and t >= 5.0 else 0.0)
+    assert outs[11.9]["health"] == {"status": "blind", "blind": [moved], "reason": "jump"}
+
+
+def test_a_jump_blind_clears_once_the_drop_settles():
+    moved = "pi5>unoq:wifi"
+
+    def level(t, link):
+        if link != moved or t < 5.0:
+            return 0.0
+        return wander(t) if t < 12.0 else -9.0   # flapping, then it holds
+
+    outs = run(make(), 0, 22, level=level)
+    assert outs[11.0]["health"]["status"] == "blind"
+    assert outs[21.9]["health"]["status"] == "ok"
+    assert [k for _, k in kinds(outs)] == ["blind_on", "blind_off"]
+
+
+def test_a_silent_beacon_still_goes_blind_within_5_s():
+    lost = "east>unoq:ble"
+    outs = run(make(), 0, 20, alive=lambda t, link: not (link == lost and 8.0 <= t < 14.0))
+    first_blind = min(t for t, o in outs.items() if o["health"]["status"] == "blind")
+    assert first_blind - 8.0 <= 5.0 and outs[first_blind]["health"]["reason"] == "rate"
 
 
 def test_jump_with_a_person_there_is_not_blind():
@@ -102,8 +144,8 @@ def test_jump_with_a_person_there_is_not_blind():
 
 @pytest.mark.parametrize("flag, value", [("router_home", False), ("baseline_running", True)])
 def test_jump_rule_is_off_while_router_away_or_baseline_running(flag, value):
-    def level(t, link):   # every pi5 link sits 9 dB off base from 5 s on
-        return -9.0 if "pi5" in link and t >= 5.0 else 0.0
+    def level(t, link):   # every pi5 link wanders about 9 dB off base from 5 s on
+        return wander(t) if "pi5" in link and t >= 5.0 else 0.0
 
     def flags(t):         # router off S-home / baseline running from 5 s to 15 s
         return {flag: value} if 5.0 <= t < 15.0 else {}
@@ -111,9 +153,9 @@ def test_jump_rule_is_off_while_router_away_or_baseline_running(flag, value):
     outs = run(make(), 0, 20, level=level, flags=flags)
     assert all(outs[t]["health"]["status"] == "ok" for t in outs if t < 15.0)
     # the rule is back at 15 s and the links are still off base: blind 3 s later
-    assert outs[17.9]["health"]["status"] == "ok"
-    assert outs[18.0]["health"]["status"] == "blind"
-    assert outs[18.0]["health"]["reason"] == "jump"
+    first_blind = min(t for t, o in outs.items() if o["health"]["status"] == "blind")
+    assert 18.0 <= first_blind <= 18.6
+    assert outs[first_blind]["health"]["reason"] == "jump"
 
 
 def test_short_jump_does_not_go_blind():
