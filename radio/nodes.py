@@ -3,6 +3,9 @@
     from radio.nodes import LINKS, BEACONS
     LINKS["east>unoq:ble"]          # {"tx": "east", "rx": "unoq", "kind": "ble", ...}
     BEACONS[b"\\xff\\xffRSE"]         # "east"
+
+LINKS is the six links of section 3 and nothing else. The optional hall links (two far beacons,
+A and B, issue #358) are in HALL_LINKS. A scanner forwards the links in HEARD, which is both.
 """
 import json
 from pathlib import Path
@@ -20,3 +23,11 @@ BEACONS = {bytes.fromhex(p["data_hex"]): p["node"] for p in DOC["beacons"]["payl
 # The nodes that listen (a scanner runs on each), and those that also advertise (the Pis).
 RECEIVERS = [node["id"] for node in DOC["nodes"] if "receiver" in node["roles"]]
 PIS = [node["id"] for node in DOC["nodes"] if "receiver" in node["roles"] and "beacon" in node["roles"]]
+
+# The optional "hall" section of nodes.json; all of this is empty when the section is missing.
+HALL = DOC.get("hall") or {}
+HALL_LINKS = {link["id"]: link for link in HALL.get("links", [])}
+BEACONS.update({bytes.fromhex(p["data_hex"]): p["node"] for p in HALL.get("beacons", [])})
+
+# Every link a scanner forwards to the bus.
+HEARD = {**LINKS, **HALL_LINKS}
