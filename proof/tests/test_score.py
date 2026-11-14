@@ -167,3 +167,33 @@ def test_sim_paths_match_the_exact_proof_schema():
                                           "images_stored", "models_on_board", "measured_at", "commit"}
     for key, fields in expected.items():
         assert set(result[key]) == fields
+
+
+def test_score_refuses_sessions_recorded_before_the_current_place(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import pytest
+
+    from proof import score as score_module
+
+    def recording(name, purpose, recv_t):
+        path = tmp_path / (name + ".jsonl")
+        path.write_text(json.dumps(dict(v=2, type="meta", recv_t=recv_t, src="live", session=name, purpose=purpose)))
+        return str(path)
+
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps({"t": 9000, "session": None, "links": {}}))
+    (tmp_path / "place.json").write_text(json.dumps({"t": 5000}))
+    assert score_module.place_start(baseline) == (5000, None)
+    monkeypatch.setattr(sys, "argv", ["score", "--train", recording("sat", "train", 1000),
+                                      "--heldout", recording("sun", "heldout", 6000),
+                                      "--baseline", str(baseline), "--output", str(tmp_path / "out.json")])
+    with pytest.raises(SystemExit):
+        score_module.main()
+    err = capsys.readouterr().err
+    assert "another place" in err and "sat" in err and "sun" not in err
+    assert not (tmp_path / "out.json").exists()
+
+    (tmp_path / "place.json").unlink()                     # no place.json: baseline.json's t decides
+    assert score_module.place_start(baseline) == (9000, None)
+    assert score_module.place_start(tmp_path / "nothing.json") == (None, None)
