@@ -8,11 +8,13 @@
   </head>
   <body class="hud-preview">
     <main id="hud"></main>
-    <script type="module">
+    <aside id="controls"></aside><script type="module">
+      import { mountHudControls } from './controls.ts'
       import { renderHud } from './index.ts'
       import { adaptHudState } from './state.ts'
       import { mockFeed } from './mock.ts'
 
+      mountHudControls(document.querySelector('#controls'), detail => document.dispatchEvent(new CustomEvent('hud-command', { detail })))
       const params = new URLSearchParams(location.search)
       const { state, proof } = mockFeed(params)
       const root = document.querySelector('#hud')
@@ -24,3 +26,4 @@
     </script>
   </body>
 </html>
+
