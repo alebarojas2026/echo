@@ -95,6 +95,7 @@ test('mounted controls send commands and proof refresh stops on disposal', async
   await page.evaluate(async () => {
     const { mountHud } = await import('/src/hud/index.ts')
     const { mockFeed } = await import('/src/hud/mock.ts')
+    document.body.innerHTML = '<main></main>'
     window.sent = []
     window.dispose = mountHud(document.querySelector('main'), {
       subscribe(fn) { fn({ state: mockFeed(new URLSearchParams()).state, stale: false }); return () => {} },
@@ -111,3 +112,4 @@ test('mounted controls send commands and proof refresh stops on disposal', async
   await page.clock.fastForward(30000)
   expect(count).toBe(2)
 })
+
