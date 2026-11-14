@@ -72,4 +72,5 @@ CONTRACTS.md, contracts/, AGENTS.md, CLAUDE.md and README.md are changed only by
   - The Pi's 5 GHz hotspot is the sensing link only. The board joins it locked to the Pi's BSSID, with power saving off.
   - The Pi (192.168.77.1) and the board's hub (192.168.77.2) are joined by Ethernet. That cable carries everything else.
   - The board has no internet once it is on the hotspot. Install things before it joins.
+- **No tape until the presentation hour.** During the build, the layout is measured and marked with loose markers. In the presentation room it gets taped, and the calibration, the 20 s baseline and the training are redone there. Never write instructions that assume tape is already on the floor.
 - **Phones as beacons:** they top out at about 10 adverts a second. ESP32s can go faster.

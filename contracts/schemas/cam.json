@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/cam.json",
+  "$comment": "Section 4. From teacher/camwatch.py every 1 s and on any change.",
+  "$ref": "common.json#/$defs/envelope",
+  "properties": {
+    "type": {"const": "cam"},
+    "state": {"$ref": "common.json#/$defs/cam_state"},
+    "fps": {"type": "number", "minimum": 0}
+  },
+  "required": ["state", "fps"],
+  "unevaluatedProperties": false
+}

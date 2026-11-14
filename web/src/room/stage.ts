@@ -1,0 +1,131 @@
+import {
+  BoxGeometry,
+  BufferGeometry,
+  Float32BufferAttribute,
+  Group,
+  LineBasicMaterial,
+  LineDashedMaterial,
+  LineSegments,
+  Mesh,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  Vector3,
+} from 'three'
+import { NODES, SQUARE_M, ZONES, nodePosition, toScene, type NodeId, type Vec3 } from './frame'
+import { CARD, INK, LINE } from './palette'
+import type { RoomView } from './view'
+
+// The still parts of the room: floor, the 2 x 2 m square and its zones, two back walls, and the four nodes.
+
+const MARGIN_M = 0.5
+const WALL_M = 1.1
+
+export function v3(p: Vec3): Vector3 {
+  const [x, y, z] = toScene(p)
+  return new Vector3(x, y, z)
+}
+
+export function segments(pairs: Vec3[], material: LineBasicMaterial | LineDashedMaterial): LineSegments {
+  const pos: number[] = []
+  for (const p of pairs) pos.push(...toScene(p))
+  const geom = new BufferGeometry()
+  geom.setAttribute('position', new Float32BufferAttribute(pos, 3))
+  const lines = new LineSegments(geom, material)
+  if (material instanceof LineDashedMaterial) lines.computeLineDistances()
+  return lines
+}
+
+function buildShell(): Group {
+  const g = new Group()
+  const lo = -MARGIN_M
+  const hi = SQUARE_M + MARGIN_M
+  const size = hi - lo
+  const mid = SQUARE_M / 2
+  const card = new MeshBasicMaterial({ color: CARD })
+
+  const floor = new Mesh(new PlaneGeometry(size, size), card)
+  floor.rotation.x = -Math.PI / 2
+  floor.position.set(0, -0.002, 0)
+  g.add(floor)
+
+  const north = new Mesh(new PlaneGeometry(size, WALL_M), card)
+  north.position.copy(v3([mid, hi, WALL_M / 2]))
+  g.add(north)
+
+  const west = new Mesh(new PlaneGeometry(size, WALL_M), card)
+  west.rotation.y = Math.PI / 2
+  west.position.copy(v3([lo, mid, WALL_M / 2]))
+  g.add(west)
+
+  // Floor edge, wall tops and the three wall corners.
+  const w = WALL_M
+  const walls: Vec3[] = [[lo, hi, w], [hi, hi, w], [lo, lo, w], [lo, hi, w], [lo, hi, 0], [lo, hi, w],
+    [hi, hi, 0], [hi, hi, w], [lo, lo, 0], [lo, lo, w]]
+  const floorEdge = outline([[lo, lo, 0], [hi, lo, 0], [hi, hi, 0], [lo, hi, 0]])
+  g.add(segments([...floorEdge, ...walls], new LineBasicMaterial({ color: LINE })))
+
+  // The sensing square and its four zones.
+  const s = SQUARE_M
+  g.add(segments(outline([[0, 0, 0], [s, 0, 0], [s, s, 0], [0, s, 0]]), new LineBasicMaterial({ color: INK })))
+  const dash = new LineDashedMaterial({ color: LINE, dashSize: 0.06, gapSize: 0.05 })
+  g.add(segments([[mid, 0, 0], [mid, s, 0], [0, mid, 0], [s, mid, 0]], dash))
+  return g
+}
+
+/** Segment pairs that join the points in order and close the loop. */
+function outline(pts: Vec3[]): Vec3[] {
+  return pts.flatMap((p, i) => [p, pts[(i + 1) % pts.length]])
+}
+
+interface NodeMesh {
+  id: NodeId
+  head: Mesh
+  post: LineSegments
+  label: HTMLElement
+}
+
+export class Stage {
+  readonly group = new Group()
+  private readonly nodes: NodeMesh[] = []
+
+  constructor(private readonly view: RoomView) {
+    this.group.add(buildShell())
+
+    // Zone names sit in each zone's outer corner, clear of the links that cross the middle.
+    const near = 0.3
+    const far = SQUARE_M - near
+    const spots: Record<number, [number, number]> = { 1: [near, far], 2: [far, far], 3: [near, near], 4: [far, near] }
+    for (const z of ZONES) {
+      const [x, y] = spots[z.id]
+      view.addLabel(`${z.id} ${z.name}`, v3([x, y, 0]), 'room-label--zone')
+    }
+
+    const headGeom = new BoxGeometry(0.08, 0.08, 0.08)
+    const ink = new MeshBasicMaterial({ color: INK })
+    const postMat = new LineBasicMaterial({ color: LINE })
+    const postGeom = new BufferGeometry()
+    postGeom.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3))
+    for (const info of Object.values(NODES)) {
+      const head = new Mesh(headGeom, ink)
+      const post = new LineSegments(postGeom, postMat)
+      this.group.add(head, post)
+      const label = view.addLabel(`${info.name} · ${info.role}`, new Vector3(), 'room-label--node')
+      this.nodes.push({ id: info.id, head, post, label })
+    }
+    this.placeNodes('S-home')
+    view.scene.add(this.group)
+  }
+
+  /** Puts every node at its spot; the router follows state.router. */
+  placeNodes(router: string | null | undefined) {
+    for (const n of this.nodes) {
+      const p = nodePosition(n.id, router)
+      const top = v3(p)
+      n.head.position.copy(top)
+      n.post.position.copy(v3([p[0], p[1], 0]))
+      n.post.scale.y = p[2]
+      this.view.moveLabel(n.label, top.clone().setY(top.y + 0.12))
+    }
+    this.view.requestRender()
+  }
+}
