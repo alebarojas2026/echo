@@ -38,3 +38,14 @@ test('shows blind while the feed is fresh, then no data when it goes stale', asy
   await expect(page.getByTestId('sensor-blind')).toBeHidden()
   await expect(page.getByTestId('pred-kind')).toHaveText('__')
 })
+test('reads proof.json and preserves missing metrics and measured zero', async ({ page }) => {
+  await page.route('**/proof.json', route => route.fulfill({ json: {
+    zone: { correct: null, total: null }, person_vs_object: null, train_s: null,
+    ms_per_decision: { p50: null, p95: null }, watts: { radio_only: null },
+    bytes_out: null, images_stored: null, models_on_board: 0,
+  } }))
+  await page.goto(path)
+  await expect(page.getByTestId('models-count')).toHaveText('0')
+  for (const id of ['zone-score', 'person-object-score', 'train-seconds', 'ms-per-decision',
+    'watts', 'bytes-out', 'images-stored']) await expect(page.getByTestId(id)).toHaveText('__')
+})

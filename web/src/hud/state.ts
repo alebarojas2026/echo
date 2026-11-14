@@ -62,8 +62,8 @@ export function adaptHudState(state: ScreenState, proof: Proof | null, receivedA
     proof: {
       agreement: agreement(proof?.zone),
       personObjectScore: agreement(proof?.person_vs_object),
-      trainSeconds: proof?.train_s ?? state.model.train_s,
-      decisionMs: proof?.ms_per_decision?.p50 ?? state.model.ms_per_decision,
+      trainSeconds: proof ? proof.train_s : state.model.train_s,
+      decisionMs: proof ? proof.ms_per_decision?.p50 ?? null : state.model.ms_per_decision,
       watts: proof?.watts?.radio_only ?? null,
       bytesOut: proof?.bytes_out ?? null,
       images: proof?.images_stored ?? null,
