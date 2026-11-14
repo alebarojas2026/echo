@@ -1,4 +1,5 @@
 // Page wiring for the caregiver's phone: the brain's state socket in, one big card out, a chime on the alert.
+import { swap } from '../fade.js'
 import { card, checkinText, isState, MOCKS, shouldChime, wsUrl } from './card.js'
 
 const $ = (id) => document.getElementById(id)
@@ -24,25 +25,6 @@ function chime() {
     tone.start(now + i * 0.28)
     tone.stop(now + i * 0.28 + 0.65)
   }
-}
-
-// Text changes like the screen's: the old text fades out in 100 ms, the new one fades in over 140 ms,
-// 40 ms later, in the same spot. Opacity and transform only. Nothing moves when the text is the same,
-// and a ticking count (only its digits change) is swapped in place.
-const shown = new Map()
-function swap(el, text, render = () => { el.textContent = text }) {
-  const before = shown.get(el)
-  if (before === text) return
-  shown.set(el, text)
-  el.getAnimations().forEach((a) => a.cancel())
-  const quiet = before === undefined || before.replace(/\d+/g, '#') === text.replace(/\d+/g, '#') ||
-    matchMedia('(prefers-reduced-motion: reduce)').matches
-  if (quiet) return render()
-  el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100, fill: 'forwards' }).finished.then(() => {
-    if (shown.get(el) !== text) return
-    render()
-    el.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 140, delay: 40, fill: 'both' })
-  }, () => {})
 }
 
 function show() {
