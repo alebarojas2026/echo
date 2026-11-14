@@ -115,3 +115,16 @@ the numbers into the budget below.
 | RAM | Model 429 MB, locked in RAM (`--load-mode mmap+mlock`, so a busy disk can't page it out), a 1024-token KV cache of about 12 MB, and llama.cpp's working buffers. `MemoryMax=1G` caps the service. Measured RSS: __ MB. |
 | Time | Event to narration: __ ms. Limit 8000 ms. |
 | Disk | The 429 MB model plus the llama.cpp source and build in /opt/rs/llama.cpp. |
+
+## End-of-demo recap
+
+When the screen sends `reset` between judges, the narrator turns the brain's events since the
+last reset into a short list of facts with times and zone names, and the on-board model writes a
+recap of at most 3 sentences and 45 words (`narrator/recap.py`). It goes to the bus as a
+`narration` with `event_kind` `recap`, with `gen_ms` recorded as for any sentence. A recap built
+directly from the same facts is sent instead when the model is slow (over 25 s), unreachable, too
+long, adds a number that is not in the facts, or uses a banned word. Signal levels appear only when
+an `advice_result` event carried them. A reset with nothing to tell sends nothing.
+
+The contract schema does not yet allow `recap` or 45 words in a narration (contract issue #265),
+so `contracts.check` reports the recap message until that is decided.
