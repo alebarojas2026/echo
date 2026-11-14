@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import socket
+import time
 from pathlib import Path
 
 from websockets.asyncio.server import broadcast, serve as ws_serve
@@ -47,6 +48,17 @@ def board_stats() -> dict:
             "cpu_pct": pct}
 
 
+_complained = {}
+
+
+def _complain(text, *args, every_s=10.0):
+    """Log an unexpected error with its traceback, at most once per every_s for each text."""
+    now = time.monotonic()
+    if now - _complained.get(text, -every_s) >= every_s:
+        _complained[text] = now
+        log.exception(text, *args)
+
+
 class _BusIn(asyncio.DatagramProtocol):
     def __init__(self, brain: Brain):
         self.brain = brain
@@ -57,7 +69,10 @@ class _BusIn(asyncio.DatagramProtocol):
         except (ValueError, UnicodeDecodeError):
             return
         if isinstance(msg, dict) and msg.get("v") == 2:   # section 1: check v and type at runtime
-            self.brain.on_message(msg)
+            try:
+                self.brain.on_message(msg)
+            except Exception:   # one malformed message (a reading with no dbm, say) is dropped, not fatal
+                _complain("a bus message could not be used: %.200r", msg)
 
 
 async def serve(handler, host, port):
@@ -163,10 +178,15 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
     stop = stop or asyncio.Event()
     try:
         while not stop.is_set():
-            state = brain.state()   # may emit events; they carry lower seqs, so they go out first
-            for msg in [*brain.pop_events(), state]:
-                # broadcast never waits: a screen whose buffer is full is skipped, not waited for.
-                broadcast(clients, json.dumps(msg, separators=(",", ":")))
+            try:
+                state = brain.state()   # may emit events; they carry lower seqs, so they go out first
+                for msg in [*brain.pop_events(), state]:
+                    # broadcast never waits: a screen whose buffer is full is skipped, not waited for.
+                    broadcast(clients, json.dumps(msg, separators=(",", ":")))
+            except Exception:
+                # A tick that fails sends nothing (the screen shows NO DATA after 1 s) and the
+                # next one tries again. Timers, the model and the recordings are all kept.
+                _complain("a state tick failed")
             await asyncio.sleep(STATE_EVERY_S)
     finally:
         for task in retries:
