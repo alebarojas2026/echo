@@ -34,7 +34,7 @@ def test_all_good():
     run = fake_run(GOOD)
     assert check.check_tools(which=lambda tool: "/usr/bin/" + tool)[0]
     assert check.check_ethernet(run) == (True, "Ethernet: 192.168.77.2/24 up, the Pi answers")
-    assert check.check_wifi("wlan0", run) == (True, "Wi-Fi: wlan0 joined, 10.42.0.1 answers, power saving off")
+    assert check.check_wifi("wlan0", run, iw="iw") == (True, "Wi-Fi: wlan0 joined, 10.42.0.1 answers, power saving off")
     assert check.check_services(run)[0]
 
 
@@ -59,7 +59,7 @@ def test_ethernet_failures(broken, says):
     ({"iw dev wlan0 get power_save": (0, "Power save: on\n")}, "power saving isn't off"),
 ])
 def test_wifi_failures(broken, says):
-    ok, text = check.check_wifi("wlan0", fake_run({**GOOD, **broken}))
+    ok, text = check.check_wifi("wlan0", fake_run({**GOOD, **broken}), iw="iw")
     assert not ok and says in text
 
 

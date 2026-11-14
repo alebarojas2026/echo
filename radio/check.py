@@ -10,13 +10,12 @@ while another recording is open: a capture would end it.
 """
 import argparse
 import os
-import shutil
 import subprocess
 import sys
 import time
 
 from . import link_stats
-from .wifi_rssi import REPO, load_env_file
+from .wifi_rssi import REPO, find_tool, iw_path, load_env_file
 from .nodes import LINKS
 
 UNITS = ("radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan")
@@ -31,7 +30,7 @@ def sh(cmd) -> tuple[int, str]:
         return 127, ""
 
 
-def check_tools(which=shutil.which):
+def check_tools(which=find_tool):
     missing = [tool for tool in ("iw", "ping", "nmcli") if which(tool) is None]
     if missing:
         return False, (f"tools: {', '.join(missing)} missing -> sudo apt-get install -y iw iputils-ping "
@@ -48,8 +47,9 @@ def check_ethernet(run=sh):
     return True, "Ethernet: 192.168.77.2/24 up, the Pi answers"
 
 
-def check_wifi(iface: str, run=sh):
-    _, link = run(["iw", "dev", iface, "link"])
+def check_wifi(iface: str, run=sh, iw=None):
+    iw = iw or iw_path()
+    _, link = run([iw, "dev", iface, "link"])
     if "Connected to" not in link:
         return False, f"Wi-Fi: {iface} isn't joined to the Pi's hotspot -> sudo bash radio/wifi_join.sh"
     _, addr = run(["ip", "-4", "-o", "addr", "show", "dev", iface])
@@ -57,7 +57,7 @@ def check_wifi(iface: str, run=sh):
         return False, f"Wi-Fi: {iface} is joined but has no 10.42.0.x address -> check the Pi's hotspot (pi/ap.sh)"
     if run(["ping", "-c", "2", "-W", "1", "10.42.0.1"])[0] != 0:
         return False, "Wi-Fi: 10.42.0.1 doesn't answer, so the reader can't make the Pi send frames"
-    _, save = run(["iw", "dev", iface, "get", "power_save"])
+    _, save = run([iw, "dev", iface, "get", "power_save"])
     if "off" not in save.lower():
         return False, f"Wi-Fi: power saving isn't off on {iface} -> sudo bash radio/wifi_join.sh"
     return True, f"Wi-Fi: {iface} joined, 10.42.0.1 answers, power saving off"
