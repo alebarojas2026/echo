@@ -5,10 +5,10 @@ Reads the Gate 2 table in ``radio/GATE.md`` and prints a pass/fail summary.
 Usage (on the board, after a live run):
     python -m radio.report_hci
 
-Pass criteria (the lowest rate written for each beacon):
-    pi5:  >= 20 adverts/s
-    east: >= 7 adverts/s
-    west: >= 7 adverts/s
+Pass criteria (the lowest rate written for each link):
+    pi5>unoq:ble:                  >= 20 adverts/s
+    east>unoq:ble, west>unoq:ble:  >= 7 adverts/s
+    east>pi5:ble, west>pi5:ble:    >= 7 adverts/s
 
 The verdict comes from the rates alone. One row per run is fine: the lowest one counts.
 The Result column is only cross-checked, so it can stay `__`.
@@ -23,11 +23,13 @@ from pathlib import Path
 GATE_PATH = Path(__file__).resolve().parent / "GATE.md"
 
 MIN_RATES: dict[str, float] = {
-    "pi5": 20.0,
-    "east": 7.0,
-    "west": 7.0,
+    "pi5>unoq:ble": 20.0,
+    "east>unoq:ble": 7.0,
+    "west>unoq:ble": 7.0,
+    "east>pi5:ble": 7.0,
+    "west>pi5:ble": 7.0,
 }
-NODE_IDS = {"pi5": "S", "east": "E", "west": "W"}
+BEACON_OF = {link: {"pi5": "S", "east": "E", "west": "W"}[link.split(">")[0]] for link in MIN_RATES}
 UNMEASURED = "__"
 
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
@@ -40,7 +42,7 @@ def gate2_section(text: str) -> str:
 
 
 def parse_gate2_md(text: str) -> dict[str, list[dict]]:
-    """Every Gate 2 table row, by beacon: [{node_id, rate, rate_text, result}, ...].
+    """Every Gate 2 table row, by link id: [{beacon, rate, rate_text, result}, ...].
 
     rate is a float, or None when the cell is `__` or can't be read (rate_text keeps what was written).
     """
@@ -50,13 +52,13 @@ def parse_gate2_md(text: str) -> dict[str, list[dict]]:
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip("|").split("|")]
-        beacon = cells[0].lower()
-        if beacon not in MIN_RATES or len(cells) < 3:
+        link = cells[0].strip("`").lower()
+        if link not in MIN_RATES or len(cells) < 3:
             continue
         rate_text = cells[2]
         rate = float(rate_text) if _NUMBER.fullmatch(rate_text) else None
-        rows.setdefault(beacon, []).append({
-            "node_id": cells[1].upper(),
+        rows.setdefault(link, []).append({
+            "beacon": cells[1].upper(),
             "rate": rate,
             "rate_text": rate_text,
             "result": cells[3].upper() if len(cells) > 3 else UNMEASURED,
@@ -72,35 +74,35 @@ def lowest(entries: list[dict]) -> float | None:
 def check(rows: dict[str, list[dict]]) -> list[str]:
     """Return a list of failure reasons, empty means PASS."""
     failures: list[str] = []
-    for beacon, min_rate in MIN_RATES.items():
-        entries = rows.get(beacon)
+    for link, min_rate in MIN_RATES.items():
+        entries = rows.get(link)
         if not entries:
-            failures.append(f"beacon '{beacon}' not found in Gate 2 table")
+            failures.append(f"{link} not found in the Gate 2 table")
             continue
         for e in entries:
-            if e["node_id"] != NODE_IDS[beacon]:
-                failures.append(f"beacon '{beacon}': node ID is '{e['node_id']}', should be '{NODE_IDS[beacon]}'")
+            if e["beacon"] != BEACON_OF[link]:
+                failures.append(f"{link}: beacon is '{e['beacon']}', should be '{BEACON_OF[link]}'")
             if e["rate"] is None and e["rate_text"] != UNMEASURED:
-                failures.append(f"beacon '{beacon}': can't read rate '{e['rate_text']}' (write a bare number)")
+                failures.append(f"{link}: can't read rate '{e['rate_text']}' (write a bare number)")
         rate = lowest(entries)
         if rate is None:
             if all(e["rate_text"] == UNMEASURED for e in entries):
-                failures.append(f"beacon '{beacon}': not yet measured")
+                failures.append(f"{link}: not yet measured")
         elif rate < min_rate:
-            failures.append(f"beacon '{beacon}': rate {rate:.1f} < {min_rate:.1f} adverts/s")
+            failures.append(f"{link}: rate {rate:.1f} < {min_rate:.1f} adverts/s")
     return failures
 
 
 def warnings(rows: dict[str, list[dict]]) -> list[str]:
     """Rows whose hand-written Result disagrees with their rate. These don't change the verdict."""
     out = []
-    for beacon, entries in rows.items():
+    for link, entries in rows.items():
         for e in entries:
             if e["rate"] is None or e["result"] not in ("PASS", "FAIL"):
                 continue
-            should = "PASS" if e["rate"] >= MIN_RATES[beacon] else "FAIL"
+            should = "PASS" if e["rate"] >= MIN_RATES[link] else "FAIL"
             if e["result"] != should:
-                out.append(f"beacon '{beacon}': row with {e['rate']:.1f}/s says {e['result']}, the rate says {should}")
+                out.append(f"{link}: row with {e['rate']:.1f}/s says {e['result']}, the rate says {should}")
     return out
 
 
