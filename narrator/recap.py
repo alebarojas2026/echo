@@ -1,5 +1,7 @@
 """What the room noticed: a short recap at the end of each judge's demo, written on the board.
 
+    python -m narrator.recap          # on the board: one recap of a sample demo, timed; nothing is sent
+
 The narrator keeps the brain's events since the last reset. When the `reset` event arrives (the
 screen's reset between judges), those events become a plain list of facts, the on-board model
 turns them into at most 3 sentences and 45 words, and the result goes to the bus as a
@@ -8,7 +10,10 @@ that is not in the facts or uses a banned word, a recap built from the same fact
 """
 from __future__ import annotations
 
+import argparse
+import json
 import re
+import sys
 
 from narrator import narrate as n
 
@@ -180,3 +185,38 @@ class Recap:
         if nar.warm:   # the recap's prompt took the model's one cache slot: put the
             nar.warm()     # sentence prompt back before the next judge's first sentence
         return msg
+
+
+# A demo as the brain reports it (no signal levels, so nothing here can turn into a made-up number).
+SAMPLE = [("enter", {"zone": 3}), ("zone_change", {"zone": 4}), ("zone_change", {"zone": 2}),
+          ("zone_change", {"zone": 1}), ("zone_change", {"zone": 4}), ("alert_on", {"zone": 4}),
+          ("checkin", {"zone": 4}), ("alert_off", {"zone": 4}), ("cam_off", {}), ("exit", {"zone": 4})]
+
+
+def sample(now_ms: int) -> list:
+    """SAMPLE as brain events, 6 s apart, ending now."""
+    start = now_ms - 6000 * len(SAMPLE)
+    return [{"v": 2, "type": "event", "t": start + 6000 * i, "seq": i + 1, "src": "sim", "id": f"s{i + 1}",
+             "kind": kind, "info": info} for i, (kind, info) in enumerate(SAMPLE)]
+
+
+def main(argv=None) -> int:
+    """Write one recap of the sample demo with the board's model and print it. Exit 1 if the
+    template had to be used (the reason is on stderr), so this doubles as the recap's gate."""
+    p = argparse.ArgumentParser(description="One recap of a sample demo from the on-board model, timed.")
+    p.add_argument("--llm", default=n.LLM_URL, help="llama-server base URL")
+    p.add_argument("--timeout", type=float, default=TIMEOUT_S, help="seconds before the template is used")
+    args = p.parse_args(argv)
+    nar = n.Narrator(lambda m: ("", None), send=lambda msg: None)
+    rc = Recap(nar, n.LlamaServer(args.llm, timeout_s=args.timeout, max_tokens=MAX_TOKENS), timeout_s=args.timeout)
+    events = sample(nar.clock())
+    reset = {"v": 2, "type": "event", "t": nar.clock(), "seq": 99, "src": "sim", "id": "reset", "kind": "reset", "info": {}}
+    msg = rc.write(events, reset)
+    print(json.dumps(msg), flush=True)
+    print(f"recap: {msg['source']} in {msg['gen_ms']} ms (limit {args.timeout * 1000:.0f} ms), "
+          f"{len(msg['text'].split())} words", file=sys.stderr, flush=True)
+    return 0 if msg["source"] == "llm" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
