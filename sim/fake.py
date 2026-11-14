@@ -30,6 +30,7 @@ SIZE = 2.0
 NODES = {"unoq": (1.0, 2.0), "pi5": (1.0, 0.0), "east": (2.0, 1.0), "west": (0.0, 1.0)}
 LINKS = [("pi5", "unoq", "wifi"), ("pi5", "unoq", "ble"), ("east", "unoq", "ble"),
          ("west", "unoq", "ble"), ("east", "pi5", "ble"), ("west", "pi5", "ble")]  # (tx, rx, kind)
+ROUTER_SPOTS = {"S-home": (1.0, 0.0), "S-W30": (0.7, 0.0), "S-E30": (1.3, 0.0)}
 PATHS_DIR = Path(__file__).parent / "paths"
 
 REF_DBM = {"wifi": -40.0, "ble": -55.0}  # empty-room level at 1 m
@@ -46,22 +47,35 @@ def zone_of(x: float, y: float) -> int:
     return 1 + int(x >= SIZE / 2) + 2 * int(y < SIZE / 2)
 
 
-def baseline(tx: str, rx: str, kind: str) -> float:
+def baseline(tx: str, rx: str, kind: str, nodes: dict = NODES) -> float:
     """Empty-room level in dBm (log-distance path loss)."""
-    return REF_DBM[kind] - 20.0 * math.log10(math.dist(NODES[tx], NODES[rx]))
+    return REF_DBM[kind] - 20.0 * math.log10(math.dist(nodes[tx], nodes[rx]))
 
 
-def dist_to_link(p, a: str, b: str) -> float:
-    """Distance from point p to the segment between nodes a and b."""
-    (ax, ay), (bx, by) = NODES[a], NODES[b]
+def dist_to_link(p, a, b) -> float:
+    """Distance from point p to the segment between points a and b."""
+    (ax, ay), (bx, by) = a, b
     dx, dy = bx - ax, by - ay
     f = ((p[0] - ax) * dx + (p[1] - ay) * dy) / (dx * dx + dy * dy)
     f = min(1.0, max(0.0, f))
     return math.dist(p, (ax + f * dx, ay + f * dy))
 
 
-def drop(p, a: str, b: str, peak_db: float, width_m: float) -> float:
+def drop(p, a, b, peak_db: float, width_m: float) -> float:
     return peak_db * math.exp(-((dist_to_link(p, a, b) / width_m) ** 2))
+
+
+def active(item: dict, t: float) -> bool:
+    """True while t is inside the item's optional [t_on, t_off) window."""
+    return item.get("t_on", 0.0) <= t < item.get("t_off", math.inf)
+
+
+def latest(steps: list, t: float, key: str, default):
+    """Value of `key` in the last step at or before t (steps are sorted by t)."""
+    for step in steps or []:
+        if step["t"] <= t:
+            default = step[key]
+    return default
 
 
 def position(waypoints: list, t: float):
@@ -101,27 +115,38 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
     """Yield internal events (see wire.py) for a scripted path, in time order."""
     rng = random.Random(seed)
     waypoints = path.get("person") or []
-    objects = path.get("objects") or []
     label_every = max(1, round(rate / label_rate))
     meta = {"session": "sim-" + path.get("name", "path"), "purpose": "demo", "walker": "sim"}
     yield {"type": "meta", "t": 0.0, **meta, **path.get("meta", {})}
+    cam_was = None
     for i in range(int(path["duration_s"] * rate)):
         t = round(i / rate, 3)
         pos = position(waypoints, t)
         moving = is_moving(waypoints, t)
+        nodes = {**NODES, "pi5": ROUTER_SPOTS[latest(path.get("router"), t, "spot", "S-home")]}
         for tx, rx, kind in LINKS:
-            dbm = baseline(tx, rx, kind) + rng.gauss(0.0, noise_db)
-            for o in objects:  # static: the same drop on every reading
-                dbm -= drop((o["x"], o["y"]), tx, rx,
-                            o.get("drop_db", 6.0), o.get("width_m", 0.25))
+            link = link_id(tx, rx, kind)
+            if any(active(o, t) and (o.get("link") == link or o.get("node") in (tx, rx))
+                   for o in path.get("outages") or []):
+                continue  # this link is silent: nothing is sent at all
+            dbm = baseline(tx, rx, kind, nodes) + rng.gauss(0.0, noise_db)
+            for o in path.get("objects") or []:  # static: the same drop on every reading
+                if active(o, t):
+                    dbm -= drop((o["x"], o["y"]), nodes[tx], nodes[rx],
+                                o.get("drop_db", 6.0), o.get("width_m", 0.25))
+            for w in path.get("waves") or []:  # a hand waving in one link's path
+                if active(w, t) and w.get("link", "pi5>unoq:wifi") == link:
+                    dbm += w.get("amp_db", 4.0) * math.sin(
+                        2 * math.pi * w.get("hz", 2.0) * (t - w.get("t_on", 0.0)))
             if pos:
-                d = drop(pos, tx, rx, PERSON_DROP_DB, PERSON_WIDTH_M)
+                d = drop(pos, nodes[tx], nodes[rx], PERSON_DROP_DB, PERSON_WIDTH_M)
                 if moving:  # a moving body makes the drop flutter
                     d *= max(0.0, 1.0 + rng.gauss(0.0, 0.25))
                 dbm -= d
-            yield {"type": "rssi", "t": t, "link": link_id(tx, rx, kind),
+            yield {"type": "rssi", "t": t, "link": link,
                    "kind": kind, "tx": tx, "rx": rx, "dbm": round(dbm)}
-        if i % label_every == 0:  # one label per camera frame, empty frames too
+        cam = latest(path.get("camera"), t, "state", "on")
+        if cam == "on" and i % label_every == 0:  # one label per camera frame, empty frames too
             yield {"type": "label", "t": t, "frame": i // label_every,
                    "mode": path.get("label_mode", "person"),
                    "persons_in_frame": int(pos is not None), "present": pos is not None,
@@ -129,8 +154,10 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
                    "foot_m": [round(pos[0], 2), round(pos[1], 2)] if pos else None,
                    "motion": ("moving" if moving else "still") if pos else None,
                    "conf": round(rng.uniform(0.75, 0.95), 2), "clipped": False}
-        if i % round(rate) == 0:  # camera watch: once a second
-            yield {"type": "cam", "t": t, "state": "on", "fps": rate / label_every}
+        if i % round(rate) == 0 or cam != cam_was:  # camera watch: every second and on any change
+            yield {"type": "cam", "t": t, "state": cam,
+                   "fps": rate / label_every if cam == "on" else 0.0}
+        cam_was = cam
 
 
 def load_path(name_or_file: str) -> dict:
