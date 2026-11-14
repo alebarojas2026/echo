@@ -829,3 +829,16 @@ def _fitted(fit):
     """Run a fit and hand back the sessions it read (the closure's own list)."""
     fit()
     return next(c.cell_contents for c in fit.__closure__ if isinstance(c.cell_contents, list))
+
+
+def test_one_tray_gives_one_advice_that_does_not_flip_between_spots():
+    """A tray on the centre line scores the two spots the same; noise must not flip the sentence."""
+    brain, feed = taught()
+    for seed in (52, 60, 61):
+        brain.pop_events()
+        states = []
+        feed.play("tray_t1", seed=seed, states=states)
+        shown = [s["advice"] for _, s in states if s["advice"]]
+        assert len(shown) > 150                                  # it shows for most of the 30 s
+        assert len({(a["id"], a["to_spot"], a["text"]) for a in shown}) == 1
+        assert [e["kind"] for e in brain.pop_events()].count("advice") == 1
