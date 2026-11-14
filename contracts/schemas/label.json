@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/label.json",
+  "$comment": "Section 4. One per processed camera frame. present:false -> zone 0 and foot_m, motion null. clipped:true -> zone, foot_m null.",
+  "$ref": "common.json#/$defs/envelope",
+  "properties": {
+    "type": {"const": "label"},
+    "frame": {"type": "integer", "minimum": 0},
+    "mode": {"$ref": "common.json#/$defs/label_mode"},
+    "persons_in_frame": {"type": "integer", "minimum": 0},
+    "present": {"type": "boolean"},
+    "zone": {"type": ["integer", "null"], "minimum": 0, "maximum": 4},
+    "foot_m": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "motion": {"enum": ["moving", "still", null]},
+    "conf": {"type": "number", "minimum": 0, "maximum": 1},
+    "clipped": {"type": "boolean"}
+  },
+  "required": ["frame", "mode", "persons_in_frame", "present", "zone", "foot_m", "motion", "conf", "clipped"],
+  "unevaluatedProperties": false,
+  "allOf": [
+    {"if": {"properties": {"present": {"const": false}}, "required": ["present"]},
+     "then": {"properties": {"zone": {"const": 0}, "foot_m": {"type": "null"}, "motion": {"type": "null"}}},
+     "else": {"properties": {"motion": {"$ref": "common.json#/$defs/motion"}}}},
+    {"if": {"properties": {"clipped": {"const": true}}, "required": ["clipped"]},
+     "then": {"properties": {"zone": {"type": "null"}, "foot_m": {"type": "null"}}}}
+  ]
+}

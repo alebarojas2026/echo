@@ -1,0 +1,6 @@
+{"v":2,"type":"cmd","cmd":"train","args":{}}
+{"v":2,"type":"cmd","cmd":"record_start","args":{"session":"s12","purpose":"heldout","walker":"w3"}}
+{"v":2,"type":"cmd","cmd":"label_mode","args":{"mode":"object"}}
+{"v":2,"type":"cmd","cmd":"router_moved","args":{"spot":"S-W30"}}
+{"v":2,"type":"cmd","cmd":"truth","args":{"zone":3}}
+{"v":2,"type":"cmd","cmd":"reset","args":{}}
