@@ -17,6 +17,7 @@ from collections import deque
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
+from advisor.advise import advise
 from brain import features as F
 from brain.alert import Watch
 from brain.health import Health
@@ -29,6 +30,11 @@ NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 CAM_SILENT_MS = 3_000
 TEACHER_FRESH_MS = 1_000
 LINK_FRESH_MS = 1_000
+WIFI = "pi5>unoq:wifi"
+SETTLE_MS = 3_000        # after router_home, pi5 links must sit near base this long
+SETTLE_DB = 1.0          # ... within this of base, else an automatic baseline runs
+ADVICE_MEDIAN_MS = 3_000 # before_dbm and after_dbm are medians over this long
+AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 LABEL_MODES = ("person", "object", "off")
@@ -55,6 +61,13 @@ class Brain:
         self._last_seen: Dict[str, int] = {}  # link -> recv_t of its last reading
         self._last_dbm: Dict[str, float] = {} # link -> the last dbm we sent (or its last reading)
         self._health_ok = True
+        self.nodes = nodes
+        self._recent: Dict[str, deque] = {link: deque() for link in links}   # (recv_t, dbm), last 10 s
+        self.advice: Optional[dict] = None
+        self._moved_t: Optional[int] = None       # when router_moved came
+        self.settle: Optional[int] = None         # when router_home came, while its 3 s check runs
+        self.recalibrating = False                # the automatic baseline after a failed check
+        self._old_base: Dict[str, float] = {}
         self.sessions_dir = Path(sessions_dir) if sessions_dir else None
         self.want_session: Optional[str] = None   # the id from record_start
         self.raw_kind: Optional[str] = None   # the classifier's kind, even while pred is withheld
@@ -128,6 +141,10 @@ class Brain:
                 self._heard.add(link)
                 self._last_seen[link] = t
                 self._last_dbm.setdefault(link, dbm)
+                recent = self._recent[link]
+                recent.append((t, dbm))
+                while recent[0][0] < t - 10_000:
+                    recent.popleft()
                 if link in self.base:
                     self.xray.add(link, t, self.base[link] - dbm)
                 if self.capture and self.capture["start"] is not None:
@@ -189,7 +206,7 @@ class Brain:
     def _cmd_reset(self, args):
         """Between judges: clear the alert, still timer, check-in, advice and narration."""
         self.watch.reset()
-        self.narration = None
+        self.narration = self.advice = None
         self._watch_events()
         self.emit("reset", {})
 
@@ -223,12 +240,60 @@ class Brain:
     def _cmd_router_moved(self, args):
         self.router = args.get("spot") or "moved"
         self._move_router(self.router)
-        self.emit("router_moved", {"spot": self.router})
+        self._moved_t, self.settle = self.now(), None
+        before = self.advice["before_dbm"] if self.advice else self._median(WIFI, self.now() - ADVICE_MEDIAN_MS)
+        self.emit("router_moved", {"link": WIFI, "before_dbm": before})   # before_dbm is frozen from here
 
     def _cmd_router_home(self, args):
+        """Section 6: the tray is off and the Pi is back on S-home before this arrives."""
         self.router = HOME
         self._move_router(HOME)
-        self.emit("router_home", {})
+        self.xray.reset()   # what it held was frozen while pred was null; the tray is off by now
+        self.advice = self._moved_t = None
+        self.settle = self.now() if self.base else None   # pred stays null while the 3 s check runs
+        self.emit("router_home", {"link": WIFI})
+
+    def _median(self, link: str, t0: int, t1: Optional[int] = None) -> Optional[float]:
+        """Median dBm of a link's readings with t0 <= recv_t < t1 (t1 None = up to now)."""
+        vals = [d for t, d in self._recent[link] if t >= t0 and (t1 is None or t < t1)]
+        return round(statistics.median(vals), 1) if vals else None
+
+    def _check_settle(self, now) -> None:
+        """3 s after router_home: every pi5 link within 1 dB of base, or recalibrate."""
+        if self.settle is None or now - self.settle < SETTLE_MS:
+            return
+        start, self.settle = self.settle, None
+        for link in self.links:
+            if "pi5" in link:
+                m = self._median(link, start)
+                if m is None or abs(m - self.base[link]) > SETTLE_DB:
+                    self.recalibrating, self._old_base = True, dict(self.base)
+                    self._cmd_label_mode({"mode": "off"})
+                    self._start_capture()
+                    self.emit("recalibrating", {"link": link})
+                    return
+
+    def _update_advice(self, now, xray: dict, links: List[dict]) -> None:
+        if self.router == HOME:
+            adv = advise(xray["xray"], links, self.nodes, xray["objects"]) \
+                if xray["xray"] and self.settle is None and not self.capture else None
+            before = self._median(WIFI, now - ADVICE_MEDIAN_MS)
+            if adv is None or before is None:
+                self.advice = None
+                return
+            adv["before_dbm"] = before            # kept current while the advice shows
+            new = self.advice is None or self.advice["id"] != adv["id"]
+            self.advice = adv
+            if new:
+                self.emit("advice", {"link": WIFI, "node": adv["near"], "before_dbm": before})
+        elif self.advice and self.advice["after_dbm"] is None and self._moved_t is not None \
+                and now >= self._moved_t + AFTER_START_MS + ADVICE_MEDIAN_MS:
+            start = self._moved_t + AFTER_START_MS
+            after = self._median(WIFI, start, start + ADVICE_MEDIAN_MS)
+            if after is not None:
+                self.advice["after_dbm"] = after
+                self.emit("advice_result", {"link": WIFI, "before_dbm": self.advice["before_dbm"],
+                                            "after_dbm": after})
 
     def _cmd_truth(self, args):
         self.truth = args.get("zone")
@@ -279,11 +344,16 @@ class Brain:
         self.capture = {"start": None, "messages": []}
 
     def _capture_ok(self, now) -> bool:
-        """Section 6: health ok, the camera on and seeing nobody, label_mode off, every link reporting."""
+        """Section 6: health ok, the camera on and seeing nobody, label_mode off, every link reporting.
+
+        The automatic baseline after router_home also runs with the camera unplugged (the demo
+        unplugs it before the router moves); with the camera on it must still see nobody.
+        """
         lb = self.label
-        return bool(self.cam and self.cam[1] == "on" and now - self.cam[0] <= CAM_SILENT_MS
-                    and lb is not None and now - lb["recv_t"] <= TEACHER_FRESH_MS
-                    and (lb.get("persons_in_frame") or 0) == 0
+        cam_on = bool(self.cam and self.cam[1] == "on" and now - self.cam[0] <= CAM_SILENT_MS)
+        camera_ok = (cam_on and lb is not None and now - lb["recv_t"] <= TEACHER_FRESH_MS
+                     and (lb.get("persons_in_frame") or 0) == 0)
+        return bool((camera_ok or (self.recalibrating and not cam_on))
                     and self.label_mode == "off" and self._health_ok and not self.health.blind
                     and all(now - self._last_seen.get(link, -10**15) <= LINK_FRESH_MS for link in self.links))
 
@@ -301,6 +371,14 @@ class Brain:
                 self._set_baseline(F.baseline(msgs), expected)
                 self._save_baseline(now)
                 self.emit("baseline_done", {})
+                if self.recalibrating:   # how far did the room move from the old baseline?
+                    self.recalibrating = False
+                    moved = {link: abs(self.base[link] - old) for link, old in self._old_base.items()
+                             if link in self.base}
+                    worst = max(moved, key=moved.get, default=None)
+                    if worst and moved[worst] > SETTLE_DB:
+                        self.emit("drift", {"link": worst})   # the screen offers relearn
+        self._check_settle(now)
         self._decide(now)
 
     def _decide(self, now):
@@ -315,7 +393,7 @@ class Brain:
             self.window["decided"] = True
             self.raw_kind = self._raw["kind"]   # health wants this even while pred is hidden
             self._fresh = True
-        if self.capture or self.router != HOME or self.health.blind:
+        if self.capture or self.router != HOME or self.health.blind or self.settle is not None:
             self.pred = None                 # hidden; SENSOR BLIND never reads as "empty"
             self.watch.on_pred(now, None)    # the alert timer pauses, the LED shows "?"
             return
@@ -380,6 +458,7 @@ class Brain:
         weights = self._why_weights()
         links = [self._link_row(row, weights) for row in health["links"]
                  if row["id"] in self._heard]   # a link is listed once it has a reading
+        self._update_advice(now, xray, links)
         self._seq += 1
         cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
         lb = self.label
@@ -394,5 +473,5 @@ class Brain:
                 "cam": cam, "router": self.router, "links": links,
                 "health": health["health"],
                 "pred": self.pred, "objects": xray["objects"], "xray": xray["xray"],
-                "alert": self.watch.alert_block(), "checkin": self.watch.checkin, "advice": None, "narration": self.narration, "teacher": teacher,
+                "alert": self.watch.alert_block(), "checkin": self.watch.checkin, "advice": self.advice and dict(self.advice), "narration": self.narration, "teacher": teacher,
                 "model": model, "board": self.board_stats()}

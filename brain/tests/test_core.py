@@ -149,8 +149,8 @@ def test_router_off_home_means_no_pred(ready):
     s = brain.state()
     assert s["router"] == "S-W30" and s["pred"] is None
     brain.on_cmd(cmd("router_home"))
-    feed.play("zone_tour", seed=7)
-    assert brain.state()["router"] == "S-home" and brain.pred is not None
+    feed.play("empty_room", seed=7)          # the room is clear, so the 3 s check passes
+    assert brain.state()["router"] == "S-home" and brain.pred is not None and not brain.recalibrating
     kinds = [e["kind"] for e in brain.pop_events()]
     assert "router_moved" in kinds and "router_home" in kinds
 
@@ -463,3 +463,109 @@ def test_baseline_json_is_written_and_read_back_at_start(tmp_path):
     assert again.windower is not None
     (tmp_path / "baseline.json").write_text("not json")
     assert Brain(sessions_dir=tmp_path).base == {}
+
+
+# ---- router move, recalibrate, drift and advice (#37) ----
+
+def router_run(brain, feed, path, moved_at, home_at, edit_path=None, drop_camera_after=None, states=None):
+    """Play a path, sending router_moved (to the advised spot) and router_home at the given seconds."""
+    sent = {}
+    t0 = feed.t
+
+    def each(m):
+        s = (m["recv_t"] - t0) / 1000
+        if s >= moved_at and "moved" not in sent:
+            sent["moved"] = brain.advice["to_spot"] if brain.advice else "S-W30"
+            brain.on_cmd(cmd("router_moved", spot=sent["moved"]))
+        if s >= home_at and "home" not in sent:
+            sent["home"] = True
+            brain.on_cmd(cmd("router_home"))
+
+    msgs = sim_to_v2(path, seed=3, t0=t0) if edit_path is None else None
+    if msgs is None:
+        from sim import fake, wire
+        import json
+        encode = wire.encoder(t0)
+        msgs = [json.loads(encode(ev)) for ev in fake.simulate(edit_path(dict(fake.load_path(path))), seed=3)]
+        for m in msgs:
+            m["recv_t"] = m["t"]
+    last = 0
+    for m in msgs:
+        s = (m["recv_t"] - t0) / 1000
+        if drop_camera_after is not None and s > drop_camera_after and m["type"] in ("cam", "label"):
+            continue
+        brain.on_message(m)
+        each(m)
+        if states is not None and m["recv_t"] - last >= 100:
+            last = m["recv_t"]
+            states.append((s, brain.state()))
+    feed.t = msgs[-1]["recv_t"] + 100
+    return sent
+
+
+def test_advice_then_router_move_and_home():
+    """router_move: tray at T1 from 25 s, router to S-W30 at 45 s (its link clears), tray off at 60, home at 65."""
+    brain, feed = taught()
+    brain.pop_events()
+    states = []
+    sent = router_run(brain, feed, "router_move", moved_at=45, home_at=65, states=states)
+    assert at(states, 20)["advice"] is None
+    shown = at(states, 43)["advice"]
+    assert shown["to_spot"] == sent["moved"] == "S-W30" and shown["link"] == "pi5>unoq:wifi"
+    assert shown["near"] == "pi5" and shown["after_dbm"] is None and shown["text"]
+    base = brain.base["pi5>unoq:wifi"]
+    assert base - 12 < shown["before_dbm"] < base - 7             # the tray costs about 10 dB
+    assert at(states, 47)["advice"]["after_dbm"] is None          # after_dbm waits 2 s, then takes 3 s
+    assert at(states, 47)["pred"] is None                         # router off S-home
+    moved = at(states, 52)["advice"]
+    assert moved["before_dbm"] == at(states, 44.9)["advice"]["before_dbm"]   # frozen at router_moved
+    assert moved["after_dbm"] > moved["before_dbm"] + 4           # the new link clears the tray
+    assert at(states, 66)["pred"] is None and at(states, 66)["advice"] is None   # the 3 s check
+    assert at(states, 70)["pred"] is not None and at(states, 70)["router"] == "S-home"
+    events = [e for e in brain.pop_events() if e["kind"] in
+              ("advice", "router_moved", "advice_result", "router_home", "recalibrating", "drift")]
+    assert [e["kind"] for e in events] == ["advice", "router_moved", "advice_result", "router_home"]
+    assert events[0]["info"]["node"] == "pi5" and events[1]["info"]["before_dbm"] == moved["before_dbm"]
+    assert events[2]["info"] == {"link": "pi5>unoq:wifi", "before_dbm": moved["before_dbm"],
+                                 "after_dbm": moved["after_dbm"]}
+    assert not check_all(events)
+
+
+def tray_stays(path):   # the tray is never taken off, and the router never really moves
+    return dict(path, duration_s=75, router=[{"t": 0, "spot": "S-home"}],
+                objects=[dict(path["objects"][0], t_off=1000)])
+
+
+def test_router_home_with_the_tray_still_on_recalibrates_and_reports_drift():
+    brain, feed = taught()
+    brain.pop_events()
+    old = dict(brain.base)
+    states = []
+    router_run(brain, feed, "router_move", moved_at=40, home_at=45, edit_path=tray_stays, states=states)
+    assert at(states, 47)["pred"] is None                         # checking for 3 s
+    assert brain.recalibrating is False and at(states, 60)["pred"] is None   # then a 20 s baseline
+    assert at(states, 72)["pred"] is not None                     # done at about 68 s
+    assert old["pi5>unoq:wifi"] - brain.base["pi5>unoq:wifi"] > 7  # the tray is in the new baseline
+    kinds_seen = [e["kind"] for e in brain.pop_events()
+                  if e["kind"] in ("router_home", "recalibrating", "baseline_done", "drift")]
+    assert kinds_seen == ["router_home", "recalibrating", "baseline_done", "drift"]
+    assert brain.label_mode == "off"
+
+
+def test_recalibration_also_runs_with_the_camera_unplugged():
+    brain, feed = taught()
+    router_run(brain, feed, "router_move", moved_at=40, home_at=45, edit_path=tray_stays, drop_camera_after=30)
+    assert "baseline_done" in [e["kind"] for e in brain.events[-6:]] and not brain.recalibrating
+    # ... but a baseline asked for by hand still waits for the camera.
+    brain.on_cmd(cmd("baseline"))
+    router_run(brain, feed, "empty_room", moved_at=999, home_at=999, drop_camera_after=0)
+    assert brain.capture is not None
+
+
+def test_reset_clears_the_advice():
+    brain, feed = taught()
+    states = []
+    router_run(brain, feed, "tray_t1", moved_at=999, home_at=999, states=states)
+    assert at(states, 45)["advice"] is not None
+    brain.on_cmd(cmd("reset"))
+    assert brain.advice is None
