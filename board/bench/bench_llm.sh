@@ -2,8 +2,7 @@
 # One narrator sentence through llama-server, timed while bench_brain.py keeps the brain busy.
 # On the UNO Q, from the repo root, with llama-server up on 127.0.0.1:8091:
 #   bash board/bench/bench_llm.sh
-# Prints prompt tokens/s, generation tokens/s and wall time, PASS if the sentence took 8 s or
-# less, then the brain's step times for the same stretch. Settings: PY, LLM.
+# Prints prompt and generation tokens/s, wall time, PASS at 8 s or less, then the brain's times.
 set -u
 cd "$(dirname "$0")/../.."
 PY=${PY:-$(ls .venv/bin/python /opt/rs/venv/bin/python 2>/dev/null | head -1)}

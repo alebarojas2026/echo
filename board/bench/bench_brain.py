@@ -4,8 +4,9 @@
     python board/bench/bench_brain.py --trees 30 --depth 10 --hz 5
 
 Trains the real model on sim sessions, then plays a 60 s sim feed (a zone tour, then the tray
-at T1) through the modules on main, one tick per state message, in real time. It stands in
-for brain/main.py, which isn't on main yet. Ctrl-C or SIGTERM ends it with the summary.
+at T1) in real time through the calls the live loop (brain/core.py) makes, timed one by one,
+plus the advisor, which the live loop doesn't call yet. predict is per window (the contract's
+ms_per_decision), every other step per tick. Ctrl-C or SIGTERM ends it early.
 """
 import argparse
 import json
@@ -30,7 +31,6 @@ from sim import fake, wire
 
 T0_MS = 1_763_149_500_000
 STEPS = ("ingest", "predict", "health", "xray", "advisor", "state_json")
-NOISE_DB = 0.5   # under the X-ray's 0.8 dB steady rule, so the tray becomes an object
 FEED = dict(fake.load_path("zone_tour"), name="bench", duration_s=60,
             objects=[{"x": 1.0, "y": 0.2, "drop_db": 10, "t_on": 32}])   # the tray at T1
 
@@ -39,7 +39,7 @@ def sim(path, seed, mode=None):
     """A sim path as bus messages, with recv_t stamped the way the bus does it."""
     path = dict(fake.load_path(path) if isinstance(path, str) else path, **({"label_mode": mode} if mode else {}))
     encode = wire.encoder(T0_MS)
-    msgs = [json.loads(encode(ev)) for ev in fake.simulate(path, seed=seed, noise_db=NOISE_DB)]
+    msgs = [json.loads(encode(ev)) for ev in fake.simulate(path, seed=seed)]
     return [dict(m, recv_t=m["t"]) for m in msgs]
 
 
@@ -79,7 +79,7 @@ def run(seconds=60.0, hz=10.0, trees=None, depth=None, walkers=3, fast=False, ou
     xr, win, msgs = Xray.from_nodes(nodes), F.Windower(base), feed(seconds)
     times = {s: [] for s in STEPS + ("tick",)}
     seen = dict.fromkeys(("pred", "blind", "objects", "advice"), 0)
-    window, pending, stop, n = None, None, [], int(seconds * hz)
+    raw, pending, stop, n = None, None, [], int(seconds * hz)
     old_term = signal.signal(signal.SIGTERM, lambda *_: stop.append(1))
     out(f"running {n} ticks at {hz:g} Hz ({seconds:g} s){', not paced' if fast else ''}")
     cpu0, wall0 = time.process_time(), time.perf_counter()
@@ -89,22 +89,25 @@ def run(seconds=60.0, hz=10.0, trees=None, depth=None, walkers=3, fast=False, ou
             if stop:
                 break
             now = T0_MS + round((k + 1) * 1000 / hz)
-            t = [time.perf_counter()]
+            t, new = [time.perf_counter()], []
             while True:   # ingest: decode and window every message since the last tick
                 pending = pending or json.loads(next(msgs))
                 if pending["recv_t"] > now:
                     break
-                window = (win.push(pending) or [window])[-1]
+                new += win.push(pending)
                 if pending["type"] == "rssi":
                     link, t_ms, dbm = pending["link"], pending["recv_t"], pending["dbm"]
                     xr.add(link, t_ms, base[link] - dbm)
                     hm.add(link, t_ms, dbm)
                 pending = None
             t.append(time.perf_counter())
-            pred = model.predict(window) if window else None
+            for w in new:   # like brain/core.py: predict every new 0.1 s window, whatever the rate
+                p0 = time.perf_counter()
+                raw = model.predict(w)
+                times["predict"].append((time.perf_counter() - p0) * 1000)   # per window
             t.append(time.perf_counter())
-            health = hm.update(now, pred and pred["kind"])
-            pred = None if hm.blind else pred
+            health = hm.update(now, raw and raw["kind"])
+            pred = None if hm.blind else raw
             t.append(time.perf_counter())
             xo = xr.update(now, pred and pred["kind"])
             t.append(time.perf_counter())
@@ -115,7 +118,8 @@ def run(seconds=60.0, hz=10.0, trees=None, depth=None, walkers=3, fast=False, ou
                         "objects": xo["objects"], "xray": xo["xray"], "advice": advice})
             t.append(time.perf_counter())
             for step, a, b in zip(STEPS, t, t[1:]):
-                times[step].append((b - a) * 1000)
+                if step != "predict":
+                    times[step].append((b - a) * 1000)
             times["tick"].append((t[-1] - t[0]) * 1000)
             for key, hit in zip(seen, (pred, hm.blind, xo["objects"], advice)):
                 seen[key] += bool(hit)

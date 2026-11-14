@@ -8,8 +8,7 @@ from board.bench import bench_brain, llm_time, sample
 
 
 def test_bench_brain_times_every_step_and_reaches_the_advisor():
-    lines = []
-    res = bench_brain.run(seconds=60, fast=True, walkers=1, out=lines.append)
+    res = bench_brain.run(seconds=60, fast=True, walkers=1, out=(lines := []).append)
     assert res["ticks"] == 600 and set(res["steps"]) == set(bench_brain.STEPS) | {"tick"}
     assert all(0 <= s["p50"] <= s["p95"] <= s["max"] for s in res["steps"].values())
     # A person, then the tray at T1: every part of the hot path gets real work.

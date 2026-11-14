@@ -7,8 +7,7 @@
 # Settings: SECS (300), EVERY (2), PY, LLM, OUT, BRAIN=bench (bench_brain.py) or main.
 set -u
 cd "$(dirname "$0")/../.."
-SECS=${SECS:-300}
-EVERY=${EVERY:-2}
+SECS=${SECS:-300} EVERY=${EVERY:-2}
 PY=${PY:-$(ls .venv/bin/python /opt/rs/venv/bin/python 2>/dev/null | head -1)}
 PY=${PY:-python3}
 LLM=${LLM:-http://127.0.0.1:8091}
