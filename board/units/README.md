@@ -6,7 +6,7 @@ systemd units for every program in CONTRACTS.md section 9. Install them with `bo
 From the repo root, with the Python env already at /opt/rs/venv:
 ```sh
 sudo board/deploy.sh --install --no-pi   # before the Pi is connected
-sudo board/deploy.sh --install           # once the Pi's hotspot and the Ethernet link are up
+sudo board/deploy.sh --install           # once the Pi's hotspot and the Ethernet link are up (pi/eth.sh on the Pi, board/eth.sh here)
 ```
 Each run installs every unit, reloads systemd, enables them, and starts any that aren't running. It restarts only units whose file changed. Running it again is safe.
 
