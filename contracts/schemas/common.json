@@ -22,6 +22,7 @@
     "label_mode": {"enum": ["person", "object", "off"]},
     "narration_source": {"enum": ["llm", "template"]},
     "narration_text": {"$comment": "Section 6: at most 16 words.", "type": "string", "pattern": "^\\s*\\S+(\\s+\\S+){0,15}\\s*$"},
+    "recap_text": {"$comment": "Section 6: a recap (event_kind recap) has at most 45 words.", "type": "string", "pattern": "^\\s*\\S+(\\s+\\S+){0,44}\\s*$"},
     "event_kind": {"enum": ["enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice", "advice_result",
                             "router_moved", "router_home", "recalibrating", "cam_off", "cam_on", "cam_stalled", "alert_on",
                             "alert_off", "blind_on", "blind_off", "trained", "baseline_done", "drift", "reset", "recording"]}
