@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/state.json",
-  "$comment": "Section 5, brain -> screen. xray arrays must hold w*h cells (checked in check.py).",
+  "$comment": "Section 5, brain -> screen, including what it sends before readings, a baseline or training. xray arrays must hold w*h cells (checked in check.py).",
   "$ref": "common.json#/$defs/envelope",
   "properties": {
     "type": {"const": "state"},
@@ -28,17 +28,19 @@
       "properties": {"xy_m": {"$ref": "common.json#/$defs/xy_m"}, "near": {"$ref": "common.json#/$defs/node"}, "since_s": {"type": "number", "minimum": 0}, "drop_db": {"type": "number"}},
       "required": ["xy_m", "near", "since_s", "drop_db"], "additionalProperties": false}},
     "xray": {
-      "type": "object",
+      "$comment": "null before the first baseline.",
+      "type": ["object", "null"],
       "properties": {"w": {"type": "integer", "minimum": 1}, "h": {"type": "integer", "minimum": 1}, "cell_m": {"type": "number", "exclusiveMinimum": 0},
                      "origin_m": {"$ref": "common.json#/$defs/xy_m"}, "moving_db": {"type": "array", "items": {"type": "number"}},
                      "static_db": {"type": "array", "items": {"type": "number"}}, "n_links": {"type": "integer", "minimum": 0}},
       "required": ["w", "h", "cell_m", "origin_m", "moving_db", "static_db", "n_links"], "additionalProperties": false},
     "alert": {
-      "$comment": "limit_s comes from zones[zone].still_alert_s, which is null for zones 2 and 3.",
+      "$comment": "zone is null only while nothing is counting. limit_s is zones[zone].still_alert_s, null for zones 2 and 3.",
       "type": "object",
-      "properties": {"state": {"enum": ["none", "counting", "check_on"]}, "zone": {"$ref": "common.json#/$defs/zone"},
+      "properties": {"state": {"enum": ["none", "counting", "check_on"]}, "zone": {"type": ["integer", "null"], "minimum": 0, "maximum": 4},
                      "still_s": {"type": "number", "minimum": 0}, "limit_s": {"type": ["number", "null"]}},
-      "required": ["state", "zone", "still_s", "limit_s"], "additionalProperties": false},
+      "required": ["state", "zone", "still_s", "limit_s"], "additionalProperties": false,
+      "if": {"properties": {"state": {"enum": ["counting", "check_on"]}}}, "then": {"properties": {"zone": {"type": "integer"}}}},
     "checkin": {"type": ["object", "null"], "properties": {"t": {"type": "integer", "minimum": 0}, "link": {"$ref": "common.json#/$defs/link"}},
                 "required": ["t", "link"], "additionalProperties": false},
     "advice": {
@@ -50,7 +52,7 @@
       "required": ["id", "cause", "near", "xy_m", "link", "to_spot", "move_m", "dist_change_m", "text", "before_dbm", "after_dbm", "why"],
       "additionalProperties": false},
     "narration": {
-      "type": "object",
+      "type": ["object", "null"],
       "properties": {"text": {"$ref": "common.json#/$defs/narration_text"}, "event_id": {"type": "string"}, "t": {"type": "integer", "minimum": 0},
                      "source": {"$ref": "common.json#/$defs/narration_source"}, "gen_ms": {"type": "number", "minimum": 0}},
       "required": ["text", "event_id", "t", "source", "gen_ms"], "additionalProperties": false},
@@ -60,12 +62,15 @@
       "properties": {"present": {"type": "boolean"}, "zone": {"$ref": "common.json#/$defs/zone"}, "motion": {"enum": ["moving", "still", null]}},
       "required": ["present", "zone", "motion"], "additionalProperties": false},
     "model": {
+      "$comment": "ver, train_s and ms_per_decision are null before training.",
       "type": "object",
-      "properties": {"trained": {"type": "boolean"}, "ver": {"type": "string"}, "train_s": {"type": "number", "minimum": 0},
-                     "ms_per_decision": {"type": "number", "minimum": 0}, "windows": {"type": "integer", "minimum": 0},
+      "properties": {"trained": {"type": "boolean"}, "ver": {"type": ["string", "null"]}, "train_s": {"type": ["number", "null"], "minimum": 0},
+                     "ms_per_decision": {"type": ["number", "null"], "minimum": 0}, "windows": {"type": "integer", "minimum": 0},
                      "train_sessions": {"type": "array", "items": {"type": "string"}}, "training": {"$comment": "Only null is shown in the doc."}},
-      "required": ["trained", "ver", "train_s", "ms_per_decision", "windows", "train_sessions", "training"], "additionalProperties": false},
-    "board": {"type": "object", "properties": {"cpu_temp_c": {"type": "number"}, "cpu_mhz": {"type": "number", "minimum": 0}, "cpu_pct": {"type": "number", "minimum": 0}},
+      "required": ["trained", "ver", "train_s", "ms_per_decision", "windows", "train_sessions", "training"], "additionalProperties": false,
+      "if": {"properties": {"trained": {"const": true}}}, "then": {"properties": {"ver": {"type": "string"}, "train_s": {"type": "number"}, "ms_per_decision": {"type": "number"}}}},
+    "board": {"$comment": "a field it can't read is null", "type": "object",
+              "properties": {"cpu_temp_c": {"type": ["number", "null"]}, "cpu_mhz": {"type": ["number", "null"], "minimum": 0}, "cpu_pct": {"type": ["number", "null"], "minimum": 0}},
       "required": ["cpu_temp_c", "cpu_mhz", "cpu_pct"], "additionalProperties": false}
   },
   "required": ["cam", "router", "links", "health", "pred", "objects", "xray", "alert", "checkin", "advice", "narration", "teacher", "model", "board"],
