@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { LINK_IDS } from './frame'
-import { mockState, tourAt } from './mock'
+import { DEMO_MS } from './demo'
+import { createMockSource, mockState, tourAt } from './mock'
 
 describe('mock states', () => {
   it('keep to the contract shapes', () => {
@@ -54,5 +55,26 @@ describe('mock states', () => {
   it('give advice for an object next to the router only while the router is home', () => {
     expect(mockState('object', 1, 0).advice?.to_spot).toBe('S-W30')
     expect(mockState('object', 1, 0, 'S-W30').advice).toBeNull()
+  })
+})
+
+describe('mock reset', () => {
+  it('answers the reset command with a reset event, like the brain', () => {
+    vi.useFakeTimers()
+    const got: unknown[] = []
+    const source = createMockSource('still')
+    source.start((msg) => got.push(msg), () => {})
+    source.send({ v: 2, type: 'cmd', cmd: 'reset', args: {} })
+    expect(got).toContainEqual(expect.objectContaining({ type: 'event', kind: 'reset', src: 'sim' }))
+    vi.useRealTimers()
+  })
+
+  it('sends a reset each time the demo loop starts over', () => {
+    vi.useFakeTimers()
+    const got: { type: string; kind?: string }[] = []
+    createMockSource('demo').start((msg) => got.push(msg as { type: string }), () => {})
+    vi.advanceTimersByTime(DEMO_MS * 2 + 500)
+    expect(got.filter((m) => m.type === 'event' && m.kind === 'reset')).toHaveLength(2)
+    vi.useRealTimers()
   })
 })

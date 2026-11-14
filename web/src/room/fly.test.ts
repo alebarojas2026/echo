@@ -1,0 +1,133 @@
+import { Box3, Vector3 } from 'three'
+import { describe, expect, it } from 'vitest'
+import { FLY_MS, Fly, hallShot, mixShot, pinnedFraming, wideness } from './fly'
+import { roomShot, type RoomView, type Shot } from './view'
+
+/** Just enough of RoomView for the fly: it records the shots and lets the test run frames. */
+function fakeView() {
+  const animators: ((dt: number) => boolean)[] = []
+  const view = {
+    shots: [] as Shot[],
+    host: { dataset: {} as Record<string, string> },
+    addAnimator: (fn: (dt: number) => boolean) => void animators.push(fn),
+    setShot: (s: Shot) => void view.shots.push(s),
+    requestRender: () => {},
+    /** Runs frames of `dt` ms for `ms`. */
+    run(ms: number, dt = 16) {
+      for (let t = 0; t < ms; t += dt) animators.forEach((fn) => fn(dt))
+    },
+    get shot() {
+      return view.shots.at(-1)!
+    },
+  }
+  return view
+}
+
+const HALL = new Box3(new Vector3(-12, -0.03, -20), new Vector3(18, 6, 10))
+
+describe('the hall framing', () => {
+  it('looks at the middle of the hall and is far wider than the square', () => {
+    const hall = hallShot(HALL, 12)
+    expect(hall.target.x).toBeCloseTo(3)
+    expect(hall.target.z).toBeCloseTo(-5)
+    expect(hall.radiusM).toBeGreaterThan(10 * roomShot().radiusM)
+    expect(hall.elevDeg).toBeLessThan(roomShot().elevDeg)
+  })
+
+  it('never frames tighter than twice the square, even for a tiny scan', () => {
+    const tiny = hallShot(new Box3(new Vector3(-1, 0, -1), new Vector3(1, 1, 1)), 1.4)
+    expect(tiny.radiusM).toBeCloseTo(2 * roomShot().radiusM)
+  })
+})
+
+describe('flying between shots', () => {
+  const square = roomShot()
+  const hall = hallShot(HALL, 12)
+
+  it('starts and ends exactly on the two shots', () => {
+    expect(mixShot(square, hall, 0)).toEqual(square)
+    const end = mixShot(square, hall, 1)
+    expect(end.radiusM).toBeCloseTo(hall.radiusM)
+    expect(end.target.distanceTo(hall.target)).toBeCloseTo(0)
+  })
+
+  it('zooms by ratio, so halfway is the geometric middle of the two sizes', () => {
+    expect(mixShot(square, hall, 0.5).radiusM).toBeCloseTo(Math.sqrt(square.radiusM * hall.radiusM))
+    expect(wideness(mixShot(square, hall, 0.5), square, hall)).toBeCloseTo(0.5)
+    expect(wideness(square, square, hall)).toBe(0)
+    expect(wideness(hall, square, hall)).toBe(1)
+  })
+
+  it('reads ?view=', () => {
+    expect(pinnedFraming(new URLSearchParams('view=hall'))).toBe('hall')
+    expect(pinnedFraming(new URLSearchParams('view=square'))).toBe('square')
+    expect(pinnedFraming(new URLSearchParams('view=top'))).toBeNull()
+  })
+})
+
+describe('the fly', () => {
+  const hall = hallShot(HALL, 12)
+  const square = roomShot().radiusM
+
+  it('on load shows the hall, takes a moment, then flies down to the square', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.setHall(hall)
+    expect(view.shot.radiusM).toBeCloseTo(hall.radiusM)
+    expect(view.host.dataset.view).toBe('hall')
+    view.run(1000)
+    expect(fly.wide).toBe(1) // still taking it in
+    view.run(1200 + FLY_MS)
+    expect(view.shot.radiusM).toBeCloseTo(square)
+    expect(view.host.dataset.view).toBe('square')
+  })
+
+  it('never jumps: every frame of the fly is a small step from the one before', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.setHall(hall)
+    view.run(1200 + FLY_MS + 100)
+    for (let i = 1; i < view.shots.length; i++) {
+      const ratio = view.shots[i].radiusM / view.shots[i - 1].radiusM
+      expect(Math.abs(Math.log(ratio))).toBeLessThan(0.05)
+    }
+  })
+
+  it('on reset goes out to the hall, pauses, and comes back', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.setHall(hall)
+    view.run(1200 + FLY_MS + 100)
+    fly.reset()
+    view.run(FLY_MS + 100)
+    expect(fly.wide).toBe(1)
+    view.run(1500)
+    expect(fly.wide).toBe(1) // the pause
+    view.run(500 + FLY_MS + 100)
+    expect(fly.wide).toBe(0)
+  })
+
+  it('on H turns around mid-flight from where it is, without a jump', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.setHall(hall)
+    view.run(1200 + FLY_MS / 2)
+    const before = view.shot.radiusM
+    fly.toggle() // was heading to the square: back out to the hall
+    view.run(16)
+    expect(Math.abs(Math.log(view.shot.radiusM / before))).toBeLessThan(0.05)
+    view.run(FLY_MS + 100)
+    expect(fly.wide).toBe(1)
+  })
+
+  it('stays on a pinned framing: no fly on load, none on reset', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, 'hall', () => {})
+    fly.setHall(hall)
+    view.run(1200 + FLY_MS + 100)
+    expect(fly.wide).toBe(1)
+    fly.reset()
+    view.run(FLY_MS)
+    expect(fly.wide).toBe(1)
+  })
+})

@@ -26,7 +26,7 @@ const FIRST_LOOK_MS = 1200
 const RESET_HOLD_MS = 2000
 const HALL_ELEV_DEG = 40
 /** The hall's floor plan fills a little more than the view, so empty corners don't shrink it. */
-const HALL_FILL = 0.85
+const HALL_FILL = 0.75
 
 /** The whole hall, north up: looks at the middle of its floor plan (up to the cut) and fits its half-diagonal. */
 export function hallShot(bounds: Box3, cutM: number): Shot {
@@ -198,7 +198,8 @@ export class HallMarks {
     this.outline.visible = wide > 0
     const { at, alpha } = this.standing()
     const cam = this.view.camera
-    this.column.material.opacity = 0.9 * wide * alpha
+    // Only in the wide half of the fly: closer in, the figure itself reads, and a pole through it would not.
+    this.column.material.opacity = 0.9 * alpha * Math.min(1, Math.max(0, (wide - 0.5) / 0.5))
     this.column.visible = this.column.material.opacity > 0
     if (!this.column.visible) return
     // A fixed width on screen: metres per pixel at the column's distance from the camera.
