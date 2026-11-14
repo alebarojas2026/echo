@@ -295,3 +295,23 @@ def test_a_killed_bus_process_loses_nothing_from_the_recording(tmp_path):
     got = lines(path)
     assert [m["type"] for m in got] == ["meta"] + ["rssi"] * 40
     assert [m["seq"] for m in got[1:]] == list(range(1, 41))
+
+
+def test_link_report_says_which_links_flow_and_which_are_silent(bus):
+    assert bus.link_ids[:2] == ["pi5>unoq:wifi", "pi5>unoq:ble"]     # from radio/nodes.json
+    for seq in range(1, 61):
+        bus.handle(msg(seq, link="west>pi5:ble"), A)
+    for seq in range(1, 31):
+        bus.handle(msg(seq, link="pi5>unoq:wifi", kind="wifi", tx="pi5", rx="unoq"), B)
+    bus.handle(msg(1, "label", zone=2), B)                              # not a link
+    line = bus.link_report(30.0)
+    assert line == ("links: pi5>unoq:wifi 1.0/s, west>pi5:ble 2.0/s; nothing from: "
+                    "pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble")
+    assert bus.link_report(30.0).startswith("links: no rssi; nothing from: pi5>unoq:wifi")   # counts reset
+
+
+def test_link_report_lists_a_link_it_doesnt_know_last(bus):
+    bus.link_ids = ["east>pi5:ble"]
+    bus.handle(msg(1, link="east>pi5:ble"), A)
+    bus.handle(msg(2, link="odd>link:ble"), A)
+    assert bus.link_report(1.0) == "links: east>pi5:ble 1.0/s, odd>link:ble 1.0/s"

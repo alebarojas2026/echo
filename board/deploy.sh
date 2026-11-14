@@ -35,7 +35,7 @@ USAGE="usage: board/deploy.sh <tag|sha> [--no-pi]  or  sudo board/deploy.sh --in
 # it advertises and scans without the cable and forwards once it's in.
 # unit                    role   needs  unit file                                   runs from (folders end in /)
 UNITS='
-radio-sight-bus           board  -      board/units/radio-sight-bus.service         bus/ contracts/
+radio-sight-bus           board  -      board/units/radio-sight-bus.service         bus/ radio/nodes.json contracts/
 radio-sight-wifi-rssi     board  pi     board/units/radio-sight-wifi-rssi.service   radio/ contracts/
 radio-sight-hci-scan      board  pi     board/units/radio-sight-hci-scan.service    radio/ contracts/
 radio-sight-camwatch      board  -      board/units/radio-sight-camwatch.service    teacher/ contracts/
