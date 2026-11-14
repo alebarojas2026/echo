@@ -204,3 +204,10 @@ def test_builds_from_radio_nodes_json():
     assert {lk.expected_hz for lk in hm.links.values()} == {12.0}
     hm.set_expected({"pi5>unoq:wifi": 20})
     assert hm.links["pi5>unoq:wifi"].expected_hz == 20.0
+
+
+def test_the_steady_test_history_stays_at_5_s():
+    hm = make()
+    for i in range(10 * 600):                      # 10 minutes on base at 10 Hz
+        hm.add("pi5>unoq:wifi", i * 100, -50)
+    assert len(hm.links["pi5>unoq:wifi"].trail) <= 5 * HZ

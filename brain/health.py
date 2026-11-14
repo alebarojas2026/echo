@@ -146,6 +146,8 @@ class Health:
         if lk is not None:
             lk.readings.append((t_ms / 1000.0, float(dbm)))
             lk.trail.append((t_ms / 1000.0, float(dbm)))
+            while lk.trail[0][0] <= t_ms / 1000.0 - STEADY_S:   # never more than the last 5 s
+                lk.trail.popleft()
 
     def update(self, now_ms, kind=None, router_home=True, baseline_running=False):
         """One tick. kind = the classifier's pred.kind ("person" | "object" | "none"),
