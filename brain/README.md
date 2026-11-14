@@ -15,6 +15,19 @@ Batch: `windows(messages, base)`. Live: `Windower(base).push(msg)` returns the w
 ## Tests
 
 ```
-pip install -r sim/requirements.txt
+pip install -r brain/requirements.txt
 python -m pytest brain
 ```
+
+## Training (`brain/train.py`)
+
+Three random forests share one feature vector per window:
+- `zone`: classes 0-4 (0 = empty), so its probabilities are the contract's `probs`;
+- `motion`: moving or still, trained on windows with someone present;
+- `kind`: person, object or none.
+
+`Model(base).fit(sessions)` trains on 4 cores. `predict(window)` returns the contract's `pred` block, and `info()` returns the `model` block. A session is `{"meta": <meta message>, "messages": [...]}`.
+
+`leave_one_person_out(sessions, base)` scores zone accuracy with each walker tested on a model that never saw them. Sessions without a walker (empty room, objects) always stay in training.
+
+Install: `pip install -r brain/requirements.txt` (scikit-learn, since onnxruntime crashes on the board).
