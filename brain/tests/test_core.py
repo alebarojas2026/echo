@@ -590,3 +590,87 @@ def test_a_dismissed_advice_can_come_back_after_the_object_has_gone():
     feed.play("tray_t1", seed=5, noise_db=0.4, states=states)    # the tray comes back later
     assert at(states, 45)["advice"] is not None
     assert "advice" in [e["kind"] for e in brain.pop_events()]
+
+# ---- a restart keeps the model (#270); recordings don't pile up in memory (#271) ----
+
+def record_to_disk(brain, feed, folder, session, path, purpose="train", walker=None, seed=0, mode=None):
+    """Record a session the way the board does: the bus writes <session>.jsonl, the brain gets the same feed."""
+    import json
+    meta = {"session": session, "purpose": purpose, "walker": walker}
+    brain.on_cmd(cmd("record_start", **meta))
+    msgs = sim_to_v2(path, seed=seed, mode=mode, meta=meta, t0=feed.t)
+    with open(folder / f"{session}.jsonl", "w") as f:
+        for m in msgs:
+            f.write(json.dumps(m) + "\n")
+            brain.on_message(m)
+    feed.t = msgs[-1]["recv_t"] + 100
+    brain.on_cmd(cmd("record_stop"))
+
+
+def taught_on_disk(folder):
+    brain = Brain(sessions_dir=folder)
+    feed = Feed(brain)
+    brain.on_cmd(cmd("baseline"))
+    feed.play("empty_room", seed=1)
+    record_to_disk(brain, feed, folder, "s01", "empty_room", seed=2)
+    record_to_disk(brain, feed, folder, "s02", "tray_t1", purpose="object", mode="object", seed=4)
+    for i, w in enumerate(["w1", "w2"]):
+        record_to_disk(brain, feed, folder, f"s1{i}", "zone_tour", walker=w, seed=10 + i)
+    brain.on_cmd(cmd("train"))
+    return brain, feed
+
+
+def test_recordings_on_disk_are_not_held_in_memory_and_training_reads_them_back(tmp_path):
+    brain, _ = taught_on_disk(tmp_path)
+    assert sorted(brain.sessions) == ["s01", "s02", "s10", "s11"]
+    assert all(s["messages"] is None for s in brain.sessions.values())     # only the meta and the path
+    info = brain.state()["model"]
+    assert info["trained"] and info["train_sessions"] == ["s01", "s02", "s10", "s11"] and info["windows"] > 500
+
+
+def test_a_demo_recording_adds_nothing_to_memory(tmp_path):
+    import tracemalloc
+    brain = Brain(sessions_dir=tmp_path)
+    feed = Feed(brain)
+    feed.play("empty_room", seed=1)                    # warm up, so buffers are at their steady size
+    brain.on_cmd(cmd("record_start", session="demo", purpose="demo", walker="x"))
+    feed.play("empty_room", seed=2, meta={"session": "demo", "purpose": "demo", "walker": "x"})
+    tracemalloc.start()
+    before = tracemalloc.get_traced_memory()[0]
+    for i in range(20):                                # 10 minutes of feed, with state taken as the loop does
+        feed.play("empty_room", seed=3 + i, states=[])
+        brain.pop_events()
+    assert brain.open_session["messages"] is None
+    grown = tracemalloc.get_traced_memory()[0] - before
+    tracemalloc.stop()
+    brain.on_cmd(cmd("record_stop"))
+    assert grown < 2 * 2**20, f"{grown / 2**20:.1f} MB held during a 10 minute demo recording"
+    assert brain.sessions == {}
+
+
+def test_a_restart_brings_the_model_back_without_a_new_walk(tmp_path):
+    brain, feed = taught_on_disk(tmp_path)
+    assert (tmp_path / "model.pkl").exists() and not (tmp_path / "model.pkl.tmp").exists()
+
+    again = Brain(sessions_dir=tmp_path)               # the process was killed and started again
+    first = again.state()["model"]
+    assert first["trained"] and first["ver"] == "m1" and first["train_sessions"] == ["s01", "s02", "s10", "s11"]
+    assert [e["kind"] for e in again.events] == []     # nothing trained, nothing announced
+    feed2 = Feed(again)
+    feed2.t = feed.t
+    seen = []
+    feed2.play("zone_tour", seed=50, each=lambda m: seen.append(again.pred["zone"]) if again.pred else None)
+    assert {1, 2, 3, 4} <= set(seen)                   # pred is back, on the first walk through
+
+    again.on_cmd(cmd("train"))                         # and it can still train: the recordings are found again
+    assert again.state()["model"]["ver"] == "m2"
+
+
+def test_a_model_from_another_baseline_or_a_damaged_file_is_not_loaded(tmp_path):
+    brain, feed = taught_on_disk(tmp_path)
+    brain.on_cmd(cmd("baseline"))                      # the room is baselined again, with the tray down
+    feed.play("metal_object", seed=7)
+    assert brain.base != brain.model.base
+    assert Brain(sessions_dir=tmp_path).model is None  # stale for this baseline
+    (tmp_path / "model.pkl").write_bytes(b"not a pickle")
+    assert Brain(sessions_dir=tmp_path).model is None

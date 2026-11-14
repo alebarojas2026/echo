@@ -28,11 +28,14 @@ def start(log, *args):
 
 def test_record_and_train_through_the_real_bus(tmp_path):
     bus_port, brain_port, ws_port = spare_port(), spare_port(), spare_port(socket.SOCK_STREAM)
+    def start_brain(log):
+        return start(tmp_path / log, "brain.main", "--bus-port", str(brain_port),
+                     "--bus", f"127.0.0.1:{bus_port}", "--ws-port", str(ws_port), "--ws-host", "127.0.0.1",
+                     "--sessions", str(tmp_path), "--mode-file", str(tmp_path / "label_mode"))
+
     procs = [start(tmp_path / "bus.log", "bus", "--host", "127.0.0.1", "--port", str(bus_port),
                    "--forward", f"127.0.0.1:{brain_port}", "--sessions", str(tmp_path)),
-             start(tmp_path / "brain.log", "brain.main", "--bus-port", str(brain_port),
-                   "--bus", f"127.0.0.1:{bus_port}", "--ws-port", str(ws_port), "--ws-host", "127.0.0.1",
-                   "--sessions", str(tmp_path), "--mode-file", str(tmp_path / "label_mode"))]
+             start_brain("brain.log")]
 
     def feed(*args):
         return subprocess.Popen([sys.executable, "-m", "sim.send", *args, "--host", "127.0.0.1",
@@ -77,8 +80,33 @@ def test_record_and_train_through_the_real_bus(tmp_path):
         await ws.close()
         return state
 
+    async def after_restart():
+        """The first states of a new brain process, with a feed running and no train sent."""
+        end = time.monotonic() + 30
+        while True:
+            try:
+                ws = await connect(f"ws://127.0.0.1:{ws_port}/ws")
+                break
+            except OSError:
+                assert time.monotonic() < end, "the restarted brain never came up"
+                await asyncio.sleep(0.2)
+        first = json.loads(await ws.recv())
+        tour = feed("zone_tour", "--speed", "4")
+        procs.append(tour)
+        async with asyncio.timeout(20):
+            while True:
+                msg = json.loads(await ws.recv())
+                if msg["type"] == "state" and msg["pred"] is not None:
+                    break
+        await ws.close()
+        return first, msg
+
     try:
         state = asyncio.run(screen())
+        procs[1].kill()                      # kill -9, as in the soak test
+        procs[1].wait(timeout=10)
+        procs[1] = start_brain("brain2.log")
+        first, back = asyncio.run(after_restart())
     finally:
         for p in procs:
             p.terminate()
@@ -91,3 +119,9 @@ def test_record_and_train_through_the_real_bus(tmp_path):
     baseline = json.loads((tmp_path / "baseline.json").read_text())
     assert len(baseline["links"]) == 6, logs
     assert (tmp_path / "label_mode").read_text() == "off\n"
+
+    # After the hard kill: trained from the first state, the same version, and pred without a new walk.
+    logs += f"\nbrain2.log:\n{(tmp_path / 'brain2.log').read_text()[-1500:]}"
+    assert first["type"] == "state" and first["model"]["trained"] is True, logs
+    assert first["model"]["ver"] == state["model"]["ver"] and first["model"]["train_sessions"] == ["s1"], logs
+    assert back["model"]["ver"] == state["model"]["ver"] and back["pred"] is not None, logs

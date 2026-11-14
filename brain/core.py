@@ -11,6 +11,8 @@ recalibration and drift, advice, and the narrator's enter/exit events.
 from __future__ import annotations
 
 import json
+import os
+import pickle
 import statistics
 import time
 from collections import deque
@@ -38,6 +40,30 @@ AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 LABEL_MODES = ("person", "object", "off")
+
+
+def read_session(path) -> List[dict]:
+    """The rssi and label messages of a session file written by the bus."""
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue   # a line cut short by a crash
+            if isinstance(msg, dict) and msg.get("type") in ("rssi", "label") and "recv_t" in msg:
+                out.append(msg)
+    return out
+
+
+def first_meta(path) -> Optional[dict]:
+    """The meta line that opens a session file, or None."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            msg = json.loads(f.readline())
+    except (OSError, ValueError):
+        return None
+    return msg if isinstance(msg, dict) and msg.get("type") == "meta" else None
 
 
 def now_ms() -> int:
@@ -105,6 +131,7 @@ class Brain:
         self._cmd_seq = 0   # and one for the commands we pass to the bus, a separate socket
         self._event_n = 0
         self._load_baseline()
+        self._load_model()
 
     def now(self) -> int:
         return self._clock() if self._clock else self.feed_t
@@ -125,13 +152,16 @@ class Brain:
             # Only the meta the bus writes for our record_start opens a copy. The fake
             # feed sends its own meta (and again on every loop); those are ignored.
             if self.want_session is not None and msg.get("session") == self.want_session:
-                self.open_session = {"meta": msg, "messages": []}
+                # Only recordings that training reads are held, and only until record_stop
+                # finds the bus's file on disk. A long demo recording costs no memory.
+                keep = msg.get("purpose") in TRAIN_PURPOSES
+                self.open_session = {"meta": msg, "messages": [] if keep else None}
         elif kind == "cam":
             self.cam = (t, msg.get("state"))
         elif kind == "narration":
             self.narration = {k: msg.get(k) for k in ("text", "event_id", "t", "source", "gen_ms")}
         elif kind in ("rssi", "label"):
-            if self.open_session is not None:
+            if self.open_session is not None and self.open_session["messages"] is not None:
                 self.open_session["messages"].append(msg)
             if kind == "label":
                 self.label = msg
@@ -173,7 +203,7 @@ class Brain:
     def _cmd_train(self, args):
         if self.training or not self.base:
             return
-        sessions = [s for s in self.sessions.values() if s["meta"].get("purpose") in TRAIN_PURPOSES]
+        sessions = [dict(s) for s in self.sessions.values() if s["meta"].get("purpose") in TRAIN_PURPOSES]
         if not sessions:
             return
         self.training = {"started_t": self.now(), "progress": None,
@@ -181,6 +211,9 @@ class Brain:
         base, ver = dict(self.base), f"m{self.model_n + 1}"
 
         def fit():   # may run on another thread: touches nothing of ours
+            for s in sessions:   # read back from the bus's files; nothing is kept after the fit
+                if s["messages"] is None:
+                    s["messages"] = read_session(s["path"])
             return Model(base, ver=ver).fit(sessions)
 
         def done(model):   # back on the loop; model None = the fit failed
@@ -188,6 +221,7 @@ class Brain:
             if model is None:
                 return
             self.model, self.model_n = model, self.model_n + 1
+            self._save_model()
             self.decision_ms.clear()
             if self.window:
                 self.window["decided"] = False   # the new model decides on the next tick
@@ -226,9 +260,45 @@ class Brain:
     def _keep_open_session(self) -> Optional[str]:
         s, self.open_session = self.open_session, None
         session = s["meta"].get("session") if s else None
-        if session:
+        if session and s["messages"] is not None:
+            path = self.sessions_dir / f"{session}.jsonl" if self.sessions_dir else None
+            if path is not None and path.exists():
+                s = {"meta": s["meta"], "messages": None, "path": path}   # the bus has it on disk
             self.sessions[session] = s
         return session
+
+    def _save_model(self) -> None:
+        """data/sessions/model.pkl, so a restarted brain predicts without a new walk."""
+        if not self.sessions_dir:
+            return
+        self.sessions_dir.mkdir(parents=True, exist_ok=True)
+        tmp = self.sessions_dir / "model.pkl.tmp"
+        with open(tmp, "wb") as f:
+            pickle.dump({"ver": self.model.ver, "base": self.model.base, "model": self.model}, f)
+        os.replace(tmp, self.sessions_dir / "model.pkl")   # never a half-written file
+
+    def _load_model(self) -> None:
+        """Bring back the last model if it was fit on the baseline we just loaded.
+
+        model.pkl is our own file in data/sessions; nothing else is ever unpickled.
+        """
+        if not (self.sessions_dir and self.base):
+            return
+        try:
+            with open(self.sessions_dir / "model.pkl", "rb") as f:
+                doc = pickle.load(f)
+            model, ver = doc["model"], str(doc["ver"])
+            if doc["base"] != self.base or not model.trained:
+                return   # the room was re-baselined since: the model is stale
+            n = int(ver.lstrip("m"))
+        except Exception:
+            return       # no file, another scikit-learn, a damaged file: start untrained
+        self.model, self.model_n = model, n
+        for session in model.train_sessions:   # so train and relearn still find their recordings
+            path = self.sessions_dir / f"{session}.jsonl"
+            meta = first_meta(path)
+            if meta:
+                self.sessions[session] = {"meta": meta, "messages": None, "path": path}
 
     def _cmd_label_mode(self, args):
         mode = args.get("mode")
