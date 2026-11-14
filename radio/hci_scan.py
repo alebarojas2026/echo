@@ -88,6 +88,27 @@ def make_bus_emitter(sock: socket.socket, target: tuple[str, int], rx: str):
     return emit
 
 
+REFUSED = {0x01, 0x0C}  # Unknown HCI Command, Command Disallowed
+
+
+def start_either(scanner: BeaconScanner, say) -> None:
+    """Start the scan. If the controller refuses this command family, start once with the other.
+
+    After the host has used one family (legacy or extended) since power-on, the controller answers
+    the other with Command Disallowed (Core spec Vol 4 Part E 3.1.1), and the kernel may have picked
+    differently from us. Any other error, or a second refusal, is raised.
+    """
+    try:
+        scanner.start()
+    except hci.HciError as e:
+        if e.status not in REFUSED:
+            raise
+        scanner.ext = not scanner.ext
+        scanner.mode = "extended" if scanner.ext else "legacy"
+        say(f"scan refused ({e}); using the {scanner.mode} commands")
+        scanner.start()
+
+
 def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, seen=None,
         quiet_s: float = 2.0, clock=time.monotonic, say=None) -> dict:
     """Scan, calling emit(link, dbm) per kept advert, until `seconds` pass (0 = forever) or stop().
@@ -104,7 +125,7 @@ def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, se
     say = say or (lambda text: print(text, file=sys.stderr, flush=True))
     seen = {} if seen is None else seen
     end = clock() + seconds if seconds else None
-    scanner.start()
+    start_either(scanner, say)
     last = quiet_since = clock()
     restarted = False
     try:
@@ -172,6 +193,8 @@ def main(argv=None) -> None:
         pass
     except hci.HciError as e:
         sys.exit(f"hci{args.dev}: {e}")
+    except OSError as e:  # the adapter went down or away; systemd starts the service again
+        sys.exit(f"hci{args.dev}: {e}. Is Bluetooth on? (sudo bluetoothctl power on)")
     finally:
         bus_sock.close()
         dev.close()
