@@ -81,3 +81,18 @@ test('game with no board says NO DATA and a tap is not counted', async ({ page }
   await expect(page.locator('#found')).toHaveText('__')
   await shot(page, 'game-nodata')
 })
+
+test('both pages follow the zones in /nodes.json (the desk strip)', async ({ page }) => {
+  const zones = [{ id: 1, side: 'W', name: 'Living room', still_alert_s: null }, { id: 2, side: 'E', name: 'Bathroom', still_alert_s: 10 }]
+  await page.route('**/nodes.json', (route) => route.fulfill({ json: { zones } }))
+  await open(page, '/src/game/index.html?mock=result', 1920, 1080)
+  await expect(page.locator('#floor button')).toHaveCount(2)
+  await expect(page.locator('#floor button').first()).toContainText('Living room')
+  await expect(page.locator('#compass')).toHaveText('WestEast')
+  await expect(page.locator('#hint')).toHaveText('Tap the zone, or press 1 to 2.')
+  await expect(page.locator('#result')).toContainText('Living room')
+  expect(await smallText(page, 'h1, h2, p, span, strong, button')).toEqual([])
+  await shot(page, 'game-desk')
+  await page.goto('/src/game/phone/index.html?mock=alert')
+  await expect(page.getByTestId('phone-title')).toHaveText('No movement in the room for 10 s.')   // zone 4 isn't in this layout
+})
