@@ -13,13 +13,20 @@ import {
 } from 'three'
 import { HOME_SPOT, NODES, SQUARE_M, ZONES, nodePosition, toScene, type NodeId, type Vec3 } from './frame'
 import { Glide3 } from './motion'
-import { EDGE, FLOOR, SQUARE, TEXT } from './palette'
+import { EDGE, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
+import { at, mix, shadedGeometry, type Part } from './shade'
 import type { RoomView } from './view'
 
-// The still parts of the room: floor, the 2 x 2 m square and its zones, two back walls, and the four nodes.
+// The still parts of the room as a scale model: a floor plinth with low walls on three sides, the 2 x 2 m
+// square and its zones, and the four nodes. The plinth, walls and lines are baked-shaded MeshBasicMaterial
+// (vertex colours from one fixed light, shade.ts), so the Pi draws a shaded room for the price of a flat one.
 
-const MARGIN_M = 0.5
-const WALL_M = 0.35 // low walls edge the floor without framing the scene in long diagonals
+const MARGIN_M = 0.32 // plinth beyond the square on the west, north and east
+const SOUTH_M = 0.46 // and on the south, where the router spots and the X-ray caption sit
+const WALL_M = 0.3 // low walls edge the floor without hiding it
+const WALL_T_M = 0.04
+const PLINTH_M = 0.09 // the slab the model stands on
+const SHADOW_M = 0.05 // how far the slab's hard shadow falls to the south-east
 
 export function v3(p: Vec3): Vector3 {
   const [x, y, z] = toScene(p)
@@ -36,42 +43,65 @@ export function segments(pairs: Vec3[], material: LineBasicMaterial | LineDashed
   return lines
 }
 
-/** The drawn floor and back walls (replaced by a room scan when there is one), and the square with its zones. */
+/** The plinth, low walls and slab shadow (replaced by a room scan when there is one), and the square. */
 function buildShell(): { room: Group; square: Group } {
   const g = new Group()
   const sq = new Group()
-  const lo = -MARGIN_M
-  const hi = SQUARE_M + MARGIN_M
-  const size = hi - lo
+  const west = -MARGIN_M
+  const east = SQUARE_M + MARGIN_M
+  const north = SQUARE_M + MARGIN_M
+  const south = -SOUTH_M
+  const sizeX = east - west
+  const sizeY = north - south
   const mid = SQUARE_M / 2
-  const card = new MeshBasicMaterial({ color: FLOOR })
+  const [cx, , cz] = toScene([(west + east) / 2, (south + north) / 2, 0])
 
-  const floor = new Mesh(new PlaneGeometry(size, size), card)
-  floor.rotation.x = -Math.PI / 2
-  floor.position.set(0, -0.002, 0)
-  g.add(floor)
+  // The slab: floor-coloured top, its sides falling off toward the wall shade, a hard shadow under it.
+  const slab = shadedGeometry([
+    { geom: new BoxGeometry(sizeX, PLINTH_M, sizeY), light: FLOOR, dark: mix(FLOOR, WALL_SHADE, 0.7), at: at(cx, -PLINTH_M / 2, cz) },
+  ])
+  const shadow = new Mesh(new PlaneGeometry(sizeX, sizeY), new MeshBasicMaterial({ color: WALL_SHADE }))
+  shadow.rotation.x = -Math.PI / 2
+  shadow.position.set(cx + SHADOW_M, -PLINTH_M - 0.002, cz + SHADOW_M * 1.4)
+  g.add(shadow, new Mesh(slab, new MeshBasicMaterial({ vertexColors: true })))
 
-  const north = new Mesh(new PlaneGeometry(size, WALL_M), card)
-  north.position.copy(v3([mid, hi, WALL_M / 2]))
-  g.add(north)
+  // Low walls on the west, north and east, their cut tops drawn in the edge colour like a section.
+  const t = WALL_T_M
+  const h = WALL_M
+  const walls: Part[] = []
+  const wall = (w: number, d: number, x: number, z: number) => {
+    walls.push({ geom: new BoxGeometry(w, h, d), light: mix(FLOOR, EDGE, 0.35), dark: mix(FLOOR, WALL_SHADE, 0.6), at: at(x, h / 2, z) })
+    walls.push({ geom: new PlaneGeometry(w, d), light: EDGE, dark: EDGE, at: at(x, h + 0.001, z, -Math.PI / 2) })
+  }
+  const [nx, , nz] = toScene([(west + east) / 2, north - t / 2, 0])
+  wall(sizeX, t, nx, nz)
+  const sideLen = sizeY - t
+  const [wx, , wz] = toScene([west + t / 2, south + sideLen / 2, 0])
+  wall(t, sideLen, wx, wz)
+  const [ex, , ez] = toScene([east - t / 2, south + sideLen / 2, 0])
+  wall(t, sideLen, ex, ez)
+  g.add(new Mesh(shadedGeometry(walls), new MeshBasicMaterial({ vertexColors: true })))
 
-  const west = new Mesh(new PlaneGeometry(size, WALL_M), card)
-  west.rotation.y = Math.PI / 2
-  west.position.copy(v3([lo, mid, WALL_M / 2]))
-  g.add(west)
-
-  // Floor edge, wall tops and the three wall corners.
-  const w = WALL_M
-  const walls: Vec3[] = [[lo, hi, w], [hi, hi, w], [lo, lo, w], [lo, hi, w], [lo, hi, 0], [lo, hi, w],
-    [hi, hi, 0], [hi, hi, w], [lo, lo, 0], [lo, lo, w]]
-  const floorEdge = outline([[lo, lo, 0], [hi, lo, 0], [hi, hi, 0], [lo, hi, 0]])
-  g.add(segments([...floorEdge, ...walls], new LineBasicMaterial({ color: EDGE })))
-
-  // The sensing square and its four zones.
+  // The sensing square and its zone lines as thin strips, so they hold up at 0.85 render scale and 3 m.
   const s = SQUARE_M
-  sq.add(segments(outline([[0, 0, 0], [s, 0, 0], [s, s, 0], [0, s, 0]]), new LineBasicMaterial({ color: SQUARE })))
-  const dash = new LineDashedMaterial({ color: EDGE, dashSize: 0.06, gapSize: 0.05 })
-  sq.add(segments([[mid, 0, 0], [mid, s, 0], [0, mid, 0], [s, mid, 0]], dash))
+  const lines: Part[] = []
+  const strip = (a: Vec3, b: Vec3, wide: number, color: number) => {
+    const [ax, , az] = toScene(a)
+    const [bx, , bz] = toScene(b)
+    const len = Math.hypot(bx - ax, bz - az)
+    const ang = Math.atan2(-(bz - az), bx - ax)
+    lines.push({ geom: new PlaneGeometry(len + wide, wide), light: color, dark: color, at: at((ax + bx) / 2, 0.001, (az + bz) / 2, -Math.PI / 2, ang) })
+  }
+  const edges: [Vec3, Vec3][] = [
+    [[0, 0, 0], [s, 0, 0]],
+    [[s, 0, 0], [s, s, 0]],
+    [[s, s, 0], [0, s, 0]],
+    [[0, s, 0], [0, 0, 0]],
+  ]
+  for (const [a, b] of edges) strip(a, b, 0.014, SQUARE)
+  strip([mid, 0, 0], [mid, s, 0], 0.007, EDGE)
+  strip([0, mid, 0], [s, mid, 0], 0.007, EDGE)
+  sq.add(new Mesh(shadedGeometry(lines), new MeshBasicMaterial({ vertexColors: true })))
   return { room: g, square: sq }
 }
 
