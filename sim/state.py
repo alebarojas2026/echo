@@ -19,6 +19,7 @@ from statistics import mean, median, pstdev
 
 from . import fake
 from .wire import encoder
+from narrator.recap import template as recap_template
 
 STILL_ALERT_S = {1: 60, 2: None, 3: None, 4: 10}   # contract section 3
 GRID = {"w": 10, "h": 10, "cell_m": 0.24, "origin_m": [-0.2, -0.2]}
@@ -86,6 +87,7 @@ class Brain:
         self.before = {"present": False, "zone": 0, "alert": "none", "cam": "on", "spot": "S-home",
                        "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
+        self.demo = []   # every event since the last reset, for the recap
 
     def see(self, event: dict) -> None:
         if event["type"] == "rssi":
@@ -98,6 +100,15 @@ class Brain:
         if msg.get("cmd") == "reset":   # between judges: also the still timer, check-in, advice, narration
             self.still_s, self.checkin, self.narration = 0.0, None, None
             self.advice, self.advice_off = None, True
+            # The `reset` event (section 5), then the narrator's end-of-demo recap: its template
+            # recap of what happened since the last reset, as the board sends when the model is slow.
+            demo, self.demo = self.demo, []
+            t = self.last_t or 0.0
+            self._event(t, "reset")
+            text = recap_template(demo)
+            if text:
+                self.narration = {"text": text, "event_id": f"e{self.n_events}", "t": self._ms(t),
+                                  "source": "template", "gen_ms": 0}
 
     def _ms(self, t: float) -> int:
         return self.start_ms + round(t * 1000)
@@ -313,6 +324,9 @@ class Brain:
         info = {k: v for k, v in info.items() if v is not None}   # an unknown node is left out, not sent as null
         self.n_events += 1
         self.events.append({"type": "event", "t": t, "id": f"e{self.n_events}", "kind": kind, "info": info})
+        if kind == "reset":
+            return   # no sentence of its own: the recap follows
+        self.demo.append({"kind": kind, "info": info, "t": self._ms(t)})
         sentence = NO_NODE[kind] if kind in NO_NODE and info.get("node") is None else SENTENCES[kind]
         self.narration = {"text": sentence.format(**info), "event_id": f"e{self.n_events}",
                           "t": self._ms(t), "source": "template", "gen_ms": 0}
