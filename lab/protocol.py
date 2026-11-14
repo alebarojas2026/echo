@@ -208,13 +208,13 @@ def build(seed: int, env: rf.Env, live_person: dict = None, wave: dict = None, s
     return sc, plan
 
 
-def best_spots(tray, width=0.3, depth=10.0):
-    """Router spots (not S-home) whose new Wi-Fi link the tray blocks least (ties within 0.5 dB)."""
+def best_spots(tray, width=0.3, depth=10.0, tol_db=0.5):
+    """Router spots (not S-home) whose new Wi-Fi link the tray blocks least (ties within tol_db)."""
     unoq = rf.NODES["unoq"]
     loss = {s: float(rf.shadow_db(np.array([tray[0]]), np.array([tray[1]]), xy, unoq,
                                   rf.LAMBDA_M["wifi"], width, depth)[0])
             for s, xy in SPOTS.items() if s != "S-home"}
     lo = min(loss.values())
-    return sorted(s for s, v in loss.items() if v - lo <= 0.5)
+    return sorted(s for s, v in loss.items() if v - lo <= tol_db)
 
 
