@@ -45,7 +45,7 @@ where the brain breaks. It says nothing about real accuracy; only the hardware g
     1.5 dB above, and at least 1.5 dB below, the 1 s median.
 - **Hall fading (K) drives most results.** It is set from typical indoor numbers, not measured. Measure it in the presentation room:
   - the raw std of `pi5>unoq:wifi` over 30 s in an empty square;
-  - about 0.6 dB means K ≈ 20 dB (quiet), 1.1 dB means K ≈ 15 (the nominal here), 2 dB or more means K < 10 (busy).
+  - in the simulator, 0.7 dB means K ≈ 23 dB (quiet), 1.0 dB means K ≈ 16 (about the nominal here), 1.7 dB means K ≈ 10, and 2.3 dB or more means K ≤ 7 (busy).
 - **People are scripted** walkers with drawn sizes and speeds. There is one person at a time, and no crowd.
 - **The ranking of failures is the useful output.** Exact percentages are not, so treat them as
   relative and look at the direction.
