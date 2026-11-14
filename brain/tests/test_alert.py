@@ -255,3 +255,30 @@ def test_a_single_flipped_zone_still_cancels_a_wave_in_progress():
     watch.on_pred(T0 + 100, dict(STILL, zone=3, zone_set=[3]))   # one flipped decision
     watch.on_pred(T0 + 200, STILL)
     assert marks == [T0 + 100, T0 + 200] and watch.zone == 4     # raw changes reach the check-in rule
+
+
+def noisy_link(rate_hz, seconds, sigma_db=1.5, wave_db=0.0, seed=0):
+    """Check-ins on a link with random noise (and, with wave_db, a 2 Hz swing for 2.5 s in every 20 s)."""
+    import math
+    import random
+    rng, rule, fired = random.Random(seed), CheckIn(), 0
+    for i in range(int(seconds * rate_hz)):
+        t = int(i * 1000 / rate_hz)
+        dbm = -50 + rng.gauss(0, sigma_db)
+        if wave_db and 10 <= (t / 1000) % 20 < 12.5:
+            dbm += wave_db * math.sin(2 * math.pi * 2.0 * t / 1000)
+        fired += rule.push(T0 + t, CHECKIN_LINK, round(dbm))
+    return fired
+
+
+def test_a_faster_reader_does_not_get_more_check_ins_out_of_the_same_noise():
+    """The Wi-Fi reader sends about 50 readings a second, not 10. The same noisy link must not
+    cross the +/-1.5 dB lines more often just because it is read more often."""
+    slow = sum(noisy_link(10, 600, seed=s) for s in range(3))
+    fast = sum(noisy_link(50, 600, seed=s) for s in range(3))
+    assert fast <= slow, f"{fast} check-ins from noise at 50 readings a second, {slow} at 10"
+
+
+def test_a_wave_still_checks_in_at_every_reading_rate():
+    for rate in (10, 15, 20, 50):
+        assert noisy_link(rate, 200, sigma_db=1.0, wave_db=4.0) >= 8, rate   # 10 waves in 200 s

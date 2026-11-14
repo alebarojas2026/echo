@@ -33,7 +33,8 @@ CROSS_DB = 1.5          # a crossing is this far above or below the rolling medi
 CROSSINGS = 4           # alternating crossings needed
 CROSS_WINDOW_MS = 2500  # ... within this long
 MEDIAN_MS = 1000        # the rolling median's length
-SMOOTH_N = 3            # readings averaged before comparing, so 1 dB noise can't cross
+SMOOTH_N = 3            # at least this many readings are averaged before comparing, so 1 dB noise can't cross
+SMOOTH_MS = 200         # ... and all of the last 0.2 s (still 3 readings at 10 or 15 a second, 10 at 50 a second)
 OTHER_LINK_DB = 3.0     # no other link may change by more than this
 OTHER_BIN_MS = 500      # ... comparing 0.5 s means
 SMOOTH_DECISIONS = 10   # zone and kind are the majority of this many decisions (1 s)
@@ -116,7 +117,12 @@ class CheckIn:
         if len(self.wifi) < 2 * SMOOTH_N:
             return False
         values = [d for _, d in self.wifi]
-        dev = sum(values[-SMOOTH_N:]) / SMOOTH_N - statistics.median(values)
+        # Averaged over time, not over a count: a faster reader must not get more chances to
+        # cross on noise alone. At 10 or 15 readings a second this is the last 3, as before.
+        last = [d for when, d in self.wifi if when > t - SMOOTH_MS]
+        if len(last) < SMOOTH_N:
+            last = values[-SMOOTH_N:]
+        dev = sum(last) / len(last) - statistics.median(values)
         side = 1 if dev >= CROSS_DB else -1 if dev <= -CROSS_DB else 0
         if t < self.quiet_until:
             return False
