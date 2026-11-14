@@ -43,6 +43,7 @@ def obj(x, y, since=14.0, near="pi5", drop=9.8):
 
 def links(**drops):
     ids = ["pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble", "east>pi5:ble", "west>pi5:ble"]
+    drops = {"pi5_unoq_wifi": 7.0, **drops}   # the Wi-Fi link is dropping unless a test says otherwise
     return [{"id": i, "drop_db": drops.get(i.replace(">", "_").replace(":", "_"), 0.0)} for i in ids]
 
 
@@ -211,3 +212,18 @@ def test_inputs_are_not_changed():
     before = copy.deepcopy((grid, ls, NODES, objects))
     advise(grid, ls, NODES, objects)
     assert (grid, ls, NODES, objects) == before
+
+
+# --- only while the Wi-Fi link is dropping now (#236) ---------------------
+
+@pytest.mark.parametrize("drop, fires", [(7.0, True), (3.0, True), (2.9, False), (0.0, False), (-1.0, False)])
+def test_no_advice_unless_the_wifi_link_drops_3_db_now(drop, fires):
+    a = advise(xray([(*T1, 9.0)]), links(pi5_unoq_wifi=drop), NODES, [obj(*T1)])
+    assert (a is not None) == fires
+
+
+def test_no_advice_without_a_wifi_reading():
+    no_drop = [dict(lk, drop_db=None) if lk["id"] == "pi5>unoq:wifi" else lk for lk in links()]
+    no_row = [lk for lk in links() if lk["id"] != "pi5>unoq:wifi"]
+    for ls in (no_drop, no_row, [], None):
+        assert advise(xray([(*T1, 9.0)]), ls, NODES, [obj(*T1)]) is None
