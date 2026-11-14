@@ -53,6 +53,14 @@ async def _scenario():
         first = await until(lambda m: m["type"] == "state")
         assert first["pred"] is None and first["model"]["trained"] is False
 
+        # Section 1: anything that isn't v 2 is dropped, on both sides.
+        await ws.send(json.dumps({"v": 1, "type": "cmd", "cmd": "record_start", "args": {"session": "old"}}))
+        await ws.send(json.dumps({"type": "cmd", "cmd": "reset", "args": {}}))
+        feed.sendto(json.dumps(dict(sim_to_v2("empty_room")[1], v=1)).encode(), ("127.0.0.1", ports["udp"]))
+        await asyncio.sleep(0.3)
+        assert ports["brain"].events == [] and ports["brain"].want_session is None
+        assert (await until(lambda m: m["type"] == "state"))["links"] == []
+
         await send("baseline")
         await play("empty_room", seed=1)
         await until(lambda m: m["type"] == "event" and m["kind"] == "baseline_done")
@@ -76,12 +84,22 @@ async def _scenario():
         assert state["src"] == "sim" and state["links"][0]["base_dbm"] is not None
         assert state["model"]["ms_per_decision"] is not None
 
+        # Everything arrives in seq order: events go out before the state that follows them.
+        seqs = [m["seq"] for m in seen]
+        assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
+        assert {m["kind"] for m in seen if m["type"] == "event"} >= {"baseline_done", "recording", "trained"}
+
+        # A second screen that never reads doesn't hold this one up.
+        idle = await connect(f"ws://127.0.0.1:{ports['ws']}/ws", max_queue=1)
+
         # States arrive about 10 times a second.
         await until(lambda m: m["type"] == "state" and m["seq"] >= brain._seq)  # skip the backlog
         t0 = loop.time()
         for _ in range(10):
             await until(lambda m: m["type"] == "state")
         assert 0.5 < loop.time() - t0 < 2.0
+
+        await idle.close()
 
     # The commands reached the bus port, in order, as v2 cmd messages.
     got = []
