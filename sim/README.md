@@ -136,5 +136,7 @@ python -m sim.scrub --check data/sessions/keep/s12.jsonl    # exit 1 if any iden
 
 It deletes fields that hold a device identifier (`mac`, `bssid`, `ssid`, `addr`, `name`,
 `local_name`, `hostname`, ...) and blanks anything shaped like a MAC address in any other
-text. Contract fields are never touched, so a scrubbed file still replays. It cannot spot a
+text: bytes joined by `:`, `-`, `_` or `.`. Twelve hex digits in a row are blanked only under a
+field whose name contains `mac`, `addr` or `bssid` (for example `src_mac`), because elsewhere they
+look like any other hex, such as a short commit hash or the end of a UUID. Contract fields are never touched, so a scrubbed file still replays. It cannot spot a
 device name hidden in a field with an unrelated name, so skim the file before committing.
