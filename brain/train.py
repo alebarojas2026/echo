@@ -110,7 +110,7 @@ class Model:
             motion = str(self.motion.predict(x)[0]) or None
         zone_set = ([z for z in ZONES[1:] if probs[z] >= ZONE_SET_MIN_P] or [zone]) if present else []
         return {
-            "present": present, "kind": kind, "zone": zone if present else None,
+            "present": present, "kind": kind, "zone": zone,   # 0 = nobody there (section 3)
             "zone_set": zone_set, "probs": [round(float(p), 3) for p in probs],
             "motion": motion, "still_s": None, "why": self.why(window),
         }
