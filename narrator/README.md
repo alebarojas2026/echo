@@ -134,5 +134,15 @@ directly from the same facts is sent instead when the model is slow (over 25 s),
 long, adds a number that is not in the facts, or uses a banned word. Signal levels appear only when
 an `advice_result` event carried them. A reset with nothing to tell sends nothing.
 
+To check the recap on the board, with radio-sight-llm up:
+
+```
+/opt/rs/venv/bin/python -m narrator.recap
+```
+
+It writes one recap of a sample demo (a tour, the alert, a wave, the camera unplugged, walking out)
+and prints the narration and how long it took. Nothing is sent. Exit 1 means the template was used,
+with the reason. Recap time: __ ms. Limit 25000 ms.
+
 The recap keeps the 8 s spacing: it goes out no sooner than 8 s after the last sentence, and the
 next judge's first sentence waits 8 s after it. The schema allows `recap` and 45 words (#280).
