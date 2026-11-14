@@ -315,3 +315,26 @@ def test_link_report_lists_a_link_it_doesnt_know_last(bus):
     bus.handle(msg(1, link="east>pi5:ble"), A)
     bus.handle(msg(2, link="odd>link:ble"), A)
     assert bus.link_report(1.0) == "links: east>pi5:ble 1.0/s, odd>link:ble 1.0/s"
+
+
+def test_a_link_going_quiet_and_coming_back_is_said_once_each(caplog, tmp_path):
+    caplog.set_level("INFO", logger="bus")
+    t = [1000]
+    b = Bus(sessions=tmp_path, clock=lambda: t[0])
+    b.handle(msg(1, link="west>pi5:ble"), A)
+    b.watch_links(3999)                                  # 2.999 s: still fine
+    t[0] = 2000
+    b.handle(msg(1, "label", zone=1), B)                 # labels aren't links
+    for now in (4000, 4500, 9000):
+        b.watch_links(now)
+    t[0] = 9000
+    b.handle(msg(2, link="west>pi5:ble"), A)
+    b.handle(msg(3, link="west>pi5:ble"), A)
+    said = [r.getMessage() for r in caplog.records if "west>pi5" in r.getMessage()]
+    assert said == ["west>pi5:ble quiet for 3 s", "west>pi5:ble back after 8 s"]
+
+
+def test_a_link_that_never_sent_is_never_called_quiet(caplog, tmp_path):
+    b = Bus(sessions=tmp_path, clock=lambda: 1000)
+    b.watch_links(10**9)
+    assert not [r for r in caplog.records if "quiet" in r.getMessage()]
