@@ -21,6 +21,7 @@ from radio.wifi_rssi import (
     Stats,
     _make_message,
     _read_station_info,
+    find_tool,
     gate,
     gate_block,
     gate_rows,
@@ -363,8 +364,18 @@ class TestSettings:
         load_env_file(tmp_path / "missing", environ)   # no file: nothing changes, no error
         assert len(environ) == 4
 
+    def test_iw_is_found_outside_a_short_path(self, tmp_path):
+        sbin = tmp_path / "sbin"
+        sbin.mkdir()
+        (sbin / "iw").write_text("#!/bin/sh\n")
+        (sbin / "iw").chmod(0o755)
+        no_path = lambda name: None    # an ssh command's PATH: /usr/local/bin:/usr/bin:/bin
+        assert find_tool("iw", which=no_path, dirs=(str(tmp_path / "nope"), str(sbin))) == str(sbin / "iw")
+        assert find_tool("iw", which=lambda name: "/usr/bin/iw", dirs=(str(sbin),)) == "/usr/bin/iw"
+        assert find_tool("iw", which=no_path, dirs=(str(tmp_path / "nope"),)) is None
+
     def test_main_says_how_to_get_iw(self):
-        with mock.patch("radio.wifi_rssi.shutil.which", return_value=None), \
+        with mock.patch("radio.wifi_rssi.find_tool", return_value=None), \
              mock.patch("radio.wifi_rssi.load_env_file"):
             with pytest.raises(SystemExit, match="apt install iw"):
                 main([])
@@ -372,7 +383,7 @@ class TestSettings:
     def test_main_needs_the_bssid(self, monkeypatch):
         monkeypatch.delenv("WIFI_BSSID", raising=False)
         monkeypatch.delenv("SENSING_BSSID", raising=False)
-        with mock.patch("radio.wifi_rssi.shutil.which", return_value="/usr/sbin/iw"), \
+        with mock.patch("radio.wifi_rssi.find_tool", return_value="/usr/sbin/iw"), \
              mock.patch("radio.wifi_rssi.load_env_file"):
             with pytest.raises(SystemExit, match="WIFI_BSSID"):
                 main([])

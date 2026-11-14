@@ -29,6 +29,7 @@ without overriding anything already set:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
@@ -111,9 +112,30 @@ def parse_station_output(text: str) -> tuple[int | None, int | None]:
     return dbm, rx_pkts
 
 
+SBIN = ("/usr/sbin", "/sbin")
+
+
+def find_tool(name: str, which=shutil.which, dirs=SBIN) -> str | None:
+    """`name` on PATH, else in /usr/sbin or /sbin, where Debian keeps iw: a non-login shell's PATH
+    (an `ssh host command`, maybe adb) has neither, though the service's and a login shell's do."""
+    found = which(name)
+    if found:
+        return found
+    for folder in dirs:
+        path = os.path.join(folder, name)
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
+
+
+@functools.lru_cache(maxsize=None)
+def iw_path() -> str:
+    return find_tool("iw") or "iw"
+
+
 def _iw(*args: str) -> str | None:
     try:
-        return subprocess.check_output(["iw", *args], stderr=subprocess.DEVNULL, timeout=0.5).decode()
+        return subprocess.check_output([iw_path(), *args], stderr=subprocess.DEVNULL, timeout=0.5).decode()
     except Exception:
         return None
 
@@ -391,7 +413,7 @@ def main(argv=None) -> None:
 
     load_env_file(REPO / ".env")
     cfg = settings()
-    if shutil.which("iw") is None:
+    if find_tool("iw") is None:
         sys.exit("wifi_rssi: iw isn't installed. Run: sudo apt install iw "
                  "(before the board joins the hotspot: there's no internet after)")
     if not cfg["bssid"]:
