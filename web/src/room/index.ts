@@ -40,7 +40,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     }
     beams.update(state)
     xray.update(state.xray, state.health?.status === 'blind')
-    presence.update(state.pred, state.objects ?? [])
+    presence.update(state.pred, state.objects ?? [], state.xray)
     stage.markZones(state.pred?.zone_set ?? [])
     spots.update(state.router, state.advice)
   })
