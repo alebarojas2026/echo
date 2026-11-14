@@ -162,3 +162,36 @@ How the sessions are walked decides what the model can learn. These steps come f
 3. Step out of view each time before counting. Windows with anybody in frame, and the 2 s after, are left out of training.
 
 In the demo, put the tray back on the same T1 mark. The model recognises it only near where it was recorded.
+
+## Hall links (`brain/hall.py`, optional)
+
+Two spare beacons far from the square (letters A and B, 10-25 m away) make up to four long links:
+`a>unoq:ble`, `b>unoq:ble`, `a>pi5:ble`, `b>pi5:ble`. For each one the brain says whether there is
+movement along that path. It never says who, where along the path, or how many. The wording is
+proposed in issue #358; until it lands in CONTRACTS.md, state carries `hall` only once a hall link
+has been heard, and is otherwise exactly what it was.
+
+```jsonc
+"hall":[{"id":"a>unoq:ble","tx":"a","rx":"unoq","xy_m":[x, y],"activity":0.0-1.0,"moving":false,"rate_hz":n,"stale":false}]
+```
+
+- A body moving near or across a radio path makes the signal change from reading to reading. Per
+  link, `spread_db` is the std of its 0.5 s means over the last 3 s.
+- Each link is compared with its own quiet level: the 20th percentile of that spread over the last
+  5 minutes (20 samples at least, never under 0.5 dB). No baseline capture, nothing learned.
+- `activity` = (spread / quiet - 2) / 4, held to 0-1. `moving` turns on at 0.5 and off after 1 s
+  under 0.25.
+- `stale` = fewer than 4 of the six 0.5 s bins hold a reading (the readings stopped, or are too
+  few to judge); it clears after 3 s. A stale link has activity 0 and moving false. On a link near
+  the receiver's limit a body in the path can stop the readings altogether: that shows as stale,
+  never as "no movement".
+- `xy_m` is the far beacon's spot from the `hall` section of radio/nodes.json, or null until it is
+  measured.
+
+The six links never see any of it: `Brain.on_message` hands a hall reading to `Hall.take` and
+returns, so features, health, the x-ray, the alert, the check-in, advice and the recordings held
+for training are the same with and without hall beacons (brain/tests/test_hall.py compares every
+state of a whole demo run). Every entry point of the module catches its own errors.
+
+The thresholds are first values, and the tests use synthetic links. How far a link reaches in a
+full hall, and how a real crossing looks, have to be measured there (issue #95).

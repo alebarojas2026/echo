@@ -26,6 +26,7 @@ from brain import features as F
 from brain import layout
 from brain import settings as S
 from brain.alert import Armed, Tamper, Watch
+from brain.hall import Hall
 from brain.health import Health
 from brain.lesson import Lesson
 from brain.train import Model
@@ -150,6 +151,7 @@ class Brain:
         over_hotspot = [k for k in links if ends.get(k, _ends(k))[1] in HOTSPOT_RECEIVERS]
         self.health = Health.from_nodes(nodes, classifier_links=[k for k in links if k not in over_hotspot])
         self.xray = Xray.from_nodes(nodes)
+        self.hall = Hall.from_nodes(nodes)    # optional long links (brain/hall.py); none unless nodes.json lists them
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led, self.settings)
         # after hours: a person who appears and is still there armed.hold_s later is an intrusion
         self.armed = Armed(self.settings, S.hold_s(nodes))
@@ -222,6 +224,8 @@ class Brain:
 
     def on_message(self, msg: dict) -> None:
         """One message forwarded by the bus (it carries recv_t)."""
+        if self.hall.take(msg):
+            return   # a hall link's reading: nothing below ever sees it
         t, kind = msg.get("recv_t"), msg.get("type")
         if t is None:
             return
@@ -887,4 +891,4 @@ class Brain:
             # Section 5: a missing "armed" means false. Sent only while armed until state.json
             # knows the field (#440); a state that never arms is byte for byte what it was.
             state["armed"] = True
-        return state
+        return self.hall.add_to(state, now)
