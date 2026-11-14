@@ -50,3 +50,25 @@ def test_object_stability_uses_half_second_means():
     radio = [dict(type="rssi", link="a", recv_t=t, dbm=-55 + (2 if i % 2 else -2))
              for i, t in enumerate(range(0, 2500, 50))]
     assert object_evidence(radio, 2500, {"a": -50})
+
+
+def test_missing_spans_preserve_previous_measurements():
+    messages, states = logs()
+    result = analyze(messages, [dict(states[0]["state"], recv_t=120)])
+    proof = {"ms_per_decision": {"p50": 3.1, "p95": 4}, "commit": "old", "measured_at": "earlier"}
+    assert update_proof(proof, result, messages, states, "new") == proof
+
+
+def test_provenance_cannot_be_reassigned():
+    messages, states = logs()
+    with pytest.raises(ValueError, match="another commit"):
+        update_proof({"zone": {"total": 5}, "commit": "old"}, analyze(messages, states), messages, states, "new")
+    result = update_proof({"commit": "same", "measured_at": "earlier"}, analyze(messages, states), messages, states, "same")
+    assert result["measured_at"] == "earlier"
+
+
+def test_measured_timing_updates_require_board(monkeypatch):
+    from proof.provenance import require_board
+    monkeypatch.setattr("proof.provenance.platform.system", lambda: "Darwin")
+    with pytest.raises(ValueError, match="UNO Q"):
+        require_board()

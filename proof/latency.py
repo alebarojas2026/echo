@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 
 from proof.score import percentile
+from proof.provenance import prepare_update, require_board
 
 
 def read_jsonl(path):
@@ -47,10 +48,10 @@ def update_proof(proof, result, messages, states, commit):
         raise ValueError("synthetic or replay logs cannot populate measured proof")
     if any(r.get("state", r).get("src") != "live" for r in states):
         raise ValueError("synthetic state logs cannot populate measured proof")
-    updated = dict(proof)
+    if not result["decisions"]:
+        return dict(proof)
+    updated = prepare_update(proof, commit)
     updated["ms_per_decision"] = result["ms_per_decision"]
-    updated["measured_at"] = datetime.now(timezone.utc).isoformat()
-    updated["commit"] = commit
     return updated
 
 
@@ -67,9 +68,13 @@ def main():
         states.extend(read_jsonl(state_path))
     result = analyze(messages, states)
     if args.proof:
+        require_board()
         proof = json.loads(args.proof.read_text())
         commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        args.proof.write_text(json.dumps(update_proof(proof, result, messages, states, commit), indent=2, allow_nan=False) + "\n")
+        if result["decisions"]:
+            args.proof.write_text(json.dumps(update_proof(proof, result, messages, states, commit), indent=2, allow_nan=False) + "\n")
+        else:
+            print("No individual decision samples; proof file left unchanged.")
     print(json.dumps(result, indent=2, allow_nan=False))
 
 

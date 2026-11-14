@@ -20,3 +20,6 @@ Synthetic spans may exercise tests but cannot populate measured proof.
 End-to-end timing is printed separately because section 7 has no field for it.
 Do not copy the state's rolling median into a per-decision p95. Board capture
 instrumentation and real sessions are needed before these numbers are measured.
+Measured updates require the UNO Q device identity. Missing individual spans
+leave prior timings untouched. Existing evidence from another commit is refused;
+rerun scoring at the current commit rather than relabeling old results.
