@@ -26,6 +26,7 @@ BASELINE_AT_S, TRAINED_AT_S = 1.0, 2.0
 STALE_RATIO, BLIND_AFTER_S, CLEAR_AFTER_S = 0.4, 3.0, 3.0   # section 6, link health
 OBJECT_AFTER_S, STATIC_AFTER_S, CHECKIN_AFTER_S = 2.0, 5.0, 1.25
 ADVICE_WITHIN_M, RESULT_WAIT_S, MEDIAN_S = 0.5, 2.0, 3.0    # section 6, advice
+ADVICE_DROP_DB = 3.0      # section 6: advice only while pi5>unoq:wifi drops at least this much now
 JUMP_DB, STEADY_DB = 6.0, 0.8        # section 6: the jump rule, and what counts as a steady drop
 MOVING_RUN, RECENT = 5, 10           # section 6: the still timer is judged on smoothed decisions
 OBJECT_GONE_S = 1.0                  # section 6: a removed object's link comes down after about 1 s
@@ -167,18 +168,21 @@ class Brain:
             if l["id"] in self.jumped:
                 l["status"] = "blind"
 
-    def _advise(self, t: float, things: list, spot: str, nodes: dict) -> None:
-        """Section 6: an object that stays 5 s within 0.5 m of the router link gets advice."""
+    def _advise(self, t: float, things: list, spot: str, nodes: dict, links: list) -> None:
+        """Section 6: an object that stays 5 s within 0.5 m of the router link gets advice, but only
+        while pi5>unoq:wifi is dropping now (drop_db >= 3 dB; no row or a null drop means no advice)."""
         home = fake.NODES
+        wifi = next((l for l in links if l["id"] == WIFI), None)
+        dropping = wifi is not None and wifi.get("drop_db") is not None and wifi["drop_db"] >= ADVICE_DROP_DB
         close = [o for o in things if t - o.get("t_on", 0.0) >= STATIC_AFTER_S
                 and fake.dist_to_link((o["x"], o["y"]), home["pi5"], home["unoq"]) <= ADVICE_WITHIN_M]
         if spot != "S-home" and self.moved_at is None:
             self.moved_at = t
         if spot == "S-home":
-            if self.moved_at is not None or not close:   # back home, or nothing in the way any more
+            if self.moved_at is not None or not close or not dropping:   # back home, nothing in the way, or the link has recovered
                 self.advice, self.advice_off = None, False
             self.moved_at = None
-        if self.advice is None and close and spot == "S-home" and not self.advice_off:
+        if self.advice is None and close and dropping and spot == "S-home" and not self.advice_off:
             o = close[0]
             # the spot whose new link the object blocks least; west wins a tie
             to = min(("S-W30", "S-E30"), key=lambda s: round(object_drop(o, fake.ROUTER_SPOTS[s], home["unoq"]), 3))
@@ -268,7 +272,7 @@ class Brain:
                 self.alert_s = 0.0
                 self._event(t, "checkin", link=self.checkin["link"])
         if baseline:
-            self._advise(t, things, spot, nodes)
+            self._advise(t, things, spot, nodes, links)
 
         pred = None
         if trained and not blind and spot == "S-home":

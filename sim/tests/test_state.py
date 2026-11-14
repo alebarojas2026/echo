@@ -242,3 +242,33 @@ def test_removed_tray_disappears_within_about_a_second_with_a_person_present():
     off = next(e["t"] for e in events if e["kind"] == "object_off")
     assert 14.9 <= off <= 15.1
     assert max(at(states, 13)["xray"]["static_db"]) > 5     # the static picture did build up with the person there
+
+
+def _wifi_drop(s):
+    return next((l["drop_db"] for l in s["links"] if l["id"] == "pi5>unoq:wifi"), None)
+
+
+def test_advice_only_while_the_wifi_link_drops_3_db_or_more():
+    # Section 6: the same tray, light (under 3 dB on the router link) and heavy.
+    def tray(drop_db):
+        path = {"name": "t", "duration_s": 14, "person": None,
+                "objects": [{"x": 1.0, "y": 0.2, "drop_db": drop_db, "t_on": 2}]}
+        return [m for m in state.run(path) if m["type"] == "state"]
+
+    light, heavy = at(tray(2.0), 12), at(tray(8.0), 12)
+    assert light["objects"] and _wifi_drop(light) < 3 and light["advice"] is None
+    assert _wifi_drop(heavy) >= 3 and heavy["advice"]
+
+
+def test_no_wifi_row_or_a_null_drop_means_no_advice():
+    path = {"name": "t", "duration_s": 14, "person": None, "objects": [{"x": 1.0, "y": 0.2, "drop_db": 8, "t_on": 2}]}
+    brain = state.Brain(path)
+    obj = [{"x": 1.0, "y": 0.2, "drop_db": 8, "t_on": 0.0}]
+    for links in ([], [{"id": "pi5>unoq:wifi", "drop_db": None}], [{"id": "pi5>unoq:wifi", "drop_db": 2.9}]):
+        brain.advice = None
+        brain._advise(10.0, obj, "S-home", fake.NODES, links)
+        assert brain.advice is None, links
+    brain._advise(10.0, obj, "S-home", fake.NODES, [{"id": "pi5>unoq:wifi", "drop_db": 3.0}])
+    assert brain.advice
+    brain._advise(10.1, obj, "S-home", fake.NODES, [{"id": "pi5>unoq:wifi", "drop_db": 1.0}])
+    assert brain.advice is None   # the link recovered, so the advice goes, as in the brain
