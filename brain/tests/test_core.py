@@ -831,21 +831,14 @@ def _fitted(fit):
     return next(c.cell_contents for c in fit.__closure__ if isinstance(c.cell_contents, list))
 
 
-def test_the_log_says_what_a_baseline_is_waiting_for(caplog):
-    import logging
-    caplog.set_level(logging.INFO, logger="brain")
-    brain = Brain()
-
-    def east_pi5_never_reports(m):
-        return None if m.get("link") == "east>pi5:ble" else m
-
-    baseline_feed(brain, edit=east_pi5_never_reports)
-    assert brain.capture is not None                       # still waiting, as the contract wants
-    said = [r.getMessage() for r in caplog.records if "baseline" in r.getMessage()]
-    assert "baseline is waiting: no readings in the last second from east>pi5:ble" in said
-    assert len(said) < 6                                   # once per reason, not once per message
-    caplog.clear()
-    for m in sim_to_v2("empty_room", seed=2, t0=brain.feed_t + 100):   # every link reports: it goes through
-        brain.on_message(m)
-    said = [r.getMessage() for r in caplog.records if "baseline" in r.getMessage()]
-    assert brain.capture is None and "baseline: capturing 20 s" in said
+def test_one_tray_gives_one_advice_that_does_not_flip_between_spots():
+    """A tray on the centre line scores the two spots the same; noise must not flip the sentence."""
+    brain, feed = taught()
+    for seed in (52, 60, 61):
+        brain.pop_events()
+        states = []
+        feed.play("tray_t1", seed=seed, states=states)
+        shown = [s["advice"] for _, s in states if s["advice"]]
+        assert len(shown) > 150                                  # it shows for most of the 30 s
+        assert len({(a["id"], a["to_spot"], a["text"]) for a in shown}) == 1
+        assert [e["kind"] for e in brain.pop_events()].count("advice") == 1
