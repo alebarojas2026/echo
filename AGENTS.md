@@ -13,6 +13,8 @@ Radio Sight: Wi-Fi that understands the room. Radio links between 4 nodes around
 6. Brain: #220 (the still timer) and #222 (SENSOR BLIND on the tray) come before every other brain issue. They decide whether the no-movement alert and the tray beat work in the demo.
 7. Lanes moved: advisor/ is now Izet's (Alexander is on hardware full time); narrator/ and teacher/ are now Alejandro's. Take those tags too.
 
+8. **CI is down (the account's Actions limit), so a red check means nothing right now.** Until it's back, the merge gate is a local run: check out the PR merged with current main in a clean folder, run that lane's tests (pytest for the folder and `python -m pytest contracts`; for web: `npm ci && npx tsc --noEmit && npx vitest run && npx vite build`), and write the result in a PR comment ("CI unavailable; local: N passed"). Don't push empty commits to re-run CI.
+
 ## Lanes (stay in yours)
 | Tag | Folders | Owner |
 |---|---|---|
