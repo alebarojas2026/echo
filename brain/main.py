@@ -18,13 +18,14 @@ import os
 import socket
 from pathlib import Path
 
-from websockets.asyncio.server import serve
+from websockets.asyncio.server import broadcast, serve
 from websockets.exceptions import ConnectionClosed
 
 from brain.alert import led_grid
 from brain.core import NODES_JSON, Brain, now_ms
 
 WS_HOSTS = ("127.0.0.1", "192.168.77.2")
+SESSIONS_DIR = Path(__file__).resolve().parent.parent / "data" / "sessions"
 STATE_EVERY_S = 0.1
 log = logging.getLogger("brain")
 
@@ -54,12 +55,13 @@ class _BusIn(asyncio.DatagramProtocol):
             msg = json.loads(data)
         except (ValueError, UnicodeDecodeError):
             return
-        if isinstance(msg, dict):
+        if isinstance(msg, dict) and msg.get("v") == 2:   # section 1: check v and type at runtime
             self.brain.on_message(msg)
 
 
 async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=WS_HOSTS, ws_port=8765,
-              mode_file=None, feed_clock=False, nodes_file=NODES_JSON, ready=None, stop=None):
+              mode_file=None, feed_clock=False, nodes_file=NODES_JSON, sessions_dir=None,
+              ready=None, stop=None):
     """Run until `stop` (an asyncio.Event) is set. `ready` gets the ports actually bound."""
     loop = asyncio.get_running_loop()
     out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -81,7 +83,8 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
 
     nodes = json.loads(Path(nodes_file).read_text(encoding="utf-8"))
     brain = Brain(clock=None if feed_clock else now_ms, to_bus=to_bus, mode_file=mode_file,
-                  spawn=spawn, board_stats=board_stats, nodes=nodes, led=led_grid())
+                  spawn=spawn, board_stats=board_stats, nodes=nodes, led=led_grid(),
+                  sessions_dir=sessions_dir)
     udp, _ = await loop.create_datagram_endpoint(lambda: _BusIn(brain), local_addr=bus_in)
 
     async def screen(ws):
@@ -92,7 +95,7 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
                     msg = json.loads(raw)
                 except ValueError:
                     continue
-                if isinstance(msg, dict) and msg.get("type") == "cmd":
+                if isinstance(msg, dict) and msg.get("v") == 2 and msg.get("type") == "cmd":
                     brain.on_cmd(msg)
         except ConnectionClosed:
             pass
@@ -115,13 +118,10 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
     stop = stop or asyncio.Event()
     try:
         while not stop.is_set():
-            lines = [json.dumps(m, separators=(",", ":")) for m in [brain.state(), *brain.pop_events()]]
-            for ws in list(clients):
-                try:
-                    for line in lines:
-                        await ws.send(line)
-                except ConnectionClosed:
-                    clients.discard(ws)
+            state = brain.state()   # may emit events; they carry lower seqs, so they go out first
+            for msg in [*brain.pop_events(), state]:
+                # broadcast never waits: a screen whose buffer is full is skipped, not waited for.
+                broadcast(clients, json.dumps(msg, separators=(",", ":")))
             await asyncio.sleep(STATE_EVERY_S)
     finally:
         for s in servers:
@@ -132,7 +132,10 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="Radio Sight brain: live loop")
-    ap.add_argument("--bus-port", type=int, default=5601)
+    ap.add_argument("--bus-port", type=int, default=5601, help="UDP port the bus forwards to")
+    ap.add_argument("--bus", default=os.environ.get("BRAIN_BUS", "127.0.0.1:5600"),
+                    help="host:port of the bus, where commands are passed on (or BRAIN_BUS)")
+    ap.add_argument("--sessions", default=str(SESSIONS_DIR), help="where baseline.json is kept")
     ap.add_argument("--ws-port", type=int, default=8765)
     ap.add_argument("--ws-host", action="append", help="address to listen on (repeatable)")
     ap.add_argument("--mode-file", default=os.environ.get("TEACHER_MODE_FILE"),
@@ -141,8 +144,10 @@ def main(argv=None) -> None:
     ap.add_argument("--feed-clock", action="store_true")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    host, _, port = args.bus.rpartition(":")
     try:
-        asyncio.run(run(bus_in=("127.0.0.1", args.bus_port), ws_hosts=tuple(args.ws_host or WS_HOSTS),
+        asyncio.run(run(bus_in=("127.0.0.1", args.bus_port), bus_out=(host or "127.0.0.1", int(port)),
+                        sessions_dir=args.sessions, ws_hosts=tuple(args.ws_host or WS_HOSTS),
                         ws_port=args.ws_port, mode_file=args.mode_file, feed_clock=args.feed_clock,
                         nodes_file=args.nodes))
     except KeyboardInterrupt:

@@ -38,6 +38,8 @@ Install: `pip install -r brain/requirements.txt` (scikit-learn, since onnxruntim
 python -m brain.main                 # on the board
 python -m brain.main --feed-clock    # with a recorded file played faster than real time
 python -m brain.main --nodes radio/nodes.json   # nodes, links and zones (this is the default)
+python -m brain.main --bus 127.0.0.1:5600      # where commands are passed on to the bus (or BRAIN_BUS)
+python -m brain.main --sessions data/sessions  # where baseline.json is written and read back at start
 ```
 
 - Reads bus messages on UDP 127.0.0.1:5601.
@@ -46,7 +48,7 @@ python -m brain.main --nodes radio/nodes.json   # nodes, links and zones (this i
 
 | cmd | What the brain does |
 |---|---|
-| `baseline` | Sets label mode off and captures 20 s; a person in frame restarts it. Then `baseline_done`. |
+| `baseline` | Sets label mode off and captures 20 s. The 20 s start again whenever a section 6 condition breaks: the camera is off or its labels stop, it sees anybody, label mode is turned on, health is not ok, or a link goes quiet for 1 s. Then it writes `data/sessions/baseline.json` and sends `baseline_done`. |
 | `record_start`, `record_stop` | Sends a `recording` event. The bus records. The brain keeps its own copy of the session from the bus's `meta` message until `record_stop`. |
 | `train` | Trains on the kept sessions with purpose `train` or `object`, off the loop. Then `trained`. |
 | `relearn` | Drops the model and trains again. |
