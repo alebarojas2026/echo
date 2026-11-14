@@ -1,0 +1,21 @@
+# secrets and local config
+.env
+*.local.json
+local.json
+# recordings (keep only curated, scrubbed sessions in data/sessions/keep/)
+data/sessions/*
+!data/sessions/keep/
+# never commit images or video
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.mov
+!web/public/**/*.png
+# python / node
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+dist/
+.DS_Store
