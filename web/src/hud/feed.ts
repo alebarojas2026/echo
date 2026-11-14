@@ -14,6 +14,7 @@ export function connectHud(
 ) {
   const panels = document.createElement('div')
   const controls = document.createElement('details')
+  controls.className = 'hud-shell-controls'
   const summary = document.createElement('summary')
   summary.textContent = 'Controls'
   const content = document.createElement('div')
@@ -46,4 +47,5 @@ export function connectHud(
     unsubscribe?.()
   }
 }
+
 

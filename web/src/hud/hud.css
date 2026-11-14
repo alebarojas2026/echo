@@ -138,3 +138,4 @@
 .hud-shell-panels .hud-narrator { grid-area: auto / 1 / auto / -1; }
 .hud-shell-panels .hud-card p { font-size: 1.2rem; }
 .hud-shell-controls { pointer-events: auto; width: fit-content; background: #faf7ef; }
+.hud-shell-controls { pointer-events: auto; }

@@ -86,3 +86,28 @@ test('mounts in a stale state when the shell has no feed', async ({ page }) => {
   await expect(page.getByTestId('no-data')).toBeVisible()
   await expect(page.getByTestId('pred-kind')).toHaveText('__')
 })
+
+test('mounted controls send commands and proof refresh stops on disposal', async ({ page }) => {
+  let count = 0
+  await page.route('**/proof.json', route => route.fulfill({ json: { bytes_out: ++count } }))
+  await page.clock.install()
+  await page.goto(path)
+  await page.evaluate(async () => {
+    const { mountHud } = await import('/src/hud/index.ts')
+    const { mockFeed } = await import('/src/hud/mock.ts')
+    window.sent = []
+    window.dispose = mountHud(document.querySelector('main'), {
+      subscribe(fn) { fn({ state: mockFeed(new URLSearchParams()).state, stale: false }); return () => {} },
+      send(cmd, args) { window.sent.push({ cmd, args }) },
+    })
+  })
+  await expect(page.getByTestId('bytes-out')).toHaveText('1 bytes out')
+  await page.locator('summary').click()
+  await page.getByTestId('train-button').click()
+  expect(await page.evaluate(() => window.sent)).toEqual([{ cmd: 'train', args: {} }])
+  await page.clock.fastForward(30000)
+  await expect(page.getByTestId('bytes-out')).toHaveText('2 bytes out')
+  await page.evaluate(() => window.dispose())
+  await page.clock.fastForward(30000)
+  expect(count).toBe(2)
+})
