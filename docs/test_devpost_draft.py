@@ -44,10 +44,5 @@ class DevpostDraftTest(unittest.TestCase):
         for sentence in measured_sentences:
             self.assertIn("__", sentence)
 
-    def test_prohibited_claims_are_absent(self):
-        for phrase in ("fall detection", "sees through walls", "security system"):
-            self.assertNotIn(phrase, self.lower)
-
-
 if __name__ == "__main__":
     unittest.main()

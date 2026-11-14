@@ -8,6 +8,8 @@ Radio Sight: Wi-Fi that understands the room. Radio links between 4 nodes around
 1. CONTRACTS.md v2 is final. Switch your adapter to it before anything else.
 2. Work from GitHub issues with your tag, using the loop below. Don't wait for a person.
 3. Fix review comments on your open PRs before starting new work.
+4. **All hands-on hardware is Alexander's.** That means the board, the Pi, the webcam, the phones, tape, mounting and flashing. When a task needs it, comment `needs Alexander:` on the issue with the exact commands and what to look for, then take your next issue. Never ask Izet, Ivan or Alejandro to do hardware.
+5. Alexander's radio worker: start with the "Board bring-up" issue before the gate tests. Walk him through it step by step.
 
 ## Lanes (stay in yours)
 | Tag | Folders | Owner |
