@@ -63,7 +63,7 @@ def test_provenance_cannot_be_reassigned():
     messages, states = logs()
     with pytest.raises(ValueError, match="another commit"):
         update_proof({"zone": {"total": 5}, "commit": "old"}, analyze(messages, states), messages, states, "new")
-    result = update_proof({"commit": "same", "measured_at": "earlier"}, analyze(messages, states), messages, states, "same")
+    result = update_proof({"commit": "same", "measured_at": "earlier", "bytes_out": 0}, analyze(messages, states), messages, states, "same")
     assert result["measured_at"] == "earlier"
 
 

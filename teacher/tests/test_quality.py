@@ -5,12 +5,12 @@ from teacher.quality import report
 
 def labels():
     return [dict(type="label", recv_t=t, present=True, zone=1, motion="still", clipped=False,
-                 foot_m=[0.5, 1.5]) for t in range(0, 2001, 100)]
+                 frame=t//100, foot_m=[0.5, 1.5]) for t in range(0, 2001, 100)]
 
 
 def test_rate_and_stationary_jitter():
     result = report(labels())
-    assert result["labels_per_second"] == 10 and result["still_jitter_rms_m"] == 0
+    assert result["labels_per_second"] == 10.5 and result["still_jitter_rms_m"] == 0
     assert not result["flags"]
 
 
