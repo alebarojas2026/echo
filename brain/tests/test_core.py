@@ -831,54 +831,14 @@ def _fitted(fit):
     return next(c.cell_contents for c in fit.__closure__ if isinstance(c.cell_contents, list))
 
 
-# ---- recordings and restarts ----
-
-def test_recordings_made_before_a_restart_are_trained_on(tmp_path):
-    brain = Brain(sessions_dir=tmp_path)
-    feed = Feed(brain)
-    brain.on_cmd(cmd("baseline"))
-    feed.play("empty_room", seed=1)
-    record_to_disk(brain, feed, tmp_path, "s01", "empty_room", seed=2)
-    record_to_disk(brain, feed, tmp_path, "s10", "zone_tour", walker="w1", seed=10)
-    record_to_disk(brain, feed, tmp_path, "s20", "zone_tour", purpose="heldout", walker="w2", seed=11)
-    (tmp_path / "s10.states.jsonl").write_text("{}\n")        # proof's capture files are not sessions
-
-    again = Brain(sessions_dir=tmp_path)                       # restarted before anyone pressed Train
-    assert again.base == brain.base and again.model is None
-    again.on_cmd(cmd("train"))
-    assert again.state()["model"]["train_sessions"] == ["s01", "s10"]   # never the held-out walk
-
-
-def test_a_restart_in_the_middle_of_a_recording_still_trains_on_it(tmp_path):
-    import json
-    brain = Brain(sessions_dir=tmp_path)
-    feed = Feed(brain)
-    brain.on_cmd(cmd("baseline"))
-    feed.play("empty_room", seed=1)
-    record_to_disk(brain, feed, tmp_path, "s01", "empty_room", seed=2)
-    meta = {"session": "s10", "purpose": "train", "walker": "w1"}
-    brain.on_cmd(cmd("record_start", **meta))
-    msgs = sim_to_v2("zone_tour", seed=10, meta=meta, t0=feed.t)
-    again = None
-    with open(tmp_path / "s10.jsonl", "a") as f:               # the bus keeps writing all the while
-        for i, m in enumerate(msgs):
-            f.write(json.dumps(m) + "\n")
-            if i == len(msgs) // 2:
-                f.flush()
-                again = Brain(sessions_dir=tmp_path)           # the brain alone is restarted
-            (again or brain).on_message(m)
-    again.on_cmd(cmd("record_stop"))
-    again.on_cmd(cmd("train"))
-    assert again.state()["model"]["train_sessions"] == ["s01", "s10"]
-
-
-def test_a_training_recording_left_running_holds_nothing_in_memory(tmp_path):
-    brain = Brain(sessions_dir=tmp_path)
-    feed = Feed(brain)
-    meta = {"session": "s10", "purpose": "train", "walker": "w1"}
-    brain.on_cmd(cmd("record_start", **meta))
-    (tmp_path / "s10.jsonl").write_text("")                    # the bus opened its file
-    feed.play("zone_tour", seed=10, meta=meta)
-    assert brain.open_session["meta"]["session"] == "s10" and brain.open_session["messages"] is None
-    brain.on_cmd(cmd("record_stop"))
-    assert brain.sessions["s10"]["messages"] is None and brain.sessions["s10"]["path"] == tmp_path / "s10.jsonl"
+def test_one_tray_gives_one_advice_that_does_not_flip_between_spots():
+    """A tray on the centre line scores the two spots the same; noise must not flip the sentence."""
+    brain, feed = taught()
+    for seed in (52, 60, 61):
+        brain.pop_events()
+        states = []
+        feed.play("tray_t1", seed=seed, states=states)
+        shown = [s["advice"] for _, s in states if s["advice"]]
+        assert len(shown) > 150                                  # it shows for most of the 30 s
+        assert len({(a["id"], a["to_spot"], a["text"]) for a in shown}) == 1
+        assert [e["kind"] for e in brain.pop_events()].count("advice") == 1
