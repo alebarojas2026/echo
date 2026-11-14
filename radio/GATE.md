@@ -46,4 +46,7 @@ and `python -m radio.report_hci`) checks them.
 | east   | E       | __        | __     |
 | west   | W       | __        | __     |
 
+Add a row per run, or write only the lowest of the three runs: `python -m radio.report_hci`
+judges each beacon by its lowest rate. Write the rate as a bare number (`8.4`).
+
 **Overall Gate 2:** __
