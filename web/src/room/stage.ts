@@ -10,11 +10,13 @@ import {
   MeshBasicMaterial,
   PlaneGeometry,
   Vector3,
+  type Object3D,
 } from 'three'
 import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, type NodeId, type Vec3 } from './frame'
+import { createDevice, deviceLabelPoint, setDeviceHeight, setDeviceAppearance, type DeviceKind } from './devices'
 import type { Hearing } from './heard'
 import { fade, Glide3 } from './motion'
-import { EDGE, FAULT, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
+import { EDGE, FLOOR, SQUARE, WALL_SHADE } from './palette'
 import { at, mix, shadedGeometry, type Part } from './shade'
 import type { RoomView } from './view'
 
@@ -127,7 +129,12 @@ function outline(pts: Vec3[]): Vec3[] {
   return pts.flatMap((p, i) => [p, pts[(i + 1) % pts.length]])
 }
 
-const HEAD_M = 0.08
+const Y_AXIS = new Vector3(0, 1, 0)
+export function nodeDeviceKind(id: string): DeviceKind {
+  if (id === 'unoq') return 'unoq'
+  if (id === 'pi5' || id === 'pi5b') return 'pi5'
+  return STRIP_M ? 'beacon' : 'phone'
+}
 const ZONE_IN_X = 0.1 // zone names start (west zones) or end (east zones) this far in from the side
 
 /**
@@ -141,8 +148,7 @@ export function standBase([x, y, z]: Vec3): Vec3 {
 
 interface NodeMesh {
   id: NodeId
-  head: Mesh<BoxGeometry, MeshBasicMaterial>
-  post: LineSegments<BufferGeometry, LineBasicMaterial>
+  device: Object3D
   label: HTMLElement
   /** 0..1 as drawn, and where it is heading: 1 heard, LOST_ALPHA heard before but quiet now, 0 never heard. */
   alpha: number
@@ -179,17 +185,13 @@ export class Stage {
     }
 
     // Devices are live (heard.ts): each starts unseen and fades in once the board hears it.
-    const headGeom = new BoxGeometry(HEAD_M, HEAD_M, HEAD_M)
     for (const info of Object.values(NODES)) {
-      const head = new Mesh(headGeom, new MeshBasicMaterial({ color: TEXT, transparent: true, opacity: 0 }))
-      const postGeom = new BufferGeometry()
-      postGeom.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3))
-      const post = new LineSegments(postGeom, new LineBasicMaterial({ color: EDGE, transparent: true, opacity: 0 }))
-      head.visible = post.visible = false
-      this.group.add(head, post)
+      const device = createDevice(nodeDeviceKind(info.id), () => view.requestRender())
+      device.visible = false
+      this.group.add(device)
       const label = view.addLabel(info.name, new Vector3(), `room-label--node room-label--${nodeLabelSide(info.id)}`)
       label.hidden = true
-      this.nodes.push({ id: info.id, head, post, label, alpha: 0, alphaTo: 0 })
+      this.nodes.push({ id: info.id, device, label, alpha: 0, alphaTo: 0 })
     }
     this.putNodes()
     view.addAnimator((dt) => this.fadeNodes(dt))
@@ -211,17 +213,12 @@ export class Stage {
     const router = routerId()
     for (const n of this.nodes) {
       const p = n.id === router ? this.routerGlide.now() : nodePosition(n.id, null)
-      const top = v3(p)
-      n.head.position.copy(top)
-      // The stand: a line from the floor, the desk top, or the desk's edge (an arm) up to the head.
       const base = v3(standBase(p))
-      const stand = n.post.geometry.getAttribute('position') as Float32BufferAttribute
-      stand.set([base.x, base.y, base.z, top.x, top.y, top.z])
-      stand.needsUpdate = true
-      n.post.geometry.computeBoundingSphere()
-      // Each label hangs off the cube's face on its side, so the cube never sits on its own label.
-      const [dx, dz] = { above: [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0] }[nodeLabelSide(n.id)]
-      this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))
+      n.device.position.copy(base)
+      n.device.rotation.y = Math.atan2(-base.x, -base.z)
+      const offset = v3(p).sub(base).applyAxisAngle(Y_AXIS, -n.device.rotation.y)
+      setDeviceHeight(n.device, offset.y, offset)
+      this.view.moveLabel(n.label, deviceLabelPoint(n.device, nodeLabelSide(n.id)))
     }
     this.view.requestRender()
   }
@@ -242,7 +239,7 @@ export class Stage {
       if (n.label.textContent !== text) n.label.textContent = text
       n.label.classList.toggle('room-label--node-lost', quiet && !tampered)
       n.label.classList.toggle('room-label--node-tamper', tampered)
-      n.head.material.color.setHex(tampered ? FAULT : TEXT)
+      setDeviceAppearance(n.device, n.alpha, tampered)
     }
     this.view.host.dataset.tamper = [...this.tamper].join(',')
     this.view.host.dataset.devices = this.nodes.filter((n) => n.alphaTo === 1).map((n) => n.id).join(',')
@@ -264,8 +261,8 @@ export class Stage {
     for (const n of this.nodes) {
       n.alpha = fade(n.alpha, n.alphaTo, dt)
       busy ||= n.alpha !== n.alphaTo
-      n.head.material.opacity = n.post.material.opacity = n.alpha
-      n.head.visible = n.post.visible = n.alpha > 0
+      setDeviceAppearance(n.device, n.alpha, this.tamper.has(n.id))
+      n.device.visible = n.alpha > 0
       // The name stays readable on a quiet device: "not heard" is the point of showing it at all.
       n.label.style.opacity = String(n.alphaTo === LOST_ALPHA ? Math.min(1, n.alpha / LOST_ALPHA) : n.alpha)
       n.label.hidden = n.alpha === 0 && n.alphaTo === 0

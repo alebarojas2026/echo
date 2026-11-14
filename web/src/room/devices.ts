@@ -229,14 +229,14 @@ export class HallBeacons {
   }
 }
 
-import { DEVICE, DEVICE_DETAIL, WALL_SHADE } from './palette'
+import { DEVICE, DEVICE_DETAIL, FAULT, WALL_SHADE } from './palette'
 import { LIGHT } from './shade'
 import phoneUrl from './assets/phone.glb?url'
 import pi5Url from './assets/pi5.glb?url'
 import standUrl from './assets/stand.glb?url'
 import unoqUrl from './assets/unoq.glb?url'
 
-// The four radio nodes as small scale models: the UNO Q board, the Pi 5 router in its case and the two
+// The radio nodes as small scale models: the UNO Q board, the Pi 5 router in its case and the two
 // beacon phones, each on a slim pole with a round foot. The models are web/src/room/assets/*.glb, built by
 // tools/devices/build.py: real-size meshes with ambient occlusion baked into vertex colours, no textures.
 //
@@ -249,8 +249,8 @@ import unoqUrl from './assets/unoq.glb?url'
 // rest of the room: each surface takes a tone between a dark and a light grey from one fixed light up and to
 // the north-west (the same light as the room's baked shading), times its baked occlusion.
 
-export type DeviceKind = 'unoq' | 'pi5' | 'phone'
-type ModelName = DeviceKind | 'stand'
+export type DeviceKind = 'unoq' | 'pi5' | 'phone' | 'beacon'
+type ModelName = Exclude<DeviceKind, 'beacon'> | 'stand'
 
 /** How much bigger than life the devices and their stands are drawn, so they read from across the room.
  *  Heights don't scale: a device's anchor still sits at its node's real height. */
@@ -265,6 +265,7 @@ export const NODE_HEIGHT_M = 1.0
 export const DEVICE_BOUNDS: Record<DeviceKind, { min: Vec3; max: Vec3 }> = {
   unoq: { min: [-0.0349, -0.0231, -0.0243], max: [0.0343, 0.0227, 0.0248] },
   pi5: { min: [-0.0351, -0.03, -0.0492], max: [0.0352, 0.0166, 0.0492] },
+  beacon: { min: [-0.014, -0.004, -0.026], max: [0.014, 0.009, 0.026] },
   phone: { min: [-0.0366, -0.09, -0.0306], max: [0.0366, 0.069, 0.0437] },
 }
 
@@ -285,6 +286,9 @@ const FRAGMENT = /* glsl */ `
   uniform vec3 uDark;
   uniform vec3 uLightDir;
   uniform float uTop;
+  uniform float uAlpha;
+  uniform float uFault;
+  uniform vec3 uFaultColor;
   varying vec3 vNormalW;
   #include <color_pars_fragment>
   void main() {
@@ -293,7 +297,8 @@ const FRAGMENT = /* glsl */ `
     #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
       occlusion = vColor.r;
     #endif
-    gl_FragColor = vec4(mix(uDark, uLight, k) * occlusion, 1.0);
+    vec3 tone = mix(uDark, uLight, k) * occlusion;
+    gl_FragColor = vec4(mix(tone, uFaultColor * (0.55 + k * 0.45), uFault), uAlpha);
     #include <colorspace_fragment>
   }`
 
@@ -305,6 +310,9 @@ function toneMaterial(light: number, darkMix: number): ShaderMaterial {
       uLight: { value: new Color(light) },
       uDark: { value: new Color(light).lerp(new Color(WALL_SHADE), darkMix) },
       uLightDir: { value: LIGHT.clone() },
+      uAlpha: { value: 1 },
+      uFault: { value: 0 },
+      uFaultColor: { value: new Color(FAULT) },
       uTop: { value: LIGHT.y }, // what a surface facing straight up receives: it takes the light tone
     },
     vertexShader: VERTEX,
@@ -371,6 +379,7 @@ interface DeviceParts {
   pole: Object3D | null
   mount: number
   heightM: number
+  appearance?: Record<'device' | 'detail', ShaderMaterial>
 }
 
 /** Each device's parts, kept beside it rather than in userData, which three.js copies as JSON on clone. */
@@ -385,7 +394,9 @@ function parts(device: Object3D): DeviceParts {
 /** Stretches the pole from the floor to the device's mount point. */
 function fitPole(p: DeviceParts) {
   if (!p.pole) return
-  p.pole.scale.set(DISPLAY_SCALE, Math.max(0.01, p.heightM + DISPLAY_SCALE * p.mount), DISPLAY_SCALE)
+  const tip = p.head.position.clone().add(new Vector3(0, DISPLAY_SCALE * p.mount, 0))
+  p.pole.scale.set(DISPLAY_SCALE, Math.max(0.01, tip.length()), DISPLAY_SCALE)
+  p.pole.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), tip.normalize())
 }
 
 let fallbackGeometry: Record<DeviceKind, BufferGeometry> | null = null
@@ -429,7 +440,7 @@ export function createDevice(kind: DeviceKind, onReady?: (loaded: boolean) => vo
   deviceParts.set(device, p)
   head.position.y = p.heightM
 
-  void Promise.all([loadModel(kind), loadModel('stand')]).then(([model, stand]) => {
+  void Promise.all([kind === 'beacon' ? Promise.resolve(beaconModel()) : loadModel(kind), loadModel('stand')]).then(([model, stand]) => {
     if (model) {
       head.add(model.root.clone())
       p.mount = model.mount
@@ -455,16 +466,17 @@ export function createDevice(kind: DeviceKind, onReady?: (loaded: boolean) => vo
     p.pole.position.set(0, 0, 0)
     device.add(p.foot, p.pole)
     fitPole(p)
+    if (p.appearance) applyAppearance(device, p.appearance)
     onReady?.(Boolean(model && stand))
   })
   return device
 }
 
 /** Puts the device's anchor (its radio's centre) this many metres above the floor; the pole follows. */
-export function setDeviceHeight(device: Object3D, heightM: number) {
+export function setDeviceHeight(device: Object3D, heightM: number, offset = new Vector3()) {
   const p = parts(device)
   p.heightM = heightM
-  p.head.position.y = heightM
+  p.head.position.copy(offset).setY(heightM)
   fitPole(p)
 }
 
@@ -479,7 +491,7 @@ const corner = new Vector3()
 export function deviceLabelPoint(device: Object3D, side: 'above' | 'right' | 'left'): Vector3 {
   const p = parts(device)
   const { min, max } = DEVICE_BOUNDS[p.kind]
-  const at = device.position.clone().setY(device.position.y + p.heightM)
+  const at = p.head.position.clone().applyAxisAngle(Y_AXIS, device.rotation.y).add(device.position)
   if (side === 'above') return at.setY(at.y + max[1] * DISPLAY_SCALE)
   let reach = side === 'right' ? -Infinity : Infinity
   for (let i = 0; i < 4; i++) {
@@ -487,4 +499,46 @@ export function deviceLabelPoint(device: Object3D, side: 'above' | 'right' | 'le
     reach = side === 'right' ? Math.max(reach, corner.x) : Math.min(reach, corner.x)
   }
   return at.setX(at.x + reach * DISPLAY_SCALE)
+}
+
+// The desk's small ESP32 beacons use a schematic board silhouette, not a measured hardware model.
+let beacon: Model | undefined
+function beaconModel(): Model {
+  if (beacon) return beacon
+  const root = new Group()
+  const shared = deviceMaterials()
+  const block = (size: Vec3, at: Vec3, detail = false) => {
+    const mesh = new Mesh(unshaded(new BoxGeometry(...size)), detail ? shared.detail : shared.device)
+    mesh.position.set(...at)
+    root.add(mesh)
+  }
+  block([.028,.004,.052], [0,-.002,0], true)
+  block([.019,.009,.023], [0,.0045,-.003])
+  block([.008,.005,.006], [0,.0025,.023])
+  for (const x of [-.012,.012]) block([.002,.006,.03], [x,.003,0])
+  for (let i = 0; i < 3; i++) block([.015,.001,.001], [0,.0005,-.019-i*.002])
+  return beacon = { root, mount: -.004 }
+}
+
+function applyAppearance(device: Object3D, appearance: Record<'device' | 'detail', ShaderMaterial>) {
+  const shared = deviceMaterials()
+  device.traverse(o => {
+    if (o instanceof Mesh) o.material = o.material === shared.device || o.material === appearance.device ? appearance.device : appearance.detail
+  })
+}
+
+/** Each node fades and reports tamper independently while keeping the geometry shared. */
+export function setDeviceAppearance(device: Object3D, alpha: number, fault: boolean) {
+  const p = parts(device)
+  if (!p.appearance) {
+    const shared = deviceMaterials()
+    p.appearance = { device: shared.device.clone(), detail: shared.detail.clone() }
+    applyAppearance(device, p.appearance)
+  }
+  for (const material of Object.values(p.appearance)) {
+    material.uniforms.uAlpha.value = alpha
+    material.uniforms.uFault.value = fault ? 1 : 0
+    if (material.transparent !== (alpha < 1)) { material.transparent = alpha < 1; material.needsUpdate = true }
+    material.depthWrite = alpha === 1
+  }
 }
