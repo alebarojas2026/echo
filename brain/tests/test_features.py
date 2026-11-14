@@ -3,44 +3,7 @@ import math
 import pytest
 
 from brain import features as F
-from sim import fake
-
-# sim nodes -> contract nodes (same positions: S, E, N, W midpoints).
-SIM_NODE = {"n0": "pi5", "n1": "east", "n2": "unoq", "n3": "west"}
-# sim zones (0 SW, 1 SE, 2 NW, 3 NE) -> contract zones (1 NW, 2 NE, 3 SW, 4 SE).
-SIM_ZONE = {0: 3, 1: 4, 2: 1, 3: 2}
-
-
-def sim_to_v2(name, seed=0):
-    """Run a sim path and turn its events into v2 bus messages with recv_t."""
-    t0 = 1_763_149_500_000
-    seq = 0
-    out = []
-    for ev in fake.simulate(fake.load_path(name), seed=seed):
-        t = t0 + round(ev["t"] * 1000)
-        seq += 1
-        if ev["kind"] == "rssi":
-            a, b = (SIM_NODE[n] for n in ev["link"].split("-"))
-            pair = {a, b}
-            if pair == {"east", "west"}:
-                continue  # not a contract link
-            rx = "unoq" if "unoq" in pair else "pi5"
-            tx = (pair - {rx}).pop()
-            kinds = ["wifi", "ble"] if tx == "pi5" else ["ble"]
-            for kind in kinds:
-                out.append({"v": 2, "type": "rssi", "t": t, "seq": seq, "src": "sim",
-                            "link": f"{tx}>{rx}:{kind}", "kind": kind, "tx": tx, "rx": rx,
-                            "dbm": ev["rssi"], "recv_t": t})
-        else:
-            present = ev["present"]
-            out.append({"v": 2, "type": "label", "t": t, "seq": seq, "src": "sim",
-                        "mode": "person", "persons_in_frame": int(present),
-                        "present": present,
-                        "zone": SIM_ZONE[ev["zone"]] if present else None,
-                        "motion": "moving" if ev["moving"] else "still",
-                        "conf": 0.9, "clipped": False, "recv_t": t})
-    return out
-
+from brain.tests.simdata import sim_to_v2
 
 def rssi(t, link, dbm):
     return {"type": "rssi", "recv_t": t, "link": link, "dbm": dbm}
