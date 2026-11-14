@@ -110,10 +110,11 @@ def start_either(scanner: BeaconScanner, say) -> None:
 
 
 def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, seen=None,
-        quiet_s: float = 2.0, clock=time.monotonic, say=None) -> dict:
+        quiet_s: float = 2.0, clock=time.monotonic, say=None, keep: bool = True) -> dict | None:
     """Scan, calling emit(link, dbm) per kept advert, until `seconds` pass (0 = forever) or stop().
 
     Fills and returns `seen` = {link: [dbm, ...]}, which keeps what was read even after Ctrl-C.
+    With keep False (the service, which runs for ever) nothing is kept and it returns None.
     The scan is always turned off on the way out.
 
     Scanning is one setting for the whole controller, and other things turn it off: another scan
@@ -123,7 +124,7 @@ def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, se
     come back.
     """
     say = say or (lambda text: print(text, file=sys.stderr, flush=True))
-    seen = {} if seen is None else seen
+    seen = ({} if seen is None else seen) if keep else None
     end = clock() + seconds if seconds else None
     start_either(scanner, say)
     last = quiet_since = clock()
@@ -139,7 +140,8 @@ def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, se
                 last = now
             for link, dbm in kept_now:
                 emit(link, dbm)
-                seen.setdefault(link, []).append(dbm)
+                if seen is not None:
+                    seen.setdefault(link, []).append(dbm)
             if quiet_s and now - last >= quiet_s:
                 if not restarted:
                     say(f"no beacon adverts for {quiet_s:g} s, restarting the scan")
@@ -178,7 +180,8 @@ def main(argv=None) -> None:
     args = ap.parse_args(argv)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # a service stop still turns the scan off
     dev = open_controller(args.dev)
-    seen, started = {}, time.monotonic()
+    # Readings are kept for the summary of a --seconds run only: the service runs for ever.
+    seen, started = ({} if args.seconds else None), time.monotonic()
 
     bus_host = os.environ.get("BUS_HOST", "127.0.0.1")
     bus_port = int(os.environ.get("BUS_PORT", "5600"))
@@ -188,7 +191,7 @@ def main(argv=None) -> None:
     try:
         scanner = BeaconScanner(dev, args.node)
         print(f"hci{args.dev}: {scanner.mode} scan, duplicates not filtered, rx {args.node}", file=sys.stderr)
-        run(scanner, emitter, args.seconds, seen=seen)
+        run(scanner, emitter, args.seconds, seen=seen, keep=seen is not None)
     except KeyboardInterrupt:
         pass
     except hci.HciError as e:
@@ -198,7 +201,8 @@ def main(argv=None) -> None:
     finally:
         bus_sock.close()
         dev.close()
-    print(summary(seen, max(time.monotonic() - started, 1e-3)), file=sys.stderr)
+    if seen is not None:
+        print(summary(seen, max(time.monotonic() - started, 1e-3)), file=sys.stderr)
 
 
 if __name__ == "__main__":

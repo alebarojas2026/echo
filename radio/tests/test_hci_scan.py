@@ -283,3 +283,11 @@ def test_other_errors_are_not_retried():
     with pytest.raises(hci.HciError, match="0x12"):
         run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: None, say=lambda text: pytest.fail(text))
     assert hci.LE_SET_EXT_SCAN_PARAMS not in fake.opcodes
+
+
+def test_the_service_keeps_nothing():
+    fake = FakeController(events=[fixture("legacy_reports_three")] * 50)
+    sent = []
+    assert run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: sent.append(r), stop=lambda: fake.drained,
+               keep=False) is None
+    assert len(sent) == 100     # west and pi5 from each packet, all still sent

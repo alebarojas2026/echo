@@ -268,20 +268,29 @@ def summary(values: list[int], seconds: float) -> str:
 def run(iface: str = "wlan0", bssid: str = "", bus_host: str = "127.0.0.1", bus_port: int = 5600,
         rate_hz: float = 25.0, *, seconds: float = 0, stop=lambda: False, ping_host: str = "10.42.0.1",
         ping_hz: float = 50.0, report_every: float = 10.0, reader: Reader | None = None,
-        pinger: Pinger | None = None) -> list[int]:
-    """Read and send to the bus until `seconds` pass (0 = forever) or stop(). Returns every dBm sent."""
+        pinger: Pinger | None = None, keep: bool | None = None) -> list[int]:
+    """Read and send to the bus until `seconds` pass (0 = forever) or stop().
+
+    Returns every dBm sent if `keep` (by default only for a run with `seconds`, which prints a
+    summary): the service runs for ever and keeps nothing but the seq counter.
+    """
+    keep = seconds > 0 if keep is None else keep
     reader = reader or Reader(iface, bssid)
     pinger = pinger or Pinger(ping_host, ping_hz)
     stats = Stats(report_every)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # one socket, one seq counter
     sent: list[int] = []
+    seq = 0
 
     def send(dbm: int) -> None:
+        nonlocal seq
         try:
-            sock.sendto(_make_message(dbm, len(sent)), (bus_host, bus_port))
+            sock.sendto(_make_message(dbm, seq), (bus_host, bus_port))
         except OSError as e:
             log(f"send to the bus failed: {e}")
-        sent.append(dbm)
+        seq += 1
+        if keep:
+            sent.append(dbm)
         stats.add(dbm)
 
     def tick() -> None:
