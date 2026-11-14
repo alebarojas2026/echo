@@ -16,6 +16,7 @@ import sys
 import time
 
 from . import link_stats
+from .wifi_rssi import REPO, load_env_file
 from .nodes import LINKS
 
 UNITS = ("radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan")
@@ -96,6 +97,7 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="check the board's radio path")
     ap.add_argument("--seconds", type=float, default=5.0, help="length of the link capture")
     args = ap.parse_args(argv)
+    load_env_file(REPO / ".env")  # WIFI_IFACE, as the reader's service sees it
     iface = os.environ.get("WIFI_IFACE") or "wlan0"
     results = [check_tools(), check_ethernet(), check_wifi(iface), check_services(),
                check_links(args.seconds)]
