@@ -17,7 +17,7 @@ class BuildDocTest(unittest.TestCase):
             "raspberry pi 5",
             "powered usb-c hub with ethernet and power delivery",
             "usb webcam",
-            "two phones",
+            "two esp32-s3 boards",
             "tape for the final presentation-hour layout",
             "stands",
         ):
@@ -52,6 +52,16 @@ class BuildDocTest(unittest.TestCase):
             "no image or video is saved",
         ):
             self.assertIn(phrase, self.lower)
+
+    def test_east_and_west_beacons_are_not_phones(self):
+        for phrase in (
+            "east and west bluetooth beacons",
+            "esp32-s3 beacons at the east and west markers",
+            "phones are not used as beacons",
+        ):
+            self.assertIn(phrase, self.lower)
+
+        self.assertNotIn("beacon phones", self.lower)
 
 
 if __name__ == "__main__":

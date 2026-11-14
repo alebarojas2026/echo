@@ -9,7 +9,7 @@ Radio Sight uses radio links around one room to map signal change, locate real d
 - powered USB-C hub with Ethernet and power delivery for the UNO Q
 - Ethernet cable between the Pi and the UNO Q's hub
 - USB webcam for setup labels only
-- two phones that can advertise as Bluetooth beacons
+- two ESP32-S3 boards configured as the east and west Bluetooth beacons
 - display, keyboard, and pointing device for setup
 - stands that hold every radio node at the same height
 - loose floor markers for building and testing
@@ -21,7 +21,7 @@ The demo uses its own equipment and private network. Do not plan around venue Wi
 
 - **UNO Q:** receives radio readings and runs the bus, signal health, model training and inference, radio X-ray, check-in logic, no-movement alert logic, advisor, narration, and web service.
 - **Pi:** creates the private sensing hotspot, acts as a radio node, and drives the display. It runs no model.
-- **Phones:** advertise the east and west beacon patterns. The software matches advertised data, not device identity.
+- **ESP32-S3 beacons:** advertise the east and west beacon patterns. The software matches advertised data, not device identity; phones are not used as beacons.
 - **Webcam:** supplies temporary person, zone, and motion labels for calibration and training. Disconnect it for the live radio-only demonstration; no image or video is saved.
 
 ## Connect the hardware
@@ -29,7 +29,7 @@ The demo uses its own equipment and private network. Do not plan around venue Wi
 1. Power the UNO Q through the powered hub and connect the webcam and hub Ethernet.
 2. Connect the hub Ethernet directly to the Pi's Ethernet port. This cable carries the bus, model state, web page, and setup traffic.
 3. Connect the Pi to the demo display.
-4. Put the UNO Q at the north marker, the Pi at the south marker, and the beacon phones at the east and west markers. The contract layout is a square with every node at `1.0 m` high.
+4. Put the UNO Q at the north marker, the Pi at the south marker, and the ESP32-S3 beacons at the east and west markers. The contract layout is a square with every node at `1.0 m` high.
 5. Keep cables outside the walking area and keep the router at its home mark before calibration.
 
 For the exact network roles and contract addresses, follow the [network guide](network.md). Use only the addresses already defined by `CONTRACTS.md`; keep local network credentials out of the repository.
