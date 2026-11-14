@@ -165,14 +165,15 @@ In the demo, put the tray back on the same T1 mark. The model recognises it only
 
 ## Hall links (`brain/hall.py`, optional)
 
-Two spare beacons far from the square (letters A and B, 10-25 m away) make up to four long links:
-`a>unoq:ble`, `b>unoq:ble`, `a>pi5:ble`, `b>pi5:ble`. For each one the brain says whether there is
+Two spare beacons far from the square (letters H and J, 10-25 m away) make long links. A hall link
+is any link whose tx is one of them, one per receiver in radio/nodes.json that hears it
+(`h>unoq:ble`, `j>pi5:ble`, ...). For each one the brain says whether there is
 movement along that path. It never says who, where along the path, or how many. The wording is
 proposed in issue #358; until it lands in CONTRACTS.md, state carries `hall` only once a hall link
 has been heard, and is otherwise exactly what it was.
 
 ```jsonc
-"hall":[{"id":"a>unoq:ble","tx":"a","rx":"unoq","xy_m":[x, y],"activity":0.0-1.0,"moving":false,"rate_hz":n,"stale":false}]
+"hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[x, y],"activity":0.0-1.0,"moving":false,"rate_hz":n,"stale":false}]
 ```
 
 - A body moving near or across a radio path makes the signal change from reading to reading. Per
@@ -188,7 +189,7 @@ has been heard, and is otherwise exactly what it was.
 - `xy_m` is the far beacon's spot from the `hall` section of radio/nodes.json, or null until it is
   measured.
 
-The six links never see any of it: `Brain.on_message` hands a hall reading to `Hall.take` and
+The core links (the ones listed in nodes.json) never see any of it: `Brain.on_message` hands a hall reading to `Hall.take` and
 returns, so features, health, the x-ray, the alert, the check-in, advice and the recordings held
 for training are the same with and without hall beacons (brain/tests/test_hall.py compares every
 state of a whole demo run). Every entry point of the module catches its own errors.

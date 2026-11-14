@@ -1,4 +1,4 @@
-"""Hall links (brain/hall.py): the activity rule on made-up long links, and proof that the six
+"""Hall links (brain/hall.py): the activity rule on made-up long links, and proof that the core
 links' state is the same with and without hall beacons.
 
 The readings here are synthetic: a weak link heard a few times a second at uneven moments, on three
@@ -15,10 +15,9 @@ from brain import hall as H
 from brain.core import NODES_JSON, Brain
 from brain.tests.simdata import T0_MS, sim_to_v2
 
-LINKS = ["a>unoq:ble", "b>unoq:ble", "a>pi5:ble", "b>pi5:ble"]
-HALL = {"beacons": [{"node": "a", "id": "A", "data_hex": "FFFF525341", "xyz_m": [14.0, 9.5, 1.2]},
-                    {"node": "b", "id": "B", "data_hex": "FFFF525342", "xyz_m": None}],
-        "links": [{"id": link, "tx": link[0], "rx": link[2:].split(":")[0], "kind": "ble"} for link in LINKS]}
+HALL = {"beacons": [{"node": "h", "id": "H", "data_hex": "FFFF525348", "xyz_m": [14.0, 9.5, 1.2]},
+                    {"node": "j", "id": "J", "data_hex": "FFFF52534A", "xyz_m": None}]}
+LINKS = ["h>unoq:ble", "j>unoq:ble", "h>pi5:ble", "j>pi5:ble"]     # receivers in nodes.json order, then beacons
 ROW_KEYS = {"id", "tx", "rx", "xy_m", "activity", "moving", "rate_hz", "stale"}
 
 
@@ -92,33 +91,56 @@ def test_quiet_level_needs_twenty_samples_and_has_a_floor():
 
 def test_no_hall_section_takes_nothing_and_adds_nothing():
     hall = H.Hall.from_nodes(nodes_doc(with_hall=False))
-    assert hall.take(rssi("a>unoq:ble", T0_MS, -80)) is False
+    assert hall.take(rssi("h>unoq:ble", T0_MS, -80)) is False
     assert hall.rows(T0_MS) == [] and hall.add_to({"x": 1}, T0_MS) == {"x": 1}
 
 
 def test_only_hall_links_are_taken():
     hall = H.Hall.from_nodes(nodes_doc())
     assert hall.take(rssi("east>unoq:ble", T0_MS, -60)) is False
-    assert hall.take({"v": 2, "type": "label", "recv_t": T0_MS, "link": "a>unoq:ble"}) is False
-    assert hall.take(rssi("a>unoq:ble", T0_MS, -80)) is True
+    assert hall.take({"v": 2, "type": "label", "recv_t": T0_MS, "link": "h>unoq:ble"}) is False
+    assert hall.take(rssi("h>unoq:ble", T0_MS, -80)) is True
     assert hall.add_to({}, T0_MS) == {"hall": [
-        {"id": "a>unoq:ble", "tx": "a", "rx": "unoq", "xy_m": [14.0, 9.5], "activity": 0.0,
+        {"id": "h>unoq:ble", "tx": "h", "rx": "unoq", "xy_m": [14.0, 9.5], "activity": 0.0,
          "moving": False, "rate_hz": 0.5, "stale": True}]}
+
+
+def test_hall_links_are_every_hall_beacon_heard_by_every_receiver_in_nodes_json():
+    doc = nodes_doc()
+    doc["nodes"].append({"id": "pi5b", "side": "X", "xyz_m": [3.0, 1.0, 1.0], "roles": ["beacon", "receiver"]})
+    hall = H.Hall.from_nodes(doc)
+    for link in ("j>pi5b:ble", "h>pi5b:ble", "h>unoq:ble"):
+        assert hall.take(rssi(link, T0_MS, -85)) is True
+    assert [r["id"] for r in hall.rows(T0_MS)] == ["h>unoq:ble", "h>pi5b:ble", "j>pi5b:ble"]
+    assert [(r["tx"], r["rx"]) for r in hall.rows(T0_MS)] == [("h", "unoq"), ("h", "pi5b"), ("j", "pi5b")]
+    # heard by something that is no receiver in nodes.json: still a hall reading (the core never
+    # sees it), but there is no row for it
+    assert hall.take(rssi("h>east:ble", T0_MS, -85)) is True and len(hall.rows(T0_MS)) == 3
+    # a core link is never taken, whoever hears it
+    assert hall.take(rssi("pi5b>unoq:ble", T0_MS, -60)) is False
+    assert hall.take(rssi("east>pi5b:ble", T0_MS, -60)) is False
+
+
+def test_a_hall_beacon_named_like_a_node_of_the_square_turns_the_hall_off(caplog):
+    doc = nodes_doc()
+    doc["hall"]["beacons"][0]["node"] = "east"
+    hall = H.Hall.from_nodes(doc)
+    assert hall.take(rssi("east>unoq:ble", T0_MS, -60)) is False and hall.rows(T0_MS) == []
 
 
 def test_rows_come_in_nodes_order_once_heard_and_carry_the_beacon_position():
     hall = H.Hall.from_nodes(nodes_doc())
-    for link in ("b>pi5:ble", "a>pi5:ble"):
+    for link in ("j>pi5:ble", "h>pi5:ble"):
         hall.take(rssi(link, T0_MS, -85))
     rows = hall.rows(T0_MS + 100)
-    assert [r["id"] for r in rows] == ["a>pi5:ble", "b>pi5:ble"]
+    assert [r["id"] for r in rows] == ["h>pi5:ble", "j>pi5:ble"]
     assert all(set(r) == ROW_KEYS for r in rows)
-    assert rows[0]["xy_m"] == [14.0, 9.5] and rows[1]["xy_m"] is None     # b has not been measured
+    assert rows[0]["xy_m"] == [14.0, 9.5] and rows[1]["xy_m"] is None     # j has not been measured
 
 
 def test_a_quiet_link_never_reads_as_moving():
     hall = H.Hall.from_nodes(nodes_doc())
-    rows = play(hall, "a>unoq:ble", far_link(600, seed=1), 600)
+    rows = play(hall, "h>unoq:ble", far_link(600, seed=1), 600)
     assert not any(r["moving"] for _, r in rows)
     settled = [r for s, r in rows if s > 30]
     assert not any(r["stale"] for r in settled)
@@ -130,7 +152,7 @@ def test_a_quiet_link_never_reads_as_moving():
 def test_a_body_crossing_the_path_turns_moving_on_and_then_off(seed):
     hall = H.Hall.from_nodes(nodes_doc())
     walks = [(60.0, 62.0), (120.0, 122.0)]
-    rows = play(hall, "a>unoq:ble", far_link(180, seed=seed, walks=walks), 180)
+    rows = play(hall, "h>unoq:ble", far_link(180, seed=seed, walks=walks), 180)
     for start, end in walks:
         during = [r for s, r in rows if start + 0.5 <= s <= end + 2.0]
         assert any(r["moving"] for r in during), "the crossing was missed"
@@ -142,7 +164,7 @@ def test_a_body_crossing_the_path_turns_moving_on_and_then_off(seed):
 
 def test_moving_has_hysteresis(monkeypatch):
     """On at 0.5; between 0.25 and 0.5 it holds; off only after 1 s under 0.25."""
-    link = H._Link("a>unoq:ble", "a", "unoq", None)
+    link = H._Link("h>unoq:ble", "h", "unoq", None)
     level = {"spread": 1.0}
     monkeypatch.setattr(H, "spread_db", lambda readings, now: level["spread"])
     monkeypatch.setattr(H, "quiet_db", lambda samples: 1.0)
@@ -170,7 +192,7 @@ def test_moving_has_hysteresis(monkeypatch):
 def test_stale_when_the_readings_stop_and_clear_three_seconds_after_they_return():
     hall = H.Hall.from_nodes(nodes_doc())
     readings = [r for r in far_link(120, seed=3) if not 60_000 <= r[0] - T0_MS < 80_000]
-    rows = play(hall, "a>unoq:ble", readings, 120)
+    rows = play(hall, "h>unoq:ble", readings, 120)
     by_s = dict(rows)
     assert by_s[59.0]["stale"] is False
     assert by_s[62.0] == {**by_s[62.0], "stale": True, "activity": 0.0, "moving": False}
@@ -182,7 +204,7 @@ def test_stale_when_the_readings_stop_and_clear_three_seconds_after_they_return(
 def test_a_link_heard_about_once_a_second_is_stale_not_quiet():
     hall = H.Hall.from_nodes(nodes_doc())
     readings = [(T0_MS + 1100 * k, -88) for k in range(1, 60)]
-    rows = play(hall, "b>pi5:ble", readings, 60)
+    rows = play(hall, "j>pi5:ble", readings, 60)
     assert all(r["stale"] and not r["moving"] and r["activity"] == 0.0 for _, r in rows)
 
 
@@ -193,9 +215,9 @@ def test_bad_input_and_a_bug_inside_never_raise(monkeypatch, caplog):
     hall = H.Hall.from_nodes(nodes_doc())
     assert hall.take({"type": "rssi", "link": ["not", "hashable"]}) is False
     assert hall.take("not a message") is False
-    assert hall.take({"type": "rssi", "link": "a>unoq:ble", "recv_t": T0_MS, "dbm": None}) is True   # ours, dropped
+    assert hall.take({"type": "rssi", "link": "h>unoq:ble", "recv_t": T0_MS, "dbm": None}) is True   # ours, dropped
     assert hall.rows(T0_MS) == []
-    hall.take(rssi("a>unoq:ble", T0_MS, -80))
+    hall.take(rssi("h>unoq:ble", T0_MS, -80))
     monkeypatch.setattr(H._Link, "row", lambda self, now: 1 / 0)
     assert hall.rows(T0_MS) == [] and hall.rows(T0_MS + 100) == []
     assert hall.add_to({"x": 1}, T0_MS) == {"x": 1}
@@ -205,10 +227,10 @@ def test_bad_input_and_a_bug_inside_never_raise(monkeypatch, caplog):
 
 def test_a_bug_in_the_hall_code_does_not_stop_the_brain(monkeypatch):
     brain = Brain(nodes=nodes_doc())
-    brain.on_message(rssi("a>unoq:ble", T0_MS, -80))
+    brain.on_message(rssi("h>unoq:ble", T0_MS, -80))
     monkeypatch.setattr(H._Link, "row", lambda self, now: 1 / 0)
     monkeypatch.setattr(H._Link, "add", lambda self, t, dbm: 1 / 0)
-    brain.on_message(rssi("a>unoq:ble", T0_MS + 50, -80))
+    brain.on_message(rssi("h>unoq:ble", T0_MS + 50, -80))
     brain.on_message(rssi("east>unoq:ble", T0_MS + 60, -60))
     state = brain.state()
     assert "hall" not in state and [row["id"] for row in state["links"]] == ["east>unoq:ble"]
@@ -220,7 +242,7 @@ def cmd(name, **args):
 
 def run_demo(brain, hall_readings=()):
     """Baseline, a recorded walk, training, then the whole demo path. Returns every state and event
-    as JSON text, one every 0.1 s. hall_readings are slipped in between the six links' messages."""
+    as JSON text, one every 0.1 s. hall_readings are slipped in between the core links' messages."""
     extra = sorted(hall_readings, key=lambda m: m["recv_t"])
     out, t0, i = [], T0_MS, 0
 
@@ -250,7 +272,7 @@ def run_demo(brain, hall_readings=()):
     return out, t0
 
 
-def test_the_six_links_state_is_the_same_with_and_without_hall_beacons(monkeypatch):
+def test_the_core_links_state_is_the_same_with_and_without_hall_beacons(monkeypatch):
     monkeypatch.setattr("brain.core.time.perf_counter", lambda: 0.0)   # ms_per_decision is wall time
     plain, end = run_demo(Brain(nodes=nodes_doc(with_hall=False)))
     listed, _ = run_demo(Brain(nodes=nodes_doc()))                    # configured, never heard

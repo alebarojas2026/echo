@@ -1,7 +1,8 @@
 """Hall links: is there movement along a long radio path? (optional; contract proposal in issue #358)
 
-Two spare beacons (A and B) sit 10-25 m from the square. Each receiver that hears one makes a hall
-link (a>unoq:ble, b>unoq:ble, a>pi5:ble, b>pi5:ble). For each link this module says "movement on
+Two spare beacons (H and J) sit 10-25 m from the square. A hall link is any link whose tx is one of
+them: each receiver in nodes.json that hears one makes a link (h>unoq:ble, j>pi5:ble, ...). The core
+links are the ones listed in nodes.json "links". For each hall link this module says "movement on
 this path" or not. It never says who, where along the path, or how many.
 
 The physics: a body moving near or across a radio path changes the signal from one reading to the
@@ -27,7 +28,7 @@ Hall links never reach the classifier, link health, the x-ray, the alert, the ch
 brain/core.py hands a hall link's reading to take() and does nothing else with it. Every entry
 point here catches its own errors, so a bug in this file can't stop the brain.
 
-    hall = Hall.from_nodes(nodes_doc)     # radio/nodes.json, already parsed; no "hall" section = no hall links
+    hall = Hall.from_nodes(nodes_doc)     # radio/nodes.json, already parsed; no "hall" section = no hall beacons
     if hall.take(msg): return             # every bus message; True = it was a hall link's reading
     hall.add_to(state, now_ms)            # once per state message; adds "hall" once a hall link was heard
 """
@@ -138,51 +139,61 @@ class _Link:
 
 
 class Hall:
-    def __init__(self, links=(), positions=None):
-        """links: [{"id", "tx", "rx"}] in the order they are listed in state.
-        positions: {beacon node: [x, y] in metres, or None while it hasn't been measured}."""
-        positions = positions or {}
+    def __init__(self, beacons=None, receivers=()):
+        """beacons: {hall beacon node: [x, y] in metres, or None while it hasn't been measured}.
+        receivers: the receiver nodes, in nodes.json order. A link is listed once it has a reading,
+        ordered by receiver, then by beacon."""
+        self._beacons = dict(beacons or {})
         self._links: Dict[str, _Link] = {
-            l["id"]: _Link(l["id"], l["tx"], l["rx"], positions.get(l["tx"])) for l in links}
+            f"{tx}>{rx}:ble": _Link(f"{tx}>{rx}:ble", tx, rx, xy)
+            for rx in receivers for tx, xy in self._beacons.items()}
         self._told = False
 
     @classmethod
     def from_nodes(cls, doc) -> "Hall":
-        """Build from radio/nodes.json, already parsed. No "hall" section, or one that can't be
-        read, gives a Hall with no links: it takes nothing and adds nothing."""
+        """Build from radio/nodes.json, already parsed: the beacons of its "hall" section, and every
+        node with the receiver role. No "hall" section, or one that can't be read, gives a Hall
+        with no beacons: it takes nothing and adds nothing."""
         try:
             hall = (doc or {}).get("hall")
             if not hall:
                 return cls()
-            positions = {}
+            beacons = {}
             for b in hall["beacons"]:
                 xyz = b.get("xyz_m")
-                positions[b["node"]] = None if xyz is None else [float(xyz[0]), float(xyz[1])]
-            links = [{"id": str(l["id"]), "tx": str(l["tx"]), "rx": str(l["rx"])} for l in hall["links"]]
-            return cls(links, positions)
+                beacons[str(b["node"])] = None if xyz is None else [float(xyz[0]), float(xyz[1])]
+            core = {str(n["id"]) for n in doc["nodes"]}
+            if core & set(beacons):
+                raise ValueError(f"hall beacons {sorted(core & set(beacons))} are also nodes of the square")
+            receivers = [str(n["id"]) for n in doc["nodes"] if "receiver" in n.get("roles", [])]
+            return cls(beacons, receivers)
         except Exception as e:
             log.warning("the hall section of nodes.json can't be read (%r): no hall links", e)
             return cls()
 
     def take(self, msg) -> bool:
-        """True when msg is an rssi reading of a hall link. The caller then does nothing else with
-        it, so hall readings never reach the six links' rules. Never raises."""
+        """True when msg is an rssi reading whose tx is a hall beacon. The caller then does nothing
+        else with it, so hall readings never reach the core links' rules. A reading heard by
+        something that isn't a receiver in nodes.json is taken too, and dropped. Never raises."""
         try:
-            if not self._links or msg.get("type") != "rssi":
+            if not self._beacons or msg.get("type") != "rssi":
                 return False
-            link = self._links.get(msg.get("link"))
+            name = msg.get("link")
+            if not isinstance(name, str) or name.split(">", 1)[0] not in self._beacons:
+                return False
         except Exception:
             return False          # not something we can name as ours: the caller treats it as before
-        if link is None:
-            return False
         try:
-            link.add(int(msg["recv_t"]), float(msg["dbm"]))
+            link = self._links.get(name)
+            if link is not None:
+                link.add(int(msg["recv_t"]), float(msg["dbm"]))
         except Exception as e:    # a reading with no recv_t or no number: dropped
             self._tell(e)
         return True
 
     def rows(self, now: int) -> list:
-        """One row per hall link that has ever had a reading, in nodes.json order. Never raises."""
+        """One row per hall link that has ever had a reading, by receiver in nodes.json order and
+        then by beacon. Never raises."""
         out = []
         for link in self._links.values():
             if not link.heard:
@@ -208,4 +219,4 @@ class Hall:
     def _tell(self, e: Exception) -> None:
         if not self._told:        # once: this may happen ten times a second
             self._told = True
-            log.warning("hall links: %r (the six links are not affected)", e)
+            log.warning("hall links: %r (the core links are not affected)", e)
