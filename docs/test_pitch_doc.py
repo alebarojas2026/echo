@@ -1,0 +1,46 @@
+import re
+import unittest
+from pathlib import Path
+
+
+PITCH = Path(__file__).with_name("pitch.md")
+
+
+class PitchDocTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.text = PITCH.read_text(encoding="utf-8")
+        cls.spoken = " ".join(
+            line.removeprefix("> ")
+            for line in cls.text.splitlines()
+            if line.startswith("> ")
+        )
+        cls.lower = cls.spoken.lower()
+
+    def test_spoken_length_fits_ninety_seconds(self):
+        words = re.findall(r"\b[\w'-]+\b", self.spoken)
+        self.assertGreaterEqual(len(words), 180)
+        self.assertLessEqual(len(words), 230)
+
+    def test_required_demo_beats_are_spoken(self):
+        for phrase in (
+            "judge walks in",
+            "radio x-ray",
+            "this wave creates a check-in",
+            "metal tray",
+            "advisor recommends",
+            "before the move",
+            "after the move",
+            "camera is now unplugged",
+            "proof strip",
+        ):
+            self.assertIn(phrase, self.lower)
+
+    def test_results_remain_placeholders(self):
+        self.assertNotRegex(self.spoken, r"\d")
+        self.assertGreaterEqual(self.spoken.count("__"), 8)
+        self.assertIn("__ dBm", self.spoken)
+
+
+if __name__ == "__main__":
+    unittest.main()
