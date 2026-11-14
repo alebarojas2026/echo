@@ -5,18 +5,19 @@ import os
 from pathlib import Path
 import socket
 
-from labels import Projection, Teacher, attach_processed_results, read_mode
+from labels import Teacher, attach_processed_results, read_mode
 from heartbeat import write_heartbeat
+from preflight import box_size, check_files
 
 
 def main():
-    from arduino.app_bricks.video_objectdetection import VideoObjectDetection
-    from arduino.app_utils import App
-
     calibration = Path(os.environ.get("TEACHER_CALIB", "calib.json"))
     mode_file = os.environ.get("TEACHER_MODE_FILE", "label_mode")
     heartbeat_file = os.environ["TEACHER_HEARTBEAT"]
-    projection = Projection(json.loads(calibration.read_text()))
+    detector_size = box_size(os.environ["TEACHER_BOX_SIZE"])
+    projection = check_files(calibration, mode_file, heartbeat_file, detector_size)
+    from arduino.app_bricks.video_objectdetection import VideoObjectDetection
+    from arduino.app_utils import App
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
         def send(label):
             udp.sendto(json.dumps(label, allow_nan=False).encode(), ("msgpack-rpc-router", 5600))
