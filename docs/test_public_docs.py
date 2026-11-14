@@ -34,11 +34,28 @@ class PublicDocsTest(unittest.TestCase):
     def test_video_proof_card_uses_placeholders(self):
         text = (DOCS / "video-shots.md").read_text(encoding="utf-8")
         for label in (
-            "Dead-zone improvement",
-            "Presence accuracy",
-            "End-to-end update latency",
+            "Zone accuracy",
+            "Person-versus-object accuracy",
+            "Decision latency",
+            "Bytes sent outside local network",
+            "Images stored",
         ):
             self.assertRegex(text, rf"`{re.escape(label)}: __`")
+
+    def test_video_v2_beats_are_in_demo_order(self):
+        text = (DOCS / "video-shots.md").read_text(encoding="utf-8").lower()
+        beats = (
+            "judge walks in",
+            "radio x-ray",
+            "wave check-in",
+            "metal tray",
+            "before: __ dbm",
+            "after: __ dbm",
+            "unplug the camera",
+            "proof strip",
+        )
+        positions = [text.index(beat) for beat in beats]
+        self.assertEqual(positions, sorted(positions))
 
     def test_devpost_measured_results_use_placeholders(self):
         text = (DOCS / "devpost-draft.md").read_text(encoding="utf-8")

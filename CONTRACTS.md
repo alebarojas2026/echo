@@ -2,6 +2,8 @@
 
 The message formats every part of Radio Sight agrees on. Only Ivan changes this file. Need a change? Open an issue labeled `contract`, keep working with what's here, and switch when the change lands.
 
+All numbers in the examples below are made-up format examples, not measurements. Real results live only in proof.json and PROOF.md.
+
 Every adapter (fake feed, readers, bus, brain, screen) speaks exactly this. At runtime, check only `v` and `type`; full schema checks run in tests and CI (contracts/).
 state.src mirrors the inputs; the screen shows LIVE only for src live with nonzero link rates.
 
@@ -58,7 +60,7 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
    // One label per processed camera frame (5-10/s), including frames with nobody in them.
    // present:false only on a processed frame with no foot point inside the square; then zone 0, foot_m null, motion null.
    // seq: one counter per sending socket (a producer), shared across all message types it sends.
-   // clipped:true -> zone and foot_m are null and the window is dropped. mode = the current label_mode.
+   // clipped:true -> zone, foot_m and motion are null, whatever present is, and the window is dropped. mode = the current label_mode.
 {"v":2,"type":"cam","t":1763149512200,"seq":77,"src":"live","state":"on","fps":9.6}
    // From teacher/camwatch.py: every 1 s and at once on any change. state = on | off | stalled.
 {"v":2,"type":"narration","t":1763149513000,"seq":9,"src":"live","text":"Someone just walked into zone 2.",
@@ -77,7 +79,9 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
          "motion":"still","still_s":4.2,"why":["east>unoq:ble","pi5>unoq:wifi"]},
         // probs = [empty, z1, z2, z3, z4]. kind = person | object | none.
         // pred is null before training, while health is blind, while recalibrating, and while the router is off S-home.
+        // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
  "objects":[{"xy_m":[1.0,0.2],"near":"pi5","since_s":14.0,"drop_db":9.8}],
+        // near (here and in advice) = the closest node within 0.5 m of xy_m, or null when no node is that close.
  "xray":{"w":10,"h":10,"cell_m":0.24,"origin_m":[-0.2,-0.2],"moving_db":[/* w*h */],"static_db":[/* w*h */],"n_links":6},
         // The screen draws whatever w x h it receives. Cells are row by row from the south edge:
         // index = iy*w + ix, ix east from origin_m[0], iy north from origin_m[1]; cell centre = origin_m + (i+0.5)*cell_m.
@@ -89,6 +93,7 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
  "narration":{"text":"...","event_id":"e123","t":1763149513000,"source":"llm","gen_ms":6120},
  "teacher":{"present":true,"zone":3,"motion":"still"},                       // null when the camera is off
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
+        // training is null unless a fit is running; while it runs: {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
  "board":{"cpu_temp_c":57.0,"cpu_mhz":2016,"cpu_pct":61}}
 {"v":2,"type":"event","t":1763149512200,"seq":120,"src":"live","id":"e123","kind":"enter","info":{"zone":2}}
    // kinds: enter, exit, zone_change, checkin, object_on, object_off, advice, advice_result, router_moved, router_home,
@@ -97,7 +102,8 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
 ```
 Before readings, a baseline or training exists, the brain still sends state at about 10/s with these values:
-- links: [] until readings arrive (never null);
+- links: [] until readings arrive (never null). A link is listed once it has at least one reading (dbm is then a number);
+  before the baseline its base_dbm, drop_db and expected_hz are null, and status is "ok" or "stale" from its rate;
 - xray: null before the first baseline;
 - objects: [], advice: null, checkin: null, narration: null until each exists;
 - alert: {"state":"none","zone":null,"still_s":0,"limit_s":null} when nothing is counting;
@@ -117,6 +123,8 @@ Windows: 1.0 s long, 0.1 s hop, on recv_t. A window's label is the majority of t
   Windows with a clipped label or with no label are dropped from training.
 Moving: foot speed > 0.25 m/s over 1 s, after a 0.5 s median filter.
 Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, and label_mode off.
+  On baseline_done the brain writes data/sessions/baseline.json: {"t": epoch ms, "session": id or null,
+  "links": {link id: {"base_dbm": n, "expected_hz": n}}}. proof/ and a brain restart read it from there.
 Link health:
 - A link is stale when its rate over the last 2 s is < 0.4 x expected_hz.
 - It is blind when stale for >= 3 s, or when pred.kind == none and |median - base| > 6 dB for >= 3 s.
@@ -124,7 +132,7 @@ Link health:
 - health is blind when any classifier link is blind. Then pred is null and the screen shows SENSOR BLIND (never "empty").
   Alert timers pause. It clears after 3 s ok.
 Object (a training label): only in label_mode object. Every frame must have persons_in_frame == 0, and one or more
-  links must drop >= 3 dB for >= 2 s with std < 0.8 dB.
+  links must drop >= 3 dB for >= 2 s with the std of their 0.5 s means < 0.8 dB.
 Check-in (a rule, not learned): on pi5>unoq:wifi, >= 4 alternating crossings of +/-1.5 dB around the 1 s rolling median
   within 2.5 s, with pred.zone unchanged and no other link's drop changing by > 3 dB. Gate 8 tunes the thresholds.
 Alert:
@@ -135,7 +143,7 @@ X-ray:
 - The grid covers the square plus 0.2 m on each side.
 - Weights per Wilson & Patwari: 1/sqrt(link length) inside an excess path <= 0.1 m.
 - P = (W^T W + alpha I)^-1 W^T, computed at startup and again on router_moved and router_home.
-- Per link, static_db = the drop that has held >= 5 s with std < 0.8 dB, updated ONLY while pred is not null and
+- Per link, static_db = the drop that has held >= 5 s with the std of its 0.5 s means < 0.8 dB (raw readings are too noisy), updated ONLY while pred is not null and
   pred.kind != person (frozen while a person is present), so a person standing still never becomes an "object".
 - The people part per link = max(0, drop_db - static_db). xray.static_db = the image of the static parts;
   xray.moving_db = the image of the people parts.
@@ -144,7 +152,7 @@ Advice:
 - Fires when an object persists >= 5 s and its static_db peak lies within 0.5 m of pi5>unoq:wifi.
 - Picks the router spot (not S-home) whose new link has the lowest summed static_db along its ellipse.
 - The text is built from the result, never a fixed string.
-- before_dbm = median of pi5>unoq:wifi over the 3 s before router_moved.
+- before_dbm = median of pi5>unoq:wifi over the last 3 s: kept current while the advice shows, frozen at router_moved, never null.
 - after_dbm = median over 3 s, starting 2 s after router_moved.
 Router: take the tray off and put the Pi back on S-home BEFORE sending router_home. While the router is off S-home, pred is null. On router_home, every pi5 link must sit within 1 dB of base
   for 3 s; otherwise the board runs an automatic 20 s baseline ("recalibrating").
@@ -156,6 +164,7 @@ Screen: NO DATA (grey) when the last state is > 1 s old (the feed is stale). SEN
 ```
 
 ## 7. proof.json (served as /proof.json)
+The values below show the format only; they are not results.
 ```jsonc
 {"zone":{"correct":47,"total":52,"ci95":[0.79,0.96],"sessions":["s21","s22"],"walkers":5,"method":"held-out, see PROOF.md"},
  "threshold_zone":{"correct":38,"total":52},

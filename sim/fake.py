@@ -147,13 +147,15 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
                    "kind": kind, "tx": tx, "rx": rx, "dbm": round(dbm)}
         cam = latest(path.get("camera"), t, "state", "on")
         if cam == "on" and i % label_every == 0:  # one label per camera frame, empty frames too
+            # clipped: the camera sees the person but not their feet, so no zone, foot point or motion
+            clipped = bool(pos) and any(active(c, t) for c in path.get("clipped") or [])
             yield {"type": "label", "t": t, "frame": i // label_every,
                    "mode": path.get("label_mode", "person"),
                    "persons_in_frame": int(pos is not None), "present": pos is not None,
-                   "zone": zone_of(*pos) if pos else 0,
-                   "foot_m": [round(pos[0], 2), round(pos[1], 2)] if pos else None,
-                   "motion": ("moving" if moving else "still") if pos else None,
-                   "conf": round(rng.uniform(0.75, 0.95), 2), "clipped": False}
+                   "zone": None if clipped else zone_of(*pos) if pos else 0,
+                   "foot_m": [round(pos[0], 2), round(pos[1], 2)] if pos and not clipped else None,
+                   "motion": ("moving" if moving else "still") if pos and not clipped else None,
+                   "conf": round(rng.uniform(0.75, 0.95), 2), "clipped": clipped}
         if i % round(rate) == 0 or cam != cam_was:  # camera watch: every second and on any change
             yield {"type": "cam", "t": t, "state": cam,
                    "fps": rate / label_every if cam == "on" else 0.0}
@@ -166,6 +168,14 @@ def load_path(name_or_file: str) -> dict:
     if not p.exists():
         p = PATHS_DIR / f"{name_or_file}.json"
     return json.loads(p.read_text())
+
+
+def lossy(timed_lines, loss: float, seed: int = 0):
+    """Drop a share of already-encoded (t, line) pairs, so seq has gaps like a lossy radio."""
+    rng = random.Random(f"loss-{seed}")
+    for i, pair in enumerate(timed_lines):
+        if i == 0 or rng.random() >= loss:   # the first message (meta) always gets through
+            yield pair
 
 
 def pace(timed_lines, out=sys.stdout, speed: float = 1.0,
@@ -188,15 +198,17 @@ def main(argv=None) -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--fast", action="store_true", help="no waiting; use this to record a file")
     ap.add_argument("--start-ms", type=int, default=None, help="epoch ms of the first message (default: now)")
+    ap.add_argument("--loss", type=float, default=0.0, help="share of messages to drop, e.g. 0.05")
     args = ap.parse_args(argv)
     events = simulate(load_path(args.path), rate=args.rate, seed=args.seed)
     encode = encoder(int(time.time() * 1000) if args.start_ms is None else args.start_ms)
+    lines = lossy(((e["t"], encode(e)) for e in events), args.loss, args.seed)
     try:
         if args.fast:
-            for e in events:
-                print(encode(e))
+            for _, line in lines:
+                print(line)
         else:
-            pace((e["t"], encode(e)) for e in events)
+            pace(lines)
     except (KeyboardInterrupt, BrokenPipeError):
         pass
 

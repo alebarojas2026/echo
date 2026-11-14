@@ -14,6 +14,8 @@ python -m sim.fake my_path.json --fast     # all at once, for recording a file
 
 Options: `--rate 15` (readings per link per second, 10-20), `--seed 0` (same seed, same data),
 `--start-ms` (epoch ms of the first message; default is now).
+`--loss 0.05` drops that share of messages after they are numbered, so `seq` has gaps like a
+lossy radio (the first message always gets through). `sim.send` takes `--loss` too.
 
 ## Run the whole system with no hardware
 
@@ -89,6 +91,7 @@ Optional extras, all timed in seconds from the start:
 | `outages` | `[{"node": "east", "t_on": 10, "t_off": 20}]` | A node (or one `"link"`) sends nothing in that window |
 | `waves` | `[{"t_on": 14, "t_off": 16.5, "link": "pi5>unoq:wifi", "amp_db": 4, "hz": 2}]` | A waving hand: the link swings up and down |
 | `camera` | `[{"t": 14, "state": "off"}]` | Camera state (`on`, `off`, `stalled`); labels stop unless it is `on` |
+| `clipped` | `[{"t_on": 6, "t_off": 9}]` | The camera cannot see the person's feet: labels have `clipped: true` with `zone`, `foot_m` and `motion` null |
 
 ## Tests
 
@@ -112,6 +115,7 @@ Use the short name: `python -m sim.fake zone_tour`.
 | `router_move` | Tray at T1 from 25 s, router to `S-W30` at 45 s, tray gone at 60 s, router home at 65 s | 75 s |
 | `dropped_link` | Person in zone 1; the east beacon is silent from 10 s to 20 s (sensor blind) | 30 s |
 | `camera_unplug` | The zone tour with the camera unplugged at 14 s | 32 s |
+| `clipped_feet` | Stand in zone 2 then zone 1; labels are clipped from 6 s to 9 s | 18 s |
 
 ## Replay a recording
 

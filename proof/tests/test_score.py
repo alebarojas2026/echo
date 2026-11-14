@@ -49,7 +49,7 @@ def test_scores_counts_baseline_and_null_unmeasured_values():
 
 def test_false_presence_episodes_and_nonoverlapping_empty_time():
     result = score([session()], FakeReplay((0, 4, 4, 0, 4, 4, 0, 0, 0, 0, 0)))
-    assert result["false_alarms_per_min"] == 120  # two episodes / one observed second
+    assert result["false_alarms_per_min"] is None  # measured only by proof.false_alarms
 
 
 def test_blind_and_unlabeled_are_not_empty_predictions():
@@ -88,7 +88,8 @@ def test_object_truth_requires_no_people_and_stable_radio_history():
     assert truth(s["messages"], 2100)["kind"] == "object"
     radio = [dict(type="rssi", link="east>pi5:ble", recv_t=t, dbm=-55) for t in range(0, 2500, 100)]
     assert object_evidence(radio, 2500, FakeReplay.base)
-    radio[-1]["dbm"] = -49
+    for message in radio[-5:]:
+        message["dbm"] = -49
     assert not object_evidence(radio, 2500, FakeReplay.base)
     s["messages"][5]["persons_in_frame"] = 1
     assert truth(s["messages"], 2100) is None

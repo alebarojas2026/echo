@@ -39,11 +39,19 @@ CONTRACTS.md, contracts/, AGENTS.md, CLAUDE.md and README.md are changed only by
 5. If a task needs hardware or a person, comment exactly what's needed on the issue, then take the next one.
 6. No issues left with your tag? Add tests, then open a new issue with your tag for the most useful next step and do it.
 
-## Style (every screen, page and diagram)
-- Background #F4F0E6, cards #FAF7EF, text #1C1B17, secondary text #55524A, lines #8F8A7E.
-- The ONLY accent is olive #4F5E2E.
+## Style (every screen: room, HUD, game page)
+Dark instrument look. Each colour means one thing and nothing else:
+- Page and canvas #111316. Floor and cards #1A1D21. Edges and lines #353B43. The sensing square's outline #6B7480.
+- Text #E6E8EB. Secondary text #9AA3AD.
+- link #5AA9E6: a healthy radio link.
+- person #FF9F43: the person (the X-ray heat scale up to #FFD29A, the ghost, the links behind the decision, zone names).
+- object #A9B4C2: objects (hatching, markers).
+- action #3DD68C: the router advice arrow and the check-in.
+- fault #F2555A: a broken link and the no-movement alert.
+- A status colour always comes with a word. Never colour alone.
+- Take colours from the shared tokens (web/src/room/palette.ts and the CSS variables), never a hard-coded hex. The look may still be tuned after Ivan's UI review.
 - Headlines in Newsreader, body in Hanken Grotesk (self-hosted fonts are in web/src/hud/fonts/).
-- No glow, bloom, gradients, purple, emoji or neon. Motion is calm.
+- No glow, bloom, gradients, purple, emoji or neon, and no pure black or pure white. Motion is calm: opacity and transform only.
 
 ## Hard rules
 - **Open every PR against main.** Never base a PR on another PR's branch: when that branch merges and is deleted, your PR closes. If you need unmerged work, wait for it to merge, or build against main with a small stub.
