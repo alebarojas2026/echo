@@ -12,6 +12,7 @@ data/sessions/*
 *.mp4
 *.mov
 !web/public/**/*.png
+!web/tests/**/*.png
 # python / node
 __pycache__/
 *.pyc

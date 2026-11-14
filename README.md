@@ -16,11 +16,11 @@ Built at MadHacks 2026 for the Qualcomm / N+1 Institute track. Theme: "Let's Dig
 | Folder | What | Owner |
 |---|---|---|
 | `contracts/`, `CONTRACTS.md` | Message formats every part agrees on | Ivan |
-| `web/src/room/` | 3D room, radio links, radio image | Ivan |
-| `web/src/hud/`, `web/tests/` | Screen panels and demo tests | Ivan |
+| `web/src/room/`, `web/index.html`, `web/src/main.ts`, `web/package.json` | 3D room, radio links, radio image, web shell | Ivan |
+| `web/src/hud/`, `web/tests/`, `scripts/` | Screen panels, demo tests and demo check script | Ivan |
 | `radio/`, `pi/` | Signal readers on the UNO Q, Pi router and beacon setup | Alexander |
 | `advisor/` | Dead-zone placement advice | Alexander |
-| `board/`, `mcu/`, `bus/` | Board startup, LED grid, message bus and session recorder | Alexander |
+| `board/`, `mcu/`, `bus/` | Board startup, LED grid, web server (port 8080), message bus and session recorder | Alexander |
 | `brain/` | Features, on-board training, live predictions | Izet |
 | `teacher/` | Camera labels during setup (no images saved) | Izet |
 | `proof/` | Accuracy and latency measurements | Izet |
