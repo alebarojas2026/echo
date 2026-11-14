@@ -1,19 +1,20 @@
-"""Fake Radio Sight data: RSSI for every link plus matching camera labels.
+"""Fake Radio Sight data: RSSI for every link plus matching camera messages.
 
     python -m sim.fake zone_tour            # real time, JSON lines on stdout
     python -m sim.fake zone_tour --fast > data/sessions/tour.jsonl
 
-Room: a 2 x 2 m floor square, origin at one corner, metres.
+Room, nodes, links and zones follow CONTRACTS.md section 3. Metres, origin at
+the south-west corner, x east, y north.
 
-    y=2 +-----n2-----+      zones:  2 | 3
-        |  2  |  3   |              --+--
-        n3----+-----n1              0 | 1
-        |  0  |  1   |
-    y=0 +-----n0-----+
+    y=2 +----unoq----+      zones:  1 | 2      0 = empty
+        |  1  |  2   |              --+--
+      west----+----east             3 | 4
+        |  3  |  4   |
+    y=0 +----pi5-----+
        x=0          x=2
 
-Four nodes sit at the midpoints of the sides, giving 6 links. Each diagonal
-link crosses exactly one zone, so zones are distinguishable from RSSI alone.
+Each diagonal link crosses exactly one zone. The two pi5>unoq links (wifi and
+ble) run up the middle.
 """
 import argparse
 import json
@@ -21,28 +22,33 @@ import math
 import random
 import sys
 import time
-from itertools import combinations
 from pathlib import Path
 
-from .wire import encode
+from .wire import encoder
 
 SIZE = 2.0
-NODES = {"n0": (1.0, 0.0), "n1": (2.0, 1.0), "n2": (1.0, 2.0), "n3": (0.0, 1.0)}
-LINKS = list(combinations(NODES, 2))
+NODES = {"unoq": (1.0, 2.0), "pi5": (1.0, 0.0), "east": (2.0, 1.0), "west": (0.0, 1.0)}
+LINKS = [("pi5", "unoq", "wifi"), ("pi5", "unoq", "ble"), ("east", "unoq", "ble"),
+         ("west", "unoq", "ble"), ("east", "pi5", "ble"), ("west", "pi5", "ble")]  # (tx, rx, kind)
 PATHS_DIR = Path(__file__).parent / "paths"
 
+REF_DBM = {"wifi": -40.0, "ble": -55.0}  # empty-room level at 1 m
 PERSON_DROP_DB = 8.0   # peak drop when a person stands on the link line
 PERSON_WIDTH_M = 0.2   # how fast the drop fades with distance from the line
-MOVING_SPEED = 0.05    # m/s above which the camera says "moving"
+MOVING_SPEED = 0.25    # m/s over 1 s, contract section 6
+
+
+def link_id(tx: str, rx: str, kind: str) -> str:
+    return f"{tx}>{rx}:{kind}"
 
 
 def zone_of(x: float, y: float) -> int:
-    return int(x >= SIZE / 2) + 2 * int(y >= SIZE / 2)
+    return 1 + int(x >= SIZE / 2) + 2 * int(y < SIZE / 2)
 
 
-def baseline(a: str, b: str) -> float:
-    """Empty-room RSSI in dBm (log-distance path loss)."""
-    return -40.0 - 20.0 * math.log10(math.dist(NODES[a], NODES[b]))
+def baseline(tx: str, rx: str, kind: str) -> float:
+    """Empty-room level in dBm (log-distance path loss)."""
+    return REF_DBM[kind] - 20.0 * math.log10(math.dist(NODES[tx], NODES[rx]))
 
 
 def dist_to_link(p, a: str, b: str) -> float:
@@ -76,39 +82,55 @@ def position(waypoints: list, t: float):
     return (a["x"] + f * (b["x"] - a["x"]), a["y"] + f * (b["y"] - a["y"]))
 
 
-def is_moving(waypoints: list, t: float, dt: float = 0.2) -> bool:
+def is_moving(waypoints: list, t: float, window_s: float = 1.0) -> bool:
+    """Foot speed over the last second (or since they appeared) above MOVING_SPEED."""
     now = position(waypoints, t)
-    # someone who has just appeared has no past, so look ahead instead
-    then = position(waypoints, t - dt) or position(waypoints, t + dt)
-    return bool(now and then) and math.dist(now, then) / dt > MOVING_SPEED
+    if not now:
+        return False
+    for k in range(10, 0, -1):  # oldest position inside the window
+        dt = window_s * k / 10
+        then = position(waypoints, t - dt)
+        if then:
+            return math.dist(now, then) / dt > MOVING_SPEED
+    ahead = position(waypoints, t + 0.1)  # first instant in the room: look ahead
+    return bool(ahead) and math.dist(now, ahead) / 0.1 > MOVING_SPEED
 
 
-def simulate(path: dict, rate: float = 15.0, label_rate: float = 5.0,
+def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
              seed: int = 0, noise_db: float = 1.0):
     """Yield internal events (see wire.py) for a scripted path, in time order."""
     rng = random.Random(seed)
     waypoints = path.get("person") or []
     objects = path.get("objects") or []
     label_every = max(1, round(rate / label_rate))
+    meta = {"session": "sim-" + path.get("name", "path"), "purpose": "demo", "walker": "sim"}
+    yield {"type": "meta", "t": 0.0, **meta, **path.get("meta", {})}
     for i in range(int(path["duration_s"] * rate)):
         t = round(i / rate, 3)
         pos = position(waypoints, t)
         moving = is_moving(waypoints, t)
-        for a, b in LINKS:
-            rssi = baseline(a, b) + rng.gauss(0.0, noise_db)
+        for tx, rx, kind in LINKS:
+            dbm = baseline(tx, rx, kind) + rng.gauss(0.0, noise_db)
             for o in objects:  # static: the same drop on every reading
-                rssi -= drop((o["x"], o["y"]), a, b,
-                             o.get("drop_db", 6.0), o.get("width_m", 0.25))
+                dbm -= drop((o["x"], o["y"]), tx, rx,
+                            o.get("drop_db", 6.0), o.get("width_m", 0.25))
             if pos:
-                d = drop(pos, a, b, PERSON_DROP_DB, PERSON_WIDTH_M)
+                d = drop(pos, tx, rx, PERSON_DROP_DB, PERSON_WIDTH_M)
                 if moving:  # a moving body makes the drop flutter
                     d *= max(0.0, 1.0 + rng.gauss(0.0, 0.25))
-                rssi -= d
-            yield {"kind": "rssi", "t": t, "link": f"{a}-{b}", "rssi": round(rssi)}
-        if i % label_every == 0:
-            yield {"kind": "label", "t": t,
-                   "zone": zone_of(*pos) if pos else None,
-                   "present": pos is not None, "moving": moving}
+                dbm -= d
+            yield {"type": "rssi", "t": t, "link": link_id(tx, rx, kind),
+                   "kind": kind, "tx": tx, "rx": rx, "dbm": round(dbm)}
+        if i % label_every == 0:  # one label per camera frame, empty frames too
+            yield {"type": "label", "t": t, "frame": i // label_every,
+                   "mode": path.get("label_mode", "person"),
+                   "persons_in_frame": int(pos is not None), "present": pos is not None,
+                   "zone": zone_of(*pos) if pos else 0,
+                   "foot_m": [round(pos[0], 2), round(pos[1], 2)] if pos else None,
+                   "motion": ("moving" if moving else "still") if pos else None,
+                   "conf": round(rng.uniform(0.75, 0.95), 2), "clipped": False}
+        if i % round(rate) == 0:  # camera watch: once a second
+            yield {"type": "cam", "t": t, "state": "on", "fps": rate / label_every}
 
 
 def load_path(name_or_file: str) -> dict:
@@ -138,8 +160,10 @@ def main(argv=None) -> None:
     ap.add_argument("--rate", type=float, default=15.0, help="readings per link per second (10-20)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--fast", action="store_true", help="no waiting; use this to record a file")
+    ap.add_argument("--start-ms", type=int, default=None, help="epoch ms of the first message (default: now)")
     args = ap.parse_args(argv)
     events = simulate(load_path(args.path), rate=args.rate, seed=args.seed)
+    encode = encoder(int(time.time() * 1000) if args.start_ms is None else args.start_ms)
     try:
         if args.fast:
             for e in events:
