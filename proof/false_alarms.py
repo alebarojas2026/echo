@@ -6,6 +6,12 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import subprocess
+from proof.provenance import prepare_update
+
+
+def load_zones():
+    path = Path(__file__).resolve().parents[1] / "radio/nodes.json"
+    return {z["id"]: z.get("still_alert_s") for z in json.loads(path.read_text())["zones"]}
 
 
 def read_jsonl(path):
@@ -31,7 +37,8 @@ def intervals(messages):
     return out
 
 
-def analyze(messages, events):
+def analyze(messages, events, zones=None):
+    zones = load_zones() if zones is None else zones
     spans = intervals(messages)
     starts = [s[0] for s in spans]
     exposure_ms = sum(b - a for a, b, _, _ in spans)
@@ -52,7 +59,8 @@ def analyze(messages, events):
             continue
         _, _, actual, since = spans[i]
         if event["kind"] == "alert_on":
-            limit = {1: 60000, 4: 10000}.get(actual.get("zone")) if actual.get("present") else None
+            limit_s = zones.get(actual.get("zone")) if actual.get("present") else None
+            limit = limit_s * 1000 if limit_s is not None else None
             if limit is not None and t - since >= limit and event.get("info", {}).get("zone") == actual["zone"]:
                 continue
         counts[event["kind"]] += 1
@@ -67,9 +75,10 @@ def update_proof(proof, result, messages, events, commit):
         raise ValueError("only live recordings can update measured proof")
     if "synthetic" in (proof.get("zone") or {}).get("method", "").lower():
         raise ValueError("synthetic proof cannot be promoted to measured evidence")
-    out = dict(proof)
-    out.update(false_alarms_per_min=result["false_alarms_per_min"], commit=commit,
-               measured_at=datetime.now(timezone.utc).isoformat())
+    if not result["observed_minutes"]:
+        return dict(proof)
+    out = prepare_update(proof, commit)
+    out["false_alarms_per_min"] = result["false_alarms_per_min"]
     return out
 
 

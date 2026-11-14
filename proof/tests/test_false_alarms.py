@@ -3,6 +3,11 @@ import pytest
 from proof.false_alarms import analyze, analyze_many, update_proof
 
 
+@pytest.fixture(autouse=True)
+def zones(monkeypatch):
+    monkeypatch.setattr("proof.false_alarms.load_zones", lambda: {1: 60, 2: None, 3: None, 4: 10})
+
+
 def labels(zone=0, seconds=2):
     return [dict(type="label", src="live", recv_t=t, mode="person", present=bool(zone), zone=zone,
                  motion="still" if zone else None, clipped=False) for t in range(0, seconds * 1000 + 1, 100)]
@@ -59,3 +64,10 @@ def test_multiple_sessions_aggregate_counts_and_exposure():
     result = analyze_many([(labels(), [event("checkin")]), (labels(seconds=4), [])])
     assert result["counts"]["checkin"] == 1
     assert result["false_alarms_per_min"] == 10
+
+
+def test_changed_zone_limits_and_provenance():
+    assert analyze(labels(4, 12), [event("alert_on", 11000)], zones={4: 20})["counts"]["alert_on"] == 1
+    data = labels()
+    with pytest.raises(ValueError, match="another commit"):
+        update_proof({"zone": {"total": 10}, "commit": "old"}, analyze(data, []), data, [], "new")
