@@ -17,7 +17,11 @@ placements belong in separate positive tests, not these negative recordings.
 No usable observation yields null; measured zero requires usable live sessions.
 Simulated sessions exercise the analysis but are refused for proof updates.
 Existing measurements from a different commit are refused rather than restamped.
-The capture must be nonempty and use session-range recv_t timestamps. Include
+The capture must be nonempty and use the same board recv_t clock. A continuous
+capture may begin before the session and finish after it; its coverage and event
+counts are clipped to the session range before event-id deduplication. A capture
+with no overlap is refused; touching a boundary alone provides no observation.
+Include
 captured state heartbeats to establish coverage when no events occur. Only the
 intersection of capture coverage and valid labeled observation enters exposure.
 An empty capture is missing evidence, not zero events. Measured writes require

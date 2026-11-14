@@ -45,8 +45,10 @@ def analyze(messages, events, zones=None):
         raise ValueError("missing session timestamps")
     session_start, session_end = min(m["recv_t"] for m in messages), max(m["recv_t"] for m in messages)
     capture_start, capture_end = min(m["recv_t"] for m in events), max(m["recv_t"] for m in events)
-    if capture_start < session_start or capture_end > session_end:
+    if capture_end < session_start or capture_start > session_end:
         raise ValueError("events capture is outside the session recv_t range; check the board clock")
+    capture_start = max(capture_start, session_start)
+    capture_end = min(capture_end, session_end)
     spans = [(max(a, capture_start), min(b, capture_end), label, since)
              for a, b, label, since in intervals(messages)
              if max(a, capture_start) < min(b, capture_end)]
@@ -57,13 +59,15 @@ def analyze(messages, events, zones=None):
     for event in events:
         if event.get("type") != "event" or event.get("kind") not in counts:
             continue
+        t = event["recv_t"]
+        if not capture_start <= t < capture_end:
+            continue
         identity = event.get("id")
         if not identity:
             raise ValueError("event ids are required to deduplicate repeated captures")
         if identity in seen:
             continue
         seen.add(identity)
-        t = event["recv_t"]
         i = bisect_right(starts, t) - 1
         if i < 0 or not (spans[i][0] <= t < spans[i][1]):
             continue
