@@ -1,5 +1,7 @@
 # Radio Sight: Spoken Pitch
 
+This is the 5-minute finalist pitch. The 3-minute desk version is in `desk-demo.md`.
+
 _Start with the room display and hardware visible._
 
 > This is Radio Sight: Wi-Fi that understands the room. It maps how people and objects change radio links across a space.
