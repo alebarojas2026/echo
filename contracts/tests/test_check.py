@@ -23,6 +23,8 @@ INVALID = [
     "$.pred.probs",                 # 4 probs, not 5
     "w*h is 25",                    # xray size does not match w x h
     "$.links",                      # links is [] before readings, never null
+    "$.links[0].dbm",               # a listed link always has a reading
+    "$.links[0].status",            # blind before the baseline
     "$.alert.zone",                 # counting with no zone
     "$.model.ver",                  # trained but no version
     "$.kind",                       # unknown event kind
