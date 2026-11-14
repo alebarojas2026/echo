@@ -56,6 +56,7 @@ def test_labels_follow_the_person():
             {"t": 4, "x": 1.5, "y": 1.5}, {"t": 5, "x": None}]
     labels = [e for e in fake.simulate(path(walk, duration=6)) if e["kind"] == "label"]
     at = lambda t: min(labels, key=lambda e: abs(e["t"] - t))
+    assert at(0)["moving"] is True  # walking from the very first reading
     assert at(0.4) == {"kind": "label", "t": 0.4, "zone": 0, "present": True, "moving": True}
     assert (at(3.4)["zone"], at(3.4)["moving"]) == (3, False)
     assert at(5.6)["present"] is False and at(5.6)["zone"] is None

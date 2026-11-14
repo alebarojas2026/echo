@@ -60,3 +60,14 @@ The person walks in straight lines between waypoints and holds the last one.
 pip install -r sim/requirements.txt
 python -m pytest sim
 ```
+
+## Ready-made paths
+
+Use the short name: `python -m sim.fake zone_tour`.
+
+| Name | What happens | Length |
+|---|---|---|
+| `zone_tour` | Walk in, stand 5 s in each zone (0, 1, 3, 2), walk out | 34 s |
+| `stand_still` | Walk into zone 3, stand still 15 s, walk out | 24 s |
+| `empty_room` | Nobody there, noise only | 30 s |
+| `metal_object` | Empty room, metal object next to `n1`: a steady drop on `n1`'s three links | 30 s |

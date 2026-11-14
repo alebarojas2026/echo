@@ -77,7 +77,9 @@ def position(waypoints: list, t: float):
 
 
 def is_moving(waypoints: list, t: float, dt: float = 0.2) -> bool:
-    now, then = position(waypoints, t), position(waypoints, t - dt)
+    now = position(waypoints, t)
+    # someone who has just appeared has no past, so look ahead instead
+    then = position(waypoints, t - dt) or position(waypoints, t + dt)
     return bool(now and then) and math.dist(now, then) / dt > MOVING_SPEED
 
 
