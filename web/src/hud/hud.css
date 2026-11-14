@@ -29,3 +29,4 @@
 .hud-operator[hidden] { display:none; }
 .hud-operator :is(button,input,select) { font:inherit; min-height:44px; background:var(--floor); color:var(--text); border:1px solid var(--square); padding:8px; }
 @media(max-width:640px) { .radio-hud { padding:16px; } }
+.radio-hud small { font-size:28px; } .radio-hud { overflow-wrap:anywhere; }
