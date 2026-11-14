@@ -18,6 +18,7 @@ class BuildDocTest(unittest.TestCase):
             "powered usb-c hub with ethernet and power delivery",
             "usb webcam",
             "two esp32-s3 boards",
+            "laptop for the demo browser",
             "tape for the final presentation-hour layout",
             "stands",
         ):
@@ -26,6 +27,7 @@ class BuildDocTest(unittest.TestCase):
     def test_setup_steps_are_in_safe_order(self):
         steps = (
             "### finish internet installs first",
+            "### bring up the direct ethernet link",
             "### mark the layout with loose markers",
             "### calibrate the setup camera",
             "### start the pi's private hotspot",
@@ -47,11 +49,20 @@ class BuildDocTest(unittest.TestCase):
         for phrase in (
             "all learned work runs locally",
             "it runs no model",
+            "laptop browser shows the local interface",
+            "do not copy files or bundles over the hotspot",
+            "sudo bash pi/eth.sh",
+            "sudo bash board/eth.sh",
+            "sudo bash pi/ap.sh",
+            "sudo bash radio/wifi_join.sh",
+            "http://192.168.77.2:8080/?src=ws",
             "[network guide](network.md)",
             "do not plan around venue wi-fi",
             "no image or video is saved",
         ):
             self.assertIn(phrase, self.lower)
+
+        self.assertNotIn("drives the display", self.lower)
 
     def test_east_and_west_beacons_are_not_phones(self):
         for phrase in (

@@ -32,7 +32,22 @@ class NetworkDocTest(unittest.TestCase):
             "message bus",
             "websocket",
             "demo screen",
+            "laptop browser",
+            "one ethernet cable",
+            "do not copy files or bundles over the hotspot",
             "camera teacher",
+        ):
+            self.assertIn(phrase, self.lower)
+
+        self.assertNotIn("browser in kiosk mode", self.lower)
+
+    def test_link_bring_up_and_browser_ports_are_explicit(self):
+        for phrase in (
+            "sudo bash pi/eth.sh",
+            "sudo bash board/eth.sh",
+            "sudo bash pi/ap.sh",
+            "sudo bash radio/wifi_join.sh",
+            "http port `8080` and websocket port `8765`",
         ):
             self.assertIn(phrase, self.lower)
 

@@ -57,6 +57,11 @@ class PublicDocsTest(unittest.TestCase):
         positions = [text.index(beat) for beat in beats]
         self.assertEqual(positions, sorted(positions))
 
+    def test_video_names_the_laptop_as_the_screen(self):
+        text = (DOCS / "video-shots.md").read_text(encoding="utf-8").lower()
+        self.assertIn("the laptop shows the local interface", text)
+        self.assertNotIn("the pi is the router and screen", text)
+
     def test_devpost_measured_results_use_placeholders(self):
         text = (DOCS / "devpost-draft.md").read_text(encoding="utf-8")
         claims = re.findall(r"(?:Our|The) measured[^.]*\.", text)

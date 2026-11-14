@@ -54,6 +54,11 @@ class PitchDocTest(unittest.TestCase):
         self.assertGreaterEqual(self.spoken.count("__"), 8)
         self.assertIn("__ dBm", self.spoken)
 
+    def test_compute_and_screen_roles_are_clear(self):
+        self.assertIn("this laptop shows the local interface", self.lower)
+        self.assertIn("the pi supplies network and radio but runs no model", self.lower)
+        self.assertNotIn("pi provides the sensing network and screen", self.lower)
+
 
 if __name__ == "__main__":
     unittest.main()

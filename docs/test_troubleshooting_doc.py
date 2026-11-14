@@ -59,6 +59,16 @@ class TroubleshootingDocTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.lower)
 
+    def test_laptop_path_recovery_names_links_and_ports(self):
+        for phrase in (
+            "laptop is joined to the pi hotspot",
+            "sudo bash pi/eth.sh",
+            "sudo bash board/eth.sh",
+            "websocket port `8765`",
+            "http port `8080`",
+        ):
+            self.assertIn(phrase, self.lower)
+
     def test_router_and_calibration_recovery_match_v2(self):
         for phrase in (
             "remove the tray",
