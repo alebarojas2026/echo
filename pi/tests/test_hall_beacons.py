@@ -1,4 +1,4 @@
-"""The Pi forwards the optional hall beacons A and B (issue #358) next to east and west."""
+"""The Pi forwards the optional hall beacons H and J (issue #358) next to east and west."""
 import json
 import socket
 
@@ -9,7 +9,7 @@ from radio.tests.test_hall_beacons import report
 
 
 def test_the_pi_forwards_hall_adverts_and_its_own_two_links_as_before():
-    events = [report("E", -61), report("A", -86), report("S", -30), report("W", -70), report("B", -91)]
+    events = [report("E", -61), report("H", -86), report("S", -30), report("W", -70), report("J", -91)]
     fake = FakeController(events=events)
     srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     srv.bind(("127.0.0.1", 0))
@@ -20,9 +20,9 @@ def test_the_pi_forwards_hall_adverts_and_its_own_two_links_as_before():
     srv.close()
     assert [(m["link"], m["tx"], m["rx"], m["kind"], m["dbm"], m["seq"]) for m in got] == [
         ("east>pi5:ble", "east", "pi5", "ble", -61, 0),
-        ("a>pi5:ble", "a", "pi5", "ble", -86, 1),
+        ("h>pi5:ble", "h", "pi5", "ble", -86, 1),
         ("west>pi5:ble", "west", "pi5", "ble", -70, 2),     # the Pi's own beacon S is never a link to itself
-        ("b>pi5:ble", "b", "pi5", "ble", -91, 3),
+        ("j>pi5:ble", "j", "pi5", "ble", -91, 3),
     ]
     assert all(m["v"] == 2 and m["type"] == "rssi" and m["src"] == "live" for m in got)
     assert seen["east>pi5:ble"] == [-61] and seen["west>pi5:ble"] == [-70]

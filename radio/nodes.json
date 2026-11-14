@@ -50,16 +50,10 @@
     ]
   },
   "hall": {
-    "note": "Optional long links to two beacons far outside the square (issue #358). Never classifier links: they stay out of the links list above. xyz_m is each beacon's spot in the frame above, null until it is measured in the room.",
+    "note": "Optional beacons far outside the square (issue #358). A hall link is any link whose tx is one of them, heard by any receiver above: <node>><receiver>:ble. Hall links are never core links: they stay out of the links list above. xyz_m is each beacon's spot in the frame above, null until it is measured in the room.",
     "beacons": [
-      {"node": "a", "id": "A", "data_hex": "FFFF525341", "xyz_m": null},
-      {"node": "b", "id": "B", "data_hex": "FFFF525342", "xyz_m": null}
-    ],
-    "links": [
-      {"id": "a>unoq:ble", "tx": "a", "rx": "unoq", "kind": "ble"},
-      {"id": "b>unoq:ble", "tx": "b", "rx": "unoq", "kind": "ble"},
-      {"id": "a>pi5:ble", "tx": "a", "rx": "pi5", "kind": "ble"},
-      {"id": "b>pi5:ble", "tx": "b", "rx": "pi5", "kind": "ble"}
+      {"node": "h", "id": "H", "data_hex": "FFFF525348", "xyz_m": null},
+      {"node": "j", "id": "J", "data_hex": "FFFF52534A", "xyz_m": null}
     ]
   }
 }

@@ -8,9 +8,9 @@ Scan Parameters/Enable, reports in subevent 0x0D) if it has LE Set Extended Scan
 the legacy pair (0x200B/0x200C, subevent 0x02). The two are never mixed. Either way the scan is
 passive, interval = window = 10 ms, and Filter_Duplicates is 0 (btmon: "Filter duplicates: Disabled").
 
-Only reports carrying manufacturer data FFFF 52 53 'S'|'E'|'W' are kept (radio/nodes.json), plus 'A'|'B',
-the optional hall beacons listed there; everything else is dropped before any JSON is built, and no
-address ever leaves the parser.
+Only reports carrying manufacturer data FFFF 52 53 'S'|'E'|'W' are kept (radio/nodes.json), plus the
+optional hall beacons listed there ('H'|'J'); everything else is dropped before any JSON is built, and
+no address ever leaves the parser.
 """
 import argparse
 import json
