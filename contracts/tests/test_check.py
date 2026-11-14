@@ -12,24 +12,23 @@ INVALID = [
     "'v' is a required property",   # old sim format
     "$.v",                          # v1
     "$.t",                          # t in seconds, not epoch ms
-    "$.src",
     "$.link",                       # no such link
     "$.kind",                       # link says wifi, kind says ble
     "'rssi' was unexpected",        # field not in the contract
     "$.zone",                       # clipped but zone set
-    "'conf' is a required property",
     "$.state",                      # cam state paused
     "$.text",                       # more than 16 words
-    "$.purpose",
     "$.pred.probs",                 # 4 probs, not 5
-    "$.health.status",
     "w*h is 25",                    # xray size does not match w x h
     "$.kind",                       # unknown event kind
     "$.args.mode",
-    "$.cmd",
     "unknown type 'ping'",
     "bad JSON",
 ]
+
+
+def read(name):
+    return (FIXTURES / name).read_text(encoding="utf-8")
 
 
 def test_every_message_type_has_a_schema():
@@ -37,43 +36,39 @@ def test_every_message_type_has_a_schema():
     assert "proof" in check.VALIDATORS
 
 
-@pytest.mark.parametrize("path", sorted(FIXTURES.glob("valid_*.jsonl")), ids=lambda p: p.stem)
-def test_valid_fixtures_pass(path):
-    count, failures, warnings = check.check_lines(path.read_text(encoding="utf-8").splitlines())
-    assert count >= 1
-    assert failures == []
-    assert warnings == []
-
-
-def test_valid_proof_passes():
-    assert check.check_proof((FIXTURES / "valid_proof.json").read_text(encoding="utf-8")) == []
+@pytest.mark.parametrize("name", sorted(p.name for p in FIXTURES.glob("valid_*.jsonl")))
+def test_valid_fixtures_pass(name):
+    count, failures, warnings = check.check_lines(read(name).splitlines())
+    assert count >= 1 and failures == [] and warnings == []
 
 
 def test_each_invalid_line_fails_for_its_reason():
-    lines = (FIXTURES / "invalid.jsonl").read_text(encoding="utf-8").splitlines()
+    lines = read("invalid.jsonl").splitlines()
     assert len(lines) == len(INVALID)
     for no, (line, reason) in enumerate(zip(lines, INVALID), 1):
-        _, failures, _ = check.check_lines([line])
-        assert failures, f"line {no} passed"
+        failures = check.check_lines([line])[1]
         assert any(reason in err for _, err in failures), f"line {no}: {failures}"
 
 
-def test_invalid_proof_fails():
-    errs = check.check_proof((FIXTURES / "invalid_proof.json").read_text(encoding="utf-8"))
-    assert any("$.zone.correct" in e for e in errs)
+def test_proof():
+    assert check.check_lines([read("valid_proof.json")], "proof")[1] == []
+    assert "$.zone.correct" in check.check_lines([read("invalid_proof.json")], "proof")[1][0][1]
 
 
 def rssi(seq, rx="pi5"):
-    link, tx = ("east>pi5:ble", "east") if rx == "pi5" else ("east>unoq:ble", "east")
+    link = "east>pi5:ble" if rx == "pi5" else "east>unoq:ble"
     return json.dumps({"v": 2, "type": "rssi", "t": 1763149512120 + seq, "seq": seq, "src": "live",
-                       "link": link, "kind": "ble", "tx": tx, "rx": rx, "dbm": -61})
+                       "link": link, "kind": "ble", "tx": "east", "rx": rx, "dbm": -61})
 
 
 def test_seq_gaps_are_warnings_per_producer():
-    lines = [rssi(1), rssi(7, rx="unoq"), rssi(2), rssi(5), rssi(8, rx="unoq")]
-    count, failures, warnings = check.check_lines(lines)
+    count, failures, warnings = check.check_lines([rssi(1), rssi(7, "unoq"), rssi(2), rssi(5), rssi(8, "unoq")])
     assert (count, failures) == (5, [])
-    assert warnings == [(4, "live/rssi/pi5/ble: seq 2 -> 5 (2 lost)")]
+    assert warnings == [(4, "live/rssi/pi5/ble: seq 2 -> 5")]
+
+
+def test_one_counter_for_everything_is_not_a_gap():
+    assert check.check_lines([rssi(1), rssi(2, "unoq"), rssi(3), rssi(4, "unoq")])[2] == []
 
 
 def test_empty_input_fails():

@@ -5,11 +5,7 @@
   "$defs": {
     "count": {"type": ["integer", "null"], "minimum": 0},
     "num": {"type": ["number", "null"], "minimum": 0},
-    "score": {
-      "type": "object",
-      "properties": {"correct": {"$ref": "#/$defs/count"}, "total": {"$ref": "#/$defs/count"}},
-      "required": ["correct", "total"]
-    }
+    "score": {"type": "object", "properties": {"correct": {"$ref": "#/$defs/count"}, "total": {"$ref": "#/$defs/count"}}, "required": ["correct", "total"]}
   },
   "type": "object",
   "properties": {
@@ -19,26 +15,18 @@
                      "sessions": {"type": "array", "items": {"type": "string"}}, "walkers": {"$ref": "#/$defs/count"}, "method": {"type": "string"}},
       "required": ["ci95", "sessions", "walkers", "method"], "unevaluatedProperties": false},
     "threshold_zone": {"$ref": "#/$defs/score", "unevaluatedProperties": false},
-    "person_vs_object": {
-      "$ref": "#/$defs/score",
-      "properties": {"tray_placements": {"$ref": "#/$defs/count"}},
-      "required": ["tray_placements"], "unevaluatedProperties": false},
-    "false_alarms_per_min": {"$ref": "#/$defs/num"},
-    "train_s": {"$ref": "#/$defs/num"},
-    "ms_per_decision": {
-      "type": "object",
-      "properties": {"p50": {"$ref": "#/$defs/num"}, "p95": {"$ref": "#/$defs/num"}},
-      "required": ["p50", "p95"], "additionalProperties": false},
+    "person_vs_object": {"$ref": "#/$defs/score", "properties": {"tray_placements": {"$ref": "#/$defs/count"}},
+                         "required": ["tray_placements"], "unevaluatedProperties": false},
+    "false_alarms_per_min": {"$ref": "#/$defs/num"}, "train_s": {"$ref": "#/$defs/num"},
+    "ms_per_decision": {"type": "object", "properties": {"p50": {"$ref": "#/$defs/num"}, "p95": {"$ref": "#/$defs/num"}},
+                        "required": ["p50", "p95"], "additionalProperties": false},
     "watts": {
       "type": "object",
       "properties": {"idle": {"$ref": "#/$defs/num"}, "teaching": {"$ref": "#/$defs/num"}, "radio_only": {"$ref": "#/$defs/num"},
                      "source": {"type": ["string", "null"]}},
       "required": ["idle", "teaching", "radio_only", "source"], "additionalProperties": false},
-    "bytes_out": {"$ref": "#/$defs/count"},
-    "images_stored": {"$ref": "#/$defs/count"},
-    "models_on_board": {"$ref": "#/$defs/count"},
-    "measured_at": {"type": "string"},
-    "commit": {"type": "string"}
+    "bytes_out": {"$ref": "#/$defs/count"}, "images_stored": {"$ref": "#/$defs/count"}, "models_on_board": {"$ref": "#/$defs/count"},
+    "measured_at": {"type": "string"}, "commit": {"type": "string"}
   },
   "required": ["zone", "threshold_zone", "person_vs_object", "false_alarms_per_min", "train_s", "ms_per_decision", "watts",
                "bytes_out", "images_stored", "models_on_board", "measured_at", "commit"],

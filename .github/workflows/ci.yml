@@ -38,6 +38,9 @@ jobs:
       - name: tests contracts
         if: ${{ !cancelled() && hashFiles('contracts/**/test_*.py') != '' }}
         run: lane=contracts; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests docs
+        if: ${{ !cancelled() && hashFiles('docs/**/test_*.py') != '' }}
+        run: lane=docs; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
       - name: tests mcu
         if: ${{ !cancelled() && hashFiles('mcu/**/test_*.py') != '' }}
         run: lane=mcu; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
@@ -62,6 +65,13 @@ jobs:
       - name: tests teacher
         if: ${{ !cancelled() && hashFiles('teacher/**/test_*.py') != '' }}
         run: lane=teacher; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+
+      - name: every folder with tests has a step above
+        if: ${{ !cancelled() }}
+        run: |
+          for d in $(find . -path ./.git -prune -o -name 'test_*.py' -print | cut -d/ -f2 | sort -u); do
+            grep -q "lane=$d;" .github/workflows/ci.yml || { echo "::error::$d/ has tests but no step in ci.yml"; exit 1; }
+          done
 
       - name: contract fixtures
         if: ${{ !cancelled() }}
