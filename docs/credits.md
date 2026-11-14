@@ -4,13 +4,16 @@ Radio Sight was built at MadHacks 2026 for the Qualcomm / N+1 track, following t
 
 ## Libraries
 
-The committed dependency manifests currently declare one third-party package:
+The project currently uses these third-party packages. An entry marked `Not yet in a manifest` is imported by code on `main`, but its owning module has not declared a version yet.
 
 | Library | Version | License | Used by | Project link |
 |---|---|---|---|---|
-| pytest | Unpinned | MIT | `bus/`, `sim/` | [pytest](https://pytest.org/) |
+| pytest | Unpinned | MIT | `bus/`, `sim/`, `narrator/` | [pytest](https://pytest.org/) |
+| websockets | `>=12` | BSD-3-Clause | `narrator/` | [websockets](https://websockets.readthedocs.io/) |
+| NumPy | Not yet in a manifest | BSD-3-Clause | `advisor/` | [NumPy](https://numpy.org/) |
+| OpenCV (`cv2`) | Not yet in a manifest | Apache-2.0 | `teacher/` | [OpenCV](https://opencv.org/) |
 
-`pytest` is development and test tooling. No third-party runtime library is currently declared in a committed manifest.
+`pytest` is development and test tooling. `websockets`, NumPy, and OpenCV are runtime libraries.
 
 As implementation dependencies land, this table should list every direct third-party library with its declared version, license, project link, and the Radio Sight module that uses it. The checked-in manifest in each module remains the source of truth.
 
