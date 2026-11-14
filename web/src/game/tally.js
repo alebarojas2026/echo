@@ -85,3 +85,22 @@ export function wsUrl(loc) {
   const override = new URLSearchParams(loc.search).get('ws')
   return override || `ws://${loc.hostname || '127.0.0.1'}:8765/ws`
 }
+
+// The big counts: `__` until a real (live) round has been played, as for every unmeasured number.
+export function counts(tally) {
+  const total = tally.found + tally.hidden
+  return total ? { found: String(tally.found), hidden: String(tally.hidden) } : { found: '__', hidden: '__' }
+}
+
+// The status line, in the screen's words (web/src/hud/judge.ts): where the feed comes from, and the camera.
+// kind: 'ok' | 'practice' | 'off' | 'fault'. Each colour on the page always comes with one of these words.
+export function status(state, ageMs) {
+  if (!isState(state) || ageMs > STALE_MS) return { source: 'NO DATA', kind: 'off', cam: '', note: 'Waiting for the board.' }
+  const cam = { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] ?? ''
+  if (state.health?.status === 'blind') return { source: 'SENSOR BLIND', kind: 'fault', cam, note: 'Rounds wait until the radio is back.' }
+  const live = state.links?.some((link) => (link.rate_hz ?? 0) > 0)
+  const source = state.src === 'sim' ? 'SIM' : state.src === 'replay' ? 'REPLAY' : live ? 'LIVE' : 'NO RADIO'
+  if (state.src !== 'live') return { source, kind: 'practice', cam, note: 'Practice: rounds are not counted.' }
+  if (!state.pred) return { source, kind: 'off', cam, note: 'The radio is not ready yet.' }
+  return { source, kind: 'ok', cam, note: 'Ready for the next round.' }
+}

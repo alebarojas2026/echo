@@ -1,22 +1,51 @@
 // Page wiring for the crowd game: the brain's state socket in, taps on the zone buttons out.
-import { addRound, emptyTally, isState, judge, load, resultText, save, STALE_MS, tallyText, truthCmd, undo, wsUrl } from './tally.js'
+import { swap } from './fade.js'
+import { addRound, counts, emptyTally, isState, judge, load, resultText, save, status, tallyText, truthCmd, undo, wsUrl, ZONES } from './tally.js'
 
 const $ = (id) => document.getElementById(id)
 const tallyEl = $('tally')
 const statusEl = $('status')
 const resultEl = $('result')
 
-let tally = load(localStorage)
-let state = null
-let stateAt = 0
+// ?mock=ready|round|result|practice|blind shows one state without a board, for checking the look.
+// A mock never reads or writes the stored tally.
+const MOCK_LINKS = [{ id: 'east>pi5:ble', rate_hz: 9 }]
+const MOCK_STATE = { v: 2, type: 'state', src: 'live', cam: 'off', links: MOCK_LINKS, health: { status: 'ok' },
+  pred: { present: true, kind: 'person', zone: 4, zone_set: [4], motion: 'still' } }
+const MOCKS = {
+  ready: {},
+  round: { tally: { found: 3, hidden: 2, rounds: ['found', 'hidden', 'found', 'found', 'hidden'] } },
+  result: { tally: { found: 3, hidden: 2, rounds: ['found', 'hidden', 'found', 'found', 'hidden'] }, tap: 1 },
+  practice: { state: { src: 'sim' } },
+  blind: { state: { pred: null, health: { status: 'blind' } } },
+}
+const mock = MOCKS[new URLSearchParams(location.search).get('mock')]
+const storage = mock ? { getItem: () => null, setItem: () => {} } : localStorage
+
+let tally = mock?.tally ?? load(storage)
+let state = mock ? { ...MOCK_STATE, ...mock.state } : null
+let stateAt = performance.now()
 let socket = null
 
 function age() {
+  if (mock) return 0
   return state ? performance.now() - stateAt : Infinity
 }
 
+// Zone names take the person colour; the rest of the sentence stays plain.
+const ZONE_NAMES = new RegExp(`(${Object.values(ZONES).join('|')})`)
+function showResult(text, outcome) {
+  resultEl.dataset.outcome = outcome
+  swap(resultEl, text, () => resultEl.replaceChildren(...text.split(ZONE_NAMES).map((part, i) =>
+    i % 2 ? Object.assign(document.createElement('span'), { className: 'zone', textContent: part }) : part)))
+}
+
 function showTally() {
-  tallyEl.textContent = tallyText(tally)
+  const n = counts(tally)
+  swap($('found'), n.found)
+  swap($('hidden'), n.hidden)
+  for (const id of ['found', 'hidden']) $(id).toggleAttribute('data-empty', n[id] === '__')
+  tallyEl.setAttribute('aria-label', tallyText(tally))
   tallyEl.dataset.found = tally.found
   tallyEl.dataset.hidden = tally.hidden
   $('undo').disabled = tally.rounds.length === 0
@@ -24,21 +53,18 @@ function showTally() {
 }
 
 function showStatus() {
-  let text = 'Ready'
-  let kind = 'ok'
-  if (age() > STALE_MS) [text, kind] = ['NO DATA', 'off']
-  else if (!state.pred) [text, kind] = [state.health?.status === 'blind' ? 'SENSOR BLIND' : 'Radio not ready', 'off']
-  else if (state.src !== 'live') [text, kind] = [`Practice (${state.src}): rounds are not counted`, 'practice']
-  statusEl.textContent = text
-  statusEl.dataset.kind = kind
+  const now = status(state, age())
+  statusEl.dataset.kind = now.kind
+  swap($('source'), now.source)
+  swap($('cam'), now.cam)
+  swap($('note'), now.note)
 }
 
 function play(zone) {
   const result = judge(state, age(), zone)
   tally = addRound(tally, result)
-  save(localStorage, tally)
-  resultEl.textContent = resultText(result)
-  resultEl.dataset.outcome = result.outcome
+  save(storage, tally)
+  showResult(resultText(result), result.outcome)
   showTally()
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(truthCmd(zone)))
 }
@@ -70,9 +96,8 @@ document.addEventListener('keydown', (event) => {
 })
 $('undo').addEventListener('click', () => {
   tally = undo(tally)
-  save(localStorage, tally)
-  resultEl.textContent = 'Last round taken back.'
-  resultEl.dataset.outcome = ''
+  save(storage, tally)
+  showResult('Last round taken back.', '')
   showTally()
 })
 $('reset').addEventListener('click', () => {
@@ -86,14 +111,20 @@ $('reset').addEventListener('click', () => {
     return
   }
   tally = emptyTally()
-  save(localStorage, tally)
+  save(storage, tally)
   delete $('reset').dataset.armed
   $('reset').textContent = 'Start over'
-  resultEl.textContent = ''
+  showResult('', '')
   showTally()
 })
 
 showTally()
 showStatus()
-setInterval(showStatus, 250)
-connect()
+if (mock?.tap) {
+  const result = judge(state, 0, mock.tap)
+  showResult(resultText(result), result.outcome)
+}
+if (!mock) {
+  setInterval(showStatus, 250)
+  connect()
+}
