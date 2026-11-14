@@ -151,6 +151,8 @@ Before readings, a baseline or training exists, the brain still sends state at a
    // record_start {session, purpose, walker}; label_mode {mode: person|object|off}; router_moved {spot}; truth {zone} (crowd game).
    // reset = between judges: clears the alert, still timer, check-in, advice and narration.
    // arm {on: true|false} = "this space should be empty now" (after hours). See Armed in section 6.
+   // baseline {} = a new place or layout. baseline {keep_model: true} = the same layout set down again (another desk,
+   // a knocked arm): only the baseline is new, see section 6.
 ```
 
 ## 6. Shared rules (every part computes the same thing)
@@ -159,6 +161,10 @@ Windows: 1.0 s long, 0.1 s hop, on recv_t. A window's label is the majority of t
   Windows with a clipped label or with no label are dropped from training.
 Moving: foot speed > 0.25 m/s over 1 s, after a 0.5 s median filter.
 Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, and label_mode off.
+  With the camera off (unplugged at the judging desk) there is no camera to ask: the capture runs on health ok and
+  label_mode off alone, and the operator keeps the strip empty.
+  baseline {keep_model: true} keeps the model and the recordings: the model was taught on drops from a baseline, so
+  it carries over to a new baseline of the same layout. Features are taken relative to the baseline for this reason.
   On baseline_done the brain writes data/sessions/baseline.json: {"t": epoch ms, "session": id or null,
   "links": {link id: {"base_dbm": n, "expected_hz": n}}}. proof/ and a brain restart read it from there.
 Link health:

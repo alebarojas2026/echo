@@ -4,3 +4,5 @@
 {"v":2,"type":"cmd","cmd":"router_moved","args":{"spot":"S-W30"}}
 {"v":2,"type":"cmd","cmd":"truth","args":{"zone":2}}
 {"v":2,"type":"cmd","cmd":"reset","args":{}}
+{"v":2,"type":"cmd","cmd":"baseline","args":{}}
+{"v":2,"type":"cmd","cmd":"baseline","args":{"keep_model":true}}
