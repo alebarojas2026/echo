@@ -5,7 +5,7 @@ from proof.manual import egress_bytes, update
 
 def test_sourced_reading_and_zero_egress():
     proof = {"commit": "same", "measured_at": "original", "zone": {"total": 10}}
-    result, evidence = update(proof, "same", "2026-11-14T21:00:00Z", "idle", 2.5, "USB meter", "0\n", "board/egress.sh count, 5 min")
+    result, evidence = update(proof, "same", "2026-11-14T21:00:00Z", "idle", 2.5, "USB meter", "0\n", "board/egress.sh count, 5 min", 300)
     assert result["watts"]["idle"] == 2.5 and result["bytes_out"] == 0
     assert result["measured_at"] == "original" and evidence["source"] == "USB meter"
     assert "watts" not in proof
@@ -32,6 +32,6 @@ def test_egress_requires_successful_strict_stdout(text):
 
 def test_mismatched_commit_or_meter_refused():
     with pytest.raises(ValueError, match="another commit"):
-        update({"commit": "old", "bytes_out": 0}, "new", "2026-11-14", "idle", 2, "meter")
+        update({"commit": "old", "bytes_out": 0}, "new", "2026-11-14", "idle", 2, "meter", duration_s=300)
     with pytest.raises(ValueError, match="another meter"):
-        update({"watts": {"source": "old", "idle": 2}}, "same", "2026-11-14", "teaching", 3, "new")
+        update({"watts": {"source": "old", "idle": 2}}, "same", "2026-11-14", "teaching", 3, "new", duration_s=300)

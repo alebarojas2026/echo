@@ -22,7 +22,7 @@ def test_plan_runs_stages_in_order_and_never_trains_on_heldout(tmp_path):
     heldout = recording(tmp_path, "test", "heldout")
     recording(tmp_path, "object", "object")
     heldout.with_suffix(".states.jsonl").write_text("")
-    heldout.with_suffix(".events.jsonl").write_text("")
+    heldout.with_suffix(".events.jsonl").write_text('{"v":2,"type":"state","recv_t":0}')
     (tmp_path / "proof-plan.json").write_text('{"negative_sessions":["test"]}')
     baseline = tmp_path / "baseline.json"
     baseline.write_text("{}")

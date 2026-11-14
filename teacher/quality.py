@@ -9,9 +9,18 @@ from statistics import mean
 
 def report(messages, min_hz=5, max_clipped=0.1, max_jitter_m=0.1):
     labels = sorted((m for m in messages if m.get("type") == "label"), key=lambda m: m["recv_t"])
+    frame_ids = [m.get("frame") for m in labels]
+    frames_known = all(isinstance(frame, int) for frame in frame_ids)
+    if frames_known:
+        unique = {}
+        for label in labels:
+            unique.setdefault(label["frame"], label)
+        labels = list(unique.values())
     count = len(labels)
-    span = (labels[-1]["recv_t"] - labels[0]["recv_t"]) / 1000 if count > 1 else 0
-    hz = (count - 1) / span if span else None
+    times = [m["recv_t"] for m in messages if "recv_t" in m]
+    start, end = (min(times), max(times)) if times else (0, 0)
+    span = (end - start) / 1000
+    hz = count / span if span and frames_known and count else None
     clipped = sum(bool(m.get("clipped")) for m in labels)
     empty = sum(not m.get("present") and not m.get("clipped") for m in labels)
     groups, current = [], []
@@ -32,7 +41,10 @@ def report(messages, min_hz=5, max_clipped=0.1, max_jitter_m=0.1):
         centre = [mean(m["foot_m"][i] for m in group) for i in (0, 1)]
         squares.extend(math.dist(m["foot_m"], centre) ** 2 for m in group)
     jitter = math.sqrt(mean(squares)) if squares else None
-    gaps = sum(b["recv_t"] - a["recv_t"] > 1000 for a, b in zip(labels, labels[1:]))
+    gaps = None
+    if count >= 2:
+        boundaries = [start] + [m["recv_t"] for m in labels] + [end]
+        gaps = sum(b - a > 1000 for a, b in zip(boundaries, boundaries[1:]))
     flags = []
     if hz is None or hz < min_hz:
         flags.append("insufficient processed-label rate")
