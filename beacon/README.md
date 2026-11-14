@@ -29,7 +29,7 @@ On paper the three beacons together (S at about 20 ms, E and W at 35 ms) add up 
 Each beacon is about 1.4 m from each receiver. Free-space loss over 1.4 m at 2.4 GHz is about 43 dB, so +9 dBm arrives at about -34 dBm before antenna and mounting losses. That is far below the -10 dBm every Bluetooth LE receiver has to handle, and far above the receivers' noise floor, so a person in the line or the venue's Wi-Fi never pushes a reading into the noise. A lower level gives up that margin in a hall full of 2.4 GHz traffic. A higher one adds nothing inside a 2 m square and carries further into the venue. +9 dBm is also an exact step of the ESP32-S3's power table (it moves in 3 dB steps).
 
 ### When something goes wrong
-- It is advertising within a second of a reset: setup sends five HCI commands (reset, random address, parameters, data, enable) and nothing else.
+- It should be advertising well within a second of a reset: setup sends five HCI commands (reset, random address, parameters, data, enable) and nothing else. To check, press **R** and watch for the first blink, which comes the moment advertising starts.
 - A watchdog restarts the chip if the Bluetooth controller stops answering for 5 seconds. The sketch asks the controller for a reply every second and feeds the watchdog only when one comes back. A crash restarts it too.
 - If any setup step fails, it says which one on USB serial and restarts.
 
