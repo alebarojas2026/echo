@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from brain import health
 from sim import fake
@@ -16,7 +17,7 @@ def make(**kw):
 
 
 def run(hm, t0, t1, level=lambda t, link: 0.0, alive=lambda t, link: True,
-        kind=lambda t: "none", seed=0):
+        kind=lambda t: "none", flags=lambda t: {}, seed=0):
     """Readings at HZ per link and one update per reading tick. Returns {t: out}."""
     rng = np.random.default_rng(seed)
     outs = {}
@@ -25,7 +26,7 @@ def run(hm, t0, t1, level=lambda t, link: 0.0, alive=lambda t, link: True,
         for link in LINKS:
             if alive(t, link):
                 hm.add(link, t * 1000, round(BASE[link] + level(t, link) + rng.normal(0, 0.7)))
-        outs[round(t, 1)] = hm.update(t * 1000, kind(t))
+        outs[round(t, 1)] = hm.update(t * 1000, kind(t), **flags(t))
     return outs
 
 
@@ -97,6 +98,22 @@ def test_jump_with_a_person_there_is_not_blind():
     assert all(o["health"]["status"] == "ok" for o in outs.values())
     outs = run(make(), 0, 12, level=level, kind=lambda t: None)   # no prediction yet
     assert all(o["health"]["status"] == "ok" for o in outs.values())
+
+
+@pytest.mark.parametrize("flag, value", [("router_home", False), ("baseline_running", True)])
+def test_jump_rule_is_off_while_router_away_or_baseline_running(flag, value):
+    def level(t, link):   # every pi5 link sits 9 dB off base from 5 s on
+        return -9.0 if "pi5" in link and t >= 5.0 else 0.0
+
+    def flags(t):         # router off S-home / baseline running from 5 s to 15 s
+        return {flag: value} if 5.0 <= t < 15.0 else {}
+
+    outs = run(make(), 0, 20, level=level, flags=flags)
+    assert all(outs[t]["health"]["status"] == "ok" for t in outs if t < 15.0)
+    # the rule is back at 15 s and the links are still off base: blind 3 s later
+    assert outs[17.9]["health"]["status"] == "ok"
+    assert outs[18.0]["health"]["status"] == "blind"
+    assert outs[18.0]["health"]["reason"] == "jump"
 
 
 def test_short_jump_does_not_go_blind():

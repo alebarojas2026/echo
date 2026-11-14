@@ -7,7 +7,8 @@ fields for "links", and blind_on / blind_off events.
 Rules (section 6):
 - A link is stale when its rate over the last 2 s is < 0.4 x expected_hz.
 - It is blind when stale for >= 3 s, or when pred.kind == "none" and
-  |median - base| > 6 dB for >= 3 s. The median is over the last 1 s.
+  |median - base| > 6 dB for >= 3 s. The median is over the last 1 s. The
+  jump rule is off while the router is off S-home or a baseline is running.
 - health is blind when any classifier link is blind. A blind link clears
   after 3 s ok.
 status is "degraded" when some link is stale or blind but health isn't blind.
@@ -84,7 +85,7 @@ class Health:
         hm = Health.from_nodes(nodes_doc)    # expected_hz from radio/nodes.json
         hm.set_base({link: base_dbm})        # after baseline_done
         hm.add(link, recv_t_ms, dbm)         # every rssi message
-        out = hm.update(now_ms, kind)        # once per state message
+        out = hm.update(now_ms, kind, router_home, baseline_running)   # once per state message
         state["health"] = out["health"]      # pred = None while hm.blind
     """
 
@@ -121,10 +122,12 @@ class Health:
         if lk is not None:
             lk.readings.append((t_ms / 1000.0, float(dbm)))
 
-    def update(self, now_ms, kind=None):
+    def update(self, now_ms, kind=None, router_home=True, baseline_running=False):
         """One tick. kind = the classifier's pred.kind ("person" | "object" | "none"),
-        even while pred is withheld; None when there is no prediction (untrained,
-        router off S-home, recalibrating), which turns the jump rule off.
+        even while pred is withheld; None when there is no prediction (untrained).
+        The jump rule only runs when kind == "none", router_home is True (the
+        router sits on S-home) and baseline_running is False (no baseline or
+        recalibrating capture).
 
         Returns {"health": {...}, "links": [...], "events": [...]}.
         """
@@ -132,7 +135,8 @@ class Health:
         if self._start is None:
             self._start = now
         judge_rate = now - self._start >= RATE_WINDOW_S - EPS_S   # a full window first
-        rows = [lk.judge(now, judge_rate, kind == "none") for lk in self.links.values()]
+        judge_jump = kind == "none" and router_home and not baseline_running
+        rows = [lk.judge(now, judge_rate, judge_jump) for lk in self.links.values()]
 
         blind = [r["id"] for r in rows if r["status"] == "blind"]
         bad_cls = [k for k in self.classifier_links if k in blind]
