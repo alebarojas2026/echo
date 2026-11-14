@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}  # every push to main gets its own result
 
 jobs:
   python:
@@ -37,7 +37,7 @@ jobs:
         run: lane=bus; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
       - name: tests contracts
         if: ${{ !cancelled() && hashFiles('contracts/**/test_*.py') != '' }}
-        run: lane=contracts; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+        run: lane=contracts; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q --ignore=contracts/tests/test_e2e.py
       - name: tests docs
         if: ${{ !cancelled() && hashFiles('docs/**/test_*.py') != '' }}
         run: lane=docs; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
@@ -69,6 +69,13 @@ jobs:
           for d in $(find . -path ./.git -prune -o -name 'test_*.py' -print | cut -d/ -f2 | sort -u); do
             grep -q "lane=$d;" .github/workflows/ci.yml || { echo "::error::$d/ has tests but no step in ci.yml"; exit 1; }
           done
+
+      - name: end-to-end smoke (sim, bus, brain, screen)
+        if: ${{ !cancelled() }}
+        run: |
+          for lane in bus brain sim; do if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; done
+          pip install websockets
+          python -m pytest contracts/tests/test_e2e.py -q -rs
 
       - name: contract fixtures
         if: ${{ !cancelled() }}
