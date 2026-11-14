@@ -247,6 +247,28 @@ class TestPinger:
         pinger.check()
         assert len(procs) == 2
 
+    def test_a_failing_ping_is_said_once_and_its_recovery_too(self):
+        t, procs, said = [0.0], [], []
+
+        def popen(cmd, **kw):
+            procs.append(FakeProc())
+            return procs[-1]
+
+        pinger = Pinger("10.42.0.1", 50, popen=popen, clock=lambda: t[0], retry_s=2.0, say=said.append)
+        pinger.check()
+        for step in range(1, 4):                 # exits at once three times in a row
+            procs[-1].code = 2
+            t[0] = 2.5 * step
+            pinger.check()
+        assert said == ["ping to 10.42.0.1 exited (2): readings come at the beacon rate until it runs; "
+                        "trying again every 2 s"]
+        t[0] += 4.0
+        pinger.check()                           # running, but not for 5 s yet
+        assert len(said) == 1
+        t[0] += 2.0
+        pinger.check()
+        assert said[-1] == "ping to 10.42.0.1 running again" and len(procs) == 4
+
     def test_zero_hz_means_no_pings(self):
         pinger = Pinger("10.42.0.1", 0, popen=lambda *a, **k: pytest.fail("ping started"), say=quiet)
         pinger.check()
