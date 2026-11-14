@@ -18,7 +18,7 @@ systemctl list-units 'radio-sight-*'
 journalctl -u radio-sight-bus -f
 ```
 
-Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sudo (it uses sudo itself). It checks out the ref and restarts only what changed. The Pi uses the same commands; there it installs only `radio-sight-radio-node`.
+Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sudo (it uses sudo itself). It checks out the ref and restarts only what changed. The Pi uses the same commands; there it installs only `radio-sight-radio-node`, and runs it with or without `--no-pi`, since beacon S doesn't need the cable.
 
 ## Placeholders
 | In the file | Becomes |
@@ -38,6 +38,6 @@ Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sud
 | radio-sight-serve | `python board/serve.py` | `@USER@` | |
 | radio-sight-llm | llama-server, from `narrator/llm.service` | arduino | |
 | radio-sight-narrate | `python -m narrator.narrate` | `@USER@` | |
-| radio-sight-radio-node (Pi only) | `python -m pi.radio_node` | root | needs the Ethernet link |
+| radio-sight-radio-node (Pi only) | `python -m pi.radio_node` | root | no: it advertises and scans without the Ethernet link, and forwards once it's up |
 
 A unit whose program doesn't exist yet still installs and keeps restarting until it does; `journalctl -u <unit>` shows why. If an older `llm.service` from the narrator README is installed, deploy removes it, so two model servers don't fight over port 8091.
