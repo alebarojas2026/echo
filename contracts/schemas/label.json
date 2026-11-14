@@ -9,7 +9,7 @@
     "mode": {"$ref": "common.json#/$defs/label_mode"},
     "persons_in_frame": {"type": "integer", "minimum": 0},
     "present": {"type": "boolean"},
-    "zone": {"type": ["integer", "null"], "minimum": 0, "maximum": 4},
+    "zone": {"type": ["integer", "null"], "minimum": 0, "maximum": 2},
     "foot_m": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
     "motion": {"enum": ["moving", "still", null]},
     "conf": {"type": "number", "minimum": 0, "maximum": 1},
