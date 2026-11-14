@@ -58,9 +58,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path)
     parser.add_argument("states", type=Path)
+    parser.add_argument("--more-pairs", nargs=2, action="append", default=[], type=Path, metavar=("SESSION", "STATES"))
     parser.add_argument("--proof", type=Path, help="update this measured proof file; otherwise only report")
     args = parser.parse_args()
     messages, states = read_jsonl(args.session), read_jsonl(args.states)
+    for session_path, state_path in args.more_pairs:
+        messages.extend(read_jsonl(session_path))
+        states.extend(read_jsonl(state_path))
     result = analyze(messages, states)
     if args.proof:
         proof = json.loads(args.proof.read_text())
