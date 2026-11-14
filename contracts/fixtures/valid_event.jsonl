@@ -1,0 +1,2 @@
+{"v":2,"type":"event","t":1763149512200,"seq":120,"src":"live","id":"e123","kind":"enter","info":{"zone":2}}
+{"v":2,"type":"event","t":1763149512300,"seq":121,"src":"live","id":"e124","kind":"recording","info":{"on":true,"session":"s12"}}

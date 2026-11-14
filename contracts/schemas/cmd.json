@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/cmd.json",
+  "$comment": "Section 5, screen -> brain. The doc's cmd example has no t, seq or src, so they are optional here.",
+  "$ref": "common.json#/$defs/fields",
+  "properties": {
+    "type": {"const": "cmd"},
+    "cmd": {"enum": ["train", "baseline", "reset_alert", "reset", "record_start", "record_stop", "label_mode", "router_moved", "router_home", "relearn", "truth"]},
+    "args": {"type": "object"}
+  },
+  "required": ["v", "type", "cmd", "args"],
+  "unevaluatedProperties": false,
+  "allOf": [
+    {"if": {"properties": {"cmd": {"const": "record_start"}}, "required": ["cmd"]},
+     "then": {"properties": {"args": {"properties": {"session": {"type": "string"}, "purpose": {"$ref": "common.json#/$defs/purpose"}, "walker": {"type": "string"}},
+                                      "required": ["session", "purpose", "walker"], "additionalProperties": false}}}},
+    {"if": {"properties": {"cmd": {"const": "label_mode"}}, "required": ["cmd"]},
+     "then": {"properties": {"args": {"properties": {"mode": {"$ref": "common.json#/$defs/label_mode"}}, "required": ["mode"], "additionalProperties": false}}}},
+    {"if": {"properties": {"cmd": {"const": "router_moved"}}, "required": ["cmd"]},
+     "then": {"properties": {"args": {"properties": {"spot": {"$ref": "common.json#/$defs/router_spot"}}, "required": ["spot"], "additionalProperties": false}}}},
+    {"if": {"properties": {"cmd": {"const": "truth"}}, "required": ["cmd"]},
+     "then": {"properties": {"args": {"properties": {"zone": {"$ref": "common.json#/$defs/zone"}}, "required": ["zone"], "additionalProperties": false}}}},
+    {"if": {"properties": {"cmd": {"enum": ["train", "baseline", "reset_alert", "reset", "record_stop", "router_home", "relearn"]}}, "required": ["cmd"]},
+     "then": {"properties": {"args": {"maxProperties": 0}}}}
+  ]
+}

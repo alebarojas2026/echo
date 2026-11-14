@@ -1,0 +1,29 @@
+# llama-server for the narrator, on the UNO Q only. Setup steps: narrator/README.md.
+#   sudo cp narrator/llm.service /etc/systemd/system/llm.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now llm.service
+[Unit]
+Description=Radio Sight narrator model (llama-server on 127.0.0.1:8091)
+After=network.target
+
+[Service]
+Type=simple
+User=arduino
+# 2 threads, one slot, a small context. -np 1 keeps the fixed start of the
+# prompt cached in that slot, so each event only adds a few tokens of work.
+ExecStart=/opt/rs/llama.cpp/build/bin/llama-server \
+    --model /opt/rs/models/qwen2.5-0.5b-instruct-q4_0.gguf \
+    --alias qwen2.5-0.5b-instruct-q4_0 \
+    --host 127.0.0.1 --port 8091 \
+    --threads 2 --threads-batch 2 --parallel 1 --ctx-size 1024 \
+    --cache-ram 0 --load-mode mmap+mlock --no-webui
+# Cores 2-3 at low priority: cores 0-1 stay free for the radio readers and the brain.
+CPUAffinity=2 3
+Nice=10
+# mlock keeps the model in RAM, so a busy disk can't page it out mid-sentence.
+LimitMEMLOCK=infinity
+MemoryMax=1G
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,2 @@
+{"v":2,"type":"narration","t":1763149513000,"seq":9,"src":"live","text":"Someone just walked into zone 2.","event_id":"e123","event_kind":"enter","gen_ms":6120,"source":"llm","model":"<model name>"}
+{"v":2,"type":"narration","t":1763149521000,"seq":10,"src":"live","text":"Someone just walked into zone 2 (Chair).","event_id":"e124","event_kind":"enter","gen_ms":12,"source":"template","model":null}

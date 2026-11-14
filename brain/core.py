@@ -3,24 +3,29 @@
 No sockets here (brain/main.py has them), so every rule can be tested with a
 fake clock. Times are board epoch ms, the same clock as the bus's recv_t.
 
-Not in this file yet, each has its own issue: link health and SENSOR BLIND,
-the x-ray and objects, check-in and the alert, recalibration and drift, and
-the narrator's enter/exit events. Their state fields are sent empty for now.
+Link health (brain/health.py) and the x-ray and objects (brain/xray.py) are
+separate modules; this file feeds them and puts their output into the state.
+Still to come, each with its own issue: check-in and the alert, recalibration
+and drift, advice, and the narrator's enter/exit events.
 """
 from __future__ import annotations
 
+import json
 import statistics
 import time
 from collections import deque
+from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from brain import features as F
+from brain.health import Health
 from brain.train import Model
+from brain.xray import Xray
 
 BASELINE_MS = 20_000
 HOME = "S-home"
-RATE_WINDOW_MS = 2_000
-STALE_FRACTION = 0.4
+NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
+NO_ALERT = {"state": "none", "zone": None, "still_s": 0, "limit_s": None}
 CAM_SILENT_MS = 3_000
 TEACHER_FRESH_MS = 1_000
 TRAIN_PURPOSES = ("train", "object")
@@ -33,18 +38,28 @@ def now_ms() -> int:
 
 class Brain:
     def __init__(self, clock: Optional[Callable[[], int]] = None, to_bus=None, mode_file=None,
-                 spawn=None, board_stats=None, links=F.LINKS):
+                 spawn=None, board_stats=None, links=F.LINKS, nodes=None):
         """clock None = follow the feed (latest recv_t), for recorded files played fast.
-        to_bus(msg) forwards a command to the bus. spawn(job) runs training off the loop."""
+        to_bus(msg) forwards a command to the bus.
+        spawn(fit, done) runs fit() off the loop, then done(model) back on it.
+        nodes is radio/nodes.json, already parsed (default: the repo's copy)."""
+        nodes = nodes or json.loads(NODES_JSON.read_text(encoding="utf-8"))
+        self.health = Health.from_nodes(nodes)
+        self.xray = Xray.from_nodes(nodes)
+        self._still_since: Optional[int] = None
+        self._heard = False                   # any reading yet
+        self.want_session: Optional[str] = None   # the id from record_start
+        self.raw_kind: Optional[str] = None   # the classifier's kind, even while pred is withheld
+        self._raw: Optional[dict] = None
+        self._fresh = False
         self._clock = clock
         self.to_bus = to_bus or (lambda msg: None)
         self.mode_file = mode_file
-        self.spawn = spawn or (lambda job: job())
+        self.spawn = spawn or (lambda fit, done: done(fit()))
         self.board_stats = board_stats or (lambda: {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None})
         self.links = tuple(links)
         self.feed_t = 0
         self.src = "live"
-        self.history: Dict[str, deque] = {link: deque() for link in self.links}  # (recv_t, dbm)
         self.base: Dict[str, float] = {}
         self.expected_hz: Dict[str, float] = {}
         self.windower: Optional[F.Windower] = None
@@ -55,7 +70,6 @@ class Brain:
         self.training: Optional[dict] = None
         self.decision_ms: deque = deque(maxlen=200)
         self.pred: Optional[dict] = None
-        self._still_since: Optional[int] = None
         self.sessions: Dict[str, dict] = {}
         self.open_session: Optional[dict] = None
         self.router = HOME
@@ -82,7 +96,10 @@ class Brain:
         self.feed_t = max(self.feed_t, int(t))
         self.src = msg.get("src", self.src)
         if kind == "meta":
-            self.open_session = {"meta": msg, "messages": []}
+            # Only the meta the bus writes for our record_start opens a copy. The fake
+            # feed sends its own meta (and again on every loop); those are ignored.
+            if self.want_session is not None and msg.get("session") == self.want_session:
+                self.open_session = {"meta": msg, "messages": []}
         elif kind == "cam":
             self.cam = (t, msg.get("state"))
         elif kind == "narration":
@@ -94,8 +111,12 @@ class Brain:
                 self.label = msg
                 if self.capture and (msg.get("persons_in_frame") or 0) > 0:
                     self._start_capture()  # someone walked in: start the 20 s again
-            elif msg.get("link") in self.history:
-                self.history[msg["link"]].append((t, float(msg["dbm"])))
+            elif msg.get("link") in self.links:
+                link, dbm = msg["link"], float(msg["dbm"])
+                self.health.add(link, t, dbm)
+                self._heard = True
+                if link in self.base:
+                    self.xray.add(link, t, self.base[link] - dbm)
                 if self.capture:
                     if self.capture["start"] is None:
                         self.capture["start"] = t  # the 20 s run from the first reading
@@ -129,17 +150,18 @@ class Brain:
         self.training = {"since_t": self.now(), "sessions": len(sessions)}
         base, ver = dict(self.base), f"m{self.model_n + 1}"
 
-        def job():
-            try:
-                model = Model(base, ver=ver).fit(sessions)
-            except Exception:
-                self.training = None
-                raise
-            self.model, self.model_n, self.training = model, self.model_n + 1, None
+        def fit():   # may run on another thread: touches nothing of ours
+            return Model(base, ver=ver).fit(sessions)
+
+        def done(model):   # back on the loop; model None = the fit failed
+            self.training = None
+            if model is None:
+                return
+            self.model, self.model_n = model, self.model_n + 1
             self.decision_ms.clear()
             self.emit("trained", {"ver": ver, "train_s": model.info()["train_s"]})
 
-        self.spawn(job)
+        self.spawn(fit, done)
 
     def _cmd_relearn(self, args):
         """Forget the current model and train again from the recorded sessions."""
@@ -155,11 +177,12 @@ class Brain:
         self.emit("reset", {})
 
     def _cmd_record_start(self, args):
+        self.want_session = args.get("session")
         # The bus opens the file and sends back the meta message that opens our copy.
         self.emit("recording", {"on": True, "session": args.get("session")})
 
     def _cmd_record_stop(self, args):
-        s, self.open_session = self.open_session, None
+        s, self.open_session, self.want_session = self.open_session, None, None
         session = s["meta"].get("session") if s else None
         if session:
             self.sessions[session] = s
@@ -176,10 +199,12 @@ class Brain:
 
     def _cmd_router_moved(self, args):
         self.router = args.get("spot") or "moved"
+        self._move_router(self.router)
         self.emit("router_moved", {"spot": self.router})
 
     def _cmd_router_home(self, args):
         self.router = HOME
+        self._move_router(HOME)
         self.emit("router_home", {})
 
     def _cmd_truth(self, args):
@@ -187,14 +212,17 @@ class Brain:
 
     # ---- rules ----
 
+    def _move_router(self, spot):
+        try:
+            self.xray.set_router(spot)   # the x-ray's geometry follows the router
+        except KeyError:
+            pass                         # not a spot in nodes.json
+
     def _start_capture(self):
         self.capture = {"start": None, "messages": []}
 
     def _tick(self):
         now = self.now()
-        for q in self.history.values():
-            while q and q[0][0] < now - 10_000:
-                q.popleft()
         if self.capture and self.capture["start"] is not None and now - self.capture["start"] >= BASELINE_MS:
             msgs, self.capture = self.capture["messages"], None
             base = F.baseline(msgs)
@@ -204,19 +232,30 @@ class Brain:
                     n = sum(1 for m in msgs if m["link"] == link)
                     self.expected_hz[link] = round(n / (BASELINE_MS / 1000), 1)
                 self.windower, self.window = F.Windower(base, self.links), None
+                self.health.set_base(base)
+                self.health.set_expected(self.expected_hz)
+                self.xray.reset()
                 self.emit("baseline_done", {"links": len(base)})
         self._decide(now)
 
     def _decide(self, now):
-        if not (self.model and self.window) or self.capture or self.router != HOME:
-            self.pred, self._still_since = None, None
+        if not (self.model and self.window):
+            self.pred = self.raw_kind = self._still_since = None
             return
-        if self.window.get("decided"):
+        if not self.window.get("decided"):   # the classifier runs on every new window
+            t0 = time.perf_counter()
+            self._raw = self.model.predict(self.window)
+            self.decision_ms.append((time.perf_counter() - t0) * 1000)
+            self.window["decided"] = True
+            self.raw_kind = self._raw["kind"]   # health wants this even while pred is hidden
+            self._fresh = True
+        if self.capture or self.router != HOME or self.health.blind:
+            self.pred = self._still_since = None   # hidden; SENSOR BLIND never reads as "empty"
             return
-        t0 = time.perf_counter()
-        pred = self.model.predict(self.window)
-        self.decision_ms.append((time.perf_counter() - t0) * 1000)
-        self.window["decided"] = True
+        if not self._fresh:
+            return
+        self._fresh = False
+        pred = dict(self._raw)
         still = pred["kind"] == "person" and pred["motion"] == "still"
         if not still or (self.pred and self.pred["zone"] != pred["zone"]):
             self._still_since = None
@@ -237,23 +276,6 @@ class Brain:
 
     # ---- output ----
 
-    def _links(self, now) -> List[dict]:
-        weights = self._why_weights()
-        out = []
-        for link in self.links:
-            recent = [d for t, d in self.history[link] if t > now - RATE_WINDOW_MS]
-            last_s = [d for t, d in self.history[link] if t > now - 1000]
-            dbm = round(statistics.median(last_s), 1) if last_s else None
-            base = self.base.get(link)
-            expected = self.expected_hz.get(link)
-            rate = round(len(recent) / (RATE_WINDOW_MS / 1000), 1)
-            stale = rate == 0 or (expected is not None and rate < STALE_FRACTION * expected)
-            out.append({"id": link, "dbm": dbm, "base_dbm": base,
-                        "drop_db": None if dbm is None or base is None else round(base - dbm, 1),
-                        "rate_hz": rate, "expected_hz": expected,
-                        "status": "stale" if stale else "ok", "why": weights.get(link, 0.0)})
-        return out
-
     def _why_weights(self) -> Dict[str, float]:
         """0-1 per link: how much it explains the current decision."""
         if not (self.model and self.window and self.pred):
@@ -268,6 +290,16 @@ class Brain:
     def state(self) -> dict:
         now = self.now()
         self._tick()
+        health = self.health.update(now, self.raw_kind, self.router == HOME, self.capture is not None)
+        if self.health.blind:
+            self.pred = self._still_since = None
+        # Section 5: xray is null before the first baseline, links are [] before any reading.
+        xray = self.xray.update(now, self.pred["kind"] if self.pred else None) if self.base else \
+            {"xray": None, "objects": [], "events": []}
+        for e in health["events"] + xray["events"]:
+            self.emit(e["kind"], e["info"])
+        weights = self._why_weights()
+        links = [dict(row, why=weights.get(row["id"], 0.0)) for row in health["links"]] if self._heard else []
         self._seq += 1
         cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
         lb = self.label
@@ -279,9 +311,8 @@ class Brain:
         model["ms_per_decision"] = round(statistics.median(self.decision_ms), 2) if self.decision_ms else None
         model["training"] = self.training
         return {"v": 2, "type": "state", "t": now, "seq": self._seq, "src": self.src,
-                "cam": cam, "router": self.router, "links": self._links(now),
-                "health": {"status": "ok", "blind": [], "reason": None},
-                "pred": self.pred, "objects": [], "xray": None,
-                "alert": {"state": "none", "zone": None, "still_s": 0.0, "limit_s": None},
-                "checkin": None, "advice": None, "narration": self.narration, "teacher": teacher,
+                "cam": cam, "router": self.router, "links": links,
+                "health": health["health"],
+                "pred": self.pred, "objects": xray["objects"], "xray": xray["xray"],
+                "alert": dict(NO_ALERT), "checkin": None, "advice": None, "narration": self.narration, "teacher": teacher,
                 "model": model, "board": self.board_stats()}
