@@ -198,7 +198,7 @@ def main():
     parser.add_argument("--train", nargs="+", required=True, type=Path)
     parser.add_argument("--heldout", nargs="+", required=True, type=Path)
     parser.add_argument("--baseline", required=True, type=Path, help="JSON with base_dbm and expected_hz from the empty-room capture")
-    parser.add_argument("--output", type=Path, default=Path("proof.json"))
+    parser.add_argument("--output", type=Path, default=Path(__file__).resolve().with_name("proof.json"))
     parser.add_argument("--on-board", action="store_true", help="record timing only on the UNO Q")
     parser.add_argument("--allow-sim", action="store_true", help="self-tests only; output cannot be named proof.json")
     args = parser.parse_args()

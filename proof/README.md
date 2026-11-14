@@ -5,7 +5,7 @@ Run on the board after `brain.train.Model` and `brain.core.Brain` are available:
 ```sh
 python -m proof.score --train data/sessions/train-*.jsonl \
   --heldout data/sessions/heldout-*.jsonl --baseline <capture-summary.json> \
-  --on-board --output proof.json
+  --on-board --output proof/proof.json
 ```
 
 The baseline summary must contain `base_dbm` and `expected_hz` dictionaries from

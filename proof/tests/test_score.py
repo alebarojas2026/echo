@@ -132,3 +132,37 @@ def test_real_brain_replay_never_receives_camera_truth():
     replay = BrainReplay(Model(), dict.fromkeys(LINKS, -50), dict.fromkeys(LINKS, 10))
     rows = list(replay.replay(s))
     assert rows and all(row["pred"]["zone"] == 4 for row in rows)
+
+
+def test_sim_paths_match_the_exact_proof_schema():
+    from brain.features import LINKS, Windower
+    from brain.tests.simdata import sim_to_v2
+
+    class SimReplay(FakeReplay):
+        base = dict.fromkeys(LINKS, -50)
+        def replay(self, session):
+            windows = Windower(self.base)
+            for message in session["messages"]:
+                for window in windows.push(message):
+                    yield dict(end=window["end"], pred=dict(present=False, zone=None, kind="none"),
+                               links=window["links"], ms=None)
+
+    sessions = []
+    for name in ("zone_tour", "empty_room"):
+        messages = sim_to_v2(name)
+        meta = dict(v=2, type="meta", t=messages[0]["t"], recv_t=messages[0]["recv_t"], seq=1,
+                    src="sim", session=name, purpose="heldout", walker="synthetic")
+        sessions.append(dict(meta=meta, messages=[meta] + [m for m in messages if m["type"] != "meta"]))
+    result = score(sessions, SimReplay(), allow_sim=True)
+    assert result["zone"]["total"] and result["threshold_zone"]["total"]
+    expected = {
+        "zone": {"correct", "total", "ci95", "sessions", "walkers", "method"},
+        "threshold_zone": {"correct", "total"},
+        "person_vs_object": {"correct", "total", "tray_placements"},
+        "ms_per_decision": {"p50", "p95"},
+        "watts": {"idle", "teaching", "radio_only", "source"},
+    }
+    assert set(result) == set(expected) | {"false_alarms_per_min", "train_s", "bytes_out",
+                                          "images_stored", "models_on_board", "measured_at", "commit"}
+    for key, fields in expected.items():
+        assert set(result[key]) == fields
