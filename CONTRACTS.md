@@ -125,7 +125,7 @@ Link health:
 - health is blind when any classifier link is blind. Then pred is null and the screen shows SENSOR BLIND (never "empty").
   Alert timers pause. It clears after 3 s ok.
 Object (a training label): only in label_mode object. Every frame must have persons_in_frame == 0, and one or more
-  links must drop >= 3 dB for >= 2 s with std < 0.8 dB.
+  links must drop >= 3 dB for >= 2 s with the std of their 0.5 s means < 0.8 dB.
 Check-in (a rule, not learned): on pi5>unoq:wifi, >= 4 alternating crossings of +/-1.5 dB around the 1 s rolling median
   within 2.5 s, with pred.zone unchanged and no other link's drop changing by > 3 dB. Gate 8 tunes the thresholds.
 Alert:
@@ -136,7 +136,7 @@ X-ray:
 - The grid covers the square plus 0.2 m on each side.
 - Weights per Wilson & Patwari: 1/sqrt(link length) inside an excess path <= 0.1 m.
 - P = (W^T W + alpha I)^-1 W^T, computed at startup and again on router_moved and router_home.
-- Per link, static_db = the drop that has held >= 5 s with std < 0.8 dB, updated ONLY while pred is not null and
+- Per link, static_db = the drop that has held >= 5 s with the std of its 0.5 s means < 0.8 dB (raw readings are too noisy), updated ONLY while pred is not null and
   pred.kind != person (frozen while a person is present), so a person standing still never becomes an "object".
 - The people part per link = max(0, drop_db - static_db). xray.static_db = the image of the static parts;
   xray.moving_db = the image of the people parts.
