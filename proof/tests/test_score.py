@@ -88,7 +88,8 @@ def test_object_truth_requires_no_people_and_stable_radio_history():
     assert truth(s["messages"], 2100)["kind"] == "object"
     radio = [dict(type="rssi", link="east>pi5:ble", recv_t=t, dbm=-55) for t in range(0, 2500, 100)]
     assert object_evidence(radio, 2500, FakeReplay.base)
-    radio[-1]["dbm"] = -49
+    for message in radio[-5:]:
+        message["dbm"] = -49
     assert not object_evidence(radio, 2500, FakeReplay.base)
     s["messages"][5]["persons_in_frame"] = 1
     assert truth(s["messages"], 2100) is None
