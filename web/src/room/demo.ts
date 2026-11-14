@@ -41,8 +41,9 @@ const LINES: [number, string, string][] = [
   [40, 'cam_off', 'Setup is done; sensing now runs on radio alone.'],
   [54, 'object_on', 'An object, not a person, is next to the router.'],
   [73, 'advice_result', 'Moving the router made its link to the receiver stronger.'],
-  // A recap may run to 45 words (contract), but the schema in contracts/ still caps narration at 16.
-  [82, 'recap', 'Recap: walked in, held still, waved, camera off, tray told from a person, router moved.'],
+  // The end-of-demo recap: up to 3 sentences and 45 words (contract section 6).
+  [82, 'recap', 'Someone walked in, stood still until the no-movement alert, and waved to check in. ' +
+    'Then the camera came off and the radio kept up. It told the tray from a person and found a better router spot.'],
 ]
 
 export function demoScene(tMs: number, start: number): Scene {

@@ -216,7 +216,7 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
     health: blind ? { status: 'blind', blind: ['east>unoq:ble'], reason: 'rate' } : { status: 'ok', blind: [], reason: null },
     pred, objects, xray,
     alert: scene.alert, checkin: scene.checkin, advice, narration: scene.narration, teacher,
-    model: UNTRAINED,
+    model: MOCK_MODEL,
     board: NO_BOARD,
   }
 }
@@ -253,8 +253,10 @@ function emptyState(seq: number, router: string): StateMsg {
   }
 }
 
-/** Training time and decision time are measurements, so the mock says "not trained" and leaves them null.
- *  (The contract now also allows trained with null timings; the schema in contracts/ doesn't yet.) */
+/** A trained model whose timings were never measured: the contract keeps them null then, even when trained. */
+const MOCK_MODEL = { trained: true, ver: 'mock', train_s: null, ms_per_decision: null, windows: 0, train_sessions: [], training: null }
+
+/** Before training (the waiting state): nothing to report. */
 const UNTRAINED = { trained: false, ver: null, train_s: null, ms_per_decision: null, windows: 0, train_sessions: [], training: null }
 
 /** The board's readings are measurements; the mock has none. */
