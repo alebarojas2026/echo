@@ -36,6 +36,19 @@ class PitchDocTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.lower)
 
+    def test_spoken_demo_beats_are_in_run_order(self):
+        beats = (
+            "judge walks in",
+            "this wave creates a check-in",
+            "metal tray",
+            "before the move",
+            "after the move",
+            "camera is now unplugged",
+            "proof strip",
+        )
+        positions = [self.lower.index(beat) for beat in beats]
+        self.assertEqual(positions, sorted(positions))
+
     def test_results_remain_placeholders(self):
         self.assertNotRegex(self.spoken, r"\d")
         self.assertGreaterEqual(self.spoken.count("__"), 8)
