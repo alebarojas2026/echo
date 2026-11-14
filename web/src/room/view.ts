@@ -12,19 +12,20 @@ interface Label {
   at: Vector3
 }
 
+// Defaults are set for the Pi 5 kiosk: no multisampling and one canvas pixel per CSS pixel.
 export interface ViewOptions {
-  /** Multisampled edges (default on). ?aa=0 turns it off. */
+  /** Multisampled edges. Off by default; ?aa=1 turns it on. */
   antialias?: boolean
-  /** Canvas pixels per CSS pixel (default: the screen's, at most 2). ?dpr=1 forces 1. */
+  /** Canvas pixels per CSS pixel. 1 by default; ?dpr=2 (any value up to 3) for sharper screens. */
   pixelRatio?: number
 }
 
-/** Reads ?aa= and ?dpr= so the Pi can be tuned from the kiosk URL without a rebuild. */
+/** Reads ?aa= and ?dpr= so the screen can be tuned from its URL without a rebuild. */
 export function viewOptions(params: URLSearchParams): ViewOptions {
   const dpr = Number(params.get('dpr'))
   return {
-    antialias: params.get('aa') !== '0',
-    pixelRatio: dpr > 0 && dpr <= 3 ? dpr : undefined,
+    antialias: params.get('aa') === '1',
+    pixelRatio: dpr > 0 && dpr <= 3 ? dpr : 1,
   }
 }
 
@@ -48,9 +49,9 @@ export class RoomView {
   private readonly scratch = new Vector3()
 
   constructor(readonly host: HTMLElement, opts: ViewOptions = {}) {
-    this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? true, powerPreference: 'high-performance' })
+    this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? false, powerPreference: 'high-performance' })
     this.renderer.setClearColor(PAPER, 1)
-    this.renderer.setPixelRatio(opts.pixelRatio ?? Math.min(window.devicePixelRatio || 1, 2))
+    this.renderer.setPixelRatio(opts.pixelRatio ?? 1)
     this.renderer.domElement.className = 'room-canvas'
     this.renderer.domElement.setAttribute('aria-hidden', 'true')
     host.append(this.renderer.domElement)
