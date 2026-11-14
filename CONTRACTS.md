@@ -77,7 +77,8 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
         // pred is null before training, while health is blind, while recalibrating, and while the router is off S-home.
  "objects":[{"xy_m":[1.0,0.2],"near":"pi5","since_s":14.0,"drop_db":9.8}],
  "xray":{"w":10,"h":10,"cell_m":0.24,"origin_m":[-0.2,-0.2],"moving_db":[/* w*h */],"static_db":[/* w*h */],"n_links":6},
-        // The screen draws whatever w x h it receives.
+        // The screen draws whatever w x h it receives. Cells are row by row from the south edge:
+        // index = iy*w + ix, ix east from origin_m[0], iy north from origin_m[1]; cell centre = origin_m + (i+0.5)*cell_m.
  "alert":{"state":"counting","zone":4,"still_s":7.2,"limit_s":10},          // none|counting|check_on
  "checkin":{"t":1763149511000,"link":"pi5>unoq:wifi"},                       // the last check-in, or null
  "advice":{"id":"a7","cause":"obstruction","near":"pi5","xy_m":[1.0,0.2],"link":"pi5>unoq:wifi","to_spot":"S-W30",
