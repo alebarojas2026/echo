@@ -1,0 +1,13 @@
+{
+  "source": "synthetic coordinate fixture; not a measured camera session",
+  "image_size": [400, 400],
+  "corners_px": [[100, 300], [300, 300], [300, 100], [100, 100]],
+  "cases": [
+    {"box": [140, 80, 160, 150], "foot_m": [0.5, 1.5], "zone": 1},
+    {"box": [240, 80, 260, 150], "foot_m": [1.5, 1.5], "zone": 2},
+    {"box": [140, 180, 160, 250], "foot_m": [0.5, 0.5], "zone": 3},
+    {"box": [240, 180, 260, 250], "foot_m": [1.5, 0.5], "zone": 4},
+    {"box": [190, 100, 210, 200], "foot_m": [1.0, 1.0], "zone": 2},
+    {"box": [310, 180, 330, 250], "foot_m": [2.2, 0.5], "zone": 0}
+  ]
+}
