@@ -12,15 +12,15 @@ describe('fps meter', () => {
 })
 
 describe('view options from the URL', () => {
-  it('defaults to the Pi-safe settings: no antialiasing, pixel ratio 1', () => {
-    expect(viewOptions(new URLSearchParams(''))).toEqual({ antialias: false, pixelRatio: 1 })
+  it('defaults to the setting measured on a Pi 5: antialiasing on, 3D at 0.85 scale', () => {
+    expect(viewOptions(new URLSearchParams(''))).toEqual({ antialias: true, pixelRatio: 0.85 })
   })
 
-  it('turns quality up with ?aa=1 and a sane ?dpr=', () => {
-    expect(viewOptions(new URLSearchParams('aa=1&dpr=2'))).toEqual({ antialias: true, pixelRatio: 2 })
-    expect(viewOptions(new URLSearchParams('aa=0')).antialias).toBe(false)
+  it('reads ?aa=0 and a sane ?dpr=', () => {
+    expect(viewOptions(new URLSearchParams('aa=0&dpr=2'))).toEqual({ antialias: false, pixelRatio: 2 })
+    expect(viewOptions(new URLSearchParams('aa=1')).antialias).toBe(true)
     expect(viewOptions(new URLSearchParams('dpr=0.75')).pixelRatio).toBe(0.75)
-    expect(viewOptions(new URLSearchParams('dpr=nope')).pixelRatio).toBe(1)
-    expect(viewOptions(new URLSearchParams('dpr=9')).pixelRatio).toBe(1)
+    expect(viewOptions(new URLSearchParams('dpr=nope')).pixelRatio).toBe(0.85)
+    expect(viewOptions(new URLSearchParams('dpr=9')).pixelRatio).toBe(0.85)
   })
 })

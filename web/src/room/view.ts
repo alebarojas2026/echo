@@ -13,11 +13,13 @@ interface Label {
   at: Vector3
 }
 
-// Defaults are set for the Pi 5 kiosk: no multisampling and one canvas pixel per CSS pixel.
+// Defaults are set for the Pi 5 kiosk: 4x multisampling with the 3D drawn at 0.85 scale (the browser scales it
+// up; HTML labels stay sharp). On a Pi 5 at 1080p that held the display's refresh with no dropped frames, where
+// scale 1 dropped a few and DPR 2 fell to 16 fps (plan/ui-research/02-3d-direction.md, section 1).
 export interface ViewOptions {
-  /** Multisampled edges. Off by default; ?aa=1 turns it on. */
+  /** Multisampled edges. On by default; ?aa=0 turns it off. */
   antialias?: boolean
-  /** Canvas pixels per CSS pixel. 1 by default; ?dpr=2 (any value up to 3) for sharper screens. */
+  /** Canvas pixels per CSS pixel. 0.85 by default; ?dpr=1 or ?dpr=2 (any value up to 3) for sharper screens. */
   pixelRatio?: number
 }
 
@@ -25,8 +27,8 @@ export interface ViewOptions {
 export function viewOptions(params: URLSearchParams): ViewOptions {
   const dpr = Number(params.get('dpr'))
   return {
-    antialias: params.get('aa') === '1',
-    pixelRatio: dpr > 0 && dpr <= 3 ? dpr : 1,
+    antialias: params.get('aa') !== '0',
+    pixelRatio: dpr > 0 && dpr <= 3 ? dpr : 0.85,
   }
 }
 
@@ -66,9 +68,9 @@ export class RoomView {
   private readonly scratch = new Vector3()
 
   constructor(readonly host: HTMLElement, opts: ViewOptions = {}) {
-    this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? false, powerPreference: 'high-performance' })
+    this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? true, powerPreference: 'high-performance' })
     this.renderer.setClearColor(BG, 1)
-    this.renderer.setPixelRatio(opts.pixelRatio ?? 1)
+    this.renderer.setPixelRatio(opts.pixelRatio ?? 0.85)
     this.renderer.domElement.className = 'room-canvas'
     this.renderer.domElement.setAttribute('aria-hidden', 'true')
     host.append(this.renderer.domElement)

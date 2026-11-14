@@ -9,7 +9,7 @@ import { FAULT, LINK, PERSON } from './palette'
 import { v3 } from './stage'
 import type { RoomView } from './view'
 
-// One thin blue line per radio link (contract section 3), drawn between the node heads.
+// One thin neutral line per radio link (contract section 3), drawn between the node heads.
 // It dims as drop_db rises, turns amber (the person's colour) when the link is in pred.why, and breaks into dashes when blind.
 
 export interface BeamLook {
