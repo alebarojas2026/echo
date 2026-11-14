@@ -1,0 +1,6 @@
+# Command Complete for Read Local Supported Commands (7.4.2), from a controller without extended scanning
+04 0e 44 01 02 10 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   # octets 0-15
+00 00 00 00 00 00 00 00 00 f7 ff 00 00 00 00 00   # octets 16-31: legacy LE adv and scan commands
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   # octets 32-47: octet 37 = 00, no extended scanning
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   # octets 48-63

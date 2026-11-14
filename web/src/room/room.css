@@ -45,80 +45,116 @@
   left: 0;
   white-space: nowrap;
   color: #55524a;
-  font: 500 0.8rem/1 'Hanken Grotesk', system-ui, sans-serif;
-  letter-spacing: 0.02em;
+  font: 500 20px/1.1 'Hanken Grotesk', system-ui, sans-serif;
   will-change: transform;
 }
 
-/* The modifiers set which point of the label sits on its scene point. */
-.room-label--node {
-  translate: -50% -100%;
-  color: #1c1b17;
+/* Sizes are for reading from 3 m on the 1080p kiosk. The translate sets which point of a label sits on its
+   scene point, so no label lands on a node cube or a beam end. */
+.room-label--zone {
+  translate: 0 -50%;
+  font: 500 40px/1 Newsreader, Georgia, serif;
+  transition: color 0.3s ease;
 }
 
-.room-label--zone {
-  translate: -50% -50%;
-  font-family: Newsreader, Georgia, serif;
-  font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: 0;
+.room-label--zone-east {
+  translate: -100% -50%;
+}
+
+.room-label--zone-set {
+  color: #4f5e2e;
+}
+
+.room-label--node {
+  color: #1c1b17;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.room-label--above {
+  translate: -50% calc(-100% - 12px);
+}
+
+.room-label--right {
+  translate: 16px -50%;
+}
+
+.room-label--left {
+  translate: calc(-100% - 16px) -50%;
 }
 
 .room-label--beam {
-  translate: -50% -100%;
-  font-size: 0.7rem;
+  translate: -50% -50%;
+  padding: 2px 6px;
+  background: #faf7ef;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.room-label--caption {
+  translate: -50% -50%;
+  padding: 4px 10px;
+  background: #faf7ef;
+  font-size: 28px;
+  font-weight: 600;
 }
 
 .room-label--ghost {
   translate: -50% -100%;
   color: #4f5e2e;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
 }
 
 .room-label--object {
-  translate: -50% -100%;
-  padding: 0.2rem 0.35rem;
+  translate: -100% -50%;
+  padding: 4px 8px;
   border: 1px solid #8f8a7e;
   background: #faf7ef;
   color: #1c1b17;
-  font-size: 0.7rem;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
+.room-label--xray {
+  translate: 0 -50%;
+  font-size: 22px;
+  font-weight: 600;
+}
+
 .room-label--spot {
   translate: -50% -50%;
-  font-size: 0.7rem;
+  font-size: 22px;
 }
 
 .room-legend {
   position: absolute;
-  left: 1.25rem;
-  bottom: 1rem;
+  right: 32px;
+  bottom: 32px;
   display: flex;
-  gap: 1rem;
+  gap: 24px;
   color: #55524a;
-  font: 500 0.8rem/1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 500 20px/1 'Hanken Grotesk', system-ui, sans-serif;
   pointer-events: none;
 }
 
 .room-legend span {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 10px;
 }
 
 .room-fps {
   position: absolute;
-  right: 1rem;
-  bottom: 1rem;
-  padding: 0.3rem 0.5rem;
+  top: 24px;
+  right: 24px;
+  padding: 6px 10px;
   border: 1px solid #8f8a7e;
   background: #faf7ef;
   color: #1c1b17;
-  font: 600 0.8rem/1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 20px/1 'Hanken Grotesk', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 

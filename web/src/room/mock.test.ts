@@ -37,6 +37,12 @@ describe('mock states', () => {
     expect(Math.max(...mockState('object', 1, 0).xray!.static_db)).toBeGreaterThan(1)
   })
 
+  it('send motion null when nobody is there', () => {
+    expect(mockState('empty', 1, 0).pred!.motion).toBeNull()
+    expect(mockState('object', 1, 0).pred!.motion).toBeNull()
+    expect(mockState('tour', 1, 1000).pred!.motion).toBe('moving')
+  })
+
   it('drop pred when blind or when the router is off home', () => {
     const blind = mockState('blind', 1, 0)
     expect(blind.pred).toBeNull()
