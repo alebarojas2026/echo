@@ -47,8 +47,10 @@ adverts/s at the board and at the Pi.
 - On the board, `sudo systemctl stop radio-sight-hci-scan` first (one scanner at a time), then
   `sudo python -m radio.hci_scan --node unoq --seconds 60`. Its summary gives the three `>unoq` rows.
   Start the service again afterwards.
-- On the Pi, the radio node's status line (`journalctl -u radio-sight-radio-node -f`, every 10 s)
-  gives the two `>pi5` rows. Use the lowest value over 60 s.
+- On the Pi, before the board runs: `sudo systemctl stop radio-sight-radio-node`, then
+  `sudo python3 -m pi.radio_node --seconds 300`, which covers all three board runs. It advertises S and
+  forwards as usual, and at the end its summary gives the two `>pi5` rows (use the `lowest 10s` column).
+  Start the service again afterwards.
 - Confirmed in btmon: `Filter duplicates: Disabled`.
 
 | Link          | Beacon | Adverts/s | Result |

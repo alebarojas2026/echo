@@ -294,3 +294,31 @@ def test_hci_iface_takes_a_number_or_a_name(monkeypatch, value, dev):
     finally:
         monkeypatch.delenv("HCI_IFACE")
         importlib.reload(radio_node)
+
+
+def test_summary_gives_the_lowest_and_median_10s_rate():
+    seen = {"east>pi5:ble": [-60, -62, -64]}
+    lines = radio_node.summary(seen, {"east>pi5:ble": [8.0, 6.0, 9.0], "west>pi5:ble": []}, 3.0).splitlines()
+    assert lines[0].split() == ["link", "n", "adverts/s", "lowest", "10s", "median", "10s", "median", "dBm"]
+    assert lines[1].split() == ["east>pi5:ble", "3", "1.0", "6.0", "8.0", "-62.0"]
+    assert lines[2].split() == ["west>pi5:ble", "0", "0.0", "__", "__", "__"]
+
+
+def test_windows_get_one_rate_per_status_line(monkeypatch):
+    monkeypatch.setattr(radio_node, "QUIET_S", 1000.0)
+    fake = FakeController(events=[fixture("legacy_report_east")] * 5)
+    windows = {}
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=loops(20), clock=Clock(1.0), windows=windows,
+        log=lambda line: None)
+    assert windows == {"east>pi5:ble": [0.5, 0.0], "west>pi5:ble": [0.0, 0.0]}
+
+
+def test_timed_run_prints_the_summary(monkeypatch, capsys):
+    fake = FakeController(events=[fixture("legacy_report_east"), fixture("legacy_reports_three")])
+    monkeypatch.setattr(radio_node, "open_controller", lambda dev: hci.Hci(fake))
+    monkeypatch.setattr(radio_node, "BUS_HOST", "127.0.0.1")
+    radio_node.main(["--seconds", "0.2"])
+    err = capsys.readouterr().err.splitlines()
+    assert err[-3].split()[:5] == ["link", "n", "adverts/s", "lowest", "10s"]
+    assert err[-2].split()[:2] == ["east>pi5:ble", "1"] and err[-2].split()[-1] == "-61.0"
+    assert err[-1].split()[:2] == ["west>pi5:ble", "1"] and err[-1].split()[-1] == "-70.0"
