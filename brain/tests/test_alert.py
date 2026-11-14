@@ -76,7 +76,7 @@ def test_zone_without_a_limit_never_alerts():
                 {"t": 21, "x": 0.0, "y": 0.5}, {"t": 21.1, "x": None}]
         watch, events, blocks = run("stand_still", seed=seed, person=hall)   # zone 3: limit null
         assert events == [] and {b["state"] for _, b in blocks} == {"none"}
-        assert max(b["still_s"] for _, b in blocks) > 10         # still_s counts all the same
+        assert {b["still_s"] for _, b in blocks} == {0}          # nothing counts toward a limit here
 
 
 def test_empty_room_and_walking_do_nothing():

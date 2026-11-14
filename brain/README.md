@@ -52,12 +52,12 @@ python -m brain.main --nodes radio/nodes.json   # nodes, links and zones (this i
 | `relearn` | Drops the model and trains again. |
 | `label_mode` | Writes the mode to `--mode-file` (or `TEACHER_MODE_FILE`), which the camera teacher reads. |
 | `router_moved`, `router_home` | Sets `router`; `pred` is null while it is off S-home. |
-| `reset_alert` | Restarts the still timer. |
-| `reset` | Between judges: clears the still timer and narration. Then `reset`. |
+| `reset_alert` | Clears the alert and restarts the still timer. |
+| `reset` | Between judges: clears the alert, still timer, check-in and narration. Then `reset`. |
 | `truth` | Kept for the crowd game. |
 
 `brain/core.py` holds the rules with no sockets, so tests drive it with a fake clock.
-Sent empty until their own issues land: `health` (always ok), `xray`, `objects`, `alert`, `checkin`, `advice`.
+Link health (`brain/health.py`), the x-ray and objects (`brain/xray.py`) and the check-in and alert (`brain/alert.py`) are fed from here: every reading goes to all three, and their output fills `links`, `health`, `xray`, `objects`, `alert` and `checkin`. `pred` is null while health is blind, and the LED grid then shows "?". Still sent empty: `advice`.
 
 ## Check-in and no-movement alert (`brain/alert.py`)
 

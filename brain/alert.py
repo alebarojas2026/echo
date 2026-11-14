@@ -223,4 +223,5 @@ class Watch:
         limit = self.limits.get(self.zone) if self._person else None
         if limit is not None and self.still_ms > 0:
             return {"state": "counting", "zone": self.zone, "still_s": still_s, "limit_s": limit}
-        return {"state": "none", "zone": None, "still_s": still_s, "limit_s": None}
+        # Section 5's empty block: still_s is 0 whenever nothing is counting toward a limit.
+        return {"state": "none", "zone": None, "still_s": 0, "limit_s": None}
