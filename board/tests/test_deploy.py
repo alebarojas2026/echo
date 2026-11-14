@@ -6,25 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from board.tests.shell import BASH
+
 REPO = Path(__file__).resolve().parents[2]
 BOARD_UNITS = {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan",
                "radio-sight-camwatch", "radio-sight-brain", "radio-sight-serve",
                "radio-sight-llm", "radio-sight-narrate"}
 
 
-def find_bash():
-    if os.name != "nt":
-        return shutil.which("bash")
-    # Git for Windows keeps bash in <Git>/bin, with git in <Git>/cmd or <Git>/mingw64/bin.
-    # A bare "bash" on Windows may be the WSL launcher, so don't use that.
-    git = shutil.which("git")
-    for up in Path(git).resolve().parents[:3] if git else []:
-        if (up / "bin" / "bash.exe").exists() and (up / "bin" / "git.exe").exists():
-            return str(up / "bin" / "bash.exe")
-    return None
-
-
-BASH = find_bash()
 pytestmark = pytest.mark.skipif(BASH is None, reason="needs bash and git")
 
 
@@ -55,6 +44,7 @@ def repo(tmp_path):
                  "teacher/camwatch.py", "brain/main.py", "advisor/advice.py", "narrator/narrate.py",
                  "pi/radio_node.py", "web/src/main.ts", "docs/notes.md"):
         write(r, path, "# v1\n")
+    write(r, ".gitignore", "dist/\n")
     write(r, "narrator/llm.service", "[Service]\nWorkingDirectory=@REPO@\nExecStart=/usr/bin/llama-server\n")
     git(r, "init", "-q")
     commit(r, "first")
@@ -155,13 +145,46 @@ def test_unknown_ref_fails(repo):
     assert "unknown tag or sha" in out
 
 
-def test_web_change_without_node_modules_warns(repo):
+def stamp(repo, built):
+    (repo / "web" / "dist").mkdir(exist_ok=True)
+    (repo / "web" / "dist" / "build.txt").write_text(built + "\n", newline="\n")
+
+
+def test_no_web_build_says_how_to_push_one(repo):
+    _, out = deploy(repo, "v1")
+    assert "web/dist has no build.txt" in out and "board/push-web.sh" in out
+
+
+def test_web_build_of_this_ref_is_current(repo):
+    stamp(repo, git(repo, "rev-parse", "v1"))
+    _, out = deploy(repo, "v1")
+    assert "web/dist is current" in out
+
+
+def test_web_build_stays_current_when_only_other_folders_change(repo):
+    stamp(repo, git(repo, "rev-parse", "v1"))
+    write(repo, "bus/core.py", "# v2\n")
+    sha = commit(repo)
+    git(repo, "checkout", "-q", "v1")
+    _, out = deploy(repo, sha)
+    assert "web/dist is current" in out
+
+
+def test_web_change_makes_the_build_stale(repo):
     deploy(repo, "v1")
+    stamp(repo, git(repo, "rev-parse", "v1"))
     write(repo, "web/src/main.ts", "// v2\n")
     sha = commit(repo)
     git(repo, "checkout", "-q", "v1")
     restarted, out = deploy(repo, sha)
-    assert restarted == set() and "web/dist is stale" in out
+    assert restarted == set() and "web/dist is stale" in out and "board/push-web.sh" in out
+
+
+@pytest.mark.parametrize("built", ["{v1}-dirty", "0123456789abcdef0123456789abcdef01234567", "junk"])
+def test_dirty_or_unknown_builds_are_stale(repo, built):
+    stamp(repo, built.format(v1=git(repo, "rev-parse", "v1")))
+    _, out = deploy(repo, "v1")
+    assert "web/dist is stale" in out
 
 
 def test_missing_unit_source_is_skipped(repo):

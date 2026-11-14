@@ -1,6 +1,6 @@
 # Kiosk on the Pi
 
-The Pi's screen shows the board's web page, http://192.168.77.2:8080, full screen from boot. These steps are for Raspberry Pi OS with desktop (Bookworm or Trixie) running Wayland with labwc, the default on a Pi 5. Do them once, on the Pi, as the user that logs in to the desktop.
+The Pi's screen shows the board's web page, http://192.168.77.2:8080/?src=ws, full screen from boot. `?src=ws` makes the screen read the brain's live WebSocket; without it the screen shows its built-in mock states. These steps are for Raspberry Pi OS with desktop (Bookworm or Trixie) running Wayland with labwc, the default on a Pi 5. Do them once, on the Pi, as the user that logs in to the desktop.
 
 ## Before you start
 - The Ethernet link is up (`pi/eth.sh`), and the board is serving: `curl -sI http://192.168.77.2:8080/` answers `200`.
@@ -25,10 +25,11 @@ This writes a small script. It waits until the board's web server answers, then 
 mkdir -p ~/.local/bin
 cat > ~/.local/bin/radio-sight-kiosk <<'EOF'
 #!/bin/sh
-URL=http://192.168.77.2:8080
+BASE=http://192.168.77.2:8080
+URL="$BASE/?src=ws"
 BROWSER=$(command -v chromium || command -v chromium-browser)
 PROFILE="${XDG_RUNTIME_DIR:-/tmp}/radio-sight-kiosk"
-until curl -sf -o /dev/null "$URL/proof.json"; do sleep 2; done
+until curl -sf -o /dev/null "$BASE/proof.json"; do sleep 2; done
 while true; do
     rm -rf "$PROFILE"
     "$BROWSER" --kiosk --ozone-platform-hint=auto --noerrdialogs --disable-infobars \
@@ -48,6 +49,8 @@ Here's what the flags do:
 
 To try it by hand, open a terminal on the Pi's screen and run `~/.local/bin/radio-sight-kiosk`.
 
+If you set the kiosk up before `?src=ws` was added, run this step again. It overwrites the script, and the next boot (or `pkill -f radio-sight-kiosk` and a rerun) picks it up.
+
 ## 4. Start it with the desktop
 labwc runs `~/.config/labwc/autostart` when the desktop starts.
 ```sh
@@ -61,7 +64,7 @@ If you had set a screen rotation or resolution in Screen Configuration and it's 
 
 ## Stop it, or update it
 - Stop the kiosk (over SSH or from a terminal): `pkill -f radio-sight-kiosk`. It starts again on the next boot.
-- Reload after a new web build: stop it and run it again, or reboot. The server sends `Cache-Control: no-cache`, so a reload always gets the new build.
+- Reload after a new web build: `board/push-web.sh` does it for you by closing Chromium, which the script reopens 2 s later. By hand: `pkill -f 'user-data-dir=.*radio-sight-kios[k]'` on the Pi. The server sends `Cache-Control: no-cache`, so the reopened page is always the new build.
 - Turn it off for good: delete the `radio-sight-kiosk` line from `~/.config/labwc/autostart`.
 
 ## Notes
