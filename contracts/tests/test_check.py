@@ -19,6 +19,7 @@ INVALID = [
     "$.motion",                     # nobody there but motion set
     "$.state",                      # cam state paused
     "$.text",                       # more than 16 words
+    "$.text",                       # a recap of 50 words, more than 45
     "$.model",                      # llm sentence without a model
     "$.pred.probs",                 # 4 probs, not 5
     "w*h is 25",                    # xray size does not match w x h
@@ -29,6 +30,8 @@ INVALID = [
     "$.model.ver",                  # trained but no version
     "$.motion",                     # clipped but motion set
     "$.pred.motion",                # nobody there but motion set
+    "$.pred.zone",                  # nobody there but zone 3
+    "$.pred.zone_set",              # nobody there but zone_set [3]
     "$.objects[0].near",            # east is 1 m away
     "$.advice.before_dbm",           # shown before the router moves, so already measured
     "$.kind",                       # unknown event kind
