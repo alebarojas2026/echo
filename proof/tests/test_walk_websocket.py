@@ -44,9 +44,15 @@ def test_state_flood_does_not_starve_ping_or_record_stop():
             while True:
                 command = json.loads(ws.recv(timeout=2))
                 commands.append(command)
-                ws.send(json.dumps({"v": 2, "type": "state"}))
                 if command["cmd"] == "record_stop":
                     break
+                try:
+                    ws.send(json.dumps({"v": 2, "type": "state"}))
+                except ConnectionClosedOK as error:
+                    if error.rcvd is None or error.rcvd.code != 1000:
+                        raise
+                    # A clean close can overtake replies while received commands
+                    # remain queued. Keep reading; only record_stop is success.
         except Exception as error:
             if not normal_stop_close(error, commands):
                 errors.append(error)
@@ -71,7 +77,7 @@ def test_state_flood_does_not_starve_ping_or_record_stop():
         client_sock.close()
         server.join(timeout=3)
     assert not server.is_alive()
-    assert not errors
+    assert not errors, errors
     assert len(commands) == 13
     assert commands[-2]["args"] == {"mode": "off"}
     assert commands[-1]["cmd"] == "record_stop"
