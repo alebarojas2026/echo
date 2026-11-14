@@ -1,8 +1,8 @@
 # Radio gate results
 
 Gate tests decide whether the radio numbers are good enough for the demo.
-Alexander fills in the measured rows; the CI script (`python -m radio.report_wifi`
-and `python -m radio.report_hci`) checks them.
+Alexander fills in the measured rows; the CI script (`python3 -m radio.report_wifi`
+and `python3 -m radio.report_hci`) checks them.
 
 ---
 
@@ -17,10 +17,10 @@ and `python -m radio.report_hci`) checks them.
 - Board joined to the hotspot, locked to the Pi's BSSID, power saving off: `sudo bash radio/wifi_join.sh`
   on the board, with `SENSING_SSID`, `SENSING_PSK` and `SENSING_BSSID` in the board's `.env` (the BSSID
   is the `addr` line of `/usr/sbin/iw dev <hotspot interface> info` on the Pi; the full path works in any shell). It must print `joined`.
-- On the board, from the repo, no sudo: `python -m radio.wifi_rssi --gate`. It pings the Pi 50 times a
+- On the board, from the repo, no sudo: `python3 -m radio.wifi_rssi --gate`. It pings the Pi 50 times a
   second (beacons alone are too few frames), walks through the three runs (line clear, then
   someone standing in the middle of the line, 10 s each) and prints the rate, rows and result below,
-  ready to paste. Then `python -m radio.report_wifi` must print `GATE 1 PASS`.
+  ready to paste. Then `python3 -m radio.report_wifi` must print `GATE 1 PASS`.
 
 **Measured sample rate:** __ samples/s
 
@@ -45,7 +45,7 @@ adverts/s at the board and at the Pi.
   `FFFF525345` and `FFFF525357` in the advertising data (legacy, non-connectable). Phones aren't
   used: an iPhone can't put manufacturer data in its adverts (#289).
 - On the board, `sudo systemctl stop radio-sight-hci-scan` first (one scanner at a time), then
-  `sudo python -m radio.hci_scan --node unoq --seconds 60`. Its summary gives the three `>unoq` rows.
+  `sudo python3 -m radio.hci_scan --node unoq --seconds 60`. Its summary gives the three `>unoq` rows.
   Start the service again afterwards.
 - On the Pi, before the board runs: `sudo systemctl stop radio-sight-radio-node`, then
   `sudo python3 -m pi.radio_node --seconds 300`, which covers all three board runs. It advertises S and
@@ -61,7 +61,7 @@ adverts/s at the board and at the Pi.
 | east>pi5:ble  | E      | __        | __     |
 | west>pi5:ble  | W      | __        | __     |
 
-Add a row per run, or write only the lowest of the three runs: `python -m radio.report_hci`
+Add a row per run, or write only the lowest of the three runs: `python3 -m radio.report_hci`
 judges each link by its lowest rate. Write the rate as a bare number (`8.4`).
 
 **Overall Gate 2:** __
