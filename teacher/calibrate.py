@@ -1,9 +1,27 @@
-"""Click measured SW, SE, NE, NW floor corners; save numbers only."""
+"""Click measured SW, SE, NE, NW floor corners; save numbers only.
+
+The corners are those of the area a person stands in, from radio/nodes.json: the 2 x 2 m square
+(frame.size_m), or on the desk layout the strip (frame.strip_m, split at frame.zone_split_x_m).
+"""
 
 import argparse
 import json
 import math
 from pathlib import Path
+
+from teacher.applab.python.labels import area_of, zone_in
+
+NODES = Path(__file__).resolve().parents[1] / "radio" / "nodes.json"
+
+
+def area_from_nodes(nodes):
+    """(area_m, zone_split_m) from a parsed nodes.json: the strip when the frame has one, else the square."""
+    frame = nodes.get("frame") or {}
+    if frame.get("strip_m") and frame.get("zone_split_x_m") is not None:
+        w, h = frame["strip_m"]
+        return [w, h], [frame["zone_split_x_m"], None]
+    w, h = frame.get("size_m") or [2.0, 2.0]
+    return [w, h], [w / 2, h / 2]
 
 
 def solve(matrix, rhs):
@@ -23,11 +41,14 @@ def solve(matrix, rhs):
     return [row[-1] for row in rows]
 
 
-def calibration(corners, image_size, side_m=2.0):
+def calibration(corners, image_size, side_m=2.0, area_m=None, zone_split_m=None):
+    """The projection from clicked pixels to metres. With area_m (and zone_split_m), the area is
+    that rectangle; without, the side_m square split in four."""
     if len(corners) != 4 or len(image_size) != 2:
         raise ValueError("four corners and an image size are required")
     width, height = image_size
-    if width <= 0 or height <= 0 or not math.isfinite(side_m) or side_m <= 0:
+    w, h = area_m if area_m else (side_m, side_m)
+    if width <= 0 or height <= 0 or not all(math.isfinite(v) and v > 0 for v in (w, h)):
         raise ValueError("invalid dimensions")
     for x, y in corners:
         if not (math.isfinite(x) and math.isfinite(y) and 0 <= x < width and 0 <= y < height):
@@ -37,16 +58,20 @@ def calibration(corners, image_size, side_m=2.0):
         a, b, c = (corners[(i + j) % 4] for j in range(3))
         crosses.append((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]))
     if not (all(v > 1e-8 for v in crosses) or all(v < -1e-8 for v in crosses)):
-        raise ValueError("corners must form a convex square outline in SW, SE, NE, NW order")
+        raise ValueError("corners must form a convex outline in SW, SE, NE, NW order")
     matrix, rhs = [], []
-    for (u, v), (x, y) in zip(corners, [(0, 0), (side_m, 0), (side_m, side_m), (0, side_m)]):
+    for (u, v), (x, y) in zip(corners, [(0, 0), (w, 0), (w, h), (0, h)]):
         matrix.extend([[u, v, 1, 0, 0, 0, -x*u, -x*v],
                        [0, 0, 0, u, v, 1, -y*u, -y*v]])
         rhs.extend([x, y])
-    h = solve(matrix, rhs) + [1.0]
-    return {"image_size": list(image_size), "side_m": side_m,
-            "corners_px": corners, "corner_order": ["SW", "SE", "NE", "NW"],
-            "homography": [h[:3], h[3:6], h[6:]]}
+    m = solve(matrix, rhs) + [1.0]
+    config = {"image_size": list(image_size), "side_m": side_m if not area_m else max(w, h),
+              "corners_px": corners, "corner_order": ["SW", "SE", "NE", "NW"],
+              "homography": [m[:3], m[3:6], m[6:]]}
+    if area_m:
+        config["area_m"] = [w, h]
+        config["zone_split_m"] = list(zone_split_m) if zone_split_m else [w / 2, h / 2]
+    return config
 
 
 def foot_point(box, config):
@@ -60,9 +85,7 @@ def foot_point(box, config):
     if abs(d) < 1e-12:
         raise ValueError("foot point projects to infinity")
     x, y = [round((h[i][0] * u + h[i][1] * v + h[i][2]) / d, 12) for i in (0, 1)]
-    side = config["side_m"]
-    zone = 0 if not (0 <= x <= side and 0 <= y <= side) else 1 + int(x >= side/2) + 2 * int(y < side/2)
-    return [x, y], zone
+    return [x, y], zone_in(area_of(config), x, y)
 
 
 def click_corners(device):
@@ -104,11 +127,17 @@ def click_corners(device):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", default="/dev/video0")
-    parser.add_argument("--side-m", type=float, default=2.0)
+    parser.add_argument("--nodes", type=Path, default=NODES, help="radio/nodes.json, for the area's size and zones")
+    parser.add_argument("--side-m", type=float, default=None, help="a square of this side instead of nodes.json")
     parser.add_argument("--output", type=Path, default=Path(__file__).with_name("calib.json"))
     args = parser.parse_args()
+    if args.side_m:
+        area_m, split = None, None
+    else:
+        area_m, split = area_from_nodes(json.loads(args.nodes.read_text(encoding="utf-8")))
+        print(f"area {area_m[0]} x {area_m[1]} m from {args.nodes}: click its SW, SE, NE, NW corners")
     points, size = click_corners(args.device)
-    config = calibration(points, size, args.side_m)
+    config = calibration(points, size, args.side_m or 2.0, area_m, split)
     args.output.write_text(json.dumps(config, indent=2, allow_nan=False) + "\n")
     print(f"Saved corner coordinates and projection to {args.output}")
 
