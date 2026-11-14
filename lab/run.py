@@ -124,7 +124,10 @@ def drive(msgs, plan):
     brain = core.Brain(clock=None, nodes=NODES_DOC)
     clk = [msgs[0]["recv_t"]]
     brain._clock = lambda: clk[0]
-    watch = AL.Watch(limits=LIMITS)
+    # Newer brain/core.py owns a Watch and feeds it every decision itself; with an
+    # older core the lab runs one alongside, once per state tick.
+    own = getattr(brain, "watch", None) is None
+    watch = AL.Watch(limits=LIMITS) if own else brain.watch
     T0 = rf.T0_MS
     cmds = sorted(((T0 + t * 1000, c, a) for t, c, a in plan["cmds"]), key=lambda c: c[0])
     meta_seq = [0]
@@ -159,9 +162,10 @@ def drive(msgs, plan):
         clk[0] = t
         st = brain.state()
         evs = brain.pop_events()
-        watch.on_pred(t, brain.pred)
-        for k, info in watch.pop_events():
-            events.append((t, k, info))
+        if own:
+            watch.on_pred(t, brain.pred)
+            for k, info in watch.pop_events():
+                events.append((t, k, info))
         for e in evs:
             events.append((t, e["kind"], e["info"]))
             if e["kind"] == "baseline_done" and out["baseline_t"] is None:
@@ -191,7 +195,8 @@ def drive(msgs, plan):
             out["baseline_restarts"] += 1
         brain.on_message(m)
         if m["type"] == "rssi":
-            watch.on_rssi(m)
+            if own:
+                watch.on_rssi(m)
             if t >= live0:
                 live_rssi.append(m)
     out.update(brain=brain, ticks=ticks, events=events, advice=advice, live_rssi=live_rssi)
