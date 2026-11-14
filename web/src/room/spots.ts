@@ -64,6 +64,11 @@ export class RouterSpots {
     view.addAnimator((dt) => this.ease(dt))
   }
 
+  /** True while a spot's tag ("Move router here, ...") is on screen. */
+  get tagShown(): boolean {
+    return [...this.tags.values()].some((tag) => !tag.hidden)
+  }
+
   update(router: string, advice: Advice | null) {
     for (const [id, mat] of this.rings) mat.color.setHex(id === router ? TEXT : EDGE)
     const arrow = adviceArrow(advice, router)

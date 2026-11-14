@@ -69,12 +69,11 @@ interface Leg {
 export class Fly {
   /** 0 at the square's framing, 1 at the hall's. */
   wide = 0
-  private readonly square = roomShot()
   private hall: Shot | null = null
-  private shot = this.square
+  private shot: Shot
   private framing: Framing = 'square'
   private legs: Leg[] = []
-  private from: Shot = this.square
+  private from: Shot
   private elapsed = 0
   private readonly reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -83,7 +82,13 @@ export class Fly {
     private readonly pinned: Framing | null,
     private readonly onWide: (wide: number) => void,
   ) {
+    this.shot = this.from = this.square()
     view.addAnimator((dt) => this.step(dt))
+  }
+
+  /** The square's framing for the canvas as it is now (a narrow canvas backs off to keep the side words on it). */
+  private square(): Shot {
+    return roomShot(...this.view.size)
   }
 
   /** The hall is known (its scan has loaded): show it, then fly down unless a framing is pinned. */
@@ -114,13 +119,13 @@ export class Fly {
   }
 
   private shotOf(framing: Framing): Shot {
-    return framing === 'hall' && this.hall ? this.hall : this.square
+    return framing === 'hall' && this.hall ? this.hall : this.square()
   }
 
   private cut(framing: Framing) {
     this.framing = framing
     this.legs = []
-    this.show(this.shotOf(framing))
+    this.show(this.shotOf(framing), framing)
   }
 
   /** Starts the first leg from the shot on screen now, so a fly that interrupts another never jumps. */
@@ -134,10 +139,11 @@ export class Fly {
     this.view.requestRender()
   }
 
-  private show(shot: Shot) {
+  /** Puts the camera on `shot`. Once it has arrived on the square, the view follows the canvas size from then on. */
+  private show(shot: Shot, arrived?: Framing) {
     this.shot = shot
-    this.view.setShot(shot)
-    this.wide = this.hall ? wideness(shot, this.square, this.hall) : 0
+    this.view.setShot(arrived === 'square' ? roomShot : shot)
+    this.wide = this.hall ? wideness(shot, this.square(), this.hall) : 0
     this.view.host.dataset.view = this.wide >= 1 ? 'hall' : this.wide <= 0 ? 'square' : 'flying'
     this.onWide(this.wide)
   }
@@ -148,7 +154,7 @@ export class Fly {
     this.elapsed += dt
     const u = (this.elapsed - leg.waitMs) / FLY_MS
     if (u <= 0) return true
-    this.show(mixShot(this.from, this.shotOf(leg.to), easeInOut(u)))
+    this.show(mixShot(this.from, this.shotOf(leg.to), easeInOut(u)), u >= 1 ? leg.to : undefined)
     if (u < 1) return true
     this.framing = leg.to
     this.legs.shift()

@@ -86,11 +86,12 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     presence.wave = waving
     alertMarks.update(state.alert)
     beams.update(state)
-    xray.update(state.xray, state.health?.status === 'blind')
+    spots.update(state.router, state.advice)
+    // The advice's words sit just south of the square, where the X-ray caption goes: one at a time.
+    xray.update(state.xray, state.health?.status === 'blind', spots.tagShown)
     presence.update(state.pred, state.objects ?? [], state.xray, state.router)
     // Zone names follow the zones the figure shows (held), so one wrong decision never flashes a name.
     stage.markZones(presence.shownZones(), state.alert?.state === 'check_on' ? state.alert.zone : null)
-    spots.update(state.router, state.advice)
   })
   return { view, stage }
 }

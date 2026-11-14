@@ -172,10 +172,11 @@ export class XrayLayer {
     this.caption.hidden = true
   }
 
-  /** `blind` hides the image: when the radio has failed, the picture means nothing. */
-  update(x: Xray | null, blind: boolean) {
+  /** `blind` hides the image: when the radio has failed, the picture means nothing. `quiet` hides only the
+   *  caption, while the router advice's words sit where it goes. */
+  update(x: Xray | null, blind: boolean, quiet = false) {
     this.fadeTo = x && !blind ? 1 : 0
-    this.caption.hidden = !x
+    this.caption.hidden = !x || quiet
     if (x && x.w > 0 && x.h > 0) {
       this.fit(x)
       const n = x.w * x.h

@@ -1,5 +1,5 @@
 import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
-import { SQUARE_M } from './frame'
+import { SQUARE_M, toScene, type Vec3 } from './frame'
 import { BG } from './palette'
 
 // Owns the renderer, the camera and the frame loop. Frames are drawn only when something changed
@@ -78,10 +78,41 @@ export interface Shot {
   radiusM: number
 }
 
-/** The room's normal framing, scaled to nodes.json's square. */
-export function roomShot(): Shot {
+/** A shot that depends on the canvas size. */
+export type ShotFor = (width: number, height: number) => Shot
+
+/**
+ * Words that sit beside the square and need room toward the canvas edge: the beacons' names (beside their
+ * heads, outward) and the no-movement word (on the floor just outside the square, outward). "West beacon" and
+ * "No movement" at 28 px are about 170 px wide; with their gap and the 24 px edge margin, 200 px.
+ */
+const SIDE_WORDS_PX = 200
+function sideWordAnchors(): Vector3[] {
+  const s = SQUARE_M
+  return ([[0, s / 2, 1], [s, s / 2, 1], [-0.08, 0.2, 0], [s + 0.08, 0.2, 0]] as Vec3[]).map((p) => new Vector3(...toScene(p)))
+}
+
+/**
+ * The room's normal framing, scaled to nodes.json's square. On a narrow canvas (a laptop, beside the panels'
+ * rail) it backs off just enough that the words beside the square stay on the canvas; on the 1920 x 1080
+ * screen's 1280 x 1080 canvas they already fit, so it doesn't change there.
+ */
+export function roomShot(width = 1280, height = 1080): Shot {
   const scale = SQUARE_M / 2
-  return { elevDeg: ELEV_DEG, target: TARGET_M.clone().multiplyScalar(scale), radiusM: FIT_RADIUS_M * scale }
+  const shot = { elevDeg: ELEV_DEG, target: TARGET_M.clone().multiplyScalar(scale), radiusM: FIT_RADIUS_M * scale }
+  const room = width / 2 - SIDE_WORDS_PX
+  if (room <= 0) return shot
+  const cam = new PerspectiveCamera(FOV_DEG, 1, 0.1, 100)
+  const anchors = sideWordAnchors()
+  // A point's distance from the middle of the canvas shrinks about in step with the camera's distance, so a
+  // few rounds of "back off by how far over we are" settle it.
+  for (let round = 0; round < 4; round++) {
+    fitCamera(cam, width, height, shot)
+    const over = Math.max(...anchors.map((a) => (Math.abs(a.clone().project(cam).x) * width) / 2 / room))
+    if (over <= 1) break
+    shot.radiusM *= over * 1.005
+  }
+  return shot
 }
 
 /** Straight down on the square, north up: for lining a scan up by eye (align mode). */
@@ -91,7 +122,7 @@ export function topShot(): Shot {
 }
 
 /** Points the camera at the shot's target and backs off until its sphere fits the narrower field of view. */
-export function fitCamera(camera: PerspectiveCamera, width: number, height: number, shot: Shot = roomShot()) {
+export function fitCamera(camera: PerspectiveCamera, width: number, height: number, shot: Shot = roomShot(width, height)) {
   camera.aspect = width / height
   const vfov = (camera.fov * Math.PI) / 180
   const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect)
@@ -120,7 +151,7 @@ export class RoomView {
   private lastFrameAt = 0
   private labelsDirty = true
   private readonly scratch = new Vector3()
-  private shot = roomShot()
+  private shot: Shot | ShotFor = roomShot
 
   constructor(readonly host: HTMLElement, opts: Partial<ViewOptions> = {}) {
     this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? false, powerPreference: 'high-performance' })
@@ -169,12 +200,21 @@ export class RoomView {
     this.requestRender()
   }
 
-  /** Moves the camera to `shot` (kept across resizes). */
-  setShot(shot: Shot) {
+  /** The canvas size in CSS pixels. */
+  get size(): [number, number] {
+    return [this.width, this.height]
+  }
+
+  /** Moves the camera to `shot`, kept across resizes; a ShotFor is asked again at every new size. */
+  setShot(shot: Shot | ShotFor) {
     this.shot = shot
-    fitCamera(this.camera, this.width, this.height, shot)
+    fitCamera(this.camera, this.width, this.height, this.shotNow())
     this.labelsDirty = true
     this.requestRender()
+  }
+
+  private shotNow(): Shot {
+    return typeof this.shot === 'function' ? this.shot(this.width, this.height) : this.shot
   }
 
   requestRender() {
@@ -188,7 +228,7 @@ export class RoomView {
     this.width = w
     this.height = h
     this.renderer.setSize(w, h, false)
-    fitCamera(this.camera, w, h, this.shot)
+    fitCamera(this.camera, w, h, this.shotNow())
     for (const fn of this.resizeHooks) fn(w, h)
     this.labelsDirty = true
     this.requestRender()
