@@ -22,6 +22,7 @@ class ArchitectureDocTest(unittest.TestCase):
             "Brain",
             "Router advisor",
             "Narrator",
+            "llama-server",
             "Browser screen",
             "LED grid",
         ):
@@ -36,8 +37,16 @@ class ArchitectureDocTest(unittest.TestCase):
             "msgpack-rpc-router:5600",
             "ws://192.168.77.2:8765/ws",
             "http://192.168.77.2:8080",
+            "http://127.0.0.1:8091",
         ):
             self.assertIn(endpoint, self.text)
+
+    def test_pi_radio_role_is_bluetooth_only(self):
+        self.assertIn(
+            "Bluetooth beacon S and east/west readings",
+            self.text,
+        )
+        self.assertNotIn("Wi-Fi and Bluetooth readings", self.text)
 
     def test_advisor_is_drawn_inside_brain(self):
         brain = re.search(
