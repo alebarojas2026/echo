@@ -12,6 +12,8 @@ Built at MadHacks 2026 for the Qualcomm / N+1 Institute track. Theme: "Let's Dig
 3. The board combines all links into a radio image of the room: what stays put is an obstruction or dead zone, what moves is a person.
 4. The screen shows the room, the radio links, where people are, and plain-language explanations. No image is ever saved and nothing leaves the board.
 
+How the parts connect: [docs/network.md](docs/network.md)
+
 ## Repo layout
 | Folder | What | Owner |
 |---|---|---|
