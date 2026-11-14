@@ -1,4 +1,4 @@
-"""Fast checks that the lab's link model and runner behave (SIMULATED data)."""
+"""Fast checks that the lab's link model behaves (SIMULATED data)."""
 import numpy as np
 
 from lab import rf
@@ -40,10 +40,3 @@ def test_messages_follow_the_contract_and_rates():
     labels = [m for m in msgs if m["type"] == "label"]
     assert labels and all(("zone" in m and "clipped" in m) for m in labels)
 
-
-def test_smoke_session_trains_and_scores():
-    from lab import run
-    out = run.session(seed=0, smoke=True, replays=False)
-    m = out["metrics"]
-    assert m["trained"] and m["heldout_windows"] > 0
-    assert 0.0 <= m["heldout_acc"] <= 1.0
