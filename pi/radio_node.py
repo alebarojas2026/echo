@@ -33,6 +33,7 @@ import argparse
 import os
 import signal
 import socket
+import statistics
 import struct
 import sys
 import time
@@ -171,10 +172,12 @@ def set_up(dev: hci.Hci, scanner: BeaconScanner, interval: int = ADV_INTERVAL_HC
     return interval
 
 
+PI_LINKS = (f"east>{RX}:ble", f"west>{RX}:ble")
+
+
 def status_line(counts: dict, seconds: float, bus: BusSender, redone: int) -> str:
     """Rates and sends since the last status line; how often the controller was set up again since start."""
-    rates = ", ".join(f"{link} {counts.get(link, 0) / seconds:.1f}/s"
-                      for link in (f"east>{RX}:ble", f"west>{RX}:ble"))
+    rates = ", ".join(f"{link} {counts.get(link, 0) / seconds:.1f}/s" for link in PI_LINKS)
     line = f"[pi.radio_node] {rates}; sent {bus.sent}, not sent {bus.failed}"
     if bus.failed and bus.error is not None:
         line += f" ({bus.error.strerror or bus.error})"
@@ -183,13 +186,27 @@ def status_line(counts: dict, seconds: float, bus: BusSender, redone: int) -> st
     return line + f"; set up again {redone}x since start"
 
 
+def summary(seen: dict, windows: dict, seconds: float) -> str:
+    """One line per Pi link for the Gate 2 table: readings, adverts/s over the run, the lowest and
+    median 10 s rate (a phone that slows down shows up here), and the median dBm."""
+    lines = [f"{'link':<14} {'n':>6} {'adverts/s':>10} {'lowest 10s':>11} {'median 10s':>11} {'median dBm':>11}"]
+    for link in PI_LINKS:
+        values, rates = seen.get(link, []), windows.get(link, [])
+        low = f"{min(rates):.1f}" if rates else "__"
+        mid = f"{statistics.median(rates):.1f}" if rates else "__"
+        dbm = f"{statistics.median(values):.1f}" if values else "__"
+        lines.append(f"{link:<14} {len(values):>6} {len(values) / seconds:>10.1f} {low:>11} {mid:>11} {dbm:>11}")
+    return "\n".join(lines)
+
+
 def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
-        seconds: float = 0, stop=lambda: False, seen=None, bus_sock=None,
+        seconds: float = 0, stop=lambda: False, seen=None, windows=None, bus_sock=None,
         clock=time.monotonic, log=lambda line: print(line, file=sys.stderr, flush=True)) -> dict | None:
     """Advertise beacon S and scan for east/west beacons, forwarding rssi to the board bus.
 
     If given, `seen` is filled with {link: [dbm, ...]} and returned (the service passes none, so
-    nothing piles up). An OSError from the HCI socket (the controller is down or gone) is raised
+    nothing piles up). If given, `windows` gets each Pi link's rate for every 10 s status line.
+    An OSError from the HCI socket (the controller is down or gone) is raised
     to the caller; one from the bus socket never is.
     """
     own_sock = bus_sock is None
@@ -238,6 +255,9 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
                 redo_at = None
                 last_advert = clock()
             if now - last_status >= STATUS_S:
+                if windows is not None:
+                    for link in PI_LINKS:
+                        windows.setdefault(link, []).append(counts.get(link, 0) / (now - last_status))
                 log(status_line(counts, now - last_status, bus, redone))
                 counts, last_status = {}, now
         return seen
@@ -255,8 +275,11 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--dev", type=int, default=HCI_IDX, help="HCI device number (default: 0)")
-    ap.add_argument("--seconds", type=float, default=0, help="stop after this long (0 = until Ctrl-C)")
+    ap.add_argument("--seconds", type=float, default=0,
+                    help="stop after this long and print a Gate 2 summary (0 = run until stopped)")
     args = ap.parse_args(argv)
+    # Only a timed run keeps readings, for its summary; the service keeps nothing.
+    seen, windows = ({}, {}) if args.seconds else (None, None)
 
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     dev = open_controller(args.dev)
@@ -266,8 +289,9 @@ def main(argv=None) -> None:
         f"forwarding to {BUS_HOST}:{BUS_PORT}",
         file=sys.stderr, flush=True,
     )
+    started = time.monotonic()
     try:
-        run(dev, bus_host=BUS_HOST, bus_port=BUS_PORT, seconds=args.seconds)
+        run(dev, bus_host=BUS_HOST, bus_port=BUS_PORT, seconds=args.seconds, seen=seen, windows=windows)
     except KeyboardInterrupt:
         pass
     except hci.HciError as e:
@@ -277,6 +301,8 @@ def main(argv=None) -> None:
         sys.exit(f"hci{args.dev}: {e}. Is Bluetooth on? sudo rfkill unblock bluetooth; sudo bluetoothctl power on")
     finally:
         dev.close()
+        if seen is not None:
+            print(summary(seen, windows, max(time.monotonic() - started, 1e-3)), file=sys.stderr)
 
 
 if __name__ == "__main__":
