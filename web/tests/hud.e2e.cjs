@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test')
-const path = '/src/hud/'
+const path = '/src/hud/index.html'
 for (const width of [320, 768, 1024, 1440]) {
   test(`shows the panels at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
