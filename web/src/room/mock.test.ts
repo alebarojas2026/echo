@@ -30,6 +30,13 @@ describe('mock states', () => {
     expect(Math.hypot(cx - at[0], cy - at[1])).toBeLessThan(x.cell_m)
   })
 
+  it('keep a still person out of the object layer', () => {
+    const x = mockState('still', 1, 3000).xray!
+    expect(Math.max(...x.moving_db)).toBeGreaterThan(1)
+    expect(Math.max(...x.static_db)).toBe(0)
+    expect(Math.max(...mockState('object', 1, 0).xray!.static_db)).toBeGreaterThan(1)
+  })
+
   it('drop pred when blind or when the router is off home', () => {
     const blind = mockState('blind', 1, 0)
     expect(blind.pred).toBeNull()

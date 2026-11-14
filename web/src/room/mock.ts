@@ -115,8 +115,9 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
 
   const xray: Xray = {
     ...XRAY,
-    moving_db: blob(person?.moving ? person.xy : null, 6),
-    static_db: blob(object ?? (scenario === 'still' ? person!.xy : null), object ? 8 : 3),
+    // People (walking or still) are in moving_db; only objects are in static_db (contract section 6).
+    moving_db: blob(person?.xy ?? null, person?.moving ? 6 : 4),
+    static_db: blob(object, 8),
     n_links: 6,
   }
   const objects: ObjectMark[] = object ? [{ xy_m: object, near: 'pi5', since_s: tMs / 1000, drop_db: 9 }] : []

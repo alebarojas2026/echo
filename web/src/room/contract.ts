@@ -63,10 +63,7 @@ export interface Alert {
   limit_s: number | null
 }
 
-export interface Checkin {
-  t: number
-  link: string
-}
+export interface Checkin { t: number; link: string }
 
 export interface Advice {
   id: string
@@ -91,11 +88,7 @@ export interface Narration {
   gen_ms: number | null
 }
 
-export interface Teacher {
-  present: boolean
-  zone: number
-  motion: 'moving' | 'still'
-}
+export interface Teacher { present: boolean; zone: number; motion: 'moving' | 'still' }
 
 export interface Model {
   trained: boolean
@@ -107,11 +100,7 @@ export interface Model {
   training: unknown
 }
 
-export interface Board {
-  cpu_temp_c: number | null
-  cpu_mhz: number | null
-  cpu_pct: number | null
-}
+export interface Board { cpu_temp_c: number | null; cpu_mhz: number | null; cpu_pct: number | null }
 
 export interface StateMsg extends Envelope {
   type: 'state'
@@ -142,6 +131,7 @@ export type CmdName =
   | 'train'
   | 'baseline'
   | 'reset_alert'
+  | 'reset'
   | 'record_start'
   | 'record_stop'
   | 'label_mode'
