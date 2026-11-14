@@ -44,6 +44,7 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 
 - Reads bus messages on UDP 127.0.0.1:5601.
 - Sends section 5 `state` about 10 times a second, and `event` messages as they happen, on `ws://<host>:8765/ws` (127.0.0.1 and 192.168.77.2).
+- If 192.168.77.2 isn't on the machine yet (the board's Ethernet comes up after the brain starts), it listens on 127.0.0.1 and retries the other address every 2 s until it binds. No restart needed. On a laptop it just keeps retrying quietly.
 - Takes `cmd` messages from the screen and passes each one on to the bus (127.0.0.1:5600) so it gets recorded.
 
 | cmd | What the brain does |

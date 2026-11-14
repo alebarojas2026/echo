@@ -128,7 +128,9 @@ Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, 
 Link health:
 - A link is stale when its rate over the last 2 s is < 0.4 x expected_hz.
 - It is blind when stale for >= 3 s, or when pred.kind == none and |median - base| > 6 dB for >= 3 s.
-  The jump rule (the second one) is off while the router is off S-home or a baseline is running.
+  The jump rule (the second one) is off while the router is off S-home or a baseline is running. It doesn't apply to a link
+  whose reading is below its base and steady: the std of its 0.5 s means, over the time since it went off base (2 s at least,
+  5 s at most), is < 0.8 dB. A steady drop is an object, not a broken link. Above base, or off base and not steady, is still a jump.
 - health is blind when any classifier link is blind. Then pred is null and the screen shows SENSOR BLIND (never "empty").
   Alert timers pause. It clears after 3 s ok.
 Object (a training label): only in label_mode object. Every frame must have persons_in_frame == 0, and one or more
@@ -136,7 +138,8 @@ Object (a training label): only in label_mode object. Every frame must have pers
 Check-in (a rule, not learned): on pi5>unoq:wifi, >= 4 alternating crossings of +/-1.5 dB around the 1 s rolling median
   within 2.5 s, with pred.zone unchanged and no other link's drop changing by > 3 dB. Gate 8 tunes the thresholds.
 Alert:
-- still_s counts while kind == person, motion == still and the zone is unchanged.
+- still_s counts while kind == person, motion == still and the zone is unchanged, judged on smoothed decisions:
+  it resets only after 5 moving decisions in a row (0.5 s), or when another zone or kind holds the majority of the last 10 decisions.
 - check_on when still_s >= zones[zone].still_alert_s. null never alerts, and objects never alert.
 - It clears on a checkin or on reset_alert.
 X-ray:
