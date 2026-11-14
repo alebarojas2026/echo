@@ -67,6 +67,20 @@ class TestStationRegex:
         assert dbm == -62
         assert pkts == 1823
 
+    def test_chain_values_read_the_signal_line_not_the_ack_lines(self):
+        # ath10k reports per-chain signal, so iw puts "[-71, -74]" between the number and dBm.
+        chains = (FIXTURE_DIR / "iw_station_chains.txt").read_text()
+        assert parse_station_output(chains) == (-71, 2051)
+
+    def test_chain_values_without_ack_lines(self):
+        chains = (FIXTURE_DIR / "iw_station_chains.txt").read_text()
+        no_ack = "\n".join(line for line in chains.splitlines() if "ack signal" not in line)
+        assert parse_station_output(no_ack) == (-71, 2051)
+
+    def test_only_ack_and_avg_lines_give_no_signal(self):
+        text = "\tsignal avg:\t-70 dBm\n\tlast ack signal:-58 dBm\n\tavg ack signal:\t-58 dBm\n\trx packets:\t5\n"
+        assert parse_station_output(text) == (None, 5)
+
 
 # ---------------------------------------------------------------------------
 # _read_station_info (mocked subprocess)

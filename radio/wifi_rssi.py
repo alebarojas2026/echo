@@ -46,7 +46,9 @@ TX = "pi5"
 RX = "unoq"
 KIND = "wifi"
 
-_SIGNAL_RE = re.compile(r"signal:\s+(-?\d+)\s+dBm")
+# The "signal:" line itself, never "signal avg:" or "last ack signal:" (the Pi's ACKs to our own frames).
+# ath10k reports chains, so iw prints "signal: -71 [-71, -74] dBm": take the number before the brackets.
+_SIGNAL_RE = re.compile(r"^\s*signal:\s*(-?\d+)", re.M)
 _RX_PACKETS_RE = re.compile(r"rx packets:\s+(\d+)")
 
 
