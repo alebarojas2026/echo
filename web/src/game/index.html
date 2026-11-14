@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Can you hide from Wi-Fi?</title>
+    <link rel="icon" href="data:,">
+    <style>
+      :root {
+        --page: #f4f0e6; --card: #faf7ef; --text: #1c1b17; --soft: #55524a; --line: #8f8a7e;
+        --accent: #4f5e2e;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; background: var(--page); color: var(--text);
+        font: 1.05rem/1.45 'Hanken Grotesk', system-ui, sans-serif;
+      }
+      main { max-width: 44rem; margin-inline: auto; padding: clamp(1rem, 4vw, 2.5rem); }
+      h1 {
+        margin: 0; font: 600 clamp(2rem, 7vw, 3.4rem)/1.05 Newsreader, Georgia, serif;
+        letter-spacing: -0.01em; text-wrap: balance;
+      }
+      .lede { margin: .6rem 0 1.5rem; color: var(--soft); max-width: 34rem; }
+      .tally {
+        margin: 0; padding: 1rem 0; border-block: 1px solid var(--line);
+        font: 600 clamp(1.5rem, 5.5vw, 2.4rem)/1.15 Newsreader, Georgia, serif;
+        font-variant-numeric: tabular-nums;
+      }
+      .status { margin: .9rem 0 0; font-size: .95rem; color: var(--soft); }
+      .status::before {
+        content: ''; display: inline-block; width: .6rem; height: .6rem; margin-right: .5rem;
+        border-radius: 50%; background: var(--line);
+      }
+      .status[data-kind='ok']::before { background: var(--accent); }
+      .status[data-kind='practice']::before { background: transparent; box-shadow: inset 0 0 0 2px var(--line); }
+      .result { min-height: 3.2rem; margin: .6rem 0 1.2rem; font-size: 1.2rem; font-weight: 600; }
+      .result[data-outcome='found'] { color: var(--accent); }
+      .result[data-outcome='hidden'] { color: var(--text); }
+      h2 { margin: 0 0 .2rem; font-size: 1rem; font-weight: 700; }
+      .hint { margin: 0 0 .8rem; color: var(--soft); font-size: .9rem; }
+      .floor {
+        display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; padding: .5rem;
+        border: 2px solid var(--text); border-radius: .5rem; background: var(--card);
+      }
+      .floor button {
+        min-height: 6.5rem; padding: .75rem; border: 1px solid var(--line); border-radius: .3rem;
+        background: var(--page); color: inherit; font: inherit; text-align: left; cursor: pointer;
+        touch-action: manipulation;
+      }
+      .floor button strong { display: block; font-size: 1.35rem; }
+      .floor button span { color: var(--soft); font-size: .9rem; }
+      .floor button:hover { border-color: var(--text); }
+      .floor button:active { background: var(--accent); color: var(--card); }
+      .floor button:active span { color: inherit; }
+      .compass { display: flex; justify-content: space-between; margin: .35rem .2rem 0; color: var(--soft); font-size: .8rem; }
+      .tools { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.5rem; }
+      .tools button {
+        min-height: 2.75rem; padding: .5rem 1rem; border: 1px solid var(--line); border-radius: .3rem;
+        background: transparent; color: inherit; font: inherit; cursor: pointer;
+      }
+      .tools button:disabled { opacity: .45; cursor: default; }
+      button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      @media (prefers-reduced-motion: no-preference) {
+        .floor button { transition: background-color .12s ease-out, border-color .12s ease-out; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Can you hide from Wi-Fi?</h1>
+      <p class="lede">Step into the square and try to stay out of sight. No camera is watching: the board only has radio to go on.</p>
+
+      <p class="tally" data-testid="hide-tally" id="tally" aria-live="polite">No rounds yet</p>
+      <p class="status" id="status" data-kind="off">NO DATA</p>
+      <p class="result" id="result" role="status"></p>
+
+      <h2 id="floor-title">Where are they really standing?</h2>
+      <p class="hint">Tap the zone, or press 1 to 4. That scores the round.</p>
+      <div class="floor" role="group" aria-labelledby="floor-title">
+        <button type="button" data-zone="1"><strong>Bed</strong><span>Zone 1, north-west</span></button>
+        <button type="button" data-zone="2"><strong>Chair</strong><span>Zone 2, north-east</span></button>
+        <button type="button" data-zone="3"><strong>Hall</strong><span>Zone 3, south-west</span></button>
+        <button type="button" data-zone="4"><strong>Bathroom</strong><span>Zone 4, south-east</span></button>
+      </div>
+      <p class="compass"><span>South side: the router</span><span>North is up</span></p>
+
+      <div class="tools">
+        <button type="button" id="undo">Take back last round</button>
+        <button type="button" id="reset">Start over</button>
+      </div>
+    </main>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
