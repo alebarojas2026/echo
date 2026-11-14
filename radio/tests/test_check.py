@@ -119,8 +119,29 @@ def test_main_checks_the_interface_named_in_env(monkeypatch):
     monkeypatch.setattr(check, "load_env_file", lambda path: monkeypatch.setenv("WIFI_IFACE", "wlan1"))
     seen = []
     monkeypatch.setattr(check, "check_wifi", lambda iface: seen.append(iface) or (True, "wifi"))
-    for name in ("check_tools", "check_ethernet", "check_services"):
+    for name in ("check_tools", "check_radios", "check_ethernet", "check_services"):
         monkeypatch.setattr(check, name, lambda: (True, name))
     monkeypatch.setattr(check, "check_links", lambda seconds: (True, "links"))
     check.main([])
     assert seen == ["wlan1"]
+
+
+def rfkill(root, n, kind, soft="0", hard="0"):
+    entry = root / f"rfkill{n}"
+    entry.mkdir(parents=True)
+    for name, value in (("type", kind), ("soft", soft), ("hard", hard)):
+        (entry / name).write_text(value + "\n")
+
+
+def test_radios_not_blocked(tmp_path):
+    rfkill(tmp_path, 0, "wlan")
+    rfkill(tmp_path, 1, "bluetooth")
+    assert check.check_radios(tmp_path) == (True, "radios: Bluetooth and Wi-Fi not blocked")
+
+
+def test_a_blocked_radio_says_how_to_unblock(tmp_path):
+    rfkill(tmp_path, 0, "wlan")
+    rfkill(tmp_path, 1, "bluetooth", soft="1")
+    rfkill(tmp_path, 2, "nfc", soft="1")          # not ours
+    ok, text = check.check_radios(tmp_path)
+    assert not ok and text.startswith("radios: bluetooth (soft) blocked -> sudo rfkill unblock all")
