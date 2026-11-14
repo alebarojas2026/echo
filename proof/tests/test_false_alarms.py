@@ -1,6 +1,6 @@
 import pytest
 
-from proof.false_alarms import analyze, update_proof
+from proof.false_alarms import analyze, analyze_many, update_proof
 
 
 def labels(zone=0, seconds=2):
@@ -53,3 +53,9 @@ def test_sim_paths_and_no_simulated_proof():
 def test_still_sim_path_has_observation():
     from brain.tests.simdata import sim_to_v2
     assert analyze(sim_to_v2("stand_still"), [])["observed_minutes"] > 0
+
+
+def test_multiple_sessions_aggregate_counts_and_exposure():
+    result = analyze_many([(labels(), [event("checkin")]), (labels(seconds=4), [])])
+    assert result["counts"]["checkin"] == 1
+    assert result["false_alarms_per_min"] == 10

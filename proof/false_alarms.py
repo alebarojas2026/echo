@@ -73,14 +73,27 @@ def update_proof(proof, result, messages, events, commit):
     return out
 
 
+def analyze_many(pairs):
+    results = [analyze(messages, events) for messages, events in pairs]
+    minutes = sum(r["observed_minutes"] for r in results)
+    counts = {k: sum(r["counts"][k] for r in results) for k in ("checkin", "alert_on", "object_on")}
+    return {"counts": counts, "observed_minutes": minutes,
+            "per_minute": {k: n / minutes if minutes else None for k, n in counts.items()},
+            "false_alarms_per_min": sum(counts.values()) / minutes if minutes else None}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path)
     parser.add_argument("events", type=Path, help="captured events stamped with board recv_t")
+    parser.add_argument("--more-pairs", nargs=2, action="append", default=[], type=Path, metavar=("SESSION", "EVENTS"))
     parser.add_argument("--proof", type=Path)
     args = parser.parse_args()
     messages, events = read_jsonl(args.session), read_jsonl(args.events)
-    result = analyze(messages, events)
+    pairs = [(messages, events)] + [(read_jsonl(a), read_jsonl(b)) for a, b in args.more_pairs]
+    result = analyze_many(pairs)
+    messages = [m for a, _ in pairs for m in a]
+    events = [e for _, b in pairs for e in b]
     if args.proof:
         proof = json.loads(args.proof.read_text())
         commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
