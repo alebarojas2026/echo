@@ -65,7 +65,9 @@ class Brain:
         self.label = None      # the latest camera label
         self.narration = None
         self.events: List[dict] = []
-        self._seq = {"state": 0, "event": 0, "cmd": 0}
+        self._seq = 0       # one counter for everything we send to the screens (section 4)
+        self._cmd_seq = 0   # and one for the commands we pass to the bus, a separate socket
+        self._event_n = 0
 
     def now(self) -> int:
         return self._clock() if self._clock else self.feed_t
@@ -109,8 +111,8 @@ class Brain:
         handler = getattr(self, f"_cmd_{cmd}", None)
         if handler is None:
             return
-        self._seq["cmd"] += 1
-        self.to_bus({"v": 2, "type": "cmd", "t": self.now(), "seq": self._seq["cmd"], "src": self.src,
+        self._cmd_seq += 1
+        self.to_bus({"v": 2, "type": "cmd", "t": self.now(), "seq": self._cmd_seq, "src": self.src,
                      "cmd": cmd, "args": args})
         handler(args)
 
@@ -147,13 +149,21 @@ class Brain:
     def _cmd_reset_alert(self, args):
         self._still_since = None
 
+    def _cmd_reset(self, args):
+        """Between judges: clear the alert, still timer, check-in, advice and narration."""
+        self._still_since = self.narration = None
+        self.emit("reset", {})
+
     def _cmd_record_start(self, args):
-        pass  # the bus opens the file and sends back the meta message that opens our copy
+        # The bus opens the file and sends back the meta message that opens our copy.
+        self.emit("recording", {"on": True, "session": args.get("session")})
 
     def _cmd_record_stop(self, args):
         s, self.open_session = self.open_session, None
-        if s and s["meta"].get("session"):
-            self.sessions[s["meta"]["session"]] = s
+        session = s["meta"].get("session") if s else None
+        if session:
+            self.sessions[session] = s
+        self.emit("recording", {"on": False, "session": session})
 
     def _cmd_label_mode(self, args):
         mode = args.get("mode")
@@ -216,10 +226,10 @@ class Brain:
         self.pred = pred
 
     def emit(self, kind: str, info: dict) -> None:
-        self._seq["event"] += 1
-        n = self._seq["event"]
-        self.events.append({"v": 2, "type": "event", "t": self.now(), "seq": n, "src": self.src,
-                            "id": f"e{n}", "kind": kind, "info": info})
+        self._seq += 1
+        self._event_n += 1
+        self.events.append({"v": 2, "type": "event", "t": self.now(), "seq": self._seq, "src": self.src,
+                            "id": f"e{self._event_n}", "kind": kind, "info": info})
 
     def pop_events(self) -> List[dict]:
         out, self.events = self.events, []
@@ -258,7 +268,7 @@ class Brain:
     def state(self) -> dict:
         now = self.now()
         self._tick()
-        self._seq["state"] += 1
+        self._seq += 1
         cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
         lb = self.label
         teacher = None
@@ -268,7 +278,7 @@ class Brain:
                                                       "windows": 0, "train_sessions": []}
         model["ms_per_decision"] = round(statistics.median(self.decision_ms), 2) if self.decision_ms else None
         model["training"] = self.training
-        return {"v": 2, "type": "state", "t": now, "seq": self._seq["state"], "src": self.src,
+        return {"v": 2, "type": "state", "t": now, "seq": self._seq, "src": self.src,
                 "cam": cam, "router": self.router, "links": self._links(now),
                 "health": {"status": "ok", "blind": [], "reason": None},
                 "pred": self.pred, "objects": [], "xray": None,
