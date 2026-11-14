@@ -55,7 +55,8 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
 {"v":2,"type":"label","t":1763149512150,"seq":412,"src":"live","frame":18231,"mode":"person","persons_in_frame":1,
  "present":true,"zone":4,"foot_m":[1.42,0.61],"motion":"moving","conf":0.81,"clipped":false}
    // One label per processed camera frame (5-10/s), including frames with nobody in them.
-   // present:false only on a processed frame with no foot point inside the square.
+   // present:false only on a processed frame with no foot point inside the square; then zone 0, foot_m null, motion null.
+   // seq: one counter per sending socket (a producer), shared across all message types it sends.
    // clipped:true -> zone and foot_m are null and the window is dropped. mode = the current label_mode.
 {"v":2,"type":"cam","t":1763149512200,"seq":77,"src":"live","state":"on","fps":9.6}
    // From teacher/camwatch.py: every 1 s and at once on any change. state = on | off | stalled.
