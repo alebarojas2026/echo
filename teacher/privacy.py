@@ -79,7 +79,7 @@ def python_violations(source, path):
 def violations(source, path):
     path = Path(path)
     if path.suffix == ".py":
-        return python_violations(source, path)
+        return python_violations(source, path.as_posix())
     findings = []
     patterns = [r"\b(?:ffmpeg|avconv)\b", r"\b(?:imwrite|imsave|savefig|writeVideo|toFile)\s*\(",
                 r"\b(?:writeFile|writeFileSync|createWriteStream)\s*\([^\n]*\.(?:png|jpe?g|mp4|avi|webm)"]
@@ -87,7 +87,7 @@ def violations(source, path):
         if line.lstrip().startswith(("#", "//", "*")):
             continue
         if any(re.search(pattern, line) for pattern in patterns):
-            findings.append(f"{path}:{number}: image/video output")
+            findings.append(f"{path.as_posix()}:{number}: image/video output")
     return findings
 
 
