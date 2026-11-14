@@ -1,2 +1,4 @@
-# Room scans ship inside web/dist (push-web.sh), never in git: they are pictures of a real room.
+# Room scans ship inside web/dist (push-web.sh), never in git: they are pictures of a real room. Their
+# alignment (room.json, saved by ?align=1) is made on site for that scan, so it stays out of git too.
 *.glb
+room.json

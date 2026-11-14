@@ -293,7 +293,7 @@ def test_the_service_keeps_nothing():
     assert len(sent) == 100     # west and pi5 from each packet, all still sent
 
 
-def run_main(monkeypatch, capsys, argv, events):
+def run_main(monkeypatch, capsys, argv, events, at_end=KeyboardInterrupt):
     """hci_scan.main() on the fake controller, sending to a local socket. Returns (stderr, messages)."""
     from radio import hci_scan
     bus = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -301,7 +301,7 @@ def run_main(monkeypatch, capsys, argv, events):
     bus.settimeout(0.5)
     monkeypatch.setenv("BUS_HOST", "127.0.0.1")
     monkeypatch.setenv("BUS_PORT", str(bus.getsockname()[1]))
-    fake = FakeController(events=events, at_end=KeyboardInterrupt)
+    fake = FakeController(events=events, at_end=at_end)
     monkeypatch.setattr(hci_scan, "open_controller", lambda dev: hci.Hci(fake))
     monkeypatch.setattr(hci_scan.signal, "signal", lambda *a: None)
     hci_scan.main(argv)
@@ -327,3 +327,11 @@ def test_main_service_sends_but_prints_no_summary(monkeypatch, capsys):
     err, got = run_main(monkeypatch, capsys, ["--node", "unoq"], [fixture("legacy_report_east")])
     assert "adverts/s" not in err
     assert [m["link"] for m in got] == ["east>unoq:ble"]
+
+
+def test_main_ends_with_one_line_when_hci0_goes_away(monkeypatch, capsys):
+    # The adapter is powered off or unplugged mid-scan: the socket fails. systemd starts the
+    # service again; the journal gets one clear line instead of a traceback.
+    with pytest.raises(SystemExit, match=r"hci0: .*No such device.*Is Bluetooth on\?"):
+        run_main(monkeypatch, capsys, ["--node", "unoq"], [fixture("legacy_report_east")],
+                 at_end=OSError(19, "No such device"))
