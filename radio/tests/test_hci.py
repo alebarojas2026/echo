@@ -46,8 +46,8 @@ def test_command_result_matches_only_its_opcode():
     assert hci.command_result(packet, hci.LE_SET_SCAN_PARAMS) == b"\x0c"
     assert hci.command_result(packet, hci.LE_SET_SCAN_ENABLE) is None
     assert hci.command_result(fixture("legacy_report_east"), hci.LE_SET_SCAN_PARAMS) is None
-    status = bytes.fromhex("04 0f 04 00 01 06 20")  # Command Status 0x00 for 0x2006
-    assert hci.command_result(status, hci.LE_SET_ADV_PARAMS) == b"\x00"
+    status = bytes.fromhex("04 0f 04 00 01 0c 20")  # Command Status: success, 1 packet, 0x200C
+    assert hci.command_result(status, hci.LE_SET_SCAN_ENABLE) == b"\x00"
 
 
 def test_legacy_report_parsed_without_its_address():
