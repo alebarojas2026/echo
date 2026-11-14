@@ -14,7 +14,8 @@ from radio.nodes import BEACONS, DOC  # noqa: E402
 
 
 def main(binary_path: str, letter: str) -> None:
-    payloads = {p["id"]: p for p in DOC["beacons"]["payloads"]}
+    # the square's beacons, and the optional hall beacons when radio/nodes.json has them
+    payloads = {p["id"]: p for p in DOC["beacons"]["payloads"] + (DOC.get("hall") or {}).get("beacons", [])}
     if letter not in payloads:
         sys.exit(f"{letter} has no payload in radio/nodes.json, so no scanner would keep it")
     payload = bytes.fromhex(payloads[letter]["data_hex"])

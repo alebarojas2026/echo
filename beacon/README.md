@@ -118,11 +118,53 @@ If nothing is scanning, start a scan in a second terminal with `sudo bluetoothct
 ## Power
 Any USB-C phone charger or power bank works. The board draws very little current, and some power banks decide nothing is plugged in and switch off after a while. A wall charger avoids that. With a power bank, switch on its low-current (trickle) mode if it has one (often a long or double press of its button; check its manual), then leave the beacon on it for a couple of minutes and check the orange LED is still blinking.
 
+## Hall beacons H and J (optional)
+The two spare boards can sit far from the square, as tripwires: for each long link from one of them to a receiver, the screen says whether there is movement along that path, and nothing more (not who, not where along it, not how many). The rule is in brain/hall.py, the wording is proposed in issue #358, and the scanners keep H and J once radio/nodes.json has its `hall` section. The demo never depends on them: with the hall beacons off, everything is exactly as without them.
+
+### Flash them
+The same steps as E and W ("Flash the boards" above), one board at a time, with the letters H and J:
+```sh
+arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 \
+  --build-property "compiler.cpp.extra_flags=-DBEACON_ID='H'" \
+  --build-path /tmp/beacon-H --upload --port "$PORT" beacon
+```
+Tape the board **H**, swap boards, find the port again, and run it once more with `'J'` and `/tmp/beacon-J`. Check each one like E and W: over USB it prints `beacon H: advertising FFFF 52 53 48 ...` (J: `... 4A`), and in nRF Connect the data is `52 53 48` or `52 53 4A`.
+
+### Where to put them
+- 10 to 25 m from the square, in two different directions: for example one at the back of the hall and one at the far side. Each beacon makes one path to every receiver, and those paths are what gets watched, so pick spots whose straight lines to the square cross where people walk (an aisle, the space in front of the seats).
+- As high as is practical and in clear sight of the square: on a shelf, a window sill or the top of a seat back, not on the floor and not behind a laptop or a bag. A row of seated people between the beacon and the square weakens the link all the time; people walking through it are what should show.
+- Antenna end up, like E and W. Any USB charger powers it ("Power" below applies: a wall charger is safest).
+- Don't move a hall beacon once it's placed. The link learns its own quiet level over the first minute, and a moved beacon is a different link.
+
+Then tell the board where each one is, so the screen can draw the line. Measure from the square's south-west corner in the square's own frame (x east, y north, metres; a metre either way is fine, it only places the end of a line on the screen), and on the board put the numbers into the `hall` section of radio/nodes.json, with the height above the floor as the third:
+```json
+{"node": "h", "id": "H", "data_hex": "FFFF525348", "xyz_m": [x, y, z]}
+```
+Then `sudo systemctl restart radio-sight-brain`. A beacon whose `xyz_m` is still null is scored all the same; the screen just has nowhere to draw it.
+
+### What range to expect
+Not measured yet: this needs the real boards in the real hall (issue #95).
+- On paper, free-space loss at 2.4 GHz is about 60 dB over 10 m and 68 dB over 25 m, so the +9 dBm these boards send arrives at about -51 dBm and -59 dBm before antenna losses, in a clear line of sight. That is some 20 dB weaker than E and W at 1.4 m.
+- A hall full of people is not free space. Bodies and furniture in the path take more, and the closer a link gets to the receiver's limit, the more adverts are lost. Expect far fewer readings a second than a link of the square, arriving unevenly.
+- The rule needs a reading in at least 4 of every 6 half-seconds. Below that the link is shown as stale and nothing is claimed for it. If a link is stale most of the time, bring that beacon closer or higher.
+- A body right in a weak path can stop the readings instead of making them flutter. That also shows as stale, never as "no movement".
+
+### If the scanners need them slower
+H and J are built like E and W: an advert about every 40 ms, 25 a second. That keeps a weak link usable, because most of a far beacon's adverts are lost on the way. On paper the two together add about 1% to the traffic on each advertising channel.
+
+The hardware test on #95 compares the core links' rates with the hall beacons off and on. Only if a core link's rate falls with them on, rebuild H and J with a longer interval, in units of 0.625 ms:
+```sh
+arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 \
+  --build-property "compiler.cpp.extra_flags=-DBEACON_ID='H' -DBEACON_INTERVAL=160" \
+  --build-path /tmp/beacon-H --upload --port "$PORT" beacon
+```
+160 is 100 ms: about 9.5 adverts a second with the controller's random delay. The USB status line prints the interval the board is using. E and W are always built without this flag.
+
 ## Other letters
 `BEACON_ID` can be any single uppercase letter except `S` (the Pi's beacon), for example `-DBEACON_ID='N'` for an extra corner beacon. The scanners only keep letters listed in radio/nodes.json, so a new letter needs its payload (and its links) added there before it shows up anywhere.
 
 ## CI
-`.github/workflows/beacon.yml` builds E and W on every pull request that touches `beacon/` or the scanners' beacon code, with the core cached between runs. After each build, `beacon/check_advert.py` finds the advertising data in the binary and runs it through radio/hci.py's parser and radio/nodes.json, so the firmware and the scanners can't drift apart. To run the same check on a local build:
+`.github/workflows/beacon.yml` builds E and W (and H with `-DBEACON_INTERVAL=160`, so the hall beacons' flag is compiled too) on every pull request that touches `beacon/` or the scanners' beacon code, with the core cached between runs. After each build, `beacon/check_advert.py` finds the advertising data in the binary and runs it through radio/hci.py's parser and radio/nodes.json, so the firmware and the scanners can't drift apart. To run the same check on a local build:
 ```sh
 python3 beacon/check_advert.py /tmp/beacon-E/beacon.ino.bin E
 ```

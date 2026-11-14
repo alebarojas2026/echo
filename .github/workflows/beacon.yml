@@ -1,7 +1,8 @@
 name: beacon
 
 # Builds the XIAO ESP32-S3 beacon firmware for E and W and checks the advertising data in each build
-# against radio/hci.py and radio/nodes.json.
+# against radio/hci.py and radio/nodes.json. A third build, H with a 100 ms interval, covers the hall
+# beacons' build flags (beacon/README.md).
 on:
   pull_request:
     paths: ["beacon/**", "radio/hci.py", "radio/nodes.py", "radio/nodes.json", ".github/workflows/beacon.yml"]
@@ -24,7 +25,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        beacon: [E, W]
+        include:
+          - beacon: E
+          - beacon: W
+          - beacon: H
+            flags: " -DBEACON_INTERVAL=160"
     steps:
       - uses: actions/checkout@v7
 
@@ -54,8 +59,13 @@ jobs:
       - name: compile beacon ${{ matrix.beacon }}
         run: |
           arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 --warnings all \
-            --build-property "compiler.cpp.extra_flags=-DBEACON_ID='${{ matrix.beacon }}'" \
+            --build-property "compiler.cpp.extra_flags=-DBEACON_ID='${{ matrix.beacon }}'${{ matrix.flags }}" \
             --build-path "$RUNNER_TEMP/beacon-${{ matrix.beacon }}" beacon
 
       - name: advertising data matches the scanners
-        run: python3 beacon/check_advert.py "$RUNNER_TEMP/beacon-${{ matrix.beacon }}/beacon.ino.bin" ${{ matrix.beacon }}
+        run: |
+          # H is a hall beacon: the scanners know it once radio/nodes.json has its "hall" section.
+          if [ "${{ matrix.beacon }}" = H ] && ! grep -q '"hall"' radio/nodes.json; then
+            echo "radio/nodes.json has no hall beacons yet: nothing to check H against"; exit 0
+          fi
+          python3 beacon/check_advert.py "$RUNNER_TEMP/beacon-${{ matrix.beacon }}/beacon.ino.bin" ${{ matrix.beacon }}

@@ -21,7 +21,14 @@ static_assert(BEACON_ID != 'S', "S is the Pi's beacon");
 
 // Advertising every 35 ms (56 x 0.625 ms). On top of that the controller adds the spec's random
 // advDelay of 0-10 ms to every event (Vol 6 Part B 4.4.2.2.1), so events come every 40 ms on average.
-const uint16_t INTERVAL = 56;
+// A beacon that should advertise less often (a hall beacon, beacon/README.md) can be built with another
+// interval in the same 0.625 ms units, e.g. -DBEACON_INTERVAL=160 for 100 ms. E and W are built without it.
+#ifndef BEACON_INTERVAL
+#define BEACON_INTERVAL 56
+#endif
+static_assert(BEACON_INTERVAL >= 32 && BEACON_INTERVAL <= 16384,
+              "BEACON_INTERVAL is in 0.625 ms units: 32 (20 ms) to 16384 (10.24 s), Core spec Vol 4 Part E 7.8.5");
+const uint16_t INTERVAL = BEACON_INTERVAL;
 const esp_power_level_t TX_POWER = ESP_PWR_LVL_P9;  // +9 dBm, fixed: never changed while running
 const int TX_POWER_DBM = 9;
 
