@@ -67,6 +67,16 @@ The person walks in straight lines between waypoints and holds the last one.
 `"x": null` means they left. `"person": null` is an empty room. Objects never move.
 `label_mode` (default `person`) and `meta` (overrides for the `meta` message) are optional.
 
+Optional extras, all timed in seconds from the start:
+
+| Key | Example | What it does |
+|---|---|---|
+| `objects[].t_on`, `t_off` | `{"x": 1.0, "y": 0.2, "drop_db": 10, "t_on": 25, "t_off": 55}` | The object is only there between those times |
+| `router` | `[{"t": 45, "spot": "S-W30"}]` | Moves `pi5` to a contract router spot (`S-home`, `S-W30`, `S-E30`) |
+| `outages` | `[{"node": "east", "t_on": 10, "t_off": 20}]` | A node (or one `"link"`) sends nothing in that window |
+| `waves` | `[{"t_on": 14, "t_off": 16.5, "link": "pi5>unoq:wifi", "amp_db": 4, "hz": 2}]` | A waving hand: the link swings up and down |
+| `camera` | `[{"t": 14, "state": "off"}]` | Camera state (`on`, `off`, `stalled`); labels stop unless it is `on` |
+
 ## Tests
 
 ```
@@ -84,6 +94,11 @@ Use the short name: `python -m sim.fake zone_tour`.
 | `stand_still` | Walk into zone 4 (10 s alert limit), stand still 15 s, walk out | 20 s |
 | `empty_room` | Nobody there, noise only | 30 s |
 | `metal_object` | Empty room, metal object next to `east`: a steady drop on both `east` links, `label_mode` object | 30 s |
+| `wave_checkin` | Stand still in zone 4 past the 10 s limit, wave at 14 s (check-in), walk out | 25 s |
+| `tray_t1` | Empty 25 s (baseline), metal tray at T1 for 30 s, then removed | 60 s |
+| `router_move` | Tray at T1 from 25 s, router to `S-W30` at 45 s, tray gone at 60 s, router home at 65 s | 75 s |
+| `dropped_link` | Person in zone 1; the east beacon is silent from 10 s to 20 s (sensor blind) | 30 s |
+| `camera_unplug` | The zone tour with the camera unplugged at 14 s | 32 s |
 
 ## Replay a recording
 
