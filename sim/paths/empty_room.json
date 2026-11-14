@@ -1,0 +1,7 @@
+{
+  "name": "empty_room",
+  "about": "Nobody and nothing in the room. Noise only.",
+  "duration_s": 30,
+  "person": null,
+  "objects": []
+}
