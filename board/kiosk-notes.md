@@ -3,7 +3,7 @@
 The Pi's screen shows the board's web page, http://192.168.77.2:8080/?src=ws, full screen from boot. `?src=ws` makes the screen read the brain's live WebSocket; without it the screen shows its built-in mock states. These steps are for Raspberry Pi OS with desktop (Bookworm or Trixie) running Wayland with labwc, the default on a Pi 5. Do them once, on the Pi, as the user that logs in to the desktop.
 
 ## Before you start
-- The Ethernet link is up (`pi/eth.sh`), and the board is serving: `curl -sI http://192.168.77.2:8080/` answers `200`.
+- The Ethernet link is up (`sudo bash pi/eth.sh` on the Pi and `sudo bash board/eth.sh` on the board), and the board is serving: `curl -sI http://192.168.77.2:8080/` answers `200`.
 - The desktop runs labwc: in a terminal on the Pi's screen, `echo $XDG_SESSION_TYPE` prints `wayland` and `pgrep -a labwc` shows a process. If it doesn't, run `sudo raspi-config` and pick Advanced Options > Wayland > labwc, then reboot.
 - Chromium is installed. It's `chromium` on Trixie and `chromium-browser` on older Bookworm images; the script below finds either one.
 
