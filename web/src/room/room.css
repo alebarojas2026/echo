@@ -108,6 +108,21 @@
   text-transform: uppercase;
 }
 
+.room-label--ghost.room-label--wave {
+  color: var(--action);
+}
+
+.room-label--alert {
+  translate: 0 -50%;
+  color: var(--fault);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.room-label--alert.room-label--zone-east {
+  translate: -100% -50%;
+}
+
 .room-label--caption {
   translate: -50% -50%;
   padding: 4px 10px;

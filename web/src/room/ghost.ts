@@ -66,6 +66,8 @@ interface Ghost {
 }
 
 export class Presence {
+  /** True while a wave check-in shows: the ghost's label reads "Wave seen". */
+  wave = false
   private readonly ghosts: Ghost[] = []
   private readonly tiles: { mesh: Mesh<PlaneGeometry, MeshBasicMaterial>; to: number }[] = []
   private readonly boxes: { mesh: LineSegments; label: HTMLElement }[] = []
@@ -112,7 +114,9 @@ export class Presence {
       g.to.copy(v3([x, y, 0]))
       if (!g.placed) g.at.copy(g.to) // the first sighting appears in place; later ones glide
       g.placed = true
-      g.label.textContent = spots.length > 1 ? `zone ${spot.zone}?` : pred!.motion === 'still' ? 'still' : 'moving'
+      const waving = this.wave && spots.length === 1
+      g.label.textContent = waving ? 'Wave seen' : spots.length > 1 ? `zone ${spot.zone}?` : pred!.motion === 'still' ? 'still' : 'moving'
+      g.label.classList.toggle('room-label--wave', waving)
     })
     if (!spots.length) for (const g of this.ghosts) g.placed = false
     const inSet = new Set(spots.map((s) => s.zone))

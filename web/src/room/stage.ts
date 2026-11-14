@@ -80,6 +80,7 @@ function outline(pts: Vec3[]): Vec3[] {
 }
 
 const HEAD_M = 0.08
+const ZONE_IN_X = 0.1 // zone names start (west zones) or end (east zones) this far in from the side
 
 /** What each node is called on screen and which side of its cube the name goes. */
 const NODE_LABELS: Record<NodeId, { text: string; side: 'above' | 'right' | 'left' }> = {
@@ -110,7 +111,7 @@ export class Stage {
 
     // Zone names sit in each zone's outer corner, clear of the links that cross the middle. West zones read
     // from their west edge, east zones end at their east edge.
-    const inX = 0.1
+    const inX = ZONE_IN_X
     const inY = 0.2
     for (const z of ZONES) {
       const east = z.id === 2 || z.id === 4
@@ -148,6 +149,14 @@ export class Stage {
       this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))
     }
     this.view.requestRender()
+  }
+
+  /** Where the alert's word sits: in line with the zone's name, on the side away from the node names
+   *  (toward the north edge for north zones, just above the name for south zones). */
+  alertWordAt(zone: number): Vec3 {
+    const east = zone === 2 || zone === 4
+    const north = zone === 1 || zone === 2
+    return [east ? SQUARE_M - ZONE_IN_X : ZONE_IN_X, north ? SQUARE_M - 0.07 : 0.34, 0]
   }
 
   /** Amber zone names for the zones the radio is weighing (pred.zone_set). */
