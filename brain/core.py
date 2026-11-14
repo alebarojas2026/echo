@@ -28,7 +28,9 @@ HOME = "S-home"
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 CAM_SILENT_MS = 3_000
 TEACHER_FRESH_MS = 1_000
+LINK_FRESH_MS = 1_000
 TRAIN_PURPOSES = ("train", "object")
+EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 LABEL_MODES = ("person", "object", "off")
 
 
@@ -38,17 +40,22 @@ def now_ms() -> int:
 
 class Brain:
     def __init__(self, clock: Optional[Callable[[], int]] = None, to_bus=None, mode_file=None,
-                 spawn=None, board_stats=None, links=F.LINKS, nodes=None, led=None):
+                 spawn=None, board_stats=None, links=F.LINKS, nodes=None, led=None, sessions_dir=None):
         """clock None = follow the feed (latest recv_t), for recorded files played fast.
         to_bus(msg) forwards a command to the bus.
         spawn(fit, done) runs fit() off the loop, then done(model) back on it.
         nodes is radio/nodes.json, already parsed (default: the repo's copy).
-        led is the LED grid (brain/alert.py); None = no lights."""
+        led is the LED grid (brain/alert.py); None = no lights.
+        sessions_dir is data/sessions: baseline.json is written there and read back at start."""
         nodes = nodes or json.loads(NODES_JSON.read_text(encoding="utf-8"))
         self.health = Health.from_nodes(nodes)
         self.xray = Xray.from_nodes(nodes)
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
         self._heard = set()                   # links with at least one reading
+        self._last_seen: Dict[str, int] = {}  # link -> recv_t of its last reading
+        self._last_dbm: Dict[str, float] = {} # link -> the last dbm we sent (or its last reading)
+        self._health_ok = True
+        self.sessions_dir = Path(sessions_dir) if sessions_dir else None
         self.want_session: Optional[str] = None   # the id from record_start
         self.raw_kind: Optional[str] = None   # the classifier's kind, even while pred is withheld
         self._raw: Optional[dict] = None
@@ -83,6 +90,7 @@ class Brain:
         self._seq = 0       # one counter for everything we send to the screens (section 4)
         self._cmd_seq = 0   # and one for the commands we pass to the bus, a separate socket
         self._event_n = 0
+        self._load_baseline()
 
     def now(self) -> int:
         return self._clock() if self._clock else self.feed_t
@@ -95,7 +103,10 @@ class Brain:
         if t is None:
             return
         self.feed_t = max(self.feed_t, int(t))
-        self.src = msg.get("src", self.src)
+        if kind == "rssi":
+            # state.src mirrors the radio feed. The camera and the bus's meta say "live"
+            # even over a sim feed, and must not flip the screen's badge to LIVE.
+            self.src = msg.get("src", self.src)
         if kind == "meta":
             # Only the meta the bus writes for our record_start opens a copy. The fake
             # feed sends its own meta (and again on every loop); those are ignored.
@@ -110,18 +121,16 @@ class Brain:
                 self.open_session["messages"].append(msg)
             if kind == "label":
                 self.label = msg
-                if self.capture and (msg.get("persons_in_frame") or 0) > 0:
-                    self._start_capture()  # someone walked in: start the 20 s again
             elif msg.get("link") in self.links:
                 link, dbm = msg["link"], float(msg["dbm"])
                 self.health.add(link, t, dbm)
                 self.watch.on_rssi(msg)
                 self._heard.add(link)
+                self._last_seen[link] = t
+                self._last_dbm.setdefault(link, dbm)
                 if link in self.base:
                     self.xray.add(link, t, self.base[link] - dbm)
-                if self.capture:
-                    if self.capture["start"] is None:
-                        self.capture["start"] = t  # the 20 s run from the first reading
+                if self.capture and self.capture["start"] is not None:
                     self.capture["messages"].append(msg)
             if self.windower:
                 for window in self.windower.push(msg):
@@ -149,7 +158,8 @@ class Brain:
         sessions = [s for s in self.sessions.values() if s["meta"].get("purpose") in TRAIN_PURPOSES]
         if not sessions:
             return
-        self.training = {"since_t": self.now(), "sessions": len(sessions)}
+        self.training = {"started_t": self.now(), "progress": None,
+                         "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver = dict(self.base), f"m{self.model_n + 1}"
 
         def fit():   # may run on another thread: touches nothing of ours
@@ -161,6 +171,8 @@ class Brain:
                 return
             self.model, self.model_n = model, self.model_n + 1
             self.decision_ms.clear()
+            if self.window:
+                self.window["decided"] = False   # the new model decides on the next tick
             self.emit("trained", {"ver": ver, "train_s": model.info()["train_s"]})
 
         self.spawn(fit, done)
@@ -182,16 +194,22 @@ class Brain:
         self.emit("reset", {})
 
     def _cmd_record_start(self, args):
+        self._keep_open_session()   # back-to-back recordings: the bus closes the old one too
         self.want_session = args.get("session")
         # The bus opens the file and sends back the meta message that opens our copy.
         self.emit("recording", {"on": True, "session": args.get("session")})
 
     def _cmd_record_stop(self, args):
-        s, self.open_session, self.want_session = self.open_session, None, None
+        session = self._keep_open_session()
+        self.want_session = None
+        self.emit("recording", {"on": False, "session": session})
+
+    def _keep_open_session(self) -> Optional[str]:
+        s, self.open_session = self.open_session, None
         session = s["meta"].get("session") if s else None
         if session:
             self.sessions[session] = s
-        self.emit("recording", {"on": False, "session": session})
+        return session
 
     def _cmd_label_mode(self, args):
         mode = args.get("mode")
@@ -223,6 +241,36 @@ class Brain:
         except KeyError:
             pass                         # not a spot in nodes.json
 
+    def _set_baseline(self, base: Dict[str, float], expected_hz: Dict[str, float]) -> None:
+        self.base, self.expected_hz = dict(base), dict(expected_hz)
+        self.windower, self.window = F.Windower(self.base, self.links), None
+        self.health.set_base(self.base)
+        self.health.set_expected(self.expected_hz)
+        self.xray.reset()
+
+    def _save_baseline(self, now) -> None:
+        """Section 6: data/sessions/baseline.json, for proof/ and for a brain restart."""
+        if not self.sessions_dir:
+            return
+        session = self.open_session["meta"].get("session") if self.open_session else None
+        doc = {"t": now, "session": session,
+               "links": {link: {"base_dbm": self.base[link], "expected_hz": self.expected_hz[link]}
+                         for link in self.base}}
+        self.sessions_dir.mkdir(parents=True, exist_ok=True)
+        (self.sessions_dir / "baseline.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+
+    def _load_baseline(self) -> None:
+        if not self.sessions_dir:
+            return
+        try:
+            links = json.loads((self.sessions_dir / "baseline.json").read_text(encoding="utf-8"))["links"]
+            base = {k: float(v["base_dbm"]) for k, v in links.items() if k in self.links}
+            expected = {k: float(v["expected_hz"]) for k, v in links.items() if k in self.links}
+        except (OSError, ValueError, KeyError, TypeError):
+            return   # no file, or not one of ours: start without a baseline
+        if base:
+            self._set_baseline(base, expected)
+
     def _watch_events(self):
         for kind, info in self.watch.pop_events():
             self.emit(kind, info)
@@ -230,21 +278,29 @@ class Brain:
     def _start_capture(self):
         self.capture = {"start": None, "messages": []}
 
+    def _capture_ok(self, now) -> bool:
+        """Section 6: health ok, the camera on and seeing nobody, label_mode off, every link reporting."""
+        lb = self.label
+        return bool(self.cam and self.cam[1] == "on" and now - self.cam[0] <= CAM_SILENT_MS
+                    and lb is not None and now - lb["recv_t"] <= TEACHER_FRESH_MS
+                    and (lb.get("persons_in_frame") or 0) == 0
+                    and self.label_mode == "off" and self._health_ok and not self.health.blind
+                    and all(now - self._last_seen.get(link, -10**15) <= LINK_FRESH_MS for link in self.links))
+
     def _tick(self):
         now = self.now()
-        if self.capture and self.capture["start"] is not None and now - self.capture["start"] >= BASELINE_MS:
-            msgs, self.capture = self.capture["messages"], None
-            base = F.baseline(msgs)
-            if base:
-                self.base = base
-                for link in base:
-                    n = sum(1 for m in msgs if m["link"] == link)
-                    self.expected_hz[link] = round(n / (BASELINE_MS / 1000), 1)
-                self.windower, self.window = F.Windower(base, self.links), None
-                self.health.set_base(base)
-                self.health.set_expected(self.expected_hz)
-                self.xray.reset()
-                self.emit("baseline_done", {"links": len(base)})
+        if self.capture:
+            if not self._capture_ok(now):
+                self._start_capture()               # a condition broke: the 20 s start again
+            elif self.capture["start"] is None:
+                self.capture["start"] = now
+            elif now - self.capture["start"] >= BASELINE_MS:
+                msgs, self.capture = self.capture["messages"], None
+                expected = {link: round(sum(1 for m in msgs if m["link"] == link) / (BASELINE_MS / 1000), 1)
+                            for link in self.links}
+                self._set_baseline(F.baseline(msgs), expected)
+                self._save_baseline(now)
+                self.emit("baseline_done", {})
         self._decide(now)
 
     def _decide(self, now):
@@ -272,6 +328,8 @@ class Brain:
         self.pred = pred
 
     def emit(self, kind: str, info: dict) -> None:
+        # event.json allows only these keys in info, and no nulls.
+        info = {k: info[k] for k in EVENT_INFO if info.get(k) is not None}
         self._seq += 1
         self._event_n += 1
         self.events.append({"v": 2, "type": "event", "t": self.now(), "seq": self._seq, "src": self.src,
@@ -282,6 +340,17 @@ class Brain:
         return out
 
     # ---- output ----
+
+    def _link_row(self, row: dict, weights: Dict[str, float]) -> dict:
+        """A listed link's dbm stays a number: a link quiet for over 1 s keeps its last value
+        (and the drop that goes with it); rate_hz and status are what show it is stale."""
+        link = row["id"]
+        if row["dbm"] is None:
+            dbm, base = self._last_dbm[link], self.base.get(link)
+            row = dict(row, dbm=round(dbm, 1), drop_db=None if base is None else round(base - dbm, 1))
+        else:
+            self._last_dbm[link] = row["dbm"]
+        return dict(row, why=weights.get(link, 0.0))
 
     def _why_weights(self) -> Dict[str, float]:
         """0-1 per link: how much it explains the current decision."""
@@ -298,6 +367,7 @@ class Brain:
         now = self.now()
         self._tick()
         health = self.health.update(now, self.raw_kind, self.router == HOME, self.capture is not None)
+        self._health_ok = health["health"]["status"] == "ok"
         if self.health.blind and self.pred is not None:
             self.pred = None
             self.watch.on_pred(now, None)
@@ -308,7 +378,7 @@ class Brain:
             self.emit(e["kind"], e["info"])
         self._watch_events()
         weights = self._why_weights()
-        links = [dict(row, why=weights.get(row["id"], 0.0)) for row in health["links"]
+        links = [self._link_row(row, weights) for row in health["links"]
                  if row["id"] in self._heard]   # a link is listed once it has a reading
         self._seq += 1
         cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
