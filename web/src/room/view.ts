@@ -1,6 +1,6 @@
 import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { SQUARE_M } from './frame'
-import { PAPER } from './palette'
+import { BG } from './palette'
 
 // Owns the renderer, the camera and the frame loop. Frames are drawn only when something changed
 // or an animation is still settling, so an idle room costs nothing on the Pi.
@@ -13,11 +13,13 @@ interface Label {
   at: Vector3
 }
 
-// Defaults are set for the Pi 5 kiosk: no multisampling and one canvas pixel per CSS pixel.
+// Defaults are set for the Pi 5 kiosk, from measurements on a Pi 5 at 1080p (issue #12): with antialiasing the
+// GPU was about 99% busy at 60 fps and the NO DATA screen dipped to 53 fps; without it, about 40% busy and a
+// steady 60. The render scale made no difference there, and DPR 2 fell to 16 fps.
 export interface ViewOptions {
-  /** Multisampled edges. Off by default; ?aa=1 turns it on. */
+  /** Multisampled edges. Off by default; ?aa=1 turns it on (fine on a desktop, costly on the Pi). */
   antialias?: boolean
-  /** Canvas pixels per CSS pixel. 1 by default; ?dpr=2 (any value up to 3) for sharper screens. */
+  /** Canvas pixels per CSS pixel. 1 by default; ?dpr= (any value up to 3) changes it. */
   pixelRatio?: number
 }
 
@@ -67,7 +69,7 @@ export class RoomView {
 
   constructor(readonly host: HTMLElement, opts: ViewOptions = {}) {
     this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? false, powerPreference: 'high-performance' })
-    this.renderer.setClearColor(PAPER, 1)
+    this.renderer.setClearColor(BG, 1)
     this.renderer.setPixelRatio(opts.pixelRatio ?? 1)
     this.renderer.domElement.className = 'room-canvas'
     this.renderer.domElement.setAttribute('aria-hidden', 'true')
