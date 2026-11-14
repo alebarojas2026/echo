@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Radio Sight</title>
+    <link rel="icon" href="data:,">
+  </head>
+  <body class="hud-preview">
+    <main id="hud"></main>
+    <script type="module">
+      import { renderHud } from './index.ts'
+      import { readHudState } from './state.ts'
+
+      renderHud(document.querySelector('#hud'), readHudState())
+    </script>
+  </body>
+</html>
