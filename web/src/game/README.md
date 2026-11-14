@@ -28,7 +28,8 @@ fixes a wrong tap; "Start over" (tap twice) clears it.
 
 ## Run it
 
-It is plain HTML and JavaScript modules; no build step is needed. It connects to the brain at
+`npm run build` puts it in `web/dist/game/`, so the board serves it at `http://192.168.77.2:8080/game/`
+(and the phone page at `/phone/`). In development, `npm run dev` serves it at `/src/game/`. It connects to the brain at
 `ws://<the page's host>:8765/ws` (CONTRACTS.md section 2). To point it somewhere else, add
 `?ws=ws://127.0.0.1:8765/ws` to the address.
 

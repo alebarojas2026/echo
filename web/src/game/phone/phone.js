@@ -26,20 +26,40 @@ function chime() {
   }
 }
 
+// Text changes like the screen's: the old text fades out in 100 ms, the new one fades in over 140 ms,
+// 40 ms later, in the same spot. Opacity and transform only. Nothing moves when the text is the same,
+// and a ticking count (only its digits change) is swapped in place.
+const shown = new Map()
+function swap(el, text, render = () => { el.textContent = text }) {
+  const before = shown.get(el)
+  if (before === text) return
+  shown.set(el, text)
+  el.getAnimations().forEach((a) => a.cancel())
+  const quiet = before === undefined || before.replace(/\d+/g, '#') === text.replace(/\d+/g, '#') ||
+    matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (quiet) return render()
+  el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100, fill: 'forwards' }).finished.then(() => {
+    if (shown.get(el) !== text) return
+    render()
+    el.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 140, delay: 40, fill: 'both' })
+  }, () => {})
+}
+
 function show() {
   const c = card(state, mock ? 0 : performance.now() - stateAt)
   if (shouldChime(mode, c.mode)) {
     chime()
-    navigator.vibrate?.([200, 100, 200]) // not on iPhone; it just does nothing there
+    // Browsers only vibrate after a tap on the page, and iPhone never does.
+    if (navigator.userActivation?.hasBeenActive ?? true) navigator.vibrate?.([200, 100, 200])
   }
   mode = c.mode
   document.body.dataset.mode = c.mode
-  $('label').textContent = c.label
+  swap($('label'), c.label)
   // The zone name takes the person colour; the rest of the sentence stays plain.
   const [before, after] = c.zone ? c.title.split(c.zone) : [c.title, '']
-  $('title').replaceChildren(before, ...(c.zone ? [Object.assign(document.createElement('span'), { className: 'zone', textContent: c.zone }), after] : []))
-  $('detail').textContent = c.detail
-  $('checkin').textContent = checkinText(c.checkinT)
+  swap($('title'), c.title, () => $('title').replaceChildren(before, ...(c.zone ? [Object.assign(document.createElement('span'), { className: 'zone', textContent: c.zone }), after] : [])))
+  swap($('detail'), c.detail)
+  swap($('checkin'), checkinText(c.checkinT))
   $('checkin').dataset.has = c.checkinT == null ? 'no' : 'yes'
 }
 
