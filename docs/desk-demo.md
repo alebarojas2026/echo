@@ -21,7 +21,7 @@ Each line is one timed step: what the presenter says, what the judge does, and w
 | 2:20-2:45 | "Walk out of the area." | Walks out. | "Nobody is here", on radio alone. |
 | 2:45-3:00 | "Zone accuracy on walkers it never trained on: __. One decision takes __ ms on the board. Images stored: __. Bytes sent off our network: __. Radio Sight: room-aware, and private by design." | Looks at the proof strip. | The proof strip, with `__` for anything not yet measured. |
 
-If a moment doesn't show (NO DATA or SENSOR BLIND), say what the screen says and move to the next line; never call it an empty room. Recovery steps are in `demo-runbook.md`.
+Before the cable moment, check the screen says "Camera on". If it doesn't yet (it was plugged back in during the reset), skip the pull and say the camera only taught the radio during setup. If a moment doesn't show (NO DATA or SENSOR BLIND), say what the screen says and move to the next line; never call it an empty room. Recovery steps are in `demo-runbook.md`.
 
 ## If the judge has time
 
@@ -36,7 +36,7 @@ These moments move out of the 3 minutes. Offer them only when the judge stays lo
 | Time | Step |
 |---|---|
 | 0:00-0:05 | The judge has walked out; the sensing area is empty. |
-| 0:05-0:12 | Alexander plugs the camera back in; the screen says "Camera on". |
+| 0:05-0:12 | Alexander plugs the camera back in. Don't wait for it: the camera app restarts on its own and the screen says "Camera on" again once frames flow. |
 | 0:12-0:15 | The operator presses "Reset demo" (the O key shows the controls). The alert, still count, check-in, advice and narration clear. |
 | 0:15-0:20 | Check the screen: LIVE, "Nobody is here", no NO DATA or SENSOR BLIND. The recap of the last visit may show; that's expected. |
 
