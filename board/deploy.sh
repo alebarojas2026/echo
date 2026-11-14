@@ -14,7 +14,9 @@
 # narrator and lives at narrator/llm.service; it's installed as
 # radio-sight-llm.service. The Pi hotspot (pi/ap.sh, a NetworkManager profile
 # that comes up by itself) and the kiosk (board/kiosk-notes.md, started by the
-# desktop session) are not systemd services.
+# desktop session) are not systemd services. The screen's web/dist is built on
+# a laptop and copied over by board/push-web.sh; this script only says whether
+# the copy on the board matches the ref.
 #
 # Settings, all optional: ROLE=board|pi (found from the device tree otherwise),
 # UNIT_DIR (/etc/systemd/system), SYSTEMCTL (systemctl), SUDO (sudo, or empty).
@@ -55,6 +57,20 @@ touches() {
         done
     done <<< "$changed"
     return 1
+}
+
+# web/dist isn't built here (see board/push-web.sh for why). Say whether the
+# build that's there was made from the same web/ files as this checkout.
+check_web() {
+    local built
+    built=$(cat web/dist/build.txt 2>/dev/null || true)
+    if [ -z "$built" ]; then
+        say "web/dist has no build.txt; from a laptop at $1, run board/push-web.sh"
+    elif [[ $built != *-dirty ]]         && [ "$(git rev-parse --quiet --verify "$built^{commit}:web" 2>/dev/null)" = "$(git rev-parse HEAD:web)" ]; then
+        say "web/dist is current (built at ${built:0:8})"
+    else
+        say "web/dist is stale (built at ${built:0:8}); from a laptop at $1, run board/push-web.sh"
+    fi
 }
 
 main() {
@@ -117,13 +133,8 @@ main() {
         say "nothing to restart"
     fi
 
-    if [ "$role" = board ] && touches "$changed" web/; then
-        if [ -d web/node_modules ] && command -v npm > /dev/null; then
-            say "web/ changed; rebuilding web/dist"
-            (cd web && npm run build)
-        else
-            say "web/ changed but web/node_modules is missing; web/dist is stale until you build it"
-        fi
+    if [ "$role" = board ]; then
+        check_web "$ref"
     fi
     local req
     for req in $(grep 'requirements.txt$' <<< "$changed" || true); do

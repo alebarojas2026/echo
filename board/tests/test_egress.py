@@ -1,10 +1,11 @@
 """board/egress.sh with nft replaced by a fake that keeps its state in files."""
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from board.tests.shell import BASH
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -27,18 +28,6 @@ esac
 """
 
 
-def find_bash():
-    if os.name != "nt":
-        return shutil.which("bash")
-    # Git for Windows keeps bash in <Git>/bin; a bare "bash" may be the WSL launcher.
-    git = shutil.which("git")
-    for up in Path(git).resolve().parents[:3] if git else []:
-        if (up / "bin" / "bash.exe").exists() and (up / "bin" / "git.exe").exists():
-            return str(up / "bin" / "bash.exe")
-    return None
-
-
-BASH = find_bash()
 pytestmark = pytest.mark.skipif(BASH is None, reason="needs bash")
 
 
