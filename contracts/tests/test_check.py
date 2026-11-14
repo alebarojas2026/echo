@@ -42,6 +42,7 @@ INVALID = [
     "$.alert.zone",                 # an alert in zone 4
     "$.objects[0].near",            # the old tray spot: on the desk layout the board is the closest node, not pi5
     "$.pred.why[0]",                # not one of the twelve links
+    "$.args.keep_model",            # keep_model is true or false
     "bad JSON",
 ]
 
