@@ -91,7 +91,7 @@ def test_reset_alert_clears_and_restarts_the_timer():
     for t in range(0, 12_000, 100):
         watch.on_pred(T0 + t, pred)
     assert watch.alert_block()["state"] == "check_on"
-    watch.reset()
+    watch.reset_alert()
     assert watch.pop_events() == [("alert_on", {"zone": 4}), ("alert_off", {"zone": 4})]
     assert watch.alert_block() == {"state": "none", "zone": None, "still_s": 0.0, "limit_s": None}
     watch.on_pred(T0 + 12_100, pred)
@@ -137,3 +137,31 @@ def test_check_in_is_blocked_by_a_zone_change_or_another_link_moving():
     assert not wave(rule, T0, n=38)
     assert not wave(CheckIn(), T0, other=lambda i: -58 - (8 if i > 10 else 0))   # someone walked by
     assert wave(CheckIn(), T0, other=lambda i: -58 + (i % 2))                    # ordinary noise is fine
+
+
+def test_led_shows_a_question_mark_for_null_pred_and_for_two_zones():
+    watch = Watch(LIMITS, Led())
+    one = {"present": True, "zone": 2, "zone_set": [2], "kind": "person", "motion": "moving"}
+    two = dict(one, zone_set=[2, 4])
+    steps = [one, one, None, None, one, two, two, one,
+             {"present": False, "zone": None, "zone_set": [], "kind": "none", "motion": None}, None]
+    for i, pred in enumerate(steps):
+        watch.on_pred(T0 + i * 100, pred)
+    # 2, "?" while blind, 2 again, "?" for two zones, 2 again, the empty dot, "?" again
+    assert watch.led.calls == [("show_zone", n) for n in (2, -1, 2, -1, 2, 0, -1)]
+
+
+def test_led_starts_with_a_question_mark_when_pred_is_null():
+    watch = Watch(LIMITS, Led())
+    watch.on_pred(T0, None)
+    watch.on_pred(T0 + 100, None)
+    assert watch.led.calls == [("show_zone", -1)]
+
+
+def test_reset_also_forgets_the_check_in_but_reset_alert_keeps_it():
+    watch, _, _ = run("wave_checkin")
+    assert watch.checkin is not None
+    watch.reset_alert()
+    assert watch.checkin is not None
+    watch.reset()
+    assert watch.checkin is None and watch.alert_block()["state"] == "none"

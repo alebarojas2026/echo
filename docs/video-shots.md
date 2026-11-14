@@ -1,78 +1,78 @@
 # Radio Sight: 60-Second Video Shot List
 
-## 0:00–0:07 — The problem
+## 0:00–0:05 — The problem
 
-**Picture:** Close shot of a laptop video call or download stalling in one corner of the room. Pull back to reveal that the router is nearby.
+**Picture:** Open on a stalled call or download in one corner, then pull back to show the router nearby.
 
-**Voiceover:** "Wi-Fi bars do not tell you what is happening across a real room. Walls, furniture, and people reshape the signal."
+**Voiceover:** "Wi-Fi bars miss what happens across a real room. People and objects reshape the signal and create dead zones."
 
-**On screen:** `Strong near the router. Dead here.`
+**On screen:** `Strong here. Dead here.`
 
-## 0:07–0:13 — Meet Radio Sight
+## 0:05–0:10 — Meet Radio Sight
 
-**Picture:** Quick, clean shots of the Arduino UNO Q, Raspberry Pi 5 router, beacon nodes, and the live room display.
+**Picture:** Clean close shots of the Arduino UNO Q, Pi, radio nodes, and live display.
 
-**Voiceover:** "Radio Sight is Wi-Fi that understands the room. It maps coverage, presence, and movement locally on Qualcomm Dragonwing."
+**Voiceover:** "Radio Sight is Wi-Fi that understands the room. Every learned decision runs locally on the Dragonwing CPU; the Pi is the router and screen."
 
-**On screen:** `No cloud required`
+**On screen:** `Local · Room-aware · No cloud`
 
-## 0:13–0:18 — The judge walks in
+## 0:10–0:18 — Judge walks in, X-ray responds
 
-**Picture:** Wide shot. A judge opens the door and walks into the marked demo zone. Keep the display visible in the same frame.
+**Picture:** Keep the judge, marked floor, and display in one wide shot as the judge enters. Cut close to the radio X-ray changing on the floor plan and the live links reacting.
 
-**Voiceover:** "Walk in and the radio links change."
+**Voiceover:** "When our judge walks in, the radio X-ray follows fresh activity and the screen reports presence, movement, and zone."
 
-**On screen:** The room display changes from `Room empty` to `Present · Moving`.
+**On screen:** `Person · Moving · Zone __`
 
-## 0:18–0:25 — Unplug the camera
+## 0:18–0:23 — Wave check-in
 
-**Picture:** Show the setup camera, its cable, and the dashboard setup status. Unplug the cable in one continuous shot, then hold on the disconnected plug and the still-running display.
+**Picture:** The judge makes the practiced wave without changing zones. Hold on the live check-in confirmation.
 
-**Voiceover:** "The camera only supplied labels during setup. Now it is unplugged. No image is saved; live sensing uses radio alone."
+**Voiceover:** "A deliberate wave creates a radio check-in without a phone or button."
 
-**On screen:** `Camera disconnected · Radio-only mode`
+**On screen:** `Check-in received`
 
-## 0:25–0:35 — Follow movement with radio
+## 0:23–0:31 — Metal tray reveals the dead zone
 
-**Picture:** The judge walks across the zone while the radio image and link lines react. Cut between the person's position and the matching location on the display.
+**Picture:** Place the metal tray at its marked spot beside the router. Show the static X-ray change, object result, generated advice, recommended west or east floor mark, and before value.
 
-**Voiceover:** "Radio Sight reads how a person changes every link, then combines those changes into a live picture of the room."
+**Voiceover:** "The metal tray creates a stable obstruction. Radio Sight separates it from the person, finds the affected link, and recommends a tested router position."
 
-**On screen:** `Present · Moving`
+**On screen:** `Before: __ dBm · Move router to __`
 
-## 0:35–0:43 — Find the dead zone
+## 0:31–0:39 — Move, fix, verify
 
-**Picture:** The judge reaches the problem corner. Show the connection struggling, the weak area highlighted on the map, and the advisor calling out the obstruction or placement issue.
+**Picture:** Move the router to the recommended west or east floor mark. Hold on the after value and advice result; keep the before value beside it.
 
-**Voiceover:** "It finds the dead zone where it actually happens and explains why the area is weak."
+**Voiceover:** "We make the recommended move and verify the same link. Before: __ dBm. After: __ dBm. Dead-zone improvement: __."
 
-**On screen:** `Dead zone found`
+**On screen:** `Before: __ dBm · After: __ dBm · Improvement: __`
 
-## 0:43–0:51 — Fix and verify
+## 0:39–0:46 — Unplug the camera
 
-**Picture:** Follow the advisor's placement recommendation. Move the router or node, rerun the same path, and show the weak area shrink or clear.
+**Picture:** Show the setup camera, cable, and live status together. Unplug it in one continuous shot, then hold on the disconnected plug and still-updating radio display.
 
-**Voiceover:** "We make the recommended change and repeat the same test. Coverage improves in the problem area."
+**Voiceover:** "The camera supplied setup labels only. Now it is unplugged, no image is saved, and live sensing continues from radio alone."
 
-**On screen:** `Placement changed · Retest passed`
+**On screen:** `Camera: off · Radio: live`
 
-## 0:51–0:57 — Show the proof numbers
+## 0:46–0:56 — Proof strip
 
-**Picture:** Full-screen before-and-after proof card. Use results from the measured proof report only.
+**Picture:** Fill the frame with the proof strip while the disconnected camera cable remains visible at the edge. Use only values loaded from the measured proof report.
 
-**Voiceover:** "The result is measurable: dead-zone improvement __, presence accuracy __, and end-to-end update latency __."
+**Voiceover:** "The proof is measured: zone accuracy __, person-versus-object accuracy __, decision latency __, and bytes sent outside our local network __."
 
 **On screen:**
 
-- `Dead-zone improvement: __`
-- `Presence accuracy: __`
-- `End-to-end update latency: __`
-- `Camera: unplugged`
-- `Processing: on device`
+- `Zone accuracy: __`
+- `Person-versus-object accuracy: __`
+- `Decision latency: __`
+- `Bytes sent outside local network: __`
+- `Images stored: __`
 
-## 0:57–1:00 — Close
+## 0:56–1:00 — Close
 
-**Picture:** Product hero shot with the live room display behind the hardware.
+**Picture:** End on the hardware and live room display together.
 
 **Voiceover:** "Radio Sight. Wi-Fi that understands the room."
 
@@ -80,8 +80,8 @@
 
 ## Capture notes
 
-- Record the problem and the verified fix from the same camera angle.
-- Keep the camera cable and disconnected state unmistakable.
-- Keep the judge, marked floor zone, and live display visible together when possible.
-- Replace every `__` only with a result produced by the proof workflow.
-- Do not add a claim that the demo does not show directly.
+- Record the before and after values in the same unbroken view when possible.
+- Keep the judge, marked floor, and live display visible together for the entry and check-in.
+- Keep the camera cable and disconnected state unmistakable after the unplug shot.
+- Replace every `__` only with a value produced by the proof workflow.
+- Do not add a claim that the recorded demo and proof data do not support.

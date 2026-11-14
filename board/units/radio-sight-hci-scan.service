@@ -1,0 +1,18 @@
+[Unit]
+Description=Radio Sight Bluetooth raw scan (root for raw HCI)
+After=bluetooth.service radio-sight-bus.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=@PYTHON@ -m radio.hci_scan --node unoq
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

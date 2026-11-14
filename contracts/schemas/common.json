@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/common.json",
+  "$comment": "Pieces shared by the message schemas. Section numbers refer to CONTRACTS.md.",
+  "$defs": {
+    "fields": {
+      "$comment": "Section 1 envelope. bus/ adds recv_t.",
+      "properties": {"v": {"const": 2}, "t": {"type": "integer", "minimum": 0}, "seq": {"type": "integer", "minimum": 0},
+                     "src": {"enum": ["live", "sim", "replay"]}, "recv_t": {"type": "integer", "minimum": 0}}
+    },
+    "envelope": {"$ref": "#/$defs/fields", "required": ["v", "type", "t", "seq", "src"]},
+    "node": {"enum": ["unoq", "pi5", "east", "west"]},
+    "link": {"enum": ["pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble", "east>pi5:ble", "west>pi5:ble"]},
+    "links": {"type": "array", "items": {"$ref": "#/$defs/link"}},
+    "zone": {"type": "integer", "minimum": 0, "maximum": 4},
+    "xy_m": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "motion": {"enum": ["moving", "still"]},
+    "cam_state": {"enum": ["on", "off", "stalled"]},
+    "router_spot": {"enum": ["S-home", "S-W30", "S-E30"]},
+    "purpose": {"enum": ["train", "heldout", "object", "crowd", "demo"]},
+    "label_mode": {"enum": ["person", "object", "off"]},
+    "narration_source": {"enum": ["llm", "template"]},
+    "narration_text": {"$comment": "Section 6: at most 16 words.", "type": "string", "pattern": "^\\s*\\S+(\\s+\\S+){0,15}\\s*$"},
+    "event_kind": {"enum": ["enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice", "advice_result",
+                            "router_moved", "router_home", "recalibrating", "cam_off", "cam_on", "cam_stalled", "alert_on",
+                            "alert_off", "blind_on", "blind_off", "trained", "baseline_done", "drift", "reset", "recording"]}
+  }
+}

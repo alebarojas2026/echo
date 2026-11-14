@@ -2,6 +2,8 @@
 
 The message formats every part of Radio Sight agrees on. Only Ivan changes this file. Need a change? Open an issue labeled `contract`, keep working with what's here, and switch when the change lands.
 
+All numbers in the examples below are made-up format examples, not measurements. Real results live only in proof.json and PROOF.md.
+
 Every adapter (fake feed, readers, bus, brain, screen) speaks exactly this. At runtime, check only `v` and `type`; full schema checks run in tests and CI (contracts/).
 state.src mirrors the inputs; the screen shows LIVE only for src live with nonzero link rates.
 
@@ -63,7 +65,7 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
    // From teacher/camwatch.py: every 1 s and at once on any change. state = on | off | stalled.
 {"v":2,"type":"narration","t":1763149513000,"seq":9,"src":"live","text":"Someone just walked into zone 2.",
  "event_id":"e123","event_kind":"enter","gen_ms":6120,"source":"llm","model":"<model name>"}
-   // source = llm | template
+   // source = llm | template. model is null when source is template.
 {"v":2,"type":"meta","t":1763149500000,"seq":1,"src":"live","session":"s12","purpose":"heldout","walker":"w3"}
    // Sent on record_start. purpose = train | heldout | object | crowd | demo
 ```
@@ -96,6 +98,15 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
    // reset (after the reset cmd), recording (info: {on, session}) after record_start/record_stop.
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
 ```
+Before readings, a baseline or training exists, the brain still sends state at about 10/s with these values:
+- links: [] until readings arrive (never null). A link is listed once it has at least one reading (dbm is then a number);
+  before the baseline its base_dbm, drop_db and expected_hz are null, and status is "ok" or "stale" from its rate;
+- xray: null before the first baseline;
+- objects: [], advice: null, checkin: null, narration: null until each exists;
+- alert: {"state":"none","zone":null,"still_s":0,"limit_s":null} when nothing is counting;
+- model: {"trained":false,"ver":null,"train_s":null,"ms_per_decision":null,"windows":0,"train_sessions":[],"training":null} before training;
+- board: any field it can't read is null.
+
 **Screen -> brain:**
 ```jsonc
 {"v":2,"type":"cmd","cmd":"train|baseline|reset_alert|reset|record_start|record_stop|label_mode|router_moved|router_home|relearn|truth","args":{}}
@@ -116,7 +127,7 @@ Link health:
 - health is blind when any classifier link is blind. Then pred is null and the screen shows SENSOR BLIND (never "empty").
   Alert timers pause. It clears after 3 s ok.
 Object (a training label): only in label_mode object. Every frame must have persons_in_frame == 0, and one or more
-  links must drop >= 3 dB for >= 2 s with std < 0.8 dB.
+  links must drop >= 3 dB for >= 2 s with the std of their 0.5 s means < 0.8 dB.
 Check-in (a rule, not learned): on pi5>unoq:wifi, >= 4 alternating crossings of +/-1.5 dB around the 1 s rolling median
   within 2.5 s, with pred.zone unchanged and no other link's drop changing by > 3 dB. Gate 8 tunes the thresholds.
 Alert:
@@ -127,7 +138,7 @@ X-ray:
 - The grid covers the square plus 0.2 m on each side.
 - Weights per Wilson & Patwari: 1/sqrt(link length) inside an excess path <= 0.1 m.
 - P = (W^T W + alpha I)^-1 W^T, computed at startup and again on router_moved and router_home.
-- Per link, static_db = the drop that has held >= 5 s with std < 0.8 dB, updated ONLY while pred is not null and
+- Per link, static_db = the drop that has held >= 5 s with the std of its 0.5 s means < 0.8 dB (raw readings are too noisy), updated ONLY while pred is not null and
   pred.kind != person (frozen while a person is present), so a person standing still never becomes an "object".
 - The people part per link = max(0, drop_db - static_db). xray.static_db = the image of the static parts;
   xray.moving_db = the image of the people parts.
@@ -148,6 +159,7 @@ Screen: NO DATA (grey) when the last state is > 1 s old (the feed is stale). SEN
 ```
 
 ## 7. proof.json (served as /proof.json)
+The values below show the format only; they are not results.
 ```jsonc
 {"zone":{"correct":47,"total":52,"ci95":[0.79,0.96],"sessions":["s21","s22"],"walkers":5,"method":"held-out, see PROOF.md"},
  "threshold_zone":{"correct":38,"total":52},

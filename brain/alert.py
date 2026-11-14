@@ -13,6 +13,8 @@ alerts; objects never alert). It clears on a check-in or on reset_alert, and
 on nothing else. The timer pauses while pred is null (sensor blind).
 
 LED grid (mcu/, over the Bridge): show_zone(n), alert(on), smile().
+show_zone(-1) is "?": pred is null (blind, recalibrating, router away) or the
+decision spans 2 or more zones.
 """
 from __future__ import annotations
 
@@ -62,7 +64,7 @@ class BridgeLed:
 
     def _send(self, name, *args):
         try:
-            self._call(name, *args)
+            self._call(name, *args, timeout=1)
         except Exception as e:
             if not self._warned:
                 self._warned = True
@@ -152,6 +154,7 @@ class Watch:
         self.checkin: Optional[dict] = None
         self._events: List[tuple] = []
         self._person = False
+        self._shown: Optional[int] = None   # what the LED grid shows now (-1 = "?")
 
     def on_rssi(self, msg: dict) -> None:
         t = msg["recv_t"]
@@ -166,14 +169,15 @@ class Watch:
         dt = 0 if self.last_t is None else max(0, t - self.last_t)
         self.last_t = t
         if pred is None:
+            self._show(-1)
             return
         zone = (pred.get("zone") or 0) if pred.get("present") else 0
         self._person = pred.get("kind") == "person"
+        self._show(-1 if len(pred.get("zone_set") or []) >= 2 else zone)
         if zone != self.zone:
             self.zone = zone
             self.still_ms = 0
             self.checkin_rule.zone_changed(t)
-            self.led.show_zone(zone)
         elif self._person and pred.get("motion") == "still":
             self.still_ms += dt
         else:
@@ -184,9 +188,19 @@ class Watch:
             self._events.append(("alert_on", {"zone": zone}))
             self.led.alert(True)
 
-    def reset(self) -> None:
-        """reset_alert (and reset): clear the alert and start the still timer again."""
+    def _show(self, n: int) -> None:
+        if n != self._shown:
+            self._shown = n
+            self.led.show_zone(n)
+
+    def reset_alert(self) -> None:
+        """The reset_alert cmd: clear the alert and start the still timer again."""
         self._clear()
+
+    def reset(self) -> None:
+        """The reset cmd (between judges): reset_alert, and forget the last check-in."""
+        self._clear()
+        self.checkin = None
 
     def _clear(self) -> None:
         self.still_ms = 0
