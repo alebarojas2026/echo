@@ -3,6 +3,7 @@ import { Beams } from './beams'
 import type { Feed } from './feed'
 import { startFpsMeter } from './fps'
 import { Presence } from './ghost'
+import { loadScan } from './scan'
 import { Mirror } from './mirror'
 import { RouterSpots } from './spots'
 import { Stage } from './stage'
@@ -20,6 +21,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   const view = new RoomView(host, viewOptions(params))
   if (params.get('fps') === '1') startFpsMeter(view)
   const stage = new Stage(view)
+  void loadScan(view, stage.drawnRoom, params)
   const mirror = new Mirror(host)
   const beams = new Beams(view, mirror)
   const xray = new XrayLayer(view, mirror)
