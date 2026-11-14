@@ -110,7 +110,7 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
       zone,
       zone_set: set,
       probs,
-      motion: person?.moving ? 'moving' : 'still',
+      motion: person ? (person.moving ? 'moving' : 'still') : null, // present:false -> motion null
       still_s: scenario === 'still' ? (tMs / 1000) % 14 : 0,
       why: person ? top.slice(0, 2).map((l) => l.id) : [],
     }
