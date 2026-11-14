@@ -307,7 +307,7 @@ class TestLoops:
         station = FakeStation(*[(-60 - i % 3, i) for i in range(6)])
         reader = Reader("wlan0", TEST_BSSID, read=station, say=quiet)
         sent = run(bus_host="127.0.0.1", bus_port=bus.getsockname()[1], rate_hz=1000,
-                   stop=lambda: not station.readings, reader=reader, pinger=Pinger("10.42.0.1", 0))
+                   stop=lambda: not station.readings, reader=reader, pinger=Pinger("10.42.0.1", 0), keep=True)
         got = []
         while True:
             try:
@@ -320,6 +320,17 @@ class TestLoops:
         assert [m["seq"] for m in got] == [0, 1, 2, 3, 4]
         for m in got:
             assert errors(m) == [], m
+
+    def test_the_service_keeps_nothing_but_the_seq(self):
+        bus = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        bus.bind(("127.0.0.1", 0))
+        bus.settimeout(0.5)
+        station = FakeStation(*[(-60, i) for i in range(4)])
+        sent = run(bus_port=bus.getsockname()[1], rate_hz=1000, stop=lambda: not station.readings,
+                   reader=Reader("wlan0", TEST_BSSID, read=station, say=quiet), pinger=Pinger("10.42.0.1", 0))
+        seqs = [json.loads(bus.recvfrom(4096)[0])["seq"] for _ in range(3)]
+        bus.close()
+        assert sent == [] and seqs == [0, 1, 2]
 
     def test_run_stops_the_pings_on_the_way_out(self):
         proc = FakeProc()
