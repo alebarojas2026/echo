@@ -1,216 +1,158 @@
-"""Board-side Bluetooth LE scanner for the UNO Q (north node).
+"""Raw HCI Bluetooth scan with duplicate filtering off, keeping only our beacons.
 
-Runs as root (CONTRACTS.md §9):
-    sudo python -m radio.hci_scan --node unoq
+    sudo python -m radio.hci_scan --node unoq                  # forwards rssi to bus (127.0.0.1:5600)
+    sudo python -m radio.hci_scan --node unoq --seconds 60     # Gate 2: prints adverts/s per beacon link
 
-Opens a raw HCI socket with duplicate filtering OFF (confirmed in btmon as
-"Filter duplicates: Disabled").  Keeps only advertisements whose manufacturer
-data matches one of our three beacon payloads (CONTRACTS.md §3), matched by
-data only, never by MAC address.  Emits a contract-v2 ``rssi`` message for
-each kept advertisement to the bus UDP socket at 127.0.0.1:5600.
+The controller's supported commands decide the scan commands: extended scanning (LE Set Extended
+Scan Parameters/Enable, reports in subevent 0x0D) if it has LE Set Extended Scan Enable, otherwise
+the legacy pair (0x200B/0x200C, subevent 0x02). The two are never mixed. Either way the scan is
+passive, interval = window = 10 ms, and Filter_Duplicates is 0 (btmon: "Filter duplicates: Disabled").
 
-Links produced (rx = this node):
-    pi5>unoq:ble   pi5  → unoq
-    east>unoq:ble  east → unoq
-    west>unoq:ble  west → unoq
-
-Environment variables (set in .env, gitignored):
-    HCI_IFACE   HCI device index (default 0 → hci0)
-    BUS_HOST    bus UDP host (default 127.0.0.1)
-    BUS_PORT    bus UDP port (default 5600)
-    RATE_HZ     (unused for BLE; kept for consistency)
-
-Usage:
-    sudo python -m radio.hci_scan --node unoq
+Only reports carrying manufacturer data FFFF 52 53 'S'|'E'|'W' are kept (radio/nodes.json); everything
+else is dropped before any JSON is built, and no address ever leaves the parser.
 """
-
-from __future__ import annotations
-
 import argparse
 import json
 import os
+import signal
 import socket
-import struct
+import statistics
+import sys
 import time
 
+from . import hci
+from .nodes import BEACONS, LINKS
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-HCI_IDX: int = int(os.environ.get("HCI_IFACE", "0"))
-BUS_HOST: str = os.environ.get("BUS_HOST", "127.0.0.1")
-BUS_PORT: int = int(os.environ.get("BUS_PORT", "5600"))
-
-# Beacon payloads → (tx_node, link_id) when rx = "unoq"
-# Matched by manufacturer data, never by MAC (CONTRACTS.md §3).
-BEACON_LINKS: dict[bytes, tuple[str, str]] = {
-    bytes.fromhex("FFFF525353"): ("pi5",  "pi5>unoq:ble"),   # S
-    bytes.fromhex("FFFF525345"): ("east", "east>unoq:ble"),  # E
-    bytes.fromhex("FFFF525357"): ("west", "west>unoq:ble"),  # W
-}
-
-# ---------------------------------------------------------------------------
-# HCI constants (duplicated from pi.radio_node so this module is self-contained)
-# ---------------------------------------------------------------------------
-
-BTPROTO_HCI = 1
-SOL_HCI = 0
-HCI_FILTER = 2
-HCI_EVENT_PKT = 0x04
-EVT_LE_META_EVENT = 0x3E
-EVT_LE_ADVERTISING_REPORT = 0x02
-CMD_PKT = 0x01
-
-OGF_LE = 0x08
-OCF_LE_SET_SCAN_PARAMS = 0x000B
-OCF_LE_SET_SCAN_ENABLE = 0x000C
+MARK = b"\xff\xff\x52\x53"  # company id FFFF + "RS": a cheap test before parsing a packet
 
 
-def _opcode(ogf: int, ocf: int) -> int:
-    return (ogf << 10) | ocf
+def kept(packet: bytes, rx: str):
+    """[(link, dbm)] for the reports in one HCI packet that come from our beacons, heard by `rx`."""
+    if MARK not in packet:
+        return []
+    out = []
+    for data, rssi in hci.adv_reports(packet):
+        if rssi == hci.RSSI_UNAVAILABLE:
+            continue
+        for payload in hci.manufacturer_data(data):
+            link = f"{BEACONS.get(payload)}>{rx}:ble"
+            if link in LINKS:
+                out.append((link, rssi))
+                break
+    return out
 
 
-def _hci_command(opcode: int, params: bytes) -> bytes:
-    return struct.pack("<BHB", CMD_PKT, opcode, len(params)) + params
+class BeaconScanner:
+    """Scans on one controller and keeps our beacons' adverts as (link, dbm) for receiver `rx`."""
+
+    def __init__(self, dev: hci.Hci, rx: str):
+        self.dev, self.rx = dev, rx
+        self.ext = dev.supports_ext_scan()
+        self.mode = "extended" if self.ext else "legacy"
+
+    def start(self) -> None:
+        self.dev.command(*hci.scan_enable(self.ext, False), check=False)  # params can't change while on
+        self.dev.command(*hci.scan_params(self.ext))
+        self.dev.command(*hci.scan_enable(self.ext, True))
+
+    def stop(self) -> None:
+        self.dev.command(*hci.scan_enable(self.ext, False), check=False)
+
+    def poll(self, timeout: float = 0.5):
+        packet = self.dev.recv(timeout)
+        return kept(packet, self.rx) if packet else []
 
 
-def _scan_params_cmd() -> bytes:
-    """LE Set Scan Parameters: passive, 10 ms window, accept all."""
-    return _hci_command(
-        _opcode(OGF_LE, OCF_LE_SET_SCAN_PARAMS),
-        struct.pack("<BHHBB", 0x00, 0x0010, 0x0010, 0x00, 0x00),
-    )
-
-
-def _scan_enable_cmd(enable: bool, filter_dupes: bool = False) -> bytes:
-    """LE Set Scan Enable.  filter_dupes=False keeps every advertisement."""
-    return _hci_command(
-        _opcode(OGF_LE, OCF_LE_SET_SCAN_ENABLE),
-        bytes([0x01 if enable else 0x00, 0x01 if filter_dupes else 0x00]),
-    )
-
-
-def _hci_filter_events() -> bytes:
-    type_mask = 1 << HCI_EVENT_PKT
-    event_mask = (1 << 63) - 1
-    return struct.pack("<IQH", type_mask, event_mask, 0)
-
-
-# ---------------------------------------------------------------------------
-# AD structure parser
-# ---------------------------------------------------------------------------
-
-def extract_mfr_data(payload: bytes) -> bytes | None:
-    """Return manufacturer data bytes from an AD payload, or None."""
-    i = 0
-    while i < len(payload):
-        length = payload[i]
-        if length == 0 or i + length >= len(payload):
-            break
-        ad_type = payload[i + 1]
-        data = payload[i + 2: i + 1 + length]
-        if ad_type == 0xFF:
-            return data
-        i += 1 + length
-    return None
-
-
-def parse_adv_reports(data: bytes) -> list[tuple[bytes, int]]:
-    """Parse LE Advertising Report subevent, return [(mfr_data, rssi_dbm)]."""
-    results: list[tuple[bytes, int]] = []
-    if not data:
-        return results
-    num = data[0]
-    pos = 1
-    for _ in range(num):
-        if pos + 9 > len(data):
-            break
-        data_len = data[pos + 8]
-        pos += 9
-        if pos + data_len + 1 > len(data):
-            break
-        adv_payload = data[pos: pos + data_len]
-        rssi_raw = data[pos + data_len]
-        rssi = rssi_raw - 256 if rssi_raw > 127 else rssi_raw
-        pos += data_len + 1
-        mfr = extract_mfr_data(adv_payload)
-        if mfr is not None:
-            results.append((mfr, rssi))
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Bus publisher
-# ---------------------------------------------------------------------------
-
-def _make_rssi_message(link_id: str, tx: str, rx: str, dbm: int, seq: int) -> bytes:
-    return json.dumps({
-        "v": 2,
-        "type": "rssi",
-        "t": int(time.time() * 1000),
-        "seq": seq,
-        "src": "live",
-        "link": link_id,
-        "kind": "ble",
-        "tx": tx,
-        "rx": rx,
-        "dbm": dbm,
-    }, separators=(",", ":")).encode()
-
-
-# ---------------------------------------------------------------------------
-# Main loop
-# ---------------------------------------------------------------------------
-
-def run(node: str = "unoq",
-        hci_idx: int = HCI_IDX,
-        bus_host: str = BUS_HOST,
-        bus_port: int = BUS_PORT) -> None:
-    sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_RAW, BTPROTO_HCI)
-    sock.bind((hci_idx,))
-    sock.setsockopt(SOL_HCI, HCI_FILTER, _hci_filter_events())
-
-    bus = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+def make_bus_emitter(sock: socket.socket, target: tuple[str, int], rx: str):
+    """Return an emit(link, dbm) callback that sends contract-v2 rssi messages to `target` over UDP with seq."""
     seq = 0
 
-    sock.send(_scan_params_cmd())
-    time.sleep(0.05)
-    # Duplicate filtering OFF — btmon will show "Filter duplicates: Disabled"
-    sock.send(_scan_enable_cmd(True, filter_dupes=False))
-    time.sleep(0.05)
+    def emit(link: str, dbm: int):
+        nonlocal seq
+        tx = LINKS[link]["tx"]
+        msg = {
+            "v": 2,
+            "type": "rssi",
+            "t": int(time.time() * 1000),
+            "seq": seq,
+            "src": "live",
+            "link": link,
+            "kind": "ble",
+            "tx": tx,
+            "rx": rx,
+            "dbm": dbm,
+        }
+        sock.sendto(json.dumps(msg, separators=(",", ":")).encode(), target)
+        seq += 1
 
-    print(
-        f"[hci_scan] node={node} hci{hci_idx} scanning; "
-        f"duplicates OFF; -> {bus_host}:{bus_port}",
-        flush=True,
-    )
-
-    sock.settimeout(1.0)
-    while True:
-        try:
-            pkt = sock.recv(300)
-        except socket.timeout:
-            continue
-        if len(pkt) < 4 or pkt[0] != HCI_EVENT_PKT:
-            continue
-        if pkt[1] != EVT_LE_META_EVENT or pkt[3] != EVT_LE_ADVERTISING_REPORT:
-            continue
-        for mfr_data, rssi in parse_adv_reports(pkt[4:]):
-            if mfr_data not in BEACON_LINKS:
-                continue
-            tx, link_id = BEACON_LINKS[mfr_data]
-            payload = _make_rssi_message(link_id, tx, node, rssi, seq)
-            bus.sendto(payload, (bus_host, bus_port))
-            seq += 1
+    return emit
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="BLE scanner for the UNO Q board node")
-    parser.add_argument("--node", default="unoq",
-                        help="Receiving node id (default: unoq)")
-    args = parser.parse_args()
-    run(node=args.node)
+def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, seen=None) -> dict:
+    """Scan, calling emit(link, dbm) per kept advert, until `seconds` pass (0 = forever) or stop().
+
+    Fills and returns `seen` = {link: [dbm, ...]}, which keeps what was read even after Ctrl-C.
+    The scan is always turned off on the way out.
+    """
+    seen = {} if seen is None else seen
+    end = time.monotonic() + seconds if seconds else None
+    scanner.start()
+    try:
+        while not stop() and (end is None or time.monotonic() < end):
+            for link, dbm in scanner.poll():
+                emit(link, dbm)
+                seen.setdefault(link, []).append(dbm)
+    finally:
+        scanner.stop()
+    return seen
+
+
+def summary(seen: dict, seconds: float) -> str:
+    """One line per beacon link: readings, adverts/s and median dBm, for the Gate 2 table in radio/GATE.md."""
+    lines = [f"{'link':<15} {'n':>6} {'adverts/s':>10} {'median dBm':>11}"]
+    for link in (link for link in LINKS if seen.get(link)):
+        values = seen[link]
+        lines.append(f"{link:<15} {len(values):>6} {len(values) / seconds:>10.1f} {statistics.median(values):>11.1f}")
+    return "\n".join(lines)
+
+
+def open_controller(dev: int) -> hci.Hci:
+    if hasattr(os, "geteuid") and os.geteuid() != 0:
+        sys.exit("hci_scan needs root for a raw HCI socket: run it with sudo")
+    try:
+        return hci.Hci.open(dev)
+    except OSError as e:
+        sys.exit(f"can't open hci{dev}: {e}. Is Bluetooth on? Try: sudo rfkill unblock bluetooth; "
+                 "sudo bluetoothctl power on")
+
+
+def main(argv=None) -> None:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--node", required=True, choices=["unoq", "pi5"], help="the receiver this runs on")
+    ap.add_argument("--dev", type=int, default=0, help="HCI device number (0 = hci0)")
+    ap.add_argument("--seconds", type=float, default=0, help="stop after this long (0 = until Ctrl-C)")
+    args = ap.parse_args(argv)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # a service stop still turns the scan off
+    dev = open_controller(args.dev)
+    seen, started = {}, time.monotonic()
+
+    bus_host = os.environ.get("BUS_HOST", "127.0.0.1")
+    bus_port = int(os.environ.get("BUS_PORT", "5600"))
+    bus_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    emitter = make_bus_emitter(bus_sock, (bus_host, bus_port), args.node)
+
+    try:
+        scanner = BeaconScanner(dev, args.node)
+        print(f"hci{args.dev}: {scanner.mode} scan, duplicates not filtered, rx {args.node}", file=sys.stderr)
+        run(scanner, emitter, args.seconds, seen=seen)
+    except KeyboardInterrupt:
+        pass
+    except hci.HciError as e:
+        sys.exit(f"hci{args.dev}: {e}")
+    finally:
+        bus_sock.close()
+        dev.close()
+    print(summary(seen, max(time.monotonic() - started, 1e-3)), file=sys.stderr)
 
 
 if __name__ == "__main__":

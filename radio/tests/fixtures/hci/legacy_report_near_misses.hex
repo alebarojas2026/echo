@@ -1,0 +1,7 @@
+# LE Advertising Report (7.7.65.2): five adverts that look like ours but must all be dropped
+04 3e 58 02 05    # LE Meta, 88 parameter bytes, subevent 0x02, Num_Reports 5
+03 01 a1 a2 a3 a4 a5 a6 07 06 ff ff ff 52 53 58 c3            # unknown beacon letter "X"
+03 01 a1 a2 a3 a4 a5 a6 08 07 ff ff ff 52 53 45 00 c3         # "E" with an extra byte
+03 01 a1 a2 a3 a4 a5 a6 07 06 16 ff ff 52 53 45 c3            # right bytes, but Service Data (0x16)
+03 01 a1 a2 a3 a4 a5 a6 07 09 ff ff ff 52 53 45 c3            # AD length 9 runs past the 7 data bytes
+03 01 a1 a2 a3 a4 a5 a6 07 06 ff 59 00 52 53 45 c3            # "RSE" under another company id

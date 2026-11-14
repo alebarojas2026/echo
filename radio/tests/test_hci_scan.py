@@ -1,308 +1,207 @@
-"""Tests for radio.hci_scan — no hardware, no network dependencies.
-
-Fixtures are hand-crafted HCI LE advertising report packets.  Tests verify:
-  - AD structure parsing
-  - Beacon matching by manufacturer data only
-  - Contract-v2 message shape (v, type, seq, link, kind, tx, rx, dbm, src)
-  - UDP delivery to the bus socket
-  - Seq counter increments across messages from both hci_scan and wifi_rssi
-"""
-
-from __future__ import annotations
+"""Tests for radio.hci and radio.hci_scan against hand-built HCI packets (fixtures/hci)."""
 
 import json
-import re
 import socket
-import threading
-import time
-import unittest.mock as mock
-
+import struct
 import pytest
 
+from contracts.check import errors
+from radio import hci
 from radio.hci_scan import (
-    extract_mfr_data,
-    parse_adv_reports,
-    _make_rssi_message,
-    _scan_enable_cmd,
-    _scan_params_cmd,
-    BEACON_LINKS,
-    run as hci_run,
+    BeaconScanner,
+    kept,
+    make_bus_emitter,
+    run,
+    summary,
 )
-from radio.wifi_rssi import _make_message as wifi_make_message, run as wifi_run
-
-# ---------------------------------------------------------------------------
-# Synthetic HCI packet builder (same approach as pi/tests/test_radio_node.py)
-# ---------------------------------------------------------------------------
-
-def _make_adv_payload(mfr_data: bytes) -> bytes:
-    return bytes([len(mfr_data) + 1, 0xFF]) + mfr_data
+from radio.tests.fakes import FIXTURES, FakeController, fixture
 
 
-def _make_le_adv_subevent(mfr_data: bytes, rssi: int) -> bytes:
-    adv = _make_adv_payload(mfr_data)
-    return (
-        bytes([0x01])          # num_reports
-        + bytes([0x03])        # event_type non-connectable
-        + bytes([0x00])        # addr_type public
-        + bytes(6)             # addr zeros
-        + bytes([len(adv)])
-        + adv
-        + bytes([rssi & 0xFF])
-    )
+@pytest.mark.parametrize("path", sorted(FIXTURES.glob("*.hex")), ids=lambda p: p.stem)
+def test_fixture_length_byte_matches(path):
+    packet = fixture(path.stem)
+    assert packet[0] == hci.EVENT_PKT
+    assert packet[2] == len(packet) - 3
 
 
-def _make_hci_le_adv_pkt(mfr_data: bytes, rssi: int) -> bytes:
-    subevent_id = bytes([0x02])  # LE Advertising Report
-    report = _make_le_adv_subevent(mfr_data, rssi)
-    payload = subevent_id + report
-    return bytes([0x04, 0x3E, len(payload)]) + payload
+@pytest.mark.parametrize("ext, on, expected", [
+    (False, None, "01 0b 20 07 00 1000 1000 00 00"),               # passive, 10 ms / 10 ms, public, accept all
+    (False, True, "01 0c 20 02 01 00"),                            # enable, Filter_Duplicates 0
+    (False, False, "01 0c 20 02 00 00"),
+    (True, None, "01 41 20 08 00 00 01 00 1000 1000"),             # own public, accept all, 1M only: passive 10/10 ms
+    (True, True, "01 42 20 06 01 00 0000 0000"),                   # enable, Filter_Duplicates 0, no duration/period
+    (True, False, "01 42 20 06 00 00 0000 0000"),
+])
+def test_scan_command_bytes(ext, on, expected):
+    opcode, params = hci.scan_params(ext) if on is None else hci.scan_enable(ext, on)
+    assert hci.command_packet(opcode, params) == bytes.fromhex(expected)
 
 
-MFR_PI   = bytes.fromhex("FFFF525353")
-MFR_EAST = bytes.fromhex("FFFF525345")
-MFR_WEST = bytes.fromhex("FFFF525357")
-MFR_UNK  = bytes.fromhex("DEADBEEF01")
+def test_event_filter_lets_through_command_results_and_le_meta():
+    raw = hci.event_filter(hci.EV_CMD_COMPLETE, hci.EV_CMD_STATUS, hci.EV_LE_META)
+    assert len(raw) == 16  # sizeof(struct hci_ufilter) with padding; newer kernels reject less
+    assert struct.unpack("<IIIH2x", raw) == (1 << 4, (1 << 14) | (1 << 15), 1 << 30, 0)
 
 
-# ---------------------------------------------------------------------------
-# extract_mfr_data
-# ---------------------------------------------------------------------------
-
-class TestExtractMfrData:
-    def test_pi_beacon(self):
-        assert extract_mfr_data(_make_adv_payload(MFR_PI)) == MFR_PI
-
-    def test_east_beacon(self):
-        assert extract_mfr_data(_make_adv_payload(MFR_EAST)) == MFR_EAST
-
-    def test_west_beacon(self):
-        assert extract_mfr_data(_make_adv_payload(MFR_WEST)) == MFR_WEST
-
-    def test_no_mfr_data(self):
-        assert extract_mfr_data(bytes([0x02, 0x01, 0x06])) is None
-
-    def test_empty(self):
-        assert extract_mfr_data(b"") is None
-
-    def test_flags_then_mfr(self):
-        flags = bytes([0x02, 0x01, 0x06])
-        mfr = _make_adv_payload(MFR_EAST)
-        assert extract_mfr_data(flags + mfr) == MFR_EAST
+def test_supported_commands_pick_the_scan_mode():
+    for name, ext in [("read_supported_commands_ext", True), ("read_supported_commands_legacy", False)]:
+        result = hci.command_result(fixture(name), hci.READ_LOCAL_SUPPORTED_COMMANDS)
+        assert result[0] == 0 and len(result) == 65
+        assert hci.supports(result[1:], hci.EXT_SCAN_ENABLE_BIT) is ext
 
 
-# ---------------------------------------------------------------------------
-# parse_adv_reports
-# ---------------------------------------------------------------------------
-
-class TestParseAdvReports:
-    def test_pi_beacon_at_minus62(self):
-        subevent = _make_le_adv_subevent(MFR_PI, -62)
-        results = parse_adv_reports(subevent)
-        assert len(results) == 1
-        assert results[0] == (MFR_PI, -62)
-
-    def test_east_beacon_at_minus68(self):
-        subevent = _make_le_adv_subevent(MFR_EAST, -68)
-        assert parse_adv_reports(subevent)[0] == (MFR_EAST, -68)
-
-    def test_negative_rssi_two_complement(self):
-        subevent = _make_le_adv_subevent(MFR_WEST, -100)
-        _, rssi = parse_adv_reports(subevent)[0]
-        assert rssi == -100
-
-    def test_unknown_mfr_still_returned(self):
-        subevent = _make_le_adv_subevent(MFR_UNK, -55)
-        results = parse_adv_reports(subevent)
-        assert results[0][0] == MFR_UNK
-
-    def test_empty_subevent(self):
-        assert parse_adv_reports(b"") == []
+def test_command_result_matches_only_its_opcode():
+    packet = fixture("cmd_complete_scan_params_disallowed")
+    assert hci.command_result(packet, hci.LE_SET_SCAN_PARAMS) == b"\x0c"
+    assert hci.command_result(packet, hci.LE_SET_SCAN_ENABLE) is None
+    assert hci.command_result(fixture("legacy_report_east"), hci.LE_SET_SCAN_PARAMS) is None
+    status = bytes.fromhex("04 0f 04 00 01 0c 20")  # Command Status: success, 1 packet, 0x200C
+    assert hci.command_result(status, hci.LE_SET_SCAN_ENABLE) == b"\x00"
 
 
-# ---------------------------------------------------------------------------
-# BEACON_LINKS table
-# ---------------------------------------------------------------------------
-
-class TestBeaconLinks:
-    def test_all_three_beacons_present(self):
-        assert MFR_PI   in BEACON_LINKS
-        assert MFR_EAST in BEACON_LINKS
-        assert MFR_WEST in BEACON_LINKS
-
-    def test_link_ids_correct(self):
-        assert BEACON_LINKS[MFR_PI  ][1] == "pi5>unoq:ble"
-        assert BEACON_LINKS[MFR_EAST][1] == "east>unoq:ble"
-        assert BEACON_LINKS[MFR_WEST][1] == "west>unoq:ble"
-
-    def test_tx_nodes_correct(self):
-        assert BEACON_LINKS[MFR_PI  ][0] == "pi5"
-        assert BEACON_LINKS[MFR_EAST][0] == "east"
-        assert BEACON_LINKS[MFR_WEST][0] == "west"
-
-    def test_no_mac_in_keys(self):
-        mac_re = re.compile(r"\b[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}\b")
-        for k in BEACON_LINKS:
-            assert not mac_re.search(k.hex())
+def test_legacy_report_parsed_without_its_address():
+    reports = list(hci.adv_reports(fixture("legacy_report_east")))
+    assert reports == [(bytes.fromhex("020106 06ffffff525345"), -61)]
+    assert list(hci.manufacturer_data(reports[0][0])) == [bytes.fromhex("ffff525345")]
 
 
-# ---------------------------------------------------------------------------
-# HCI command shape
-# ---------------------------------------------------------------------------
-
-class TestHciCommands:
-    def test_scan_enable_cmd_duplicate_filter_off(self):
-        cmd = _scan_enable_cmd(True, filter_dupes=False)
-        # params: enable(1) + filter(1); filter = 0x00 means OFF
-        assert cmd[-1] == 0x00
-
-    def test_scan_enable_cmd_on(self):
-        cmd = _scan_enable_cmd(True, filter_dupes=False)
-        # CMD_PKT(1) + opcode(2) + param_len(1) + enable(1) + filter(1)
-        assert cmd[4] == 0x01
-
-    def test_scan_params_cmd_starts_with_cmd_pkt(self):
-        assert _scan_params_cmd()[0] == 0x01
-
-    def test_scan_params_cmd_passive(self):
-        cmd = _scan_params_cmd()
-        # scan_type byte is at params[0] = cmd[4]; 0x00 = passive
-        assert cmd[4] == 0x00
+@pytest.mark.parametrize("name, rx, expected", [
+    ("legacy_report_east", "unoq", [("east>unoq:ble", -61)]),
+    ("legacy_report_east", "pi5", [("east>pi5:ble", -61)]),
+    ("legacy_reports_three", "unoq", [("west>unoq:ble", -70), ("pi5>unoq:ble", -80)]),
+    ("legacy_reports_three", "pi5", [("west>pi5:ble", -70)]),        # the Pi never hears itself
+    ("legacy_report_near_misses", "unoq", []),
+    ("legacy_report_cut_short", "unoq", [("east>unoq:ble", -61)]),  # keeps what came before the cut
+    ("ext_report_west", "unoq", [("west>unoq:ble", -56)]),
+    ("ext_reports_two", "unoq", [("pi5>unoq:ble", -90)]),            # RSSI 127 = not available, dropped
+    ("ext_reports_two", "pi5", []),
+    ("read_supported_commands_ext", "unoq", []),
+])
+def test_only_our_beacons_are_kept(name, rx, expected):
+    assert kept(fixture(name), rx) == expected
 
 
-# ---------------------------------------------------------------------------
-# _make_rssi_message — contract-v2 shape
-# ---------------------------------------------------------------------------
+def test_near_misses_are_real_reports():
+    # they are dropped by the beacon match, not by a parse failure
+    assert len(list(hci.adv_reports(fixture("legacy_report_near_misses")))) == 5
 
-class TestMakeRssiMessage:
-    def test_shape(self):
-        msg = json.loads(_make_rssi_message("pi5>unoq:ble", "pi5", "unoq", -62, 5))
-        assert msg["v"] == 2
+
+@pytest.mark.parametrize("ext, params, enable", [
+    (True, hci.LE_SET_EXT_SCAN_PARAMS, hci.LE_SET_EXT_SCAN_ENABLE),
+    (False, hci.LE_SET_SCAN_PARAMS, hci.LE_SET_SCAN_ENABLE),
+])
+def test_scanner_uses_one_command_family(ext, params, enable):
+    fake = FakeController(ext=ext)
+    scanner = BeaconScanner(hci.Hci(fake), "unoq")
+    scanner.start()
+    scanner.stop()
+    assert scanner.mode == ("extended" if ext else "legacy")
+    assert fake.opcodes == [hci.READ_LOCAL_SUPPORTED_COMMANDS, enable, params, enable, enable]
+    on = fake.sent[3]
+    assert on[4] == 0x01 and on[5] == 0x00  # Enable 1, Filter_Duplicates 0
+
+
+def test_run_sends_each_kept_report_and_turns_the_scan_off():
+    events = [fixture("legacy_report_east"), fixture("cmd_complete_scan_params_disallowed"),
+              fixture("legacy_reports_three"), fixture("legacy_report_near_misses")]
+    fake = FakeController(events=events)
+    sent = []
+    seen = run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: sent.append(r), stop=lambda: fake.drained)
+    assert sent == [("east>unoq:ble", -61), ("west>unoq:ble", -70), ("pi5>unoq:ble", -80)]
+    assert seen == {"east>unoq:ble": [-61], "west>unoq:ble": [-70], "pi5>unoq:ble": [-80]}
+    assert fake.sent[-1] == hci.command_packet(*hci.scan_enable(False, False))
+
+
+def test_ctrl_c_keeps_readings_and_turns_the_scan_off():
+    fake = FakeController(events=[fixture("ext_report_west")], ext=True, at_end=KeyboardInterrupt)
+    seen = {}
+    with pytest.raises(KeyboardInterrupt):
+        run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: None, seen=seen)
+    assert seen == {"west>unoq:ble": [-56]}
+    assert fake.sent[-1] == hci.command_packet(*hci.scan_enable(True, False))
+
+
+def test_command_waits_past_other_traffic():
+    noise = [fixture("legacy_report_east"), fixture("cmd_complete_scan_params_disallowed")]
+    dev = hci.Hci(FakeController(noise=noise))
+    assert dev.command(*hci.scan_enable(False, True)) == b"\x00"
+
+
+def test_failed_command_names_the_status():
+    dev = hci.Hci(FakeController(status={hci.LE_SET_SCAN_PARAMS: 0x0C}))
+    with pytest.raises(hci.HciError, match="0x200B: status 0x0C Command Disallowed"):
+        dev.command(*hci.scan_params(False))
+    assert dev.command(*hci.scan_params(False), check=False) == b"\x0c"
+
+
+def test_command_without_reply_times_out():
+    class Silent(FakeController):
+        def send(self, packet):
+            self.sent.append(packet)
+
+    with pytest.raises(hci.HciError, match="no reply"):
+        hci.Hci(Silent()).command(*hci.scan_enable(False, True), timeout=0.05)
+
+
+def test_summary_lists_rates_per_beacon_link_in_nodes_json_order():
+    text = summary({"west>unoq:ble": [-50, -52], "east>unoq:ble": [-60, -62, -61, -70]}, seconds=2.0)
+    lines = text.splitlines()
+    assert lines[1].split() == ["east>unoq:ble", "4", "2.0", "-61.5"]
+    assert lines[2].split() == ["west>unoq:ble", "2", "1.0", "-51.0"]
+    assert len(lines) == 3
+
+
+def test_bus_emitter_contract_and_sequence():
+    """Verify make_bus_emitter sends section 4 rssi messages to UDP with correct seq, rx and contract compliance."""
+    events = [
+        fixture("legacy_report_east"),
+        fixture("cmd_complete_scan_params_disallowed"),
+        fixture("legacy_reports_three"),        # carries west (-70) and pi5 (-80)
+        fixture("legacy_report_near_misses"),    # unknown beacons, must not emit
+    ]
+    fake = FakeController(events=events)
+    scanner = BeaconScanner(hci.Hci(fake), "unoq")
+
+    srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    srv.bind(("127.0.0.1", 0))
+    srv.settimeout(0.5)
+    host, port = srv.getsockname()
+
+    client_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    emitter = make_bus_emitter(client_sock, (host, port), "unoq")
+
+    run(scanner, emitter, stop=lambda: fake.drained)
+    client_sock.close()
+
+    received = []
+    while True:
+        try:
+            data, _ = srv.recvfrom(4096)
+            received.append(json.loads(data.decode()))
+        except socket.timeout:
+            break
+    srv.close()
+
+    # Exactly three messages: east, west, pi5 (near misses dropped)
+    assert len(received) == 3
+
+    # Check 1: every message passes contracts.check.errors
+    for msg in received:
+        errs = errors(msg)
+        assert errs == [], f"Contract error: {errs} in {msg}"
+
+    # Check 2: seq starts at 0 and increments by 1
+    seqs = [m["seq"] for m in received]
+    assert seqs == [0, 1, 2]
+
+    # Check 3: rx is unoq
+    for msg in received:
+        assert msg["rx"] == "unoq"
         assert msg["type"] == "rssi"
+        assert msg["v"] == 2
         assert msg["src"] == "live"
-        assert msg["link"] == "pi5>unoq:ble"
         assert msg["kind"] == "ble"
-        assert msg["tx"] == "pi5"
-        assert msg["rx"] == "unoq"
-        assert msg["dbm"] == -62
-        assert msg["seq"] == 5
 
-    def test_seq_carried_through(self):
-        m0 = json.loads(_make_rssi_message("east>unoq:ble", "east", "unoq", -70, 0))
-        m1 = json.loads(_make_rssi_message("east>unoq:ble", "east", "unoq", -70, 1))
-        assert m1["seq"] == m0["seq"] + 1
-
-    def test_no_mac_in_message(self):
-        raw = _make_rssi_message("pi5>unoq:ble", "pi5", "unoq", -62, 0).decode()
-        mac_re = re.compile(r"\b[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}\b")
-        assert not mac_re.search(raw)
-
-
-# ---------------------------------------------------------------------------
-# wifi_rssi _make_message — also contract v2
-# ---------------------------------------------------------------------------
-
-class TestWifiMakeMessage:
-    def test_shape(self):
-        msg = json.loads(wifi_make_message(-65, 3))
-        assert msg["v"] == 2
-        assert msg["type"] == "rssi"
-        assert msg["src"] == "live"
-        assert msg["link"] == "pi5>unoq:wifi"
-        assert msg["kind"] == "wifi"
-        assert msg["tx"] == "pi5"
-        assert msg["rx"] == "unoq"
-        assert msg["dbm"] == -65
-        assert msg["seq"] == 3
-
-    def test_seq_increments(self):
-        m0 = json.loads(wifi_make_message(-60, 0))
-        m1 = json.loads(wifi_make_message(-60, 1))
-        assert m1["seq"] == m0["seq"] + 1
-
-
-# ---------------------------------------------------------------------------
-# hci_scan.run() — sends UDP messages from synthetic HCI packets
-# ---------------------------------------------------------------------------
-
-class TestHciScanPipeline:
-    """Test parse → filter → publish pipeline without touching sockets.
-
-    We simulate the inner loop body directly: take synthetic HCI bytes,
-    parse them, match against BEACON_LINKS, and call _make_rssi_message.
-    """
-
-    def _process_pkt(self, pkt: bytes, node: str, seq_start: int
-                     ) -> tuple[list[dict], int]:
-        """Run one iteration of the hci_scan inner loop, return (messages, next_seq)."""
-        from radio.hci_scan import (
-            HCI_EVENT_PKT, EVT_LE_META_EVENT, EVT_LE_ADVERTISING_REPORT,
-            parse_adv_reports, BEACON_LINKS, _make_rssi_message,
-        )
-        messages = []
-        seq = seq_start
-        if len(pkt) < 4 or pkt[0] != HCI_EVENT_PKT:
-            return messages, seq
-        if pkt[1] != EVT_LE_META_EVENT or pkt[3] != EVT_LE_ADVERTISING_REPORT:
-            return messages, seq
-        for mfr_data, rssi in parse_adv_reports(pkt[4:]):
-            if mfr_data not in BEACON_LINKS:
-                continue
-            tx, link_id = BEACON_LINKS[mfr_data]
-            payload = _make_rssi_message(link_id, tx, node, rssi, seq)
-            messages.append(json.loads(payload))
-            seq += 1
-        return messages, seq
-
-    def test_known_beacons_produce_messages(self):
-        all_msgs = []
-        seq = 0
-        for mfr, rssi in [(MFR_PI, -62), (MFR_EAST, -68), (MFR_WEST, -71)]:
-            pkt = _make_hci_le_adv_pkt(mfr, rssi)
-            msgs, seq = self._process_pkt(pkt, "unoq", seq)
-            all_msgs.extend(msgs)
-        assert len(all_msgs) == 3
-        links = {m["link"] for m in all_msgs}
-        assert links == {"pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble"}
-
-    def test_unknown_beacon_dropped(self):
-        pkt = _make_hci_le_adv_pkt(MFR_UNK, -55)
-        msgs, _ = self._process_pkt(pkt, "unoq", 0)
-        assert msgs == []
-
-    def test_seq_increments_monotonically(self):
-        seq = 0
-        all_msgs = []
-        for mfr in [MFR_PI, MFR_EAST, MFR_WEST]:
-            pkt = _make_hci_le_adv_pkt(mfr, -65)
-            msgs, seq = self._process_pkt(pkt, "unoq", seq)
-            all_msgs.extend(msgs)
-        seqs = [m["seq"] for m in all_msgs]
-        assert seqs == list(range(3))
-
-    def test_rssi_preserved(self):
-        pkt = _make_hci_le_adv_pkt(MFR_EAST, -73)
-        msgs, _ = self._process_pkt(pkt, "unoq", 0)
-        assert msgs[0]["dbm"] == -73
-
-    def test_node_becomes_rx(self):
-        pkt = _make_hci_le_adv_pkt(MFR_PI, -60)
-        msgs, _ = self._process_pkt(pkt, "unoq", 0)
-        assert msgs[0]["rx"] == "unoq"
-
-    def test_non_adv_pkt_ignored(self):
-        # A packet with wrong event code
-        pkt = bytes([0x04, 0x0F, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00])
-        msgs, seq = self._process_pkt(pkt, "unoq", 0)
-        assert msgs == []
-        assert seq == 0
-
-    def test_all_messages_are_contract_v2(self):
-        seq = 0
-        for mfr in [MFR_PI, MFR_EAST, MFR_WEST]:
-            pkt = _make_hci_le_adv_pkt(mfr, -65)
-            msgs, seq = self._process_pkt(pkt, "unoq", seq)
-            for m in msgs:
-                assert m["v"] == 2
-                assert m["type"] == "rssi"
-                assert m["src"] == "live"
-                assert m["kind"] == "ble"
+    # Check 4: correct links emitted
+    links = [m["link"] for m in received]
+    assert links == ["east>unoq:ble", "west>unoq:ble", "pi5>unoq:ble"]
