@@ -91,6 +91,7 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
  "narration":{"text":"...","event_id":"e123","t":1763149513000,"source":"llm","gen_ms":6120},
  "teacher":{"present":true,"zone":3,"motion":"still"},                       // null when the camera is off
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
+        // training is null unless a fit is running; while it runs: {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
  "board":{"cpu_temp_c":57.0,"cpu_mhz":2016,"cpu_pct":61}}
 {"v":2,"type":"event","t":1763149512200,"seq":120,"src":"live","id":"e123","kind":"enter","info":{"zone":2}}
    // kinds: enter, exit, zone_change, checkin, object_on, object_off, advice, advice_result, router_moved, router_home,
@@ -120,6 +121,8 @@ Windows: 1.0 s long, 0.1 s hop, on recv_t. A window's label is the majority of t
   Windows with a clipped label or with no label are dropped from training.
 Moving: foot speed > 0.25 m/s over 1 s, after a 0.5 s median filter.
 Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, and label_mode off.
+  On baseline_done the brain writes data/sessions/baseline.json: {"t": epoch ms, "session": id or null,
+  "links": {link id: {"base_dbm": n, "expected_hz": n}}}. proof/ and a brain restart read it from there.
 Link health:
 - A link is stale when its rate over the last 2 s is < 0.4 x expected_hz.
 - It is blind when stale for >= 3 s, or when pred.kind == none and |median - base| > 6 dB for >= 3 s.
