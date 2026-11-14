@@ -1,6 +1,7 @@
 import './room.css'
 import { Beams } from './beams'
 import type { Feed } from './feed'
+import { Presence } from './ghost'
 import { Mirror } from './mirror'
 import { Stage } from './stage'
 import { RoomView } from './view'
@@ -19,6 +20,7 @@ export function mountRoom(host: HTMLElement, feed: Feed): Room {
   const mirror = new Mirror(host)
   const beams = new Beams(view, mirror)
   const xray = new XrayLayer(view, mirror)
+  const presence = new Presence(view)
 
   let router: string | null = null
   feed.subscribe(({ state, stale }) => {
@@ -32,6 +34,7 @@ export function mountRoom(host: HTMLElement, feed: Feed): Room {
     }
     beams.update(state)
     xray.update(state.xray, state.health?.status === 'blind')
+    presence.update(state.pred, state.objects ?? [])
   })
   return { view, stage }
 }
