@@ -36,21 +36,39 @@ export function viewOptions(params: URLSearchParams): ViewOptions {
 // plinth, the low walls and the 1 m stands read as a scale model. A narrow 20 degree lens keeps the far edge
 // nearly as wide as the near one. Framing is for the contract's 2 m square and scales with nodes.json.
 const ELEV_DEG = 52
-const VIEW_DIR = new Vector3(0, Math.sin((ELEV_DEG * Math.PI) / 180), Math.cos((ELEV_DEG * Math.PI) / 180))
 const TARGET_M = new Vector3(0, 0.4, 0.1)
 const FIT_RADIUS_M = 1.45
 export const FOV_DEG = 20
 
-/** Points the camera at the square and backs off until it fits the narrower field of view. */
-export function fitCamera(camera: PerspectiveCamera, width: number, height: number) {
+/** Where the camera looks from: degrees above the floor (seen from the south), what it looks at, and the
+ *  radius of the sphere around that point it must fit in view. */
+export interface Shot {
+  elevDeg: number
+  target: Vector3
+  radiusM: number
+}
+
+/** The room's normal framing, scaled to nodes.json's square. */
+export function roomShot(): Shot {
+  const scale = SQUARE_M / 2
+  return { elevDeg: ELEV_DEG, target: TARGET_M.clone().multiplyScalar(scale), radiusM: FIT_RADIUS_M * scale }
+}
+
+/** Straight down on the square, north up: for lining a scan up by eye (align mode). */
+export function topShot(): Shot {
+  // 89.5 rather than 90 keeps "north up" well defined for lookAt.
+  return { elevDeg: 89.5, target: new Vector3(0, 0, 0), radiusM: FIT_RADIUS_M * (SQUARE_M / 2) }
+}
+
+/** Points the camera at the shot's target and backs off until its sphere fits the narrower field of view. */
+export function fitCamera(camera: PerspectiveCamera, width: number, height: number, shot: Shot = roomShot()) {
   camera.aspect = width / height
   const vfov = (camera.fov * Math.PI) / 180
   const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect)
-  const scale = SQUARE_M / 2
-  const target = TARGET_M.clone().multiplyScalar(scale)
-  const dist = (FIT_RADIUS_M * scale) / Math.sin(Math.min(vfov, hfov) / 2)
-  camera.position.copy(VIEW_DIR).multiplyScalar(dist).add(target)
-  camera.lookAt(target)
+  const elev = (shot.elevDeg * Math.PI) / 180
+  const dist = shot.radiusM / Math.sin(Math.min(vfov, hfov) / 2)
+  camera.position.set(0, Math.sin(elev), Math.cos(elev)).multiplyScalar(dist).add(shot.target)
+  camera.lookAt(shot.target)
   camera.updateProjectionMatrix()
   camera.updateMatrixWorld()
 }
@@ -69,6 +87,7 @@ export class RoomView {
   private lastFrameAt = 0
   private labelsDirty = true
   private readonly scratch = new Vector3()
+  private shot = roomShot()
 
   constructor(readonly host: HTMLElement, opts: ViewOptions = {}) {
     this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? false, powerPreference: 'high-performance' })
@@ -117,6 +136,14 @@ export class RoomView {
     this.requestRender()
   }
 
+  /** Moves the camera to `shot` (kept across resizes). */
+  setShot(shot: Shot) {
+    this.shot = shot
+    fitCamera(this.camera, this.width, this.height, shot)
+    this.labelsDirty = true
+    this.requestRender()
+  }
+
   requestRender() {
     if (this.frame) return
     this.frame = requestAnimationFrame((now) => this.draw(now))
@@ -128,7 +155,7 @@ export class RoomView {
     this.width = w
     this.height = h
     this.renderer.setSize(w, h, false)
-    fitCamera(this.camera, w, h)
+    fitCamera(this.camera, w, h, this.shot)
     for (const fn of this.resizeHooks) fn(w, h)
     this.labelsDirty = true
     this.requestRender()
