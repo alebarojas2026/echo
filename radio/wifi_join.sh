@@ -18,6 +18,7 @@ fi
 
 : "${SENSING_SSID:?set SENSING_SSID in .env}"
 : "${SENSING_PSK:?set SENSING_PSK in .env}"
+SENSING_BSSID="${SENSING_BSSID:-${WIFI_BSSID:-}}"
 : "${SENSING_BSSID:?set SENSING_BSSID in .env}"
 WIFI_IFACE="${WIFI_IFACE:-wlan0}"
 

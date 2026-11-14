@@ -36,7 +36,7 @@ import time
 # ---------------------------------------------------------------------------
 
 IFACE: str = os.environ.get("WIFI_IFACE", "wlan0")
-BSSID: str = os.environ.get("WIFI_BSSID", "")  # required at runtime
+BSSID: str = os.environ.get("WIFI_BSSID") or os.environ.get("SENSING_BSSID", "")
 BUS_HOST: str = os.environ.get("BUS_HOST", "127.0.0.1")
 BUS_PORT: int = int(os.environ.get("BUS_PORT", "5600"))
 RATE_HZ: float = float(os.environ.get("RATE_HZ", "25"))
@@ -101,8 +101,8 @@ def run(iface: str = IFACE, bssid: str = BSSID,
         rate_hz: float = RATE_HZ) -> None:
     if not bssid:
         raise RuntimeError(
-            "WIFI_BSSID is not set.  Export it in the shell before starting "
-            "(never commit it to the repo)."
+            "WIFI_BSSID or SENSING_BSSID is not set.  Export it in the shell or .env "
+            "before starting (never commit it to the repo)."
         )
 
     interval = 1.0 / rate_hz
@@ -127,12 +127,6 @@ def run(iface: str = IFACE, bssid: str = BSSID,
                 sock.sendto(payload, (bus_host, bus_port))
                 seq += 1
             prev_rx_packets = rx_pkts
-        elif dbm is not None:
-            # Fallback if rx_packets could not be parsed
-            errors = 0
-            payload = _make_message(dbm, seq)
-            sock.sendto(payload, (bus_host, bus_port))
-            seq += 1
         else:
             errors += 1
             if errors >= max_consecutive_errors:
