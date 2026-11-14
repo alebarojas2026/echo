@@ -12,6 +12,7 @@ cmd messages back from the screens. Commands are also passed to the bus on
 """
 import argparse
 import asyncio
+import errno
 import json
 import logging
 import os
@@ -61,7 +62,7 @@ class _BusIn(asyncio.DatagramProtocol):
 
 async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=WS_HOSTS, ws_port=8765,
               mode_file=None, feed_clock=False, nodes_file=NODES_JSON, sessions_dir=None,
-              ready=None, stop=None):
+              ready=None, stop=None, retry_s=2.0):
     """Run until `stop` (an asyncio.Event) is set. `ready` gets the ports actually bound."""
     loop = asyncio.get_running_loop()
     out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -102,14 +103,32 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
         finally:
             clients.discard(ws)
 
-    servers = []
+    servers, waiting = [], []
     for host in ws_hosts:
         try:
             servers.append(await serve(screen, host, ws_port))
-        except OSError as e:  # 192.168.77.2 only exists on the board
-            log.warning("not listening on %s:%s (%s)", host, ws_port, e)
+        except OSError as e:
+            if e.errno != errno.EADDRNOTAVAIL:
+                raise
+            # The address isn't on this machine yet: on the board, the brain starts
+            # before the Ethernet link is up. Keep trying in the background.
+            log.warning("%s:%s is not up yet (%s); retrying every %g s", host, ws_port, e, retry_s)
+            waiting.append(host)
     if not servers:
         raise OSError(f"could not listen on any of {ws_hosts}")
+    port = servers[0].sockets[0].getsockname()[1]   # the same port everywhere, also when ws_port is 0
+
+    async def listen_later(host):
+        while True:
+            await asyncio.sleep(retry_s)
+            try:
+                servers.append(await serve(screen, host, port))
+            except OSError:
+                continue
+            log.info("now listening on %s:%s", host, port)
+            return
+
+    retries = [asyncio.create_task(listen_later(host)) for host in waiting]
     if ready is not None:
         ready.set_result({"udp": udp.get_extra_info("sockname")[1],
                           "ws": servers[0].sockets[0].getsockname()[1], "brain": brain})
@@ -124,6 +143,8 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
                 broadcast(clients, json.dumps(msg, separators=(",", ":")))
             await asyncio.sleep(STATE_EVERY_S)
     finally:
+        for task in retries:
+            task.cancel()
         for s in servers:
             s.close()
         udp.close()
