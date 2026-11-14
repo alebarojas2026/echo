@@ -106,7 +106,7 @@ def test_same_ref_restarts_nothing(repo):
 @pytest.mark.parametrize("path, expected", [
     ("bus/core.py", {"radio-sight-bus"}),
     ("radio/hci_scan.py", {"radio-sight-wifi-rssi", "radio-sight-hci-scan"}),
-    ("radio/nodes.json", {"radio-sight-wifi-rssi", "radio-sight-hci-scan", "radio-sight-brain"}),
+    ("radio/nodes.json", {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan", "radio-sight-brain"}),
     ("advisor/advice.py", {"radio-sight-brain"}),
     ("board/serve.py", {"radio-sight-serve"}),
     ("narrator/narrate.py", {"radio-sight-narrate"}),

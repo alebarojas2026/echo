@@ -16,6 +16,9 @@ An open recording outlives the bus process: data/sessions/.open names it until
 record_stop, so a bus that crashed or was restarted carries on appending to the
 same file (if it was written to in the last RESUME_WITHIN_S seconds) and says so.
 
+Every 30 s the log has a line per producer (received, lost, restarts) and one line with the rssi
+rate of each link in radio/nodes.json, naming the links that sent nothing.
+
 A producer is one sending socket (address and port). Each process should send
 from a single socket for its whole life, or its seq gaps can't be counted.
 """
@@ -39,6 +42,14 @@ OPEN_MARK = ".open"
 RESUME_WITHIN_S = 600
 
 log = logging.getLogger("bus")
+
+
+def load_link_ids(path=REPO / "radio" / "nodes.json") -> list:
+    """The link ids in radio/nodes.json, in its order; [] if it can't be read."""
+    try:
+        return [link["id"] for link in json.loads(Path(path).read_text(encoding="utf-8"))["links"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
 
 
 def now_ms() -> int:
@@ -161,6 +172,8 @@ class Bus:
         self.seq = 0  # our own counter, for the meta lines we write
         self._lost_at_start = 0
         self._warned = set()
+        self.link_ids = load_link_ids()
+        self.link_counts: dict = {}
 
     def lost(self) -> int:
         return sum(p.lost for p in self.producers.values())
@@ -186,6 +199,8 @@ class Bus:
         producer = self.producers.get(key)
         if producer is None:
             producer = self.producers[key] = Producer(msg["type"], msg.get("src"))
+        if msg["type"] == "rssi" and isinstance(msg.get("link"), str):
+            self.link_counts[msg["link"]] = self.link_counts.get(msg["link"], 0) + 1
         gap = producer.see(msg.get("seq"))
         if gap:
             log.info("%s (%s) lost %d before seq %s", key, producer.type, gap, msg.get("seq"))
@@ -236,6 +251,14 @@ class Bus:
                  self.recorder.session, self.recorder.lines, self.lost() - self._lost_at_start)
         self.recorder.stop()
 
+    def link_report(self, seconds: float) -> str:
+        """rssi per link since the last call, nodes.json order first, then the links that sent nothing."""
+        counts, self.link_counts = self.link_counts, {}
+        order = [link for link in self.link_ids if link in counts] + sorted(set(counts) - set(self.link_ids))
+        flowing = ", ".join(f"{link} {counts[link] / seconds:.1f}/s" for link in order) or "no rssi"
+        silent = [link for link in self.link_ids if link not in counts]
+        return f"links: {flowing}" + (f"; nothing from: {', '.join(silent)}" if silent else "")
+
     def report(self) -> list[str]:
         lines = [f"{key} ({p.type}, {p.src}): {p.received} received, {p.lost} lost, "
                  f"{p.restarts} restarts" for key, p in sorted(self.producers.items())]
@@ -273,6 +296,7 @@ def serve(bus: Bus, sock: socket.socket, stop=None, stats_every: float = 30.0) -
             next_report += stats_every
             for line in bus.report():
                 log.info(line)
+            log.info(bus.link_report(stats_every))
 
 
 def open_sockets(host: str, port: int, forward: tuple[str, int]):
