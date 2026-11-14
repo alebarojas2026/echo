@@ -1,7 +1,9 @@
 // Rules for the "Can you hide from Wi-Fi?" crowd game. No DOM in here, so it can be tested with node.
 // Message shapes come from CONTRACTS.md v2, section 5.
 
-export const ZONES = { 1: 'Bed', 2: 'Chair', 3: 'Hall', 4: 'Bathroom' }
+import { ZONES } from './zones.js'
+
+export { ZONES }
 export const STALE_MS = 1000 // contract section 6: NO DATA when the last state is older than 1 s
 export const STORE_KEY = 'radio-sight-hide-tally'
 
