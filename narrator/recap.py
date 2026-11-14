@@ -171,11 +171,10 @@ class Recap:
         text, source, model, why = self.text(events)
         if not text:
             return None
-        t = nar.clock()
-        nar.seq += 1
-        msg = {"v": 2, "type": "narration", "t": t, "seq": nar.seq, "src": reset.get("src", "live"),
-               "text": text, "event_id": reset.get("id"), "event_kind": "recap",
-               "gen_ms": t - start, "source": source, "model": model}
-        nar.send(msg)
-        n.log(f"{reset.get('id')} recap of {len(events)} events -> {source} {t - start} ms ({why}): {text}")
+        gen_ms = nar.clock() - start
+        # Same 8 s spacing as every sentence, so the recap isn't sent right after one and the
+        # next judge's first sentence can't replace it a second later.
+        msg = nar.send_spaced(text=text, event_id=reset.get("id"), event_kind="recap", gen_ms=gen_ms,
+                              source=source, model=model, src=reset.get("src", "live"))
+        n.log(f"{reset.get('id')} recap of {len(events)} events -> {source} {gen_ms} ms ({why}): {text}")
         return msg

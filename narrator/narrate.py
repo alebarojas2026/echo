@@ -224,6 +224,9 @@ class Narrator:
         self.seq = 0
         self.last_start_ms = None   # when the last sentence started being written
         self.last_sent_ms = None
+        # narrate() and the recap (narrator/recap.py) run on their own threads and share the
+        # gap, seq and socket: whoever sends holds this from the gap wait through the send.
+        self.lock = threading.Lock()
 
     def observe(self, msg: dict) -> None:
         """Take any message from the brain."""
@@ -281,19 +284,25 @@ class Narrator:
         start = self.clock()
         text, source, model, why = self.sentence(event)
         gen_ms = self.clock() - start
-        if self.last_sent_ms is not None:   # a quick sentence after a slow one waits its turn:
-            wait_ms = self.last_sent_ms + self.gap_ms - self.clock()   # the screen gets one per 8 s
-            if wait_ms > 0:
-                self.sleep(wait_ms / 1000)
-        t = self.clock()
-        self.seq += 1
-        msg = {"v": 2, "type": "narration", "t": t, "seq": self.seq, "src": event.get("src", "live"),
-               "text": text, "event_id": event.get("id"), "event_kind": event["kind"],
-               "gen_ms": gen_ms, "source": source, "model": model}
-        self.send(msg)
-        self.last_sent_ms = t
+        msg = self.send_spaced(text=text, event_id=event.get("id"), event_kind=event["kind"],
+                               gen_ms=gen_ms, source=source, model=model, src=event.get("src", "live"))
         log(f"{event.get('id')} {event['kind']} -> {source} {gen_ms} ms ({why}): {text}")
         return msg
+
+    def send_spaced(self, src: str, **fields) -> dict:
+        """Send one narration no sooner than gap_ms after the last one, and return it.
+        A quick sentence after a slow one waits its turn: the screen gets one per 8 s."""
+        with self.lock:
+            if self.last_sent_ms is not None:
+                wait_ms = self.last_sent_ms + self.gap_ms - self.clock()
+                if wait_ms > 0:
+                    self.sleep(wait_ms / 1000)
+            t = self.clock()
+            self.seq += 1
+            msg = {"v": 2, "type": "narration", "t": t, "seq": self.seq, "src": src, **fields}
+            self.send(msg)
+            self.last_sent_ms = t
+            return msg
 
     def step(self) -> dict | None:
         event = self.due(self.clock())

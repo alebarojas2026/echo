@@ -147,3 +147,55 @@ def test_serve_writes_the_recap_when_the_reset_arrives():
     nar = n.Narrator(lambda m: ("", None), sent.append)
     asyncio.run(n.serve(feed(), nar, poll_s=0.01, recap=r.Recap(nar, lambda m: (GOOD, "test-model"))))
     assert [(m["event_kind"], m["text"]) for m in sent] == [("recap", GOOD)]
+
+
+class FakeTime:
+    """A clock whose sleep moves it forward, so the 8 s spacing is checked without waiting."""
+
+    def __init__(self, t):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.t += round(seconds * 1000)
+
+
+def test_recap_keeps_the_8_s_spacing_on_both_sides():
+    clock, sent = FakeTime(NOW), []
+    nar = n.Narrator(lambda m: ("Someone just stepped into zone 2.", "test-model"), sent.append,
+                     clock=clock, sleep=clock.sleep)
+    rc = r.Recap(nar, lambda m: (GOOD, "test-model"))
+    first = ev(0, "enter", zone=2)
+    nar.observe(first)
+    rc.observe(first)
+    nar.step()                                    # a sentence at 0 s
+    clock.t = NOW + 1000
+    reset = dict(RESET, t=clock.t)
+    rc.write(rc.observe(reset), reset)            # the reset a second later: the recap waits for 8 s
+    clock.t = NOW + 9000
+    nar.observe(ev(9, "enter", id="e9", zone=3))  # the next judge walks in at 9 s
+    nar.step()
+    assert [(m["event_kind"], m["t"] - NOW, m["seq"]) for m in sent] == [
+        ("enter", 0, 1), ("recap", 8000, 2), ("enter", 16000, 3)]
+
+
+def test_recap_and_sentence_on_two_threads_never_share_a_seq_or_the_gap():
+    import threading
+
+    sent = []
+    nar = n.Narrator(lambda m: ("Someone just stepped into zone 2.", "test-model"), sent.append,
+                     gap_ms=200)
+    rc = r.Recap(nar, lambda m: (GOOD, "test-model"))
+    rc.observe(DEMO[0])
+    events = rc.observe(RESET)
+    threads = [threading.Thread(target=nar.narrate, args=(ev(0, "enter", zone=2),)) for _ in range(3)]
+    threads.append(threading.Thread(target=rc.write, args=(events, RESET)))
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert sorted(m["seq"] for m in sent) == [1, 2, 3, 4]
+    times = sorted(m["t"] for m in sent)
+    assert all(b - a >= 200 for a, b in zip(times, times[1:]))
