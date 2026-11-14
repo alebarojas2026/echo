@@ -1,0 +1,86 @@
+import './judge.css'
+import type { StateMsg } from '../room/contract'
+import type { Feed } from '../room/feed'
+import { fetchProof } from '../room/hud-host'
+import type { Proof } from './state'
+import { judgeMoment } from './judge-moment'
+
+type Panel = { update(state: StateMsg | null, stale: boolean): void; dispose?(): void }
+type PanelModule = { mountPanel(root: HTMLElement): Panel }
+const extraPanels = import.meta.glob<PanelModule>('./judge-*-panel.ts', { eager: true })
+const controlModule = import.meta.glob<{ mountHudControls(root: HTMLElement, send: (message: { cmd: Parameters<Feed['send']>[0]; args: Record<string, string> }) => void): void }>('./controls.ts', { eager: true })
+
+export function mountHud(root: HTMLElement, feed: Feed | null) {
+  root.classList.add('judge')
+  root.innerHTML = `
+    <header><span>Radio Sight</span><span data-testid="source-badge"></span></header>
+    <section class="judge-moment" aria-live="polite"><h1 data-testid="judge-headline"></h1><p data-testid="judge-detail"></p></section>
+    <div class="judge-extra"></div>
+    <p data-testid="cam-status"></p>
+    <p class="judge-narrator" data-testid="narrator-text"></p>
+    <footer><dl></dl></footer>
+    <aside class="hud-operator" hidden aria-label="Operator controls"><h2>Operator controls</h2><div class="operator-controls"></div><dl class="debug"></dl></aside>
+  `
+  const field = (id: string) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`)!
+  const set = (id: string, text: string) => { field(id).textContent = text }
+  const debug = root.querySelector('.debug')!
+  for (const id of ['pred-zone', 'pred-zone-set', 'pred-kind', 'pred-motion', 'why-links', 'router-spot', 'narrator-source', 'no-data', 'sensor-blind']) {
+    const value = document.createElement('dd')
+    value.dataset.testid = id
+    debug.append(value)
+  }
+  const proofLabels = { 'zone-score': 'Zone agreement', 'person-object-score': 'Person / object', 'train-seconds': 'Train time', 'ms-per-decision': 'Per decision', watts: 'Watts', 'bytes-out': 'Bytes out', 'images-stored': 'Images stored', 'models-count': 'Models' }
+  const metrics = root.querySelector('footer dl')!
+  for (const [id, label] of Object.entries(proofLabels)) {
+    const item = document.createElement('div')
+    item.innerHTML = `<dt>${label}</dt><dd data-testid="${id}">__</dd>`
+    metrics.append(item)
+  }
+  const panels = Object.values(extraPanels).map(module => {
+    const container = document.createElement('section')
+    root.querySelector('.judge-extra')!.append(container)
+    return module.mountPanel(container)
+  })
+  const operator = root.querySelector<HTMLElement>('.hud-operator')!
+  operator.hidden = new URLSearchParams(location.search).get('op') !== '1'
+  Object.values(controlModule)[0]?.mountHudControls(root.querySelector('.operator-controls')!, message => feed?.send(message.cmd, message.args))
+  const key = (event: KeyboardEvent) => {
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || (event.target as HTMLElement)?.closest('input,select,textarea,[contenteditable]')) return
+    if (event.key.toLowerCase() === 'o') operator.hidden = !operator.hidden
+    if (event.key === 'Escape') operator.hidden = true
+  }
+  document.addEventListener('keydown', key)
+  let disposed = false
+  const render = (state: StateMsg | null, stale: boolean) => {
+    const [headline, detail] = judgeMoment(state, stale)
+    set('judge-headline', headline)
+    set('judge-detail', detail)
+    set('source-badge', state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO')
+    set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] : '')
+    set('narrator-text', !stale ? state?.narration?.text ?? '' : '')
+    field('narrator-text').hidden = !field('narrator-text').textContent
+    set('pred-zone', state?.pred?.zone ? String(state.pred.zone) : '__')
+    set('pred-zone-set', state?.pred?.zone_set.join(' or ') ?? '__')
+    set('pred-kind', state?.pred?.kind ?? '__')
+    set('pred-motion', state?.pred?.motion ?? '__')
+    set('why-links', state?.pred?.why.join(', ') ?? '')
+    set('router-spot', state?.router ?? '')
+    set('narrator-source', state?.narration?.source ?? '')
+    set('no-data', stale || !state ? 'No data' : '')
+    set('sensor-blind', !stale && state?.health.status === 'blind' ? 'Sensor blind' : '')
+    panels.forEach(panel => panel.update(state, stale))
+  }
+  render(null, true)
+  const unsubscribe = feed?.subscribe(({ state, stale }) => render(state, stale))
+  const number = (value: number | null | undefined, suffix = '') => Number.isFinite(value) ? `${value}${suffix}` : '__'
+  const score = (value: { correct: number | null; total: number | null } | null | undefined) => value?.correct != null && value.total ? number(Math.round(100 * value.correct / value.total), '%') : '__'
+  const refresh = async () => {
+    const proof = await fetchProof() as Proof | null
+    if (disposed) return
+    const values = [score(proof?.zone), score(proof?.person_vs_object), number(proof?.train_s, ' s'), number(proof?.ms_per_decision?.p50, ' ms'), number(proof?.watts?.radio_only), number(proof?.bytes_out), number(proof?.images_stored), number(proof?.models_on_board)]
+    Object.keys(proofLabels).forEach((id, index) => set(id, values[index]))
+  }
+  void refresh()
+  const timer = setInterval(refresh, 30000)
+  return () => { disposed = true; clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+}

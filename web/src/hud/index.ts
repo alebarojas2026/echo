@@ -100,3 +100,4 @@ export function renderHud(root: HTMLElement, state: HudState) {
   }
   root.dataset.movement = state.checkin ? 'check-in' : state.movement
 }
+export { mountHud } from './judge'
