@@ -13,14 +13,17 @@ def measured(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def prepare_update(proof, commit):
+def prepare_update(proof, commit, measured_at=None):
     if measured(proof) and proof.get("commit") not in {None, commit}:
         raise ValueError("proof has measurements from another commit; rerun proof.score at this commit")
     out = dict(proof)
+    if not measured(proof):
+        out["commit"] = commit
+        out["measured_at"] = measured_at or datetime.now(timezone.utc).isoformat()
     if not out.get("commit"):
         out["commit"] = commit
     if not out.get("measured_at"):
-        out["measured_at"] = datetime.now(timezone.utc).isoformat()
+        out["measured_at"] = measured_at or datetime.now(timezone.utc).isoformat()
     return out
 
 

@@ -142,6 +142,7 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
     correct = total = baseline_correct = baseline_total = po_correct = po_total = 0
     false_alarms = empty_ms = 0
     durations, clusters, used, walkers = [], [], [], set()
+    missing_walker = False
     for session in sessions:
         ordered = sorted(session["messages"], key=lambda m: m["recv_t"])
         times = [m["recv_t"] for m in ordered]
@@ -180,10 +181,12 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
             used.append(session["meta"]["session"])
             if session["meta"].get("walker"):
                 walkers.add(session["meta"]["walker"])
+            else:
+                missing_walker = True
         correct += sc
         total += sn
     return {"zone": {"correct": correct if total else None, "total": total or None,
-                     "ci95": cluster_interval(clusters), "sessions": used, "walkers": len(walkers) if used else None,
+                     "ci95": cluster_interval(clusters), "sessions": used, "walkers": len(walkers) if used and not missing_walker else None,
                      "method": ("SYNTHETIC SELF-TEST; " if allow_sim else "") + "held-out recv_t windows; 95% session bootstrap, 2000 draws; see proof/README.md"},
             "threshold_zone": {"correct": baseline_correct if baseline_total else None, "total": baseline_total or None},
             "person_vs_object": {"correct": po_correct if po_total else None, "total": po_total or None,
@@ -203,6 +206,20 @@ def read_baseline(path):
         return ({k: v["base_dbm"] for k, v in data["links"].items()},
                 {k: v["expected_hz"] for k, v in data["links"].items()})
     return data["base_dbm"], data["expected_hz"]
+
+
+def merge_scored(proof, report):
+    from proof.provenance import prepare_update
+    out = prepare_update(proof, report["commit"], report["measured_at"])
+    for key in ("zone", "threshold_zone", "person_vs_object"):
+        out[key] = report[key]
+    if report["train_s"] is not None:
+        out["train_s"] = report["train_s"]
+    if report["ms_per_decision"]["p50"] is not None:
+        out["ms_per_decision"] = report["ms_per_decision"]
+    for key, value in report.items():
+        out.setdefault(key, value)
+    return out
 
 
 def main():
@@ -234,6 +251,8 @@ def main():
     adapter = BrainReplay(model, base, rates)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     report = score(heldout, adapter, args.on_board, args.allow_sim, commit)
+    if args.output.exists():
+        report = merge_scored(json.loads(args.output.read_text()), report)
     args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
 
 
