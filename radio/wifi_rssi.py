@@ -171,24 +171,44 @@ class Reader:
 
 
 class Pinger:
-    """Keeps a `ping` to the Pi running, so the Pi sends a frame `hz` times a second."""
+    """Keeps a `ping` to the Pi running, so the Pi sends a frame `hz` times a second.
+
+    When ping exits it says so once, with the exit code, and again once ping has run for
+    STEADY_S: in between, readings come at the beacon rate only.
+    """
+
+    STEADY_S = 5.0
 
     def __init__(self, host: str, hz: float, popen=subprocess.Popen, clock=time.monotonic,
                  retry_s: float = 2.0, say=log):
         self.cmd = ["ping", "-n", "-q", "-i", f"{1.0 / hz:.3f}", host] if hz > 0 else None
         self.popen, self.clock, self.retry_s, self.say = popen, clock, retry_s, say
         self.proc = None
-        self.next_try = 0.0
+        self.next_try = self.started = 0.0
+        self.failing = False
 
     def check(self) -> None:
         """Start ping if it isn't running (it exits while the hotspot is down), at most every retry_s."""
-        if self.cmd is None or (self.proc is not None and self.proc.poll() is None):
+        if self.cmd is None:
             return
         now = self.clock()
+        if self.proc is not None:
+            code = self.proc.poll()
+            if code is None:
+                if self.failing and now - self.started >= self.STEADY_S:
+                    self.say(f"ping to {self.cmd[-1]} running again")
+                    self.failing = False
+                return
+            if not self.failing:
+                self.say(f"ping to {self.cmd[-1]} exited ({code}): readings come at the beacon rate "
+                         f"until it runs; trying again every {self.retry_s:g} s")
+                self.failing = True
+            self.proc = None
         if now < self.next_try:
             return
         self.next_try = now + self.retry_s
         try:
+            self.started = now
             self.proc = self.popen(self.cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
         except OSError as e:
