@@ -2,7 +2,8 @@ import pytest
 
 from sim import fake
 
-NAMES = ["zone_tour", "stand_still", "empty_room", "metal_object"]
+NAMES = ["zone_tour", "stand_still", "empty_room", "metal_object",
+         "wave_checkin", "tray_t1", "router_move", "dropped_link", "camera_unplug"]
 
 
 def labels(name):
@@ -39,7 +40,7 @@ def test_stand_still_is_still_for_15_seconds():
     assert {e["zone"] for e in still} == {4}  # Bathroom: the 10 s alert zone
 
 
-@pytest.mark.parametrize("name", ["empty_room", "metal_object"])
+@pytest.mark.parametrize("name", ["empty_room", "metal_object", "tray_t1", "router_move"])
 def test_nobody_home(name):
     assert not any(e["present"] or e["motion"] for e in labels(name))
     assert {e["zone"] for e in labels(name)} == {0}
