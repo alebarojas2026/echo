@@ -19,7 +19,8 @@ static_db over the cells inside its ellipse (excess path <= 0.1 m, as in
 Wilson & Patwari). The spot with the lowest sum wins.
 
 The router is assumed to sit at S-home. before_dbm and after_dbm stay null;
-the brain fills them around router_moved.
+the brain fills them around router_moved. The advice id comes from the peak
+cell and the chosen spot, so it stays the same while nothing changes.
 """
 import numpy as np
 
@@ -30,11 +31,12 @@ NEAR_LINK_M = 0.5      # its static_db peak must be this close to the Wi-Fi line
 EXCESS_PATH_M = 0.1    # link ellipse, same as the X-ray weights
 PEAK_SEARCH_M = 0.5    # look for the object's peak this far around its xy_m
 WHY_DROP_DB = 3.0      # a link dropping this much counts as evidence (object rule)
+NEXT_TO_M = 0.5        # an object without "near" is next to a node only this close
 
 
 def advise(xray, links, nodes, objects):
     """Return the section 5 advice dict, or None."""
-    if not xray or xray.get("static_db") is None or not objects:
+    if not xray or xray.get("static_db") is None or len(xray["static_db"]) == 0 or not objects:
         return None
 
     cx, cy, static = _grid(xray)
@@ -164,8 +166,10 @@ def _why(links, node_xyz, px, py):
 
 
 def _nearest_node(xy, node_xyz):
+    """The closest node within NEXT_TO_M of xy, or None."""
     p = np.asarray(xy[:2], dtype=float)
-    return min(node_xyz, key=lambda n: float(np.linalg.norm(node_xyz[n][:2] - p)))
+    node = min(node_xyz, key=lambda n: float(np.linalg.norm(node_xyz[n][:2] - p)))
+    return node if np.linalg.norm(node_xyz[node][:2] - p) <= NEXT_TO_M else None
 
 
 def _r2(v):
@@ -198,7 +202,7 @@ def _text(near, tx, rx, nodes, move_m, home, receiver):
     elif place:
         first = f"An obstruction next to {place} is blocking the router's link to the receiver."
     else:
-        first = "An obstruction is blocking the router's link to the receiver."
+        first = "An obstruction between the router and the receiver is blocking their link."
 
     # East and west read well on the floor plan. Along y we talk about the
     # receiver instead of a compass word.
