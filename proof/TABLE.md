@@ -13,7 +13,8 @@ cannot be mistaken for completed trials. Synthetic reports, invalid numbers and
 measured rows without date/commit are rejected.
 
 Section 7 does not contain end-to-end latency, no-movement latency, independent
-coverage improvement or presence-accuracy counts. Those rows remain `__`.
+coverage improvement or presence-accuracy counts. Those rows keep their existing
+content and must be maintained by their separate measurement workflows.
 Decision p50/p95 are shown only when measured; their N remains `__` because the
 contract does not include a timing sample count. Do not infer it from zone N.
 Rows without a section 7 source are preserved exactly, including independent
