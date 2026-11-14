@@ -1,0 +1,19 @@
+{
+  "name": "camera_unplug",
+  "about": "The zone tour, but the camera is unplugged at 14 s: cam goes off and labels stop while the radio carries on.",
+  "duration_s": 32,
+  "person": [
+    {"t": 0, "x": 0.0, "y": 0.5},
+    {"t": 1, "x": 0.5, "y": 0.5},
+    {"t": 6, "x": 0.5, "y": 0.5},
+    {"t": 8, "x": 1.5, "y": 0.5},
+    {"t": 13, "x": 1.5, "y": 0.5},
+    {"t": 15, "x": 1.5, "y": 1.5},
+    {"t": 20, "x": 1.5, "y": 1.5},
+    {"t": 22, "x": 0.5, "y": 1.5},
+    {"t": 27, "x": 0.5, "y": 1.5},
+    {"t": 28, "x": 0.0, "y": 1.5},
+    {"t": 28.1, "x": null}
+  ],
+  "camera": [{"t": 0, "state": "on"}, {"t": 14, "state": "off"}]
+}

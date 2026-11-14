@@ -149,6 +149,7 @@ def test_commands_go_to_the_bus_and_label_mode_reaches_the_teacher(tmp_path):
     brain.on_cmd(cmd("made_up"))
     assert (tmp_path / "label_mode").read_text() == "object\n" and brain.label_mode == "object"
     assert [m["cmd"] for m in sent] == ["label_mode", "label_mode", "record_start", "truth"]
+    assert brain.pop_events()[0]["info"] == {"on": True, "session": "s9"}
     assert sent[2]["args"] == {"session": "s9", "purpose": "train", "walker": "w1"}
     assert all(m["v"] == 2 and m["type"] == "cmd" for m in sent)
     assert [m["seq"] for m in sent] == [1, 2, 3, 4] and brain.truth == 3
@@ -171,3 +172,19 @@ def test_links_go_stale_when_the_feed_stops():
     clock[0] += 5_000
     s = brain.state()
     assert all(l["status"] == "stale" and l["rate_hz"] == 0 for l in s["links"]) and s["cam"] == "off"
+
+
+def test_reset_clears_the_judge_state_and_recording_events_share_one_seq():
+    brain = Brain()
+    brain.on_message({"type": "narration", "recv_t": T0_MS, "text": "hi", "event_id": "e1", "t": T0_MS,
+                      "source": "template", "gen_ms": 1})
+    assert brain.state()["narration"]["text"] == "hi"
+    brain.on_cmd(cmd("reset"))
+    brain.on_cmd(cmd("record_stop"))
+    after = brain.state()
+    events = brain.pop_events()
+    assert after["narration"] is None
+    assert [(e["kind"], e["info"]) for e in events] == [("reset", {}), ("recording", {"on": False, "session": None})]
+    assert [e["id"] for e in events] == ["e1", "e2"]
+    # state, event, event, state: one counter across both types
+    assert [events[0]["seq"], events[1]["seq"], after["seq"]] == [2, 3, 4]

@@ -1,0 +1,7 @@
+{
+  "name": "dropped_link",
+  "about": "Someone stands in zone 1 the whole time. The east beacon goes silent from 10 s to 20 s, so both east links stop (sensor blind).",
+  "duration_s": 30,
+  "person": [{"t": 0, "x": 0.5, "y": 1.5}],
+  "outages": [{"node": "east", "t_on": 10, "t_off": 20}]
+}
