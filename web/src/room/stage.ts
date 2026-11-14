@@ -151,16 +151,11 @@ export class Stage {
     this.view.requestRender()
   }
 
-  /** Where the alert's word sits: in line with the zone's name, on the side away from the node names
-   *  (toward the north edge for north zones, just above the name for south zones). */
-  alertWordAt(zone: number): Vec3 {
-    const east = zone === 2 || zone === 4
-    const north = zone === 1 || zone === 2
-    return [east ? SQUARE_M - ZONE_IN_X : ZONE_IN_X, north ? SQUARE_M - 0.07 : 0.34, 0]
-  }
-
-  /** Amber zone names for the zones the radio is weighing (pred.zone_set). */
-  markZones(zones: readonly number[]) {
-    for (const [id, el] of this.zoneLabels) el.classList.toggle('room-label--zone-set', zones.includes(id))
+  /** Amber zone names for the zones the radio is weighing (pred.zone_set); red for a fired alert's zone. */
+  markZones(zones: readonly number[], alertZone: number | null = null) {
+    for (const [id, el] of this.zoneLabels) {
+      el.classList.toggle('room-label--zone-set', zones.includes(id))
+      el.classList.toggle('room-label--zone-alert', id === alertZone)
+    }
   }
 }
