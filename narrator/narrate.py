@@ -21,6 +21,7 @@ import sys
 import threading
 import time
 import urllib.request
+from pathlib import Path
 
 WS_URL = "ws://127.0.0.1:8765/ws"
 LLM_URL = "http://127.0.0.1:8091"
@@ -40,7 +41,11 @@ EVENT_KINDS = ("enter", "exit", "zone_change", "checkin", "object_on", "object_o
 PRIORITY = ("alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
             "recalibrating", "trained", "zone_change", "exit")
 NEVER = ("router_moved", "advice")   # the screen already says these itself
-ZONES = {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}  # name, still_alert_s
+# Zone id -> (name, still_alert_s), from radio/nodes.json (CONTRACTS.md section 3) when it can be read,
+# so a new layout's zones reach the sentences and the prompt. These are the contract's zones.
+CONTRACT_ZONES = {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}
+ZONES = dict(CONTRACT_ZONES)
+NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 NODES = {"unoq": "receiver", "pi5": "router", "east": "east beacon", "west": "west beacon"}
 
 # Things the screen must never say. The camera is added once it is off.
@@ -130,26 +135,53 @@ def template(kind: str, info: dict) -> str | None:
 
 # ---------------------------------------------------------------- the model
 
-SYSTEM = (
-    "You write captions for the screen of a Wi-Fi sensing demo. The room has four zones: "
-    "zone 1 (Bed), zone 2 (Chair), zone 3 (Hall) and zone 4 (Bathroom). "
-    "Rewrite the facts as one short, friendly sentence of at most 12 words. "
-    "Use only the facts given. Call a person someone. Say no movement when nobody moves. "
-    "Reply with the sentence only."
-)
-EXAMPLES = (
-    ("enter", "Someone just walked into zone 2 (Chair).",
-     "Someone just stepped into zone 2, by the chair."),
-    ("advice_result", "After the move, the router's Wi-Fi went from -71 to -63 dBm.",
-     "Moving the router lifted its Wi-Fi from -71 to -63 dBm."),
-)
+def load_zones(path=NODES_JSON) -> dict:
+    """{zone id: (name, still_alert_s)} from nodes.json, or the contract's zones if it can't be read."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            zones = {int(z["id"]): (str(z["name"]), z.get("still_alert_s")) for z in json.load(f)["zones"]}
+        return zones or dict(CONTRACT_ZONES)
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        log(f"zones from {path} not readable ({e}); using the contract's")
+        return dict(CONTRACT_ZONES)
+
+
+def set_zones(zones: dict) -> None:
+    ZONES.clear()
+    ZONES.update(zones)
+
+
+def _join(words: list) -> str:
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def system() -> str:
+    count = {1: "one zone", 2: "two zones", 3: "three zones", 4: "four zones"}.get(len(ZONES), f"{len(ZONES)} zones")
+    return ("You write captions for the screen of a Wi-Fi sensing demo. "
+            f"The room has {count}: {_join([f'zone {z} ({name})' for z, (name, _) in sorted(ZONES.items())])}. "
+            "Rewrite the facts as one short, friendly sentence of at most 12 words. "
+            "Use only the facts given. Call a person someone. Say no movement when nobody moves. "
+            "Reply with the sentence only.")
+
+
+def example_zone() -> int:
+    return 2 if 2 in ZONES else min(ZONES)
+
+
+def examples() -> tuple:
+    z = example_zone()
+    name = ZONES[z][0]
+    return (("enter", f"Someone just walked into zone {z} ({name}).",
+             f"Someone just stepped into zone {z}, by the {name.lower()}."),
+            ("advice_result", "After the move, the router's Wi-Fi went from -71 to -63 dBm.",
+             "Moving the router lifted its Wi-Fi from -71 to -63 dBm."))
 
 
 def prompt(kind: str, facts: str) -> list[dict]:
     """Chat messages for one event. Everything before the last message never changes,
     so llama-server keeps it cached and only the event itself is new work."""
-    msgs = [{"role": "system", "content": SYSTEM}]
-    for k, f, s in EXAMPLES:
+    msgs = [{"role": "system", "content": system()}]
+    for k, f, s in examples():
         msgs.append({"role": "user", "content": f"Event: {k}. Facts: {f}"})
         msgs.append({"role": "assistant", "content": s})
     msgs.append({"role": "user", "content": f"Event: {kind}. Facts: {facts}"})
@@ -223,7 +255,7 @@ class Warmer:
         start = self.clock()
         while True:
             try:
-                self.llm(prompt("enter", template("enter", {"zone": 2})))
+                self.llm(prompt("enter", template("enter", {"zone": example_zone()})))
                 log("model warm")
                 return True
             except Exception as e:
@@ -440,7 +472,9 @@ def main(argv=None) -> int:
     p.add_argument("--once", metavar="KIND", choices=EVENT_KINDS,
                    help="print the narration for one fresh event of this kind and exit; nothing is sent")
     p.add_argument("--info", default="{}", help="event info for --once, as JSON")
+    p.add_argument("--nodes", default=str(NODES_JSON), help="radio/nodes.json, for the zones")
     args = p.parse_args(argv)
+    set_zones(load_zones(args.nodes))
     llm = LlamaServer(args.llm)
 
     if args.once:
