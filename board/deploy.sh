@@ -31,7 +31,8 @@ set -euo pipefail
 USAGE="usage: board/deploy.sh <tag|sha> [--no-pi]  or  sudo board/deploy.sh --install [--no-pi]"
 
 # The units to install and run. needs: - = nothing else, pi = the Pi's hotspot
-# or beacons, link = the Ethernet link to the board.
+# or beacons, link = the Ethernet link to the board. The Pi's radio node is -:
+# it advertises and scans without the cable and forwards once it's in.
 # unit                    role   needs  unit file                                   runs from (folders end in /)
 UNITS='
 radio-sight-bus           board  -      board/units/radio-sight-bus.service         bus/ contracts/
@@ -42,7 +43,7 @@ radio-sight-brain         board  -      board/units/radio-sight-brain.service   
 radio-sight-serve         board  -      board/units/radio-sight-serve.service       board/serve.py
 radio-sight-llm           board  -      narrator/llm.service                        narrator/llm.service
 radio-sight-narrate       board  -      board/units/radio-sight-narrate.service     narrator/ contracts/
-radio-sight-radio-node    pi     link   board/units/radio-sight-radio-node.service  pi/ radio/ contracts/
+radio-sight-radio-node    pi     -      board/units/radio-sight-radio-node.service  pi/ radio/ contracts/
 '
 
 die() { echo "deploy: $*" >&2; exit 1; }
