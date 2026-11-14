@@ -1,0 +1,33 @@
+/*
+  Radio Sight screen tokens (AGENTS.md, Style). The same values as web/src/room/palette.ts, as CSS variables,
+  so the panels, the room's labels and the game page take colours from one place.
+  Each colour means one thing, and a status colour always comes with a word.
+*/
+@font-face {
+  font-family: 'Hanken Grotesk';
+  src: url('./fonts/hanken-grotesk.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --bg: #111316;        /* page and canvas */
+  --floor: #1a1d21;   /* floor and cards */
+  --edge: #353b43;      /* edges, lines, card borders */
+  --square: #6b7480;    /* the sensing square's outline; also empty bar tracks */
+  --text: #e6e8eb;
+  --text-2: #9aa3ad;
+  --link: #858e99;      /* a healthy radio link */
+  --person: #ff9f43;    /* the person, and the links behind the decision */
+  --object: #a9b4c2;    /* objects */
+  --action: #34b277;    /* something to do: router advice, the check-in */
+  --fault: #f2555a;     /* a broken link, the no-movement alert */
+
+  /* Spacing: 4 px base, 8 px grid. 4 is only for gaps inside one element. */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 40px; --s8: 48px;
+  /* Radius: cards 8, controls and badges 6, bars 2. Nested: inner = outer - padding, never more. */
+  --r-card: 8px; --r-control: 6px; --r-bar: 2px;
+
+  --sans: 'Hanken Grotesk', system-ui, sans-serif;
+}
+
