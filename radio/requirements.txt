@@ -1,0 +1,2 @@
+# Nothing to install: the radio readers (wifi_rssi, hci_scan) and the gate reports use only
+# the Python 3 standard library. Tests need pytest and contracts/requirements.txt, which CI installs.

@@ -14,7 +14,7 @@ and `python -m radio.report_hci`) checks them.
 **Setup:**
 - Pi at south node (S-home), board at north node — both at 1.0 m height.
 - Pi's 5 GHz hotspot up (`sudo bash pi/ap.sh`).
-- Board joined to sensing hotspot, power saving off.
+- Board joined to sensing hotspot, power saving off (`sudo bash radio/wifi_join.sh`).
 - `python -m radio.wifi_rssi` running on the board.
 
 **Measured sample rate:** __ samples/s
@@ -31,19 +31,30 @@ and `python -m radio.report_hci`) checks them.
 
 ## Gate 2 — Bluetooth raw scan (#20)
 
-**Pass criteria:** Pi beacon ≥ 20 adverts/s; each phone beacon ≥ 7 adverts/s.
+**Pass criteria:** the Pi beacon ≥ 20 adverts/s at the board; each phone beacon ≥ 7 adverts/s
+at the board and at the Pi.
 
 **Setup:**
-- Pi advertising as beacon S (manufacturer data `FFFF525353`).
+- Pi advertising as beacon S (manufacturer data `FFFF525353`): `radio-sight-radio-node` running on the Pi.
 - East and west phones advertising in nRF Connect as beacons E and W
-  (`FFFF525345`, `FFFF525357`).
-- `sudo python -m radio.hci_scan --node unoq` running on the board.
+  (`FFFF525345`, `FFFF525357`). They must be Android phones: an iPhone can't put manufacturer
+  data in its adverts (#289).
+- On the board, `sudo systemctl stop radio-sight-hci-scan` first (one scanner at a time), then
+  `sudo python -m radio.hci_scan --node unoq --seconds 60`. Its summary gives the three `>unoq` rows.
+  Start the service again afterwards.
+- On the Pi, the radio node's status line (`journalctl -u radio-sight-radio-node -f`, every 10 s)
+  gives the two `>pi5` rows. Use the lowest value over 60 s.
 - Confirmed in btmon: `Filter duplicates: Disabled`.
 
-| Beacon | Node ID | Adverts/s | Result |
-|--------|---------|-----------|--------|
-| pi5    | S       | __        | __     |
-| east   | E       | __        | __     |
-| west   | W       | __        | __     |
+| Link          | Beacon | Adverts/s | Result |
+|---------------|--------|-----------|--------|
+| pi5>unoq:ble  | S      | __        | __     |
+| east>unoq:ble | E      | __        | __     |
+| west>unoq:ble | W      | __        | __     |
+| east>pi5:ble  | E      | __        | __     |
+| west>pi5:ble  | W      | __        | __     |
+
+Add a row per run, or write only the lowest of the three runs: `python -m radio.report_hci`
+judges each link by its lowest rate. Write the rate as a bare number (`8.4`).
 
 **Overall Gate 2:** __
