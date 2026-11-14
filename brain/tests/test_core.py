@@ -18,12 +18,17 @@ class Feed:
     def __init__(self, brain):
         self.brain, self.t = brain, T0_MS
 
-    def play(self, path, seed=0, meta=None, mode=None, each=None):
-        msgs = sim_to_v2(path, seed=seed, mode=mode, meta=meta, t0=self.t)
+    def play(self, path, seed=0, meta=None, mode=None, each=None, states=None, noise_db=1.0):
+        """states: a list that collects (seconds into the path, state), one every 0.1 s like the live loop."""
+        msgs = sim_to_v2(path, seed=seed, mode=mode, meta=meta, t0=self.t, noise_db=noise_db)
+        last = 0
         for m in msgs:
             self.brain.on_message(m)
             if each:
                 each(m)
+            if states is not None and m["recv_t"] - last >= 100:
+                last = m["recv_t"]
+                states.append(((last - self.t) / 1000, self.brain.state()))
         self.t = msgs[-1]["recv_t"] + 100
 
     def record(self, session, path, purpose="train", walker=None, **kw):
@@ -39,8 +44,10 @@ def taught(to_bus=None, **kw):
     feed.play("empty_room", seed=1)
     feed.record("s01", "empty_room", seed=2)
     feed.record("s02", "metal_object", purpose="object", seed=3)
+    feed.record("s03", "tray_t1", purpose="object", mode="object", seed=4)   # the tray, taught at T1
     for i, w in enumerate(["w1", "w2", "w3"]):
         feed.record(f"s1{i}", "zone_tour", walker=w, seed=10 + i)
+        feed.record(f"s3{i}", "stand_still", walker=w, seed=30 + i)
     feed.record("s20", "zone_tour", purpose="heldout", walker="w4", seed=20)
     brain.on_cmd(cmd("train"))
     return brain, feed
@@ -56,7 +63,10 @@ def test_state_before_anything_has_the_contract_shape_and_no_pred():
     assert set(s) == STATE_KEYS and s["v"] == 2 and s["type"] == "state"
     assert s["pred"] is None and s["model"]["trained"] is False and s["cam"] == "off"
     assert [l["id"] for l in s["links"]] == list(F.LINKS)
-    assert all(l["status"] == "stale" and l["dbm"] is None for l in s["links"])
+    assert all(l["dbm"] is None and l["rate_hz"] == 0 and l["why"] == 0.0 for l in s["links"])
+    assert s["health"] == {"status": "ok", "blind": [], "reason": None}   # nothing judged yet
+    assert s["alert"]["state"] == "none" and s["checkin"] is None and s["objects"] == []
+    assert len(s["xray"]["moving_db"]) == s["xray"]["w"] * s["xray"]["h"]
 
 
 def test_baseline_takes_20_s_and_sets_base_and_expected_rate():
@@ -86,7 +96,7 @@ def test_train_uses_train_and_object_sessions_only(ready):
     brain, _ = ready
     info = brain.state()["model"]
     assert info["trained"] and info["ver"] == "m1" and info["train_s"] is not None
-    assert info["train_sessions"] == ["s01", "s02", "s10", "s11", "s12"]  # not the held-out s20
+    assert info["train_sessions"] == ["s01", "s02", "s03", "s10", "s11", "s12", "s30", "s31", "s32"]  # not held-out s20
     assert "trained" in [e["kind"] for e in brain.events]
 
 
@@ -123,7 +133,7 @@ def test_still_s_counts_while_standing(ready):
     feed.play("stand_still", seed=5, each=lambda m: seen.append(brain.pred["still_s"]) if brain.pred else None)
     assert max(seen) > 5
     brain.on_cmd(cmd("reset_alert"))
-    assert brain._still_since is None
+    assert brain.watch.still_ms == 0
 
 
 def test_router_off_home_means_no_pred(ready):
@@ -188,3 +198,67 @@ def test_reset_clears_the_judge_state_and_recording_events_share_one_seq():
     assert [e["id"] for e in events] == ["e1", "e2"]
     # state, event, event, state: one counter across both types
     assert [events[0]["seq"], events[1]["seq"], after["seq"]] == [2, 3, 4]
+
+
+def at(states, seconds):
+    return next(s for t, s in states if t >= seconds)
+
+
+def kinds(brain):
+    return [e["kind"] for e in brain.pop_events()]
+
+
+def test_a_dropped_link_means_sensor_blind_and_no_pred():
+    brain, feed = taught()
+    brain.pop_events()
+    states = []
+    feed.play("dropped_link", seed=3, states=states)   # the east beacon is silent from 10 to 20 s
+    assert at(states, 8)["health"]["status"] == "ok" and at(states, 8)["pred"]["present"]
+    blind = at(states, 16)
+    assert blind["health"]["status"] == "blind" and blind["health"]["reason"] == "rate"
+    assert set(blind["health"]["blind"]) == {"east>unoq:ble", "east>pi5:ble"}
+    assert blind["pred"] is None                        # never "empty" while blind
+    assert at(states, 28)["health"]["status"] == "ok" and at(states, 28)["pred"] is not None
+    got = kinds(brain)
+    assert got.count("blind_on") == 1 and got.count("blind_off") == 1
+
+
+def test_the_tray_shows_up_as_an_object_and_in_the_xray():
+    brain, feed = taught()
+    brain.pop_events()
+    states = []
+    # The x-ray's static rule is std < 0.8 dB on raw readings, so this needs a quieter feed
+    # than sim's default 1 dB noise (issue raised).
+    feed.play("tray_t1", seed=3, states=states, noise_db=0.4)   # tray at T1 (1.0, 0.2) from 25 to 55 s
+    assert at(states, 20)["objects"] == []
+    placed = at(states, 45)
+    assert len(placed["objects"]) == 1 and placed["objects"][0]["near"] == "pi5"
+    assert placed["pred"]["kind"] != "person"
+    xray = placed["xray"]
+    assert len(xray["static_db"]) == xray["w"] * xray["h"] and max(xray["static_db"]) > 1
+    assert "object_on" in kinds(brain)
+
+
+def test_standing_still_alerts_and_a_wave_checks_in():
+    led_calls = []
+
+    class Led:
+        def show_zone(self, n): led_calls.append(("show_zone", n))
+        def alert(self, on): led_calls.append(("alert", on))
+        def smile(self): led_calls.append(("smile",))
+
+    brain, feed = taught(led=Led())
+    brain.pop_events()
+    del led_calls[:]
+    states = []
+    feed.play("wave_checkin", seed=1, states=states)    # still in zone 4 from 1 s, waves at 14-16.5 s
+    assert at(states, 6)["alert"]["state"] == "counting" and at(states, 6)["alert"]["limit_s"] == 10
+    assert at(states, 13.5)["alert"] == dict(at(states, 13.5)["alert"], state="check_on", zone=4)
+    assert at(states, 13.5)["pred"]["still_s"] >= 10
+    after = at(states, 18)
+    assert after["alert"]["state"] == "counting" and after["checkin"]["link"] == "pi5>unoq:wifi"
+    got = [k for k in kinds(brain) if k in ("alert_on", "checkin", "alert_off")]
+    assert got == ["alert_on", "checkin", "alert_off"]
+    assert [c for c in led_calls if c[0] != "show_zone"] == [("alert", True), ("smile",), ("alert", False)]
+    brain.on_cmd(cmd("reset"))
+    assert brain.state()["checkin"] is None

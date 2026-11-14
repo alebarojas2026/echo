@@ -21,6 +21,7 @@ from pathlib import Path
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
+from brain.alert import led_grid
 from brain.core import Brain, now_ms
 
 WS_HOSTS = ("127.0.0.1", "192.168.77.2")
@@ -71,7 +72,8 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
             log.warning("could not reach the bus: %s", e)
 
     brain = Brain(clock=None if feed_clock else now_ms, to_bus=to_bus, mode_file=mode_file,
-                  spawn=lambda job: loop.run_in_executor(None, job), board_stats=board_stats)
+                  spawn=lambda job: loop.run_in_executor(None, job), board_stats=board_stats,
+                  led=led_grid())
     udp, _ = await loop.create_datagram_endpoint(lambda: _BusIn(brain), local_addr=bus_in)
 
     async def screen(ws):

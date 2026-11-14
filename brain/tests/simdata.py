@@ -6,7 +6,7 @@ from sim import fake, wire
 T0_MS = 1_763_149_500_000
 
 
-def sim_to_v2(name, seed=0, mode=None, meta=None, t0=T0_MS):
+def sim_to_v2(name, seed=0, mode=None, meta=None, t0=T0_MS, noise_db=1.0):
     """Run a sim path. mode overrides the path's label_mode (person | object | off)."""
     path = dict(fake.load_path(name))
     if mode:
@@ -15,7 +15,7 @@ def sim_to_v2(name, seed=0, mode=None, meta=None, t0=T0_MS):
         path["meta"] = meta
     encode = wire.encoder(t0)
     out = []
-    for ev in fake.simulate(path, seed=seed):
+    for ev in fake.simulate(path, seed=seed, noise_db=noise_db):
         msg = json.loads(encode(ev))
         msg["recv_t"] = msg["t"]
         out.append(msg)

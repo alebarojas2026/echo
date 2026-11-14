@@ -3,24 +3,27 @@
 No sockets here (brain/main.py has them), so every rule can be tested with a
 fake clock. Times are board epoch ms, the same clock as the bus's recv_t.
 
-Not in this file yet, each has its own issue: link health and SENSOR BLIND,
-the x-ray and objects, check-in and the alert, recalibration and drift, and
-the narrator's enter/exit events. Their state fields are sent empty for now.
+Link health (brain/health.py), the x-ray and objects (brain/xray.py) and the
+check-in and alert (brain/alert.py) are separate modules; this file feeds them
+and puts their output into the state. Still to come, each with its own issue:
+recalibration and drift, advice, and the narrator's enter/exit events.
 """
 from __future__ import annotations
 
+import json
 import statistics
 import time
 from collections import deque
 from typing import Callable, Dict, List, Optional
 
 from brain import features as F
+from brain.alert import NODES_JSON, Watch
+from brain.health import Health
 from brain.train import Model
+from brain.xray import Xray
 
 BASELINE_MS = 20_000
 HOME = "S-home"
-RATE_WINDOW_MS = 2_000
-STALE_FRACTION = 0.4
 CAM_SILENT_MS = 3_000
 TEACHER_FRESH_MS = 1_000
 TRAIN_PURPOSES = ("train", "object")
@@ -33,9 +36,15 @@ def now_ms() -> int:
 
 class Brain:
     def __init__(self, clock: Optional[Callable[[], int]] = None, to_bus=None, mode_file=None,
-                 spawn=None, board_stats=None, links=F.LINKS):
+                 spawn=None, board_stats=None, links=F.LINKS, led=None, nodes=None):
         """clock None = follow the feed (latest recv_t), for recorded files played fast.
-        to_bus(msg) forwards a command to the bus. spawn(job) runs training off the loop."""
+        to_bus(msg) forwards a command to the bus. spawn(job) runs training off the loop.
+        led is the LED grid (brain/alert.py). nodes is radio/nodes.json, already parsed."""
+        nodes = nodes or json.loads(NODES_JSON.read_text(encoding="utf-8"))
+        self.health = Health.from_nodes(nodes)
+        self.xray = Xray.from_nodes(nodes)
+        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
+        self.raw_kind: Optional[str] = None   # the classifier's kind, even while pred is withheld
         self._clock = clock
         self.to_bus = to_bus or (lambda msg: None)
         self.mode_file = mode_file
@@ -44,7 +53,6 @@ class Brain:
         self.links = tuple(links)
         self.feed_t = 0
         self.src = "live"
-        self.history: Dict[str, deque] = {link: deque() for link in self.links}  # (recv_t, dbm)
         self.base: Dict[str, float] = {}
         self.expected_hz: Dict[str, float] = {}
         self.windower: Optional[F.Windower] = None
@@ -55,7 +63,6 @@ class Brain:
         self.training: Optional[dict] = None
         self.decision_ms: deque = deque(maxlen=200)
         self.pred: Optional[dict] = None
-        self._still_since: Optional[int] = None
         self.sessions: Dict[str, dict] = {}
         self.open_session: Optional[dict] = None
         self.router = HOME
@@ -94,8 +101,12 @@ class Brain:
                 self.label = msg
                 if self.capture and (msg.get("persons_in_frame") or 0) > 0:
                     self._start_capture()  # someone walked in: start the 20 s again
-            elif msg.get("link") in self.history:
-                self.history[msg["link"]].append((t, float(msg["dbm"])))
+            elif msg.get("link") in self.links:
+                link, dbm = msg["link"], float(msg["dbm"])
+                self.health.add(link, t, dbm)
+                self.watch.on_rssi(msg)
+                if link in self.base:
+                    self.xray.add(link, t, self.base[link] - dbm)
                 if self.capture:
                     if self.capture["start"] is None:
                         self.capture["start"] = t  # the 20 s run from the first reading
@@ -147,11 +158,13 @@ class Brain:
         self._cmd_train(args)
 
     def _cmd_reset_alert(self, args):
-        self._still_since = None
+        self.watch.reset()
 
     def _cmd_reset(self, args):
         """Between judges: clear the alert, still timer, check-in, advice and narration."""
-        self._still_since = self.narration = None
+        self.watch.reset()
+        self.watch.checkin = self.narration = None
+        self._watch_events()
         self.emit("reset", {})
 
     def _cmd_record_start(self, args):
@@ -176,10 +189,12 @@ class Brain:
 
     def _cmd_router_moved(self, args):
         self.router = args.get("spot") or "moved"
+        self._move_router(self.router)
         self.emit("router_moved", {"spot": self.router})
 
     def _cmd_router_home(self, args):
         self.router = HOME
+        self._move_router(HOME)
         self.emit("router_home", {})
 
     def _cmd_truth(self, args):
@@ -187,14 +202,21 @@ class Brain:
 
     # ---- rules ----
 
+    def _move_router(self, spot):
+        try:
+            self.xray.set_router(spot)   # the x-ray's geometry follows the router
+        except KeyError:
+            pass                         # not a spot in nodes.json
+
+    def _watch_events(self):
+        for kind, info in self.watch.pop_events():
+            self.emit(kind, info)
+
     def _start_capture(self):
         self.capture = {"start": None, "messages": []}
 
     def _tick(self):
         now = self.now()
-        for q in self.history.values():
-            while q and q[0][0] < now - 10_000:
-                q.popleft()
         if self.capture and self.capture["start"] is not None and now - self.capture["start"] >= BASELINE_MS:
             msgs, self.capture = self.capture["messages"], None
             base = F.baseline(msgs)
@@ -204,12 +226,16 @@ class Brain:
                     n = sum(1 for m in msgs if m["link"] == link)
                     self.expected_hz[link] = round(n / (BASELINE_MS / 1000), 1)
                 self.windower, self.window = F.Windower(base, self.links), None
+                self.health.set_base(base)
+                self.health.set_expected(self.expected_hz)
+                self.xray.reset()
                 self.emit("baseline_done", {"links": len(base)})
         self._decide(now)
 
     def _decide(self, now):
         if not (self.model and self.window) or self.capture or self.router != HOME:
-            self.pred, self._still_since = None, None
+            self.pred = None
+            self.watch.on_pred(now, None)   # the alert timer pauses
             return
         if self.window.get("decided"):
             return
@@ -217,12 +243,13 @@ class Brain:
         pred = self.model.predict(self.window)
         self.decision_ms.append((time.perf_counter() - t0) * 1000)
         self.window["decided"] = True
-        still = pred["kind"] == "person" and pred["motion"] == "still"
-        if not still or (self.pred and self.pred["zone"] != pred["zone"]):
-            self._still_since = None
-        if still and self._still_since is None:
-            self._still_since = self.window["end"]
-        pred["still_s"] = round((self.window["end"] - self._still_since) / 1000, 1) if still else 0.0
+        self.raw_kind = pred["kind"]
+        if self.health.blind:               # SENSOR BLIND: never report "empty"
+            self.pred = None
+            self.watch.on_pred(self.window["end"], None)
+            return
+        self.watch.on_pred(self.window["end"], pred)
+        pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
 
     def emit(self, kind: str, info: dict) -> None:
@@ -236,23 +263,6 @@ class Brain:
         return out
 
     # ---- output ----
-
-    def _links(self, now) -> List[dict]:
-        weights = self._why_weights()
-        out = []
-        for link in self.links:
-            recent = [d for t, d in self.history[link] if t > now - RATE_WINDOW_MS]
-            last_s = [d for t, d in self.history[link] if t > now - 1000]
-            dbm = round(statistics.median(last_s), 1) if last_s else None
-            base = self.base.get(link)
-            expected = self.expected_hz.get(link)
-            rate = round(len(recent) / (RATE_WINDOW_MS / 1000), 1)
-            stale = rate == 0 or (expected is not None and rate < STALE_FRACTION * expected)
-            out.append({"id": link, "dbm": dbm, "base_dbm": base,
-                        "drop_db": None if dbm is None or base is None else round(base - dbm, 1),
-                        "rate_hz": rate, "expected_hz": expected,
-                        "status": "stale" if stale else "ok", "why": weights.get(link, 0.0)})
-        return out
 
     def _why_weights(self) -> Dict[str, float]:
         """0-1 per link: how much it explains the current decision."""
@@ -268,6 +278,15 @@ class Brain:
     def state(self) -> dict:
         now = self.now()
         self._tick()
+        health = self.health.update(now, self.raw_kind, self.router == HOME, self.capture is not None)
+        if self.health.blind:
+            self.pred = None
+        xray = self.xray.update(now, self.pred["kind"] if self.pred else None)
+        for e in health["events"] + xray["events"]:
+            self.emit(e["kind"], e["info"])
+        self._watch_events()
+        weights = self._why_weights()
+        links = [dict(row, why=weights.get(row["id"], 0.0)) for row in health["links"]]
         self._seq += 1
         cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
         lb = self.label
@@ -279,9 +298,8 @@ class Brain:
         model["ms_per_decision"] = round(statistics.median(self.decision_ms), 2) if self.decision_ms else None
         model["training"] = self.training
         return {"v": 2, "type": "state", "t": now, "seq": self._seq, "src": self.src,
-                "cam": cam, "router": self.router, "links": self._links(now),
-                "health": {"status": "ok", "blind": [], "reason": None},
-                "pred": self.pred, "objects": [], "xray": None,
-                "alert": {"state": "none", "zone": None, "still_s": 0.0, "limit_s": None},
-                "checkin": None, "advice": None, "narration": self.narration, "teacher": teacher,
+                "cam": cam, "router": self.router, "links": links,
+                "health": health["health"],
+                "pred": self.pred, "objects": xray["objects"], "xray": xray["xray"],
+                "alert": self.watch.alert_block(), "checkin": self.watch.checkin, "advice": None, "narration": self.narration, "teacher": teacher,
                 "model": model, "board": self.board_stats()}
