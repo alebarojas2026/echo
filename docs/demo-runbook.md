@@ -1,6 +1,6 @@
 # Radio Sight Demo Runbook
 
-Use this checklist for the live demo: the 5-minute finalist run. For the 3-minute visit at the judging desk, use `desk-demo.md`. It follows `CONTRACTS.md` v2. Do not fill a proof value by hand: an unmeasured result stays `__`.
+Use this checklist for the live demo. It follows `CONTRACTS.md` v2. Do not fill a proof value by hand: an unmeasured result stays `__`.
 
 ## Preflight
 

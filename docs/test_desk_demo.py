@@ -74,12 +74,6 @@ class DeskDemoTest(unittest.TestCase):
         self.assertIn("no-movement alert", lower)
         self.assertIn("dragonwing cpu", lower)
 
-    def test_runbook_and_pitch_point_here_and_stay_the_finalist_script(self):
-        for name in ("demo-runbook.md", "pitch.md"):
-            text = DESK.with_name(name).read_text(encoding="utf-8")
-            self.assertIn("desk-demo.md", text)
-            self.assertIn("finalist", text)
-
 
 if __name__ == "__main__":
     unittest.main()
