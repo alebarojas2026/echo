@@ -9,5 +9,5 @@ export const LINK = 0x858e99 // a healthy radio link: neutral, so only the links
 export const PERSON = 0xff9f43 // people: shadow, ghost, the links that explain where they are
 export const PERSON_HOT = 0xffd29a // the hottest part of a person's shadow
 export const OBJECT = 0xa9b4c2 // objects: hatching and markers
-export const ACTION = 0x3dd68c // something to do: the router advice arrow
+export const ACTION = 0x34b277 // something to do: the router advice arrow, the check-in
 export const FAULT = 0xf2555a // a broken link

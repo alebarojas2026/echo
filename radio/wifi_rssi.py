@@ -2,6 +2,7 @@
 
     python -m radio.wifi_rssi                 # sends rssi to the bus (127.0.0.1:5600); the service runs this
     python -m radio.wifi_rssi --seconds 30    # the same, then prints readings/s and the median dBm
+    python -m radio.wifi_rssi --gate          # Gate 1: three clear/blocked runs, prints the rows for radio/GATE.md
 
 Polls `iw dev <iface> station get <bssid>` RATE_HZ times a second and sends the signal of the last
 frame heard from the Pi, but only when `rx packets` went up since the last poll, so the same frame
@@ -14,7 +15,8 @@ is a fresh frame from the Pi to read.
 When the board isn't joined to the hotspot yet (the Pi came up late, or rebooted), the reader keeps
 trying and says so once in the log, instead of exiting.
 
-Settings come from the environment (the service loads the repo's .env):
+Settings come from the environment. The service loads the repo's .env; a manual run reads it too,
+without overriding anything already set:
     WIFI_IFACE       the interface joined to the sensing hotspot (default wlan0)
     WIFI_BSSID       the Pi hotspot's BSSID (SENSING_BSSID also works). Never commit it.
     WIFI_PING_HOST   what to ping (default 10.42.0.1)
@@ -37,14 +39,22 @@ import statistics
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 LINK_ID = "pi5>unoq:wifi"
 TX = "pi5"
 RX = "unoq"
 KIND = "wifi"
 
-_SIGNAL_RE = re.compile(r"signal:\s+(-?\d+)\s+dBm")
+# The "signal:" line itself, never "signal avg:" or "last ack signal:" (the Pi's ACKs to our own frames).
+# ath10k reports chains, so iw prints "signal: -71 [-71, -74] dBm": take the number before the brackets.
+_SIGNAL_RE = re.compile(r"^\s*signal:\s*(-?\d+)", re.M)
 _RX_PACKETS_RE = re.compile(r"rx packets:\s+(\d+)")
+
+
+REPO = Path(__file__).resolve().parent.parent
+GATE_MIN_HZ = 20.0
+GATE_MIN_DROP_DB = 3.0
 
 
 def log(text: str) -> None:
@@ -54,6 +64,27 @@ def log(text: str) -> None:
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
+
+def load_env_file(path, environ=os.environ) -> None:
+    """KEY=VALUE lines from `path` into environ. A key that's already set wins."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        if key:
+            environ.setdefault(key, value)
+
 
 def settings(environ=os.environ) -> dict:
     return {
@@ -269,14 +300,87 @@ def run(iface: str = "wlan0", bssid: str = "", bus_host: str = "127.0.0.1", bus_
 
 
 # ---------------------------------------------------------------------------
+# Gate 1
+# ---------------------------------------------------------------------------
+
+def gate_rows(runs: list[tuple[list[int], list[int]]]) -> list[dict]:
+    """One row per (clear readings, blocked readings): the medians, the drop and PASS or FAIL."""
+    rows = []
+    for i, (clear, blocked) in enumerate(runs, 1):
+        if not clear or not blocked:
+            rows.append({"run": i, "baseline": None, "blocked": None, "drop": None, "result": "FAIL"})
+            continue
+        base, low = statistics.median(clear), statistics.median(blocked)
+        drop = round(base - low, 1)
+        rows.append({"run": i, "baseline": base, "blocked": low, "drop": drop,
+                     "result": "PASS" if drop >= GATE_MIN_DROP_DB else "FAIL"})
+    return rows
+
+
+def gate_block(rate_hz: float, rows: list[dict]) -> str:
+    """The Gate 1 lines for radio/GATE.md, in the layout radio.report_wifi reads."""
+    def num(v):
+        return "__" if v is None else f"{v:g}"
+
+    passed = rate_hz >= GATE_MIN_HZ and len(rows) >= 3 and all(r["result"] == "PASS" for r in rows)
+    lines = [f"**Measured sample rate:** {rate_hz:.1f} samples/s", "",
+             "| Run | Baseline dBm | Blocked dBm | Drop dB | Result |",
+             "|-----|-------------|------------|---------|--------|"]
+    for r in rows:
+        drop = "__" if r["drop"] is None else f"{r['drop']:.1f}"
+        lines.append(f"| {r['run']:<3} | {num(r['baseline']):<11} | {num(r['blocked']):<10} | {drop:<7} | "
+                     f"{r['result']:<6} |")
+    lines += ["", f"**Overall Gate 1:** {'PASS' if passed else 'FAIL'}"]
+    return "\n".join(lines)
+
+
+def gate(reader: Reader, pinger: Pinger, rate_hz: float, runs: int = 3, window_s: float = 10.0,
+         settle_s: float = 3.0, ask=input, say=print, clock=time.monotonic, sleep=time.sleep) -> str:
+    """`runs` times: the line clear for window_s, then a person in the line for window_s.
+
+    Each measurement starts settle_s after Enter, so whoever pressed it has time to step in or out.
+    The sample rate is all readings over all the time spent measuring.
+    """
+    pairs = []
+    total_n, total_s = 0, 0.0
+
+    def measure(what: str) -> list[int]:
+        nonlocal total_n, total_s
+        say(f"  measuring in {settle_s:g} s ({what})...")
+        sleep(settle_s)
+        values: list[int] = []
+        spent = poll_loop(reader, values.append, rate_hz, window_s, tick=pinger.check, clock=clock, sleep=sleep)
+        total_n, total_s = total_n + len(values), total_s + spent
+        say("  " + summary(values, spent))
+        return values
+
+    pinger.check()
+    try:
+        for i in range(1, runs + 1):
+            ask(f"Run {i} of {runs}: nobody between the board and the Pi. Press Enter.")
+            clear = measure("line clear")
+            ask(f"Run {i} of {runs}: stand in the middle of the line between the board and the Pi. Press Enter.")
+            blocked = measure("person in the line")
+            pairs.append((clear, blocked))
+    finally:
+        pinger.stop()
+    rate = total_n / total_s if total_s else 0.0
+    return gate_block(rate, gate_rows(pairs))
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="Wi-Fi signal reader for the pi5>unoq:wifi link")
     ap.add_argument("--seconds", type=float, default=0, help="stop after this long and print a summary")
+    ap.add_argument("--gate", action="store_true",
+                    help="Gate 1: three clear/blocked runs; prints the rows for radio/GATE.md, sends nothing")
+    ap.add_argument("--window", type=float, default=10.0, help="seconds per gate measurement")
     args = ap.parse_args(argv)
 
+    load_env_file(REPO / ".env")
     cfg = settings()
     if shutil.which("iw") is None:
         sys.exit("wifi_rssi: iw isn't installed. Run: sudo apt install iw "
@@ -287,6 +391,15 @@ def main(argv=None) -> None:
     reader = Reader(cfg["iface"], cfg["bssid"])
     pinger = Pinger(cfg["ping_host"], cfg["ping_hz"])
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # a service stop still stops the pings
+
+    if args.gate:
+        try:
+            block = gate(reader, pinger, cfg["rate_hz"], window_s=args.window)
+        except (KeyboardInterrupt, EOFError):
+            sys.exit("\ngate stopped")
+        print("\nPaste this into radio/GATE.md (Gate 1) and on issue #19:\n")
+        print(block)
+        return
 
     started = time.monotonic()
     sent: list[int] = []

@@ -205,3 +205,57 @@ def test_bus_emitter_contract_and_sequence():
     # Check 4: correct links emitted
     links = [m["link"] for m in received]
     assert links == ["east>unoq:ble", "west>unoq:ble", "pi5>unoq:ble"]
+
+
+class Clocked(FakeController):
+    """A controller on a test clock: every silent recv (a None event, or no events left) moves it on
+    by 0.5 s, like the scanner's real 0.5 s poll."""
+
+    def __init__(self, t, **kw):
+        super().__init__(**kw)
+        self.t = t
+
+    def recv(self, size):
+        if self.replies:
+            return self.replies.popleft()
+        event = self.events.popleft() if self.events else None
+        if event is None:
+            self.t[0] += 0.5
+            raise socket.timeout()
+        return event
+
+
+def scan_enables(fake):
+    on = hci.command_packet(*hci.scan_enable(False, True))
+    return sum(1 for packet in fake.sent if packet == on)
+
+
+def test_a_scan_someone_else_turned_off_is_started_again():
+    t, said = [0.0], []
+    # One advert, then the Command Complete every raw socket on hci0 sees when another program
+    # sends LE Set Scan Enable (it doesn't say on or off), then silence.
+    other_program = bytes.fromhex("040e04010c2000")
+    fake = Clocked(t, events=[fixture("legacy_report_east"), other_program])
+    run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: None, stop=lambda: t[0] >= 5.0,
+        clock=lambda: t[0], say=said.append)
+    assert scan_enables(fake) == 3          # at the start, then after 2 s and 4 s of quiet
+    assert said == ["no beacon adverts for 2 s, restarting the scan"]
+    assert fake.sent[-1] == hci.command_packet(*hci.scan_enable(False, False))
+
+
+def test_adverts_coming_back_are_said_once():
+    t, said, sent = [0.0], [], []
+    east = fixture("legacy_report_east")
+    fake = Clocked(t, events=[east] + [None] * 6 + [east, east])
+    run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: sent.append(r), stop=lambda: fake.drained,
+        clock=lambda: t[0], say=said.append)
+    assert said == ["no beacon adverts for 2 s, restarting the scan", "beacon adverts back after 3 s"]
+    assert len(sent) == 3 and scan_enables(fake) == 2
+
+
+def test_steady_adverts_never_restart_the_scan():
+    t = [0.0]
+    fake = Clocked(t, events=[fixture("legacy_report_east"), None, None, None] * 4)
+    run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: None, stop=lambda: fake.drained,
+        clock=lambda: t[0], say=lambda text: pytest.fail(text))
+    assert scan_enables(fake) == 1

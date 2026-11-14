@@ -88,20 +88,43 @@ def make_bus_emitter(sock: socket.socket, target: tuple[str, int], rx: str):
     return emit
 
 
-def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, seen=None) -> dict:
+def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, seen=None,
+        quiet_s: float = 2.0, clock=time.monotonic, say=None) -> dict:
     """Scan, calling emit(link, dbm) per kept advert, until `seconds` pass (0 = forever) or stop().
 
     Fills and returns `seen` = {link: [dbm, ...]}, which keeps what was read even after Ctrl-C.
     The scan is always turned off on the way out.
+
+    Scanning is one setting for the whole controller, and other things turn it off: another scan
+    exiting, bluetoothctl, the kernel's own background-scan check after a Bluetooth power cycle.
+    So when none of our beacons has been heard for quiet_s, the scan is started again (and again
+    every quiet_s while it stays quiet). It's said once per quiet stretch, and again when adverts
+    come back.
     """
+    say = say or (lambda text: print(text, file=sys.stderr, flush=True))
     seen = {} if seen is None else seen
-    end = time.monotonic() + seconds if seconds else None
+    end = clock() + seconds if seconds else None
     scanner.start()
+    last = quiet_since = clock()
+    restarted = False
     try:
-        while not stop() and (end is None or time.monotonic() < end):
-            for link, dbm in scanner.poll():
+        while not stop() and (end is None or clock() < end):
+            kept_now = scanner.poll()
+            now = clock()
+            if kept_now:
+                if restarted:
+                    say(f"beacon adverts back after {now - quiet_since:.0f} s")
+                    restarted = False
+                last = now
+            for link, dbm in kept_now:
                 emit(link, dbm)
                 seen.setdefault(link, []).append(dbm)
+            if quiet_s and now - last >= quiet_s:
+                if not restarted:
+                    say(f"no beacon adverts for {quiet_s:g} s, restarting the scan")
+                    restarted, quiet_since = True, last
+                scanner.start()
+                last = now
     finally:
         scanner.stop()
     return seen
