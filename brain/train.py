@@ -10,9 +10,10 @@ A session is {"meta": <meta message>, "messages": [...]}: meta carries session,
 purpose and walker (CONTRACTS.md section 4). Windows from different sessions
 never mix, because each session is windowed on its own.
 
-kind comes from the label: present -> person; label_mode object -> object;
-otherwise none. The section 6 object rule (persons_in_frame 0, a steady drop)
-is enforced by the teacher when it emits object-mode labels.
+kind follows section 6. A person present -> person. In label_mode object, a
+window is "object" only when nobody was in frame for the last 2 s and a link
+held a steady drop over them (features.steady_drop); with nobody in frame and
+no steady drop it is "none"; with anybody in frame it is left out of training.
 """
 from __future__ import annotations
 
@@ -29,10 +30,14 @@ FOREST = dict(n_estimators=60, max_depth=12, min_samples_leaf=2, n_jobs=4, rando
 ZONE_SET_MIN_P = 0.25  # a zone joins zone_set when its probability is at least this
 
 
-def kind_of(label: dict) -> str:
-    if label["present"]:
-        return "person"
-    return "object" if label.get("mode") == "object" else "none"
+def kind_of(window: dict) -> Optional[str]:
+    """person | object | none for a labeled window, or None to leave it out of training."""
+    label = window["label"]
+    if label.get("mode") == "object":
+        if window["persons_2s"] > 0:
+            return None   # someone is placing the object, or standing next to the square
+        return "object" if window["steady_links"] else "none"
+    return "person" if label["present"] else "none"
 
 
 def dataset(sessions: List[dict], base: Dict[str, float]) -> dict:
@@ -42,12 +47,13 @@ def dataset(sessions: List[dict], base: Dict[str, float]) -> dict:
         meta = s.get("meta") or {}
         for w in F.windows(s["messages"], base):
             lb = w["label"]
-            if lb is None:
+            k = kind_of(w) if lb is not None else None
+            if k is None:
                 continue
             X.append(F.vector(w))
             zone.append(lb["zone"])
             motion.append(lb["motion"] or "")
-            kind.append(kind_of(lb))
+            kind.append(k)
             walker.append(meta.get("walker"))
             session.append(meta.get("session"))
     return {
@@ -102,7 +108,7 @@ class Model:
         motion = None
         if present and self.motion is not None:
             motion = str(self.motion.predict(x)[0]) or None
-        zone_set = [z for z in ZONES[1:] if probs[z] >= ZONE_SET_MIN_P] or ([zone] if present else [])
+        zone_set = ([z for z in ZONES[1:] if probs[z] >= ZONE_SET_MIN_P] or [zone]) if present else []
         return {
             "present": present, "kind": kind, "zone": zone if present else None,
             "zone_set": zone_set, "probs": [round(float(p), 3) for p in probs],

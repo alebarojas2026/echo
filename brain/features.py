@@ -21,6 +21,13 @@ from typing import Dict, Iterable, Iterator, List, Optional
 WINDOW_MS = 1000
 HOP_MS = 100
 
+# Section 6 object rule: a link drops >= 3 dB for >= 2 s with std < 0.8 dB.
+STEADY_MS = 2000
+STEADY_DROP_DB = 3.0
+STEADY_STD_DB = 0.8
+STEADY_BIN_MS = 500    # the std is taken over 0.5 s means, the same way the x-ray does it
+STEADY_COVER = 0.9     # readings must span this much of the 2 s
+
 # Classifier links, in the fixed order used for feature vectors (section 3).
 LINKS = (
     "pi5>unoq:wifi",
@@ -74,8 +81,28 @@ def window_label(labels: List[dict]) -> Optional[dict]:
         "present": zone != 0,
         "motion": _majority(motions) if zone != 0 else None,
         "mode": _majority(modes),
+        "persons_in_frame": max((lb.get("persons_in_frame") or 0) for lb in labels),
         "n_labels": len(labels),
     }
+
+
+def steady_drop(readings: List[tuple], base_dbm: Optional[float], end: int) -> bool:
+    """The section 6 object rule for one link over the 2 s before `end`.
+
+    readings: (recv_t, dbm) pairs. True when they span the 2 s, their median sits
+    >= 3 dB under the baseline, and the std of their 0.5 s means is < 0.8 dB.
+    """
+    start = end - STEADY_MS
+    pts = [(t, d) for t, d in readings if start <= t < end]
+    if base_dbm is None or len(pts) < 2 or pts[-1][0] - pts[0][0] < STEADY_COVER * STEADY_MS:
+        return False
+    bins: Dict[int, List[float]] = {}
+    for t, d in pts:
+        bins.setdefault((t - start) // STEADY_BIN_MS, []).append(d)
+    means = [sum(v) / len(v) for v in bins.values()]
+    if len(means) < 2 or statistics.pstdev(means) >= STEADY_STD_DB:
+        return False
+    return base_dbm - statistics.median(d for _, d in pts) >= STEADY_DROP_DB
 
 
 def _majority(counts: Counter):
@@ -140,15 +167,22 @@ class Windower:
 
     def _close(self, end: int) -> dict:
         start = end - WINDOW_MS
-        for q in (self._rssi, self._labels):
-            while q and q[0][0] < start:
+        for q in (self._rssi, self._labels):   # keep 2 s: the object rule looks that far back
+            while q and q[0][0] < end - STEADY_MS:
                 q.popleft()
         per_link: Dict[str, List[float]] = {}
+        trail: Dict[str, List[tuple]] = {}
         for t, link, dbm in self._rssi:
             if t < end:
-                per_link.setdefault(link, []).append(dbm)
-        labels = [m for t, m in self._labels if t < end]
+                trail.setdefault(link, []).append((t, dbm))
+                if t >= start:
+                    per_link.setdefault(link, []).append(dbm)
+        labels = [m for t, m in self._labels if start <= t < end]
         return {
+            "steady_links": [link for link in self.links
+                             if steady_drop(trail.get(link, []), self.base.get(link), end)],
+            "persons_2s": max(((m.get("persons_in_frame") or 0) for t, m in self._labels if t < end),
+                              default=0),
             "start": start,
             "end": end,
             "base": self.base,
