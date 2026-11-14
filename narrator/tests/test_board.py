@@ -123,3 +123,26 @@ def test_the_recap_puts_the_sentence_prompt_back_in_the_cache():
     reset = ev("reset", id="e9")
     rc.write(rc.observe(reset), reset)
     assert [m["event_kind"] for m in sent] == ["recap"] and kicks == [1]
+
+
+def test_zones_come_from_nodes_json(tmp_path):
+    saved = dict(n.ZONES)
+    try:
+        # main's layout gives the same prompt as before
+        n.set_zones(n.load_zones())
+        assert n.ZONES == {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}
+        assert "The room has four zones: zone 1 (Bed), zone 2 (Chair), zone 3 (Hall) and zone 4 (Bathroom)." in n.system()
+        assert n.examples()[0][2] == "Someone just stepped into zone 2, by the chair."
+        # a new layout: its names reach the sentence, the alert limit and the prompt
+        nodes = tmp_path / "nodes.json"
+        nodes.write_text('{"zones": [{"id": 1, "name": "Desk", "still_alert_s": null},'
+                         ' {"id": 2, "name": "Sofa", "still_alert_s": 8}]}')
+        n.set_zones(n.load_zones(nodes))
+        assert n.template("enter", {"zone": 2}) == "Someone just walked into zone 2 (Sofa)."
+        assert n.template("alert_on", {"zone": 2}) == "No movement in zone 2 (Sofa) for 8 seconds; time to check in."
+        assert "The room has two zones: zone 1 (Desk) and zone 2 (Sofa)." in n.system()
+        assert r.facts([ev("enter", zone=1)]) == ["0:00 someone walked into the Desk zone"]
+        # unreadable -> the contract's zones
+        assert n.load_zones(tmp_path / "missing.json") == n.CONTRACT_ZONES
+    finally:
+        n.set_zones(saved)
