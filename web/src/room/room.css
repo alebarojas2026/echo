@@ -9,7 +9,7 @@
   --link: #858e99;
   --person: #ff9f43;
   --object: #a9b4c2;
-  --action: #3dd68c;
+  --action: #34b277;
   --fault: #f2555a;
 }
 
@@ -68,7 +68,7 @@
    scene point, so no label lands on a node cube or a beam end. */
 .room-label--zone {
   translate: 0 -50%;
-  font: 500 48px/1 Newsreader, Georgia, serif;
+  font: 600 48px/1 'Hanken Grotesk', system-ui, sans-serif;
   transition: color 0.3s ease;
 }
 
@@ -103,7 +103,7 @@
 .room-notice h2 {
   margin: 0 0 16px;
   color: var(--text);
-  font: 500 72px/1 Newsreader, Georgia, serif;
+  font: 600 72px/1 'Hanken Grotesk', system-ui, sans-serif;
 }
 
 .room-notice p {
