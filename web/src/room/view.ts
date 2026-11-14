@@ -23,6 +23,7 @@ export class RoomView {
   readonly labelLayer: HTMLElement
   private readonly labels: Label[] = []
   private readonly animators = new Set<Animator>()
+  private readonly resizeHooks: ((w: number, h: number) => void)[] = []
   private width = 1
   private height = 1
   private frame = 0
@@ -66,6 +67,12 @@ export class RoomView {
     this.requestRender()
   }
 
+  /** Calls fn with the canvas size in CSS pixels now and after every resize. */
+  onResize(fn: (w: number, h: number) => void) {
+    this.resizeHooks.push(fn)
+    fn(this.width, this.height)
+  }
+
   addAnimator(fn: Animator) {
     this.animators.add(fn)
     this.requestRender()
@@ -90,6 +97,7 @@ export class RoomView {
     this.camera.position.copy(VIEW_DIR).multiplyScalar(dist).add(TARGET)
     this.camera.lookAt(TARGET)
     this.camera.updateProjectionMatrix()
+    for (const fn of this.resizeHooks) fn(w, h)
     this.labelsDirty = true
     this.requestRender()
   }
