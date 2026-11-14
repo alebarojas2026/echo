@@ -1,0 +1,30 @@
+Station <bssid> (on wlan0)
+	inactive time:	12 ms
+	rx bytes:	91234
+	rx packets:	2051
+	tx bytes:	40512
+	tx packets:	1007
+	tx retries:	3
+	tx failed:	0
+	beacon loss:	0
+	beacon rx:	977
+	rx drop misc:	0
+	signal:  	-71 [-71, -74] dBm
+	signal avg:	-70 [-70, -73] dBm
+	beacon signal avg:	-70 dBm
+	tx bitrate:	72.2 MBit/s MCS 7 short GI
+	rx bitrate:	72.2 MBit/s MCS 7 short GI
+	rx duration:	0 us
+	last ack signal:-58 dBm
+	avg ack signal:	-58 dBm
+	authorized:	yes
+	authenticated:	yes
+	associated:	yes
+	preamble:	short
+	WMM/WME:	yes
+	MFP:		no
+	TDLS peer:	no
+	DTIM period:	2
+	beacon interval:100
+	short slot time:yes
+	connected time:	95 seconds
