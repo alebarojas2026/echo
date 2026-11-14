@@ -1,12 +1,13 @@
-import type { Advice, Alert, Checkin, CmdMsg, LinkState, ObjectMark, Pred, StateMsg, Teacher, Xray } from './contract'
+import type { Advice, Alert, Checkin, CmdMsg, LinkState, Narration, ObjectMark, Pred, StateMsg, Teacher, Xray } from './contract'
 import type { Transport } from './feed'
+import { demoScene } from './demo'
 import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
 
 // Mock state messages (CONTRACTS.md v2 section 5) for building the screen without the board.
 // src is "sim" so nothing here can pass for live, and measured numbers (train time, ms per decision,
 // before/after dBm) stay null so the panels show "__".
 //
-// ?mock= tour (default) | still | checkin | camera | between | object | blind | empty | waiting | stall
+// ?mock= tour (default) | demo | still | checkin | camera | between | object | blind | empty | waiting | stall
 //   tour    someone walks a loop through the four zones, pausing in each
 //   still   someone stays still in zone 4, the no-movement alert counts up to 10 s and fires, and after
 //           14 s a wave check-in clears it; this repeats
@@ -18,9 +19,10 @@ import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
 //   empty   nobody in the room
 //   waiting the brain is up but no link has a reading yet: links [], pred and xray null
 //   stall   states for 1 s, then nothing (NO DATA)
+//   demo    the whole demo on a 90 s loop, in the planned running order (see demo.ts)
 
 export type MockScenario =
-  | 'tour' | 'still' | 'checkin' | 'camera' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall'
+  | 'tour' | 'still' | 'checkin' | 'camera' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall' | 'demo'
 
 const SEG_MS = 5000 // tour: 3 s walking, 2 s still, per zone
 const XRAY = { w: 10, h: 10, cell_m: 0.24, origin_m: [-0.2, -0.2] as [number, number] }
@@ -100,17 +102,48 @@ export function stillTimeline(scenario: MockScenario, tMs: number, start: number
   return { alert: none, checkin: null, stillS: 0 }
 }
 
+/** Everything a mock state is built from: who and what is where, and what the board has decided. */
+export interface Scene {
+  person: { xy: [number, number]; moving: boolean } | null
+  object: [number, number] | null
+  router: string
+  blind: boolean
+  alert: Alert
+  checkin: Checkin | null
+  stillS: number
+  cam: 'on' | 'off'
+  /** Advice about the object by the router. It only reaches the state while the Wi-Fi link is dropping. */
+  advice: boolean
+  narration: Narration | null
+}
+
 export function mockState(scenario: MockScenario, seq: number, tMs: number, router = HOME_SPOT, start = Date.now() - tMs): StateMsg {
+  if (scenario === 'waiting') return { ...emptyState(seq, router), links: [] }
+  if (scenario === 'demo') return buildState(seq, tMs, demoScene(tMs, start))
   const standing: Partial<Record<MockScenario, [number, number]>> = { still: [1.5, 0.5], checkin: [1.5, 0.5], between: [1.06, 0.55] }
   const walking = scenario === 'tour' || scenario === 'camera'
   const person = walking ? tourAt(tMs) : standing[scenario] ? { xy: standing[scenario]!, moving: false } : null
   const { alert, checkin, stillS } = stillTimeline(scenario, tMs, start)
   const object = scenario === 'object' ? OBJECT_XY : null
-  const blind = scenario === 'blind'
+  return buildState(seq, tMs, {
+    person, object, router, alert, checkin, stillS,
+    blind: scenario === 'blind',
+    cam: scenario === 'camera' && tMs % 16000 < 8000 ? 'on' : 'off',
+    advice: !!object,
+    narration: null,
+  })
+}
 
+/** The drop this mock puts on a link from a person and an object, with a little steady wobble. */
+function linkDrop(id: string, i: number, person: [number, number] | null, object: [number, number] | null, router: string, tMs: number) {
+  const near = (xy: [number, number] | null, db: number) => (xy ? db * Math.exp(-((distToLink(xy, id, router) / 0.2) ** 2)) : 0)
+  return near(person, 7) + near(object, 9) + 0.3 * Math.sin(tMs / 700 + i)
+}
+
+export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
+  const { person, object, router, blind } = scene
   const links: LinkState[] = LINK_IDS.map((id, i) => {
-    const near = (xy: [number, number] | null, db: number) => (xy ? db * Math.exp(-((distToLink(xy, id, router) / 0.2) ** 2)) : 0)
-    const drop = near(person?.xy ?? null, 7) + near(object, 9) + 0.3 * Math.sin(tMs / 700 + i)
+    const drop = linkDrop(id, i, person?.xy ?? null, object, router, tMs)
     const status = blind && id === 'east>unoq:ble' ? 'blind' : 'ok'
     return {
       id,
@@ -138,12 +171,13 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
     probs[0] = Number((1 - probs.reduce((a, b) => a + b, 0)).toFixed(2))
     pred = {
       present: !!person,
-      kind: person ? 'person' : 'none',
+      // With only the tray in the square the board says "an object", not "nobody".
+      kind: person ? 'person' : object ? 'object' : 'none',
       zone,
       zone_set: set,
       probs,
       motion: person ? (person.moving ? 'moving' : 'still') : null, // present:false -> motion null
-      still_s: Number(stillS.toFixed(1)),
+      still_s: Number(scene.stillS.toFixed(1)),
       why: person ? top.slice(0, 2).map((l) => l.id) : [],
     }
   }
@@ -155,30 +189,34 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
     static_db: blob(object, 8),
     n_links: 6,
   }
-  const objects: ObjectMark[] = object ? [{ xy_m: object, near: 'pi5', since_s: tMs / 1000, drop_db: 9 }] : []
+  const objects: ObjectMark[] = object ? [{ xy_m: object, near: 'pi5', since_s: Number((tMs / 1000).toFixed(1)), drop_db: 9 }] : []
+  const wifiNow = links.find((l) => l.id === 'pi5>unoq:wifi')!.dbm!
+  // before_dbm is frozen when the router moves: the reading at S-home with the object there.
+  const wifiHome = Number((-58 - linkDrop('pi5>unoq:wifi', 0, null, object, HOME_SPOT, 0)).toFixed(1))
+  // Contract section 6: advice only while pi5>unoq:wifi is dropping by 3 dB or more.
+  const wifiDrop = links.find((l) => l.id === 'pi5>unoq:wifi')!.drop_db ?? 0
   const advice: Advice | null =
-    object && router === HOME_SPOT
+    object && scene.advice && wifiDrop >= 3
       ? {
           id: 'a1', cause: 'obstruction', near: 'pi5', xy_m: object, link: 'pi5>unoq:wifi', to_spot: 'S-W30',
           // before_dbm is this mock's own wifi reading; dist_change_m comes from the spot geometry.
-          move_m: [-0.3, 0], dist_change_m: spotDistanceChange('S-W30'), after_dbm: null, why: ['pi5>unoq:wifi'],
-          before_dbm: links.find((l) => l.id === 'pi5>unoq:wifi')!.dbm!,
+          move_m: [-0.3, 0], dist_change_m: spotDistanceChange('S-W30'), why: ['pi5>unoq:wifi'],
+          before_dbm: router === HOME_SPOT ? wifiNow : wifiHome,
+          after_dbm: null,
           text: 'An object next to the router is blocking its link to the receiver. Move the router 30 cm west.',
         }
       : null
-  const camOn = scenario === 'camera' && tMs % 16000 < 8000
   const teacher: Teacher | null =
-    camOn && pred ? { present: pred.present, zone: pred.zone, motion: pred.motion } : null
+    scene.cam === 'on'
+      ? pred ? { present: pred.present, zone: pred.zone, motion: pred.motion } : { present: false, zone: 0, motion: null }
+      : null
 
-  if (scenario === 'waiting') {
-    return { ...emptyState(seq, router), links: [] }
-  }
   return {
-    v: 2, type: 'state', t: Date.now(), seq, src: 'sim', cam: camOn ? 'on' : 'off', router, links,
+    v: 2, type: 'state', t: Date.now(), seq, src: 'sim', cam: scene.cam, router, links,
     health: blind ? { status: 'blind', blind: ['east>unoq:ble'], reason: 'rate' } : { status: 'ok', blind: [], reason: null },
     pred, objects, xray,
-    alert, checkin, advice, narration: null, teacher,
-    model: UNTRAINED,
+    alert: scene.alert, checkin: scene.checkin, advice, narration: scene.narration, teacher,
+    model: MOCK_MODEL,
     board: NO_BOARD,
   }
 }
@@ -215,7 +253,10 @@ function emptyState(seq: number, router: string): StateMsg {
   }
 }
 
-/** Training time and decision time are measurements, so the mock says "not trained" and leaves them null. */
+/** A trained model whose timings were never measured: the contract keeps them null then, even when trained. */
+const MOCK_MODEL = { trained: true, ver: 'mock', train_s: null, ms_per_decision: null, windows: 0, train_sessions: [], training: null }
+
+/** Before training (the waiting state): nothing to report. */
 const UNTRAINED = { trained: false, ver: null, train_s: null, ms_per_decision: null, windows: 0, train_sessions: [], training: null }
 
 /** The board's readings are measurements; the mock has none. */
