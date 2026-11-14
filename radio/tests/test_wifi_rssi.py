@@ -9,17 +9,22 @@ from __future__ import annotations
 import json
 import re
 import socket
-import threading
-import time
 import unittest.mock as mock
 from pathlib import Path
 
 import pytest
 
+from contracts.check import errors
 from radio.wifi_rssi import (
+    Pinger,
+    Reader,
+    Stats,
     _make_message,
     _read_station_info,
+    main,
     parse_station_output,
+    poll_loop,
+    settings,
     _SIGNAL_RE,
     _RX_PACKETS_RE,
     run,
@@ -137,109 +142,200 @@ class TestMakeMessage:
 
 
 # ---------------------------------------------------------------------------
-# run() — verify it sends UDP messages only when rx packets increase
+# Reader, Pinger, Stats and run(): no subprocess, no hardware
 # ---------------------------------------------------------------------------
 
-class TestRunSendsUDP:
-    def test_sends_messages_when_rx_packets_rise(self):
-        """run() should send messages when rx packets counter increases."""
-        received: list[bytes] = []
-        stop = threading.Event()
+def quiet(_text):
+    pass
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(("127.0.0.1", 0))
-        sock.settimeout(0.1)
-        port = sock.getsockname()[1]
 
-        def collector():
-            while not stop.is_set():
-                try:
-                    data, _ = sock.recvfrom(4096)
-                    received.append(data)
-                except (socket.timeout, OSError):
-                    break
+class FakeStation:
+    """Stands in for `iw ... station get`: hands out (dbm, rx_packets) pairs, then (None, None)."""
 
-        t_collect = threading.Thread(target=collector, daemon=True)
-        t_collect.start()
+    def __init__(self, *readings):
+        self.readings, self.calls = list(readings), []
 
-        # Simulate increasing rx packets on each call: 100, 101, 102, ...
-        counter = {"pkt": 100}
+    def __call__(self, iface, bssid):
+        self.calls.append((iface, bssid))
+        return self.readings.pop(0) if self.readings else (None, None)
 
-        def fake_check_output(*args, **kwargs):
-            counter["pkt"] += 1
-            out = f"Station <bssid> (on wlan0)\n\trx packets:\t{counter['pkt']}\n\tsignal:\t-62 dBm\n"
-            return out.encode()
 
-        with mock.patch("radio.wifi_rssi.subprocess.check_output", side_effect=fake_check_output):
-            t_run = threading.Thread(
-                target=run,
-                kwargs={
-                    "iface": "wlan0",
-                    "bssid": TEST_BSSID,
-                    "bus_host": "127.0.0.1",
-                    "bus_port": port,
-                    "rate_hz": 25.0,
-                },
-                daemon=True,
-            )
-            t_run.start()
-            time.sleep(0.4)
+class FakeProc:
+    def __init__(self):
+        self.code, self.terminated = None, False
 
-        stop.set()
-        sock.close()
+    def poll(self):
+        return self.code
 
-        assert len(received) >= 4, f"Only received {len(received)} messages"
-        seqs = [json.loads(r)["seq"] for r in received]
-        assert seqs == list(range(len(seqs))), "seq did not increment monotonically"
+    def terminate(self):
+        self.terminated, self.code = True, -15
 
-    def test_unchanged_rx_packets_does_not_send(self):
-        """run() must not send messages when rx packets counter does not advance."""
-        received: list[bytes] = []
-        stop = threading.Event()
+    def wait(self, timeout=None):
+        return self.code
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(("127.0.0.1", 0))
-        sock.settimeout(0.1)
-        port = sock.getsockname()[1]
+    def kill(self):
+        self.code = -9
 
-        def collector():
-            while not stop.is_set():
-                try:
-                    data, _ = sock.recvfrom(4096)
-                    received.append(data)
-                except (socket.timeout, OSError):
-                    break
 
-        t_collect = threading.Thread(target=collector, daemon=True)
-        t_collect.start()
+class TestReader:
+    def test_reads_only_when_rx_packets_rise(self):
+        station = FakeStation((-60, 10), (-61, 11), (-62, 11), (-63, 13))
+        reader = Reader("wlan0", TEST_BSSID, read=station, say=quiet)
+        assert [reader.poll() for _ in range(4)] == [None, -61, None, -63]
+        assert station.calls[0] == ("wlan0", TEST_BSSID)
 
-        # Return static STALE_FIXTURE with unchanging rx packets: 1823
-        with mock.patch(
-            "radio.wifi_rssi.subprocess.check_output",
-            return_value=STALE_FIXTURE.encode(),
-        ):
-            t_run = threading.Thread(
-                target=run,
-                kwargs={
-                    "iface": "wlan0",
-                    "bssid": TEST_BSSID,
-                    "bus_host": "127.0.0.1",
-                    "bus_port": port,
-                    "rate_hz": 25.0,
-                },
-                daemon=True,
-            )
-            t_run.start()
-            time.sleep(0.3)
+    def test_unchanged_rx_packets_never_read(self):
+        reader = Reader("wlan0", TEST_BSSID, read=lambda *_: parse_station_output(STALE_FIXTURE), say=quiet)
+        assert [reader.poll() for _ in range(10)] == [None] * 10
 
-        stop.set()
-        sock.close()
+    def test_a_rejoin_starts_the_counter_again(self):
+        # After the Pi comes back, the station's counters restart from 0.
+        station = FakeStation((-60, 500), (None, None), (-61, 3), (-62, 4))
+        reader = Reader("wlan0", TEST_BSSID, read=station, say=quiet)
+        assert [reader.poll() for _ in range(4)] == [None, None, None, -62]
 
-        assert len(received) == 0, f"Expected 0 messages for unchanged packets, got {len(received)}"
+    def test_waiting_and_recovery_are_logged_once_each(self):
+        said = []
+        station = FakeStation((None, None), (None, None), (-60, 1), (-61, 2), (-62, 3))
+        reader = Reader("wlan0", TEST_BSSID, read=station, say=said.append)
+        for _ in range(5):
+            reader.poll()
+        assert said == ["no signal: wlan0 isn't joined to the Pi's hotspot; still trying",
+                        "reading pi5>unoq:wifi on wlan0"]
 
-    def test_raises_without_bssid(self):
-        with pytest.raises(RuntimeError, match="WIFI_BSSID"):
-            run(iface="wlan0", bssid="")
+class TestPinger:
+    def test_starts_one_ping_at_the_rate(self):
+        started = []
+        pinger = Pinger("10.42.0.1", 50, popen=lambda cmd, **kw: started.append(cmd) or FakeProc(),
+                        clock=lambda: 0.0, say=quiet)
+        pinger.check()
+        pinger.check()
+        assert started == [["ping", "-n", "-q", "-i", "0.020", "10.42.0.1"]]
+
+    def test_restarts_a_ping_that_exited_but_not_too_often(self):
+        t, procs = [0.0], []
+
+        def popen(cmd, **kw):
+            procs.append(FakeProc())
+            return procs[-1]
+
+        pinger = Pinger("10.42.0.1", 50, popen=popen, clock=lambda: t[0], retry_s=2.0, say=quiet)
+        pinger.check()
+        procs[0].code = 2   # "Network is unreachable": the hotspot is down
+        t[0] = 1.0
+        pinger.check()
+        assert len(procs) == 1
+        t[0] = 2.5
+        pinger.check()
+        assert len(procs) == 2
+
+    def test_zero_hz_means_no_pings(self):
+        pinger = Pinger("10.42.0.1", 0, popen=lambda *a, **k: pytest.fail("ping started"), say=quiet)
+        pinger.check()
+        assert pinger.cmd is None
+
+    def test_missing_ping_is_said_once_and_left_off(self):
+        said = []
+
+        def popen(cmd, **kw):
+            raise FileNotFoundError("ping")
+
+        pinger = Pinger("10.42.0.1", 50, popen=popen, clock=lambda: 100.0, say=said.append)
+        pinger.check()
+        pinger.check()
+        assert len(said) == 1 and "beacon rate" in said[0]
+
+    def test_stop_ends_a_running_ping(self):
+        proc = FakeProc()
+        pinger = Pinger("10.42.0.1", 50, popen=lambda cmd, **kw: proc, say=quiet)
+        pinger.check()
+        pinger.stop()
+        assert proc.terminated and pinger.proc is None
+
+
+class TestLoops:
+    def test_stats_say_the_rate_and_median_then_silence(self):
+        t, said = [0.0], []
+        stats = Stats(10, clock=lambda: t[0], say=said.append)
+        for v in (-60, -61, -62):
+            stats.add(v)
+        t[0] = 5.0
+        stats.tick()
+        assert said == []
+        t[0] = 10.0
+        stats.tick()
+        t[0] = 20.0
+        stats.tick()
+        assert said == ["last 10 s: 3 readings (0.3/s), median -61 dBm", "last 10 s: no readings"]
+
+    def test_poll_loop_keeps_the_rate_and_stops_after_seconds(self):
+        t = [0.0]
+
+        class Steady:
+            def poll(self):
+                t[0] += 0.004   # each iw call takes a little time
+                return -60
+
+        got = []
+        spent = poll_loop(Steady(), got.append, rate_hz=25, seconds=1.0,
+                          clock=lambda: t[0], sleep=lambda s: t.__setitem__(0, t[0] + s))
+        assert len(got) == 25
+        assert spent == pytest.approx(1.0, abs=0.05)
+
+    def test_run_sends_contract_messages_with_one_seq_counter(self):
+        bus = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        bus.bind(("127.0.0.1", 0))
+        bus.settimeout(0.5)
+        station = FakeStation(*[(-60 - i % 3, i) for i in range(6)])
+        reader = Reader("wlan0", TEST_BSSID, read=station, say=quiet)
+        sent = run(bus_host="127.0.0.1", bus_port=bus.getsockname()[1], rate_hz=1000,
+                   stop=lambda: not station.readings, reader=reader, pinger=Pinger("10.42.0.1", 0))
+        got = []
+        while True:
+            try:
+                got.append(json.loads(bus.recvfrom(4096)[0]))
+            except socket.timeout:
+                break
+        bus.close()
+        assert sent == [-61, -62, -60, -61, -62]
+        assert [m["dbm"] for m in got] == sent
+        assert [m["seq"] for m in got] == [0, 1, 2, 3, 4]
+        for m in got:
+            assert errors(m) == [], m
+
+    def test_run_stops_the_pings_on_the_way_out(self):
+        proc = FakeProc()
+
+        def interrupted(*_):
+            raise KeyboardInterrupt
+
+        with pytest.raises(KeyboardInterrupt):
+            run(rate_hz=1000, reader=Reader("wlan0", TEST_BSSID, read=interrupted, say=quiet),
+                pinger=Pinger("10.42.0.1", 50, popen=lambda cmd, **kw: proc, say=quiet))
+        assert proc.terminated
+
+
+class TestSettings:
+    def test_defaults(self):
+        cfg = settings({})
+        assert cfg == {"iface": "wlan0", "bssid": "", "bus_host": "127.0.0.1", "bus_port": 5600,
+                       "rate_hz": 25.0, "ping_host": "10.42.0.1", "ping_hz": 50.0}
+
+    def test_overrides_and_pings_off(self):
+        cfg = settings({"WIFI_IFACE": "wlan1", "SENSING_BSSID": "<b>", "WIFI_PING_HZ": "0", "RATE_HZ": "30"})
+        assert (cfg["iface"], cfg["bssid"], cfg["ping_hz"], cfg["rate_hz"]) == ("wlan1", "<b>", 0.0, 30.0)
+
+    def test_main_says_how_to_get_iw(self):
+        with mock.patch("radio.wifi_rssi.shutil.which", return_value=None):
+            with pytest.raises(SystemExit, match="apt install iw"):
+                main([])
+
+    def test_main_needs_the_bssid(self, monkeypatch):
+        monkeypatch.delenv("WIFI_BSSID", raising=False)
+        monkeypatch.delenv("SENSING_BSSID", raising=False)
+        with mock.patch("radio.wifi_rssi.shutil.which", return_value="/usr/sbin/iw"):
+            with pytest.raises(SystemExit, match="WIFI_BSSID"):
+                main([])
 
 
 # ---------------------------------------------------------------------------
