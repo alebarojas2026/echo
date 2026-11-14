@@ -1,4 +1,4 @@
-"""Click SW, SE, NE, NW corners on an in-memory camera view; save numbers only."""
+"""Click measured SW, SE, NE, NW floor corners; save numbers only."""
 
 import argparse
 import json
