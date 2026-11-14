@@ -330,6 +330,10 @@ def test_nobody_there_is_zone_0_not_null(ready):
     brain, feed = ready
     feed.play("empty_room", seed=4)
     assert brain.pred["present"] is False and brain.pred["zone"] == 0 and brain.pred["zone_set"] == []
+    assert brain.pred["motion"] is None and brain.pred["kind"] != "person"
+    block = brain.state()["alert"]
+    assert block["state"] == "none" and block["zone"] is None      # zone 0 never counts or alerts
+    assert not [e for e in brain.pop_events() if e["kind"] in ("alert_on", "checkin")]
 
 
 def test_a_quiet_link_keeps_its_last_dbm_and_drop():

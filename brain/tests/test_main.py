@@ -30,11 +30,15 @@ async def _scenario():
         msgs = sim_to_v2(path, seed=seed, meta=meta, t0=clock[0])
         for i, m in enumerate(msgs):
             feed.sendto(json.dumps(m).encode(), ("127.0.0.1", ports["udp"]))
-            if i % 20 == 0:
-                await asyncio.sleep(0.001)   # let the brain drain its socket
+            if i % 2 == 0:   # give the loop a turn every 2 messages (and a real pause every 20),
+                await asyncio.sleep(0.001 if i % 20 == 0 else 0)   # so the brain's socket buffer never overflows
         clock[0] = msgs[-1]["recv_t"] + 100
-        while ports["brain"].feed_t < msgs[-1]["recv_t"]:   # wait until all of it arrived
+        # Wait for the tail of it, with a deadline: a dropped datagram must not hang the test.
+        nearly, deadline = msgs[-20]["recv_t"], loop.time() + 10
+        while ports["brain"].feed_t < nearly:
+            assert loop.time() < deadline, f"{path}: the brain got to {ports['brain'].feed_t}, not {nearly}"
             await asyncio.sleep(0.01)
+        await asyncio.sleep(0.05)
 
     async with connect(f"ws://127.0.0.1:{ports['ws']}/ws") as ws:
         seen = []
@@ -90,7 +94,7 @@ async def _scenario():
         assert {m["kind"] for m in seen if m["type"] == "event"} >= {"baseline_done", "recording", "trained"}
 
         # A second screen that never reads doesn't hold this one up.
-        idle = await connect(f"ws://127.0.0.1:{ports['ws']}/ws", max_queue=1)
+        idle = await connect(f"ws://127.0.0.1:{ports['ws']}/ws", max_queue=1, close_timeout=0.2)
 
         # States arrive about 10 times a second.
         await until(lambda m: m["type"] == "state" and m["seq"] >= brain._seq)  # skip the backlog
