@@ -182,18 +182,25 @@ def main():
                        ("live demo", [round(x, 1) for x, _, _ in b2], [y for _, y, _ in b2])],
                       "Rician K of the hall, dB (low = busier, more fading)", "share of decisions right")
     if with_grids:
-        g = grid_table(with_grids, "checkin_grid", ["cross_db", "crossings", "cross_window_ms", "smooth_n"],
-                       ["hit", "false_per_min", "latency_s"])
+        cols = ("hit", "false_per_min", "latency_s", "hit_still", "false_per_min_still")
+        g = grid_table(with_grids, "checkin_grid", ["cross_db", "crossings", "cross_window_ms", "other_link_db"],
+                       list(cols))
         md += ["### Check-in rule replay (all swept sessions)", "",
-               "| cross dB | crossings | window ms | smooth n | wave hit | false / min | latency s |",
-               "|---|---|---|---|---|---|---|"]
-        ranked = sorted(g.items(), key=lambda kv: (-(kv[1]["hit"][0] or 0) + 2 * (kv[1]["false_per_min"][0] or 0)))
-        for k, v in ranked[:12] + [kv for kv in g.items() if kv[0] == (1.5, 4, 2500, 3)]:
-            md.append("| " + " | ".join(str(x) for x in k) + " | " +
-                      " | ".join("n/a" if v[c][0] is None else f"{v[c][0]:.2f}" for c in ("hit", "false_per_min", "latency_s")) + " |")
+               "Columns 5-7 are the rule as written; 8-9 keep a check-in only when the person read still for "
+               "7 of the last 10 decisions.", "",
+               "| cross dB | crossings | window ms | other link dB | wave hit | false / min | latency s | "
+               "hit (still-gated) | false / min (still-gated) |", "|---|---|---|---|---|---|---|---|---|"]
+
+        def score(v, h, f):
+            return -(v[h][0] or 0) + 2 * (v[f][0] or 0)
+        ranked = sorted(g.items(), key=lambda kv: score(kv[1], "hit", "false_per_min"))[:6]
+        ranked += sorted(g.items(), key=lambda kv: score(kv[1], "hit_still", "false_per_min_still"))[:6]
+        for k, v in ranked + [kv for kv in g.items() if kv[0] == (1.5, 4, 2500, 3.0)]:
+            md.append("| " + " | ".join(str(z) for z in k) + " | " +
+                      " | ".join("n/a" if v[c][0] is None else f"{v[c][0]:.2f}" for c in cols) + " |")
         md.append("")
         pts = [(v["false_per_min"][0], v["hit"][0]) for v in g.values()]
-        cur = g.get((1.5, 4, 2500, 3))
+        cur = g.get((1.5, 4, 2500, 3.0))
         svg.scatter(FIGS / "checkin_tradeoff.svg", "Check-in: every threshold trades waves caught for false fires",
                     pts, "false check-ins per minute with someone in the square", "share of waves caught",
                     (0, max(2.0, min(10.0, max(p[0] for p in pts)))), (0, 1),
@@ -275,7 +282,7 @@ def main():
         svg.bars(FIGS / "zone_vs_link_distance.svg", "Zone accuracy depends on standing near a link line",
                  [d[0] for d in dist], [ci(values(allr, k), "mean")[0] for _, k in dist],
                  "held-out walker's distance to the nearest link line", "share of windows right")
-    (OUT / "tables.md").write_text("\n".join(md), encoding="utf-8")
+    (OUT / "tables.md").write_text("\n".join(md), encoding="utf-8", newline="\n")
     print("\n".join(md))
 
 

@@ -245,7 +245,6 @@ class Script:
         toward = foot - self.cur
         toward = toward / (np.linalg.norm(toward) or 1.0)
         reach = 0.44 * p.height_m * self.rng.uniform(0.5, 0.8)   # forearm and hand swing
-        t = np.arange(n) * DT
         f = hz * (1 + 0.08 * np.cumsum(self.rng.normal(0, 0.02, n)))   # people are not metronomes
         amp = reach * (0.5 + 0.5 * np.sin(2 * np.pi * np.cumsum(f) * DT + self.rng.uniform(0, 6.3)))
         base = self.cur + toward * 0.15

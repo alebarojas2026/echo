@@ -59,7 +59,7 @@ def lines(path, title, series, xlabel, ylabel, ylim=(0, 1), xfmt=str):
         out += [f'<circle cx="{a:.1f}" cy="{b:.1f}" r="2.5" fill="{col}"/>' for a, b in pts]
     if len(series) > 1:
         _legend(out, [s[0] for s in series])
-    Path(path).write_text("\n".join(out + ["</svg>", ""]), encoding="utf-8")
+    Path(path).write_text("\n".join(out + ["</svg>", ""]), encoding="utf-8", newline="\n")
 
 
 def bars(path, title, labels, values, xlabel, ylabel, ylim=(0, 1)):
@@ -77,7 +77,7 @@ def bars(path, title, labels, values, xlabel, ylabel, ylim=(0, 1)):
         out.append(f'<rect x="{x - slot * 0.32:.1f}" y="{y:.1f}" width="{slot * 0.64:.1f}" height="{H - B - y:.1f}" '
                    f'fill="{OLIVE}"/><text x="{x:.1f}" y="{y - 4:.1f}" text-anchor="middle">{v:.2f}</text>')
         out.append(f'<text x="{x:.1f}" y="{H - B + 16}" text-anchor="middle" fill="{SUB}">{_esc(lab)}</text>')
-    Path(path).write_text("\n".join(out + ["</svg>", ""]), encoding="utf-8")
+    Path(path).write_text("\n".join(out + ["</svg>", ""]), encoding="utf-8", newline="\n")
 
 
 def scatter(path, title, pts, xlabel, ylabel, xlim, ylim, mark=None):
@@ -92,4 +92,4 @@ def scatter(path, title, pts, xlabel, ylabel, xlim, ylim, mark=None):
         x, y, lab = mark
         out.append(f'<circle cx="{fx(x):.1f}" cy="{fy(y):.1f}" r="6" fill="none" stroke="{OLIVE}" stroke-width="2"/>'
                    f'<text x="{fx(x) + 9:.1f}" y="{fy(y) + 4:.1f}" fill="{OLIVE}">{_esc(lab)}</text>')
-    Path(path).write_text("\n".join(out + ["</svg>", ""]), encoding="utf-8")
+    Path(path).write_text("\n".join(out + ["</svg>", ""]), encoding="utf-8", newline="\n")
