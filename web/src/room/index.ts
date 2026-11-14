@@ -28,13 +28,29 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   const xray = new XrayLayer(view, mirror)
   const presence = new Presence(view)
   const spots = new RouterSpots(view)
-  const alertMarks = new AlertMarks(view, stage)
+  const alertMarks = new AlertMarks(view)
   const wave = new WaveClock()
+
+  // NO DATA and SENSOR BLIND are different states (contract section 6), and each is said in words.
+  const notice = document.createElement('div')
+  notice.className = 'room-notice'
+  notice.setAttribute('role', 'status')
+  notice.innerHTML = '<h2></h2><p></p>'
+  notice.hidden = true
+  host.append(notice)
+  const say = (title: string, line: string) => {
+    notice.hidden = !title
+    notice.querySelector('h2')!.textContent = title
+    notice.querySelector('p')!.textContent = line
+  }
 
   let router: string | null = null
   feed.subscribe(({ state, stale }) => {
     // NO DATA: the last state is more than 1 s old. The room greys out and holds still.
     host.classList.toggle('room--stale', stale)
+    if (stale) say('No data', 'The feed has paused. Nothing here is current.')
+    else if (state?.health?.status === 'blind') say('Sensor blind', 'A radio link failed, so predictions pause.')
+    else say('', '')
     host.dataset.feed = stale ? 'stale' : 'live'
     if (stale || !state) return
     if (state.router !== router) {
@@ -50,7 +66,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     beams.update(state)
     xray.update(state.xray, state.health?.status === 'blind')
     presence.update(state.pred, state.objects ?? [], state.xray)
-    stage.markZones(state.pred?.zone_set ?? [])
+    stage.markZones(state.pred?.zone_set ?? [], state.alert?.state === 'check_on' ? state.alert.zone : null)
     spots.update(state.router, state.advice)
   })
   return { view, stage }

@@ -37,6 +37,8 @@ export class RouterSpots {
   private readonly rings = new Map<string, MeshBasicMaterial>()
   private readonly arrow: Mesh<ShapeGeometry, MeshBasicMaterial>
   private arrowKey = ''
+  /** Spot tags stay hidden until there is advice; then only the advised spot says where to put the router. */
+  private readonly tags = new Map<string, HTMLElement>()
   private grow = 0 // 0..1, the arrow draws itself in
   private growTo = 0
 
@@ -49,7 +51,9 @@ export class RouterSpots {
       mesh.position.copy(v3([x, y, 0.003]))
       view.scene.add(mesh)
       this.rings.set(id, mat)
-      view.addLabel(spotName(id), v3([x, y - 0.26, 0]), 'room-label--spot')
+      const tag = view.addLabel(spotName(id), v3([x, y - 0.26, 0]), 'room-label--spot')
+      tag.hidden = true
+      this.tags.set(id, tag)
     }
     this.arrow = new Mesh(arrowGeometry(0.3), new MeshBasicMaterial({ color: ACTION, transparent: true, depthWrite: false }))
     this.arrow.rotation.x = -Math.PI / 2
@@ -62,6 +66,10 @@ export class RouterSpots {
     for (const [id, mat] of this.rings) mat.color.setHex(id === router ? TEXT : EDGE)
     const arrow = adviceArrow(advice, router)
     this.view.host.dataset.adviceArrow = arrow ? arrow.to : ''
+    for (const [id, tag] of this.tags) {
+      tag.hidden = !arrow || id !== arrow.to
+      if (!tag.hidden) tag.textContent = `${arrow!.done ? 'Router moved here' : 'Move router here'}, ${spotName(id)}`
+    }
     this.growTo = arrow ? 1 : 0
     if (arrow) {
       const key = `${arrow.from}>${arrow.to}`

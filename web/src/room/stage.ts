@@ -117,7 +117,11 @@ export class Stage {
       const east = z.id === 2 || z.id === 4
       const north = z.id === 1 || z.id === 2
       const at = v3([east ? SQUARE_M - inX : inX, north ? SQUARE_M - inY : inY, 0])
-      this.zoneLabels.set(z.id, view.addLabel(`${z.id} ${z.name}`, at, `room-label--zone${east ? ' room-label--zone-east' : ''}`))
+      const label = view.addLabel('', at, `room-label--zone${east ? ' room-label--zone-east' : ''}`)
+      // The second line only shows while the no-movement alert is on in this zone: red always comes with a word.
+      label.innerHTML = '<span></span><span class="room-label__alert">No movement</span>'
+      label.firstElementChild!.textContent = `${z.id} ${z.name}`
+      this.zoneLabels.set(z.id, label)
     }
 
     const headGeom = new BoxGeometry(HEAD_M, HEAD_M, HEAD_M)
@@ -151,16 +155,11 @@ export class Stage {
     this.view.requestRender()
   }
 
-  /** Where the alert's word sits: in line with the zone's name, on the side away from the node names
-   *  (toward the north edge for north zones, just above the name for south zones). */
-  alertWordAt(zone: number): Vec3 {
-    const east = zone === 2 || zone === 4
-    const north = zone === 1 || zone === 2
-    return [east ? SQUARE_M - ZONE_IN_X : ZONE_IN_X, north ? SQUARE_M - 0.07 : 0.34, 0]
-  }
-
-  /** Amber zone names for the zones the radio is weighing (pred.zone_set). */
-  markZones(zones: readonly number[]) {
-    for (const [id, el] of this.zoneLabels) el.classList.toggle('room-label--zone-set', zones.includes(id))
+  /** Amber zone names for the zones the radio is weighing (pred.zone_set); red for a fired alert's zone. */
+  markZones(zones: readonly number[], alertZone: number | null = null) {
+    for (const [id, el] of this.zoneLabels) {
+      el.classList.toggle('room-label--zone-set', zones.includes(id))
+      el.classList.toggle('room-label--zone-alert', id === alertZone)
+    }
   }
 }

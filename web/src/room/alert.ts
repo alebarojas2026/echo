@@ -5,7 +5,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import type { Alert, Checkin } from './contract'
 import { SQUARE_M, zoneCenter } from './frame'
 import { FAULT, PERSON } from './palette'
-import { v3, type Stage } from './stage'
+import { v3 } from './stage'
 import type { RoomView } from './view'
 
 // The no-movement alert on the floor, and the wave check-in window.
@@ -68,10 +68,8 @@ export class AlertMarks {
   private width = 0
   private clock = 0
   private readonly still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
-  /** Red is a status colour, so the alert also says it in words, next to the zone's name. */
-  private readonly word: HTMLElement
 
-  constructor(private readonly view: RoomView, private readonly stage: Stage) {
+  constructor(private readonly view: RoomView) {
     const side = SQUARE_M / 2 - 2 * INSET_M
     this.fill = new Mesh(new PlaneGeometry(side, side), new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }))
     this.fill.rotation.x = -Math.PI / 2
@@ -82,8 +80,6 @@ export class AlertMarks {
     this.line.visible = false
     view.scene.add(this.fill, this.line)
     view.onResize((w, h) => this.mat.resolution.set(w, h))
-    this.word = view.addLabel('No movement', v3([0, 0, 0]), 'room-label--alert')
-    this.word.hidden = true
     view.addAnimator((dt) => this.ease(dt))
   }
 
@@ -96,12 +92,6 @@ export class AlertMarks {
       this.mat.color = new Color(look.color)
     }
     this.view.host.dataset.alertZone = look.zone ? String(look.zone) : ''
-    this.word.hidden = alert?.state !== 'check_on' || !look.zone
-    if (!this.word.hidden) {
-      const at = this.stage.alertWordAt(look.zone!)
-      this.word.classList.toggle('room-label--zone-east', look.zone === 2 || look.zone === 4)
-      this.view.moveLabel(this.word, v3(at))
-    }
     this.view.requestRender()
   }
 
