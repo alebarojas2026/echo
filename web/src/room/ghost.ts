@@ -12,7 +12,7 @@ import {
   Vector3,
 } from 'three'
 import type { ObjectMark, Pred, Xray } from './contract'
-import { SQUARE_M, zoneAt, zoneCenter } from './frame'
+import { HOME_SPOT, SQUARE_M, nodePosition, zoneAt, zoneCenter } from './frame'
 import { OBJECT, PERSON } from './palette'
 import { v3 } from './stage'
 import { shadowCentre } from './xray'
@@ -103,7 +103,7 @@ export class Presence {
     view.addAnimator((dt) => this.ease(dt))
   }
 
-  update(pred: Pred | null, objects: ObjectMark[], xray: Xray | null = null) {
+  update(pred: Pred | null, objects: ObjectMark[], xray: Xray | null = null, router: string = HOME_SPOT) {
     const shadow = shadowCentre(xray)
     const spots = ghostSpots(pred)
     this.ghosts.forEach((g, i) => {
@@ -121,14 +121,14 @@ export class Presence {
     if (!spots.length) for (const g of this.ghosts) g.placed = false
     const inSet = new Set(spots.map((s) => s.zone))
     this.tiles.forEach((t, i) => (t.to = inSet.has(i + 1) ? TILE_ALPHA : 0))
-    this.placeObjects(objects)
+    this.placeObjects(objects, router)
     this.view.host.dataset.ghost = spots.map((s) => s.zone).join(',')
     const lone = spots.length === 1 ? ghostFloor(spots[0].zone, shadow) : null
     this.view.host.dataset.ghostXy = lone ? `${lone[0].toFixed(2)},${lone[1].toFixed(2)}` : ''
     this.view.requestRender()
   }
 
-  private placeObjects(objects: ObjectMark[]) {
+  private placeObjects(objects: ObjectMark[], router: string) {
     while (this.boxes.length < objects.length) {
       const mesh = new LineSegments(new EdgesGeometry(new BoxGeometry(0.16, 0.16, 0.16)), new LineBasicMaterial({ color: OBJECT }))
       this.view.scene.add(mesh)
@@ -140,9 +140,11 @@ export class Presence {
       b.label.hidden = !o
       if (!o) return
       b.mesh.position.copy(v3([o.xy_m[0], o.xy_m[1], 0.08]))
-      // The tag ends 0.3 m west of the object, so it never sits on the router or the router's name, and
-      // 0.15 m north of it, so an object by the router (the tray, T1) doesn't put it on the zone 3 name.
-      this.view.moveLabel(b.label, v3([o.xy_m[0] - 0.3, o.xy_m[1] + 0.15, 0.08]))
+      // The tag sits 0.3 m from the object on the side away from the router, so it never lands on the router
+      // or its name (the router moves west on advice), and 0.15 m north, clear of the south zone names.
+      const east = nodePosition('pi5', router)[0] < o.xy_m[0]
+      b.label.classList.toggle('room-label--object-east', east)
+      this.view.moveLabel(b.label, v3([o.xy_m[0] + (east ? 0.3 : -0.3), o.xy_m[1] + 0.15, 0.08]))
     })
     this.view.host.dataset.objects = String(objects.length)
   }
