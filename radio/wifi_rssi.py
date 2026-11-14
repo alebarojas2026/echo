@@ -201,10 +201,11 @@ class Pinger:
 
     STEADY_S = 5.0
 
-    def __init__(self, host: str, hz: float, popen=subprocess.Popen, clock=time.monotonic,
+    def __init__(self, host: str, hz: float, popen=None, clock=time.monotonic,
                  retry_s: float = 2.0, say=log):
         self.cmd = ["ping", "-n", "-q", "-i", f"{1.0 / hz:.3f}", host] if hz > 0 else None
-        self.popen, self.clock, self.retry_s, self.say = popen, clock, retry_s, say
+        self.popen = popen or subprocess.Popen
+        self.clock, self.retry_s, self.say = clock, retry_s, say
         self.proc = None
         self.next_try = self.started = 0.0
         self.failing = False

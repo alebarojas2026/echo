@@ -552,3 +552,41 @@ class TestGate:
         block = gate_block(0.0, gate_rows([([], [])] * 3))
         assert "**Overall Gate 1:** FAIL" in block
         assert any("not yet measured" in f for f in check(parse_gate_md(block)))
+
+
+class TestMain:
+    """The service's entry point, wired end to end with iw and ping faked at the subprocess calls."""
+
+    def test_main_reads_pings_and_sends_until_its_seconds_are_up(self, monkeypatch, capsys):
+        bus = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        bus.bind(("127.0.0.1", 0))
+        bus.settimeout(0.5)
+        for key, value in {"WIFI_IFACE": "wlan0", "WIFI_BSSID": TEST_BSSID, "BUS_HOST": "127.0.0.1",
+                           "BUS_PORT": str(bus.getsockname()[1]), "RATE_HZ": "50", "WIFI_PING_HZ": "50"}.items():
+            monkeypatch.setenv(key, value)
+        rx = [0]
+
+        def station(cmd, **kw):            # every poll sees a new frame from the Pi
+            assert cmd[0].endswith("iw") and cmd[1:4] == ["dev", "wlan0", "station"]
+            rx[0] += 2
+            return f"\tsignal:  \t-58 [-58, -61] dBm\n\trx packets:\t{rx[0]}\n".encode()
+
+        pings = []
+        monkeypatch.setattr("radio.wifi_rssi.subprocess.check_output", station)
+        monkeypatch.setattr("radio.wifi_rssi.subprocess.Popen", lambda cmd, **kw: pings.append(cmd) or FakeProc())
+        monkeypatch.setattr("radio.wifi_rssi.find_tool", lambda name: "/usr/sbin/iw")
+        monkeypatch.setattr("radio.wifi_rssi.load_env_file", lambda path: None)
+        monkeypatch.setattr("radio.wifi_rssi.signal.signal", lambda *a: None)
+        main(["--seconds", "0.4"])
+        got = []
+        while True:
+            try:
+                got.append(json.loads(bus.recvfrom(4096)[0]))
+            except socket.timeout:
+                break
+        bus.close()
+        assert pings == [["ping", "-n", "-q", "-i", "0.020", "10.42.0.1"]]
+        assert len(got) >= 5 and {m["dbm"] for m in got} == {-58}
+        assert [m["seq"] for m in got] == list(range(len(got)))
+        assert all(errors(m) == [] for m in got)
+        assert capsys.readouterr().out.splitlines()[-1].startswith(f"pi5>unoq:wifi: {len(got)} readings in ")
