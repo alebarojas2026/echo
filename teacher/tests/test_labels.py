@@ -15,7 +15,7 @@ def test_processed_empty_and_non_person():
     teacher = Teacher(projection(), sent.append, clock=lambda: 1000)
     a = teacher.processed([])
     b = teacher.processed([dict(label="chair", value=0.99)])
-    assert a["present"] is False and a["zone"] == 0
+    assert a["present"] is False and a["zone"] == 0 and a["motion"] is None
     assert b["persons_in_frame"] == 0 and b["frame"] == 2
     assert a["v"] == 2 and a["seq"] == 1 and a["src"] == "live"
 

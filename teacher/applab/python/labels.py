@@ -23,7 +23,7 @@ class Projection:
         d = h[2][0] * x + h[2][1] * y + h[2][2]
         if abs(d) < 1e-12:
             raise ValueError("point projects to infinity")
-        p = [(h[i][0] * x + h[i][1] * y + h[i][2]) / d for i in (0, 1)]
+        p = [round((h[i][0] * x + h[i][1] * y + h[i][2]) / d, 12) for i in (0, 1)]
         if not all(math.isfinite(v) for v in p):
             raise ValueError("non-finite foot point")
         return p
@@ -95,7 +95,7 @@ class Teacher:
         label = dict(v=2, type="label", t=t, seq=self.frame, src="live", frame=self.frame,
                      mode=mode, persons_in_frame=len(people), present=bool(candidates),
                      zone=None if clipped else zone, foot_m=None if clipped else point,
-                     motion=moving, conf=conf, clipped=clipped)
+                     motion=moving if point is not None and not clipped else None, conf=conf, clipped=clipped)
         self.send(label)
         return label
 
