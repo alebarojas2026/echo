@@ -1,6 +1,6 @@
 import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { SQUARE_M } from './frame'
-import { PAPER } from './palette'
+import { BG } from './palette'
 
 // Owns the renderer, the camera and the frame loop. Frames are drawn only when something changed
 // or an animation is still settling, so an idle room costs nothing on the Pi.
@@ -67,7 +67,7 @@ export class RoomView {
 
   constructor(readonly host: HTMLElement, opts: ViewOptions = {}) {
     this.renderer = new WebGLRenderer({ antialias: opts.antialias ?? false, powerPreference: 'high-performance' })
-    this.renderer.setClearColor(PAPER, 1)
+    this.renderer.setClearColor(BG, 1)
     this.renderer.setPixelRatio(opts.pixelRatio ?? 1)
     this.renderer.domElement.className = 'room-canvas'
     this.renderer.domElement.setAttribute('aria-hidden', 'true')

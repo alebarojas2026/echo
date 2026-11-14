@@ -6,10 +6,12 @@
     <title>Radio Sight</title>
     <link rel="icon" href="data:,">
     <style>
-      html, body { margin: 0; height: 100%; background: #f4f0e6; color: #1c1b17; }
+      html, body { margin: 0; height: 100%; background: #111316; color: #e6e8eb; }
       /* The panels' rail: x 0-640. The room (web/src/room) fills the rest, so the two never overlap. */
       .shell-hud { position: fixed; top: 0; bottom: 0; left: 0; width: 640px; z-index: 1;
                    box-sizing: border-box; overflow-x: hidden; overflow-y: auto; }
+      /* The panels are still drawn for a light page; give them one until they take the dark palette. */
+      .shell-hud.radio-hud { background: #f4f0e6; color: #1c1b17; }
       @media (max-width: 1100px) { .shell-hud { width: auto; right: 0; overflow: auto; } }
     </style>
   </head>

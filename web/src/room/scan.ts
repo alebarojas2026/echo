@@ -1,8 +1,8 @@
 import { Box3, Color, Group, Mesh, ShaderMaterial, Texture, type Object3D } from 'three'
-import { CARD, LINE, PAPER } from './palette'
+import { FLOOR, WALL_SHADE } from './palette'
 import type { RoomView } from './view'
 
-// The scanned room (web/public/models/room.glb), drawn flat in the style colours instead of the drawn walls.
+// The scanned room (web/public/models/room.glb), drawn flat in the room's colours instead of the drawn walls.
 // vite.config.ts sets __ROOM_SCAN__ at build time only when the file exists, so a board without a scan
 // never asks for it. ?scan=0 keeps the drawn room. Alignment comes from web/public/models/room.json.
 
@@ -38,13 +38,13 @@ export function placeScan(min: [number, number, number], max: [number, number, n
   }
 }
 
-/** Floors take the card colour, walls the paper colour, with a little line colour by which way they face. */
+/** Floors take the floor colour, walls a shade lighter, darkened a little by which way they face. */
 function scanMaterial(cut: number) {
   return new ShaderMaterial({
     uniforms: {
-      uFloor: { value: new Color(CARD) },
-      uWall: { value: new Color(PAPER) },
-      uShade: { value: new Color(LINE) },
+      uFloor: { value: new Color(FLOOR) },
+      uWall: { value: new Color(0x23272d) },
+      uShade: { value: new Color(WALL_SHADE) },
       uCut: { value: cut },
     },
     vertexShader: /* glsl */ `

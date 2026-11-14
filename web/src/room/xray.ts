@@ -1,12 +1,12 @@
 import { Color, DataTexture, LinearFilter, Mesh, PlaneGeometry, RGFormat, ShaderMaterial, UnsignedByteType } from 'three'
 import type { Xray } from './contract'
 import type { Mirror } from './mirror'
-import { INK, OLIVE } from './palette'
+import { OBJECT, PERSON, PERSON_HOT } from './palette'
 import { v3 } from './stage'
 import type { RoomView } from './view'
 
 // The radio X-ray on the floor, drawn from whatever w x h grid arrives (contract sections 5 and 6).
-// People (moving_db) are olive contour bands; objects (static_db) are ink hatching. Both ease between states.
+// People (moving_db) are an amber heat-scale shadow; objects (static_db) are grey-blue hatching. Both ease between states.
 
 const DB_RANGE = 16 // a byte covers 0..16 dB, about 0.06 dB a step
 
@@ -94,8 +94,9 @@ const vertexShader = /* glsl */ `
 
 const fragmentShader = /* glsl */ `
   uniform sampler2D uData;
-  uniform vec3 uOlive;
-  uniform vec3 uInk;
+  uniform vec3 uPerson;
+  uniform vec3 uPersonHot;
+  uniform vec3 uObject;
   uniform float uRange;
   uniform float uFade;
   varying vec2 vUv;
@@ -113,15 +114,18 @@ const fragmentShader = /* glsl */ `
 
   void main() {
     vec2 db = texture2D(uData, vUv).rg * uRange;
-    // People: a filled olive shadow that deepens with the drop, edged by one 2 px line at 3 dB.
-    float people = max(0.6 * smoothstep(1.0, 6.0, db.r), 0.9 * contour(db.r, 3.0));
-    // Objects: diagonal ink hatching from 1.5 dB, its strokes thickening with the drop.
+    // People: a heat-scale shadow, amber deepening to pale gold at the strongest drop, edged by one
+    // 2 px line at 3 dB.
+    float edgeLine = 0.9 * contour(db.r, 3.0);
+    float people = max(0.7 * smoothstep(1.0, 6.0, db.r), edgeLine);
+    vec3 heat = mix(uPerson, uPersonHot, smoothstep(3.0, 8.0, db.r) * (1.0 - edgeLine));
+    // Objects: diagonal grey-blue hatching from 1.5 dB, its strokes thickening with the drop.
     float stroke = mix(0.18, 0.5, clamp((db.g - 1.5) / 6.0, 0.0, 1.0));
     float t = fract((vFloor.x - vFloor.y) / 0.05);
     float edge = fwidth((vFloor.x - vFloor.y) / 0.05);
     float hatch = 0.6 * above(db.g, 1.5) * (1.0 - smoothstep(stroke - edge, stroke + edge, t));
     float a = hatch + people * (1.0 - hatch);
-    vec3 rgb = mix(uOlive, uInk, hatch / max(a, 1e-4));
+    vec3 rgb = mix(heat, uObject, hatch / max(a, 1e-4));
     gl_FragColor = vec4(rgb, a * uFade);
     #include <colorspace_fragment>
   }
@@ -148,8 +152,9 @@ export class XrayLayer {
       depthWrite: false,
       uniforms: {
         uData: { value: null },
-        uOlive: { value: new Color(OLIVE) },
-        uInk: { value: new Color(INK) },
+        uPerson: { value: new Color(PERSON) },
+        uPersonHot: { value: new Color(PERSON_HOT) },
+        uObject: { value: new Color(OBJECT) },
         uRange: { value: DB_RANGE },
         uFade: { value: 0 },
       },
@@ -250,7 +255,7 @@ function legend(): HTMLElement {
   el.className = 'room-legend'
   el.setAttribute('aria-hidden', 'true')
   el.innerHTML = `
-    <span><svg width="28" height="18" viewBox="0 0 28 18"><rect x="1" y="1" width="26" height="16" rx="6" fill="#4F5E2E" fill-opacity="0.25" stroke="#4F5E2E" stroke-width="2"/></svg>Person</span>
-    <span><svg width="28" height="18" viewBox="0 0 28 18"><path d="M2 18L11 0M9 18L18 0M16 18L25 0M23 18L28 8" stroke="#1C1B17" stroke-opacity="0.6" stroke-width="2"/></svg>Object</span>`
+    <span><svg width="28" height="18" viewBox="0 0 28 18"><rect x="1" y="1" width="26" height="16" rx="6" fill="#FF9F43" fill-opacity="0.45" stroke="#FF9F43" stroke-width="2"/></svg>Person</span>
+    <span><svg width="28" height="18" viewBox="0 0 28 18"><path d="M2 18L11 0M9 18L18 0M16 18L25 0M23 18L28 8" stroke="#A9B4C2" stroke-opacity="0.8" stroke-width="2"/></svg>Object</span>`
   return el
 }
