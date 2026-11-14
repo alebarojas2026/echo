@@ -10,11 +10,18 @@ Networks" (IEEE TMC, 2010). Each link is one row of W. A cell gets the weight
 path <= 0.1 m) and 0 otherwise. An image is P @ y, where y holds one value per
 link and P = (W^T W + alpha I)^-1 W^T.
 
+Per link (section 6): the static part is the drop that has held for 5 s with
+a raw std under 0.8 dB. It only updates while pred is not null and
+pred.kind != person for the whole 5 s, so a person standing still never
+becomes an object. The people part is max(0, drop - static), where drop is the
+last 1 s median. static_db images the static parts, moving_db the people parts.
+
 Cell order (CONTRACTS.md section 5): row by row from the south edge,
-index = iy * w + ix, where ix counts east from origin_m[0] and iy counts north
-from origin_m[1]. Cell (ix, iy) has its centre at
-origin_m + ((ix + 0.5) * cell_m, (iy + 0.5) * cell_m).
+index = iy * w + ix, ix east from origin_m[0], iy north from origin_m[1]. Cell
+(ix, iy) has its centre at origin_m + ((ix + 0.5) * cell_m, (iy + 0.5) * cell_m).
 """
+from collections import deque
+
 import numpy as np
 
 SQUARE_M = 2.0
@@ -27,16 +34,15 @@ TRAY_SPOTS = {"T1": (1.0, 0.2)}
 
 EXCESS_PATH_M = 0.1
 ALPHA_REL = 0.1        # default alpha = this x the mean squared row length of W
-MOVING_SHORT_S = 1.0
-MOVING_LONG_S = 10.0
+DROP_WINDOW_S = 1.0    # a link's current drop is its median over this window
 STATIC_S = 5.0
 STATIC_STD_DB = 0.8
-STATIC_BIN_S = 0.5     # the std is taken over 0.5 s means; 0 uses raw readings
 PEAK_FRAC = 0.8        # cells at or above this x the blob max give its position
 BLOB_FRAC = 0.5        # cells at or above this x the image max form blobs
 OBJECT_MIN_DB = 3.0    # an object needs a link with a static drop this big
 OBJECT_MATCH_M = 0.5   # a peak this close to a known object is the same object
 OBJECT_GRACE_S = 2.0   # an object stays listed this long after it last showed
+NEAR_M = 0.5           # "near" names a node only this close, else null
 
 
 def link_ends(link_id):
@@ -46,15 +52,6 @@ def link_ends(link_id):
     return tx, rx, kind
 
 
-def from_nodes_json(doc):
-    """(nodes, links, router_spots, square_m) from radio/nodes.json, already parsed."""
-    nodes = {n["id"]: tuple(n["xyz_m"][:2]) for n in doc["nodes"]}
-    links = [link["id"] for link in doc["links"]]
-    spots = {s["id"]: tuple(s["xyz_m"][:2]) for s in doc.get("router_spots", [])}
-    square_m = float(doc.get("frame", {}).get("size_m", [SQUARE_M])[0])
-    return nodes, links, spots or dict(ROUTER_SPOTS), square_m
-
-
 def zone_of(x, y, square_m=SQUARE_M):
     """Section 3 zone of a floor point: 1 NW, 2 NE, 3 SW, 4 SE."""
     half = square_m / 2
@@ -62,11 +59,7 @@ def zone_of(x, y, square_m=SQUARE_M):
 
 
 class Grid:
-    """w x h cells covering the square plus the margin on every side.
-
-    Cells are square. When w != h the grid grows past the margin on the longer
-    side and stays centred on the square.
-    """
+    """w x h square cells covering the square plus the margin, centred on it."""
 
     def __init__(self, w=10, h=10, square_m=SQUARE_M, margin_m=MARGIN_M):
         self.w, self.h = int(w), int(h)
@@ -121,35 +114,21 @@ def projection(W, alpha=None):
     return np.linalg.solve(W @ W.T + alpha * np.eye(n_links), W).T
 
 
-def moving_level(t, v, now, short_s=MOVING_SHORT_S, long_s=MOVING_LONG_S):
-    """Mean drop over the last short_s minus the mean over the last long_s.
-
-    Floored at 0, so a person leaving a link does not paint it. 0 when the
-    link has no reading in the last short_s.
-    """
-    recent = v[t > now - short_s]
-    if recent.size == 0:
-        return 0.0
-    return max(0.0, float(recent.mean() - v[t > now - long_s].mean()))
+def current_drop(t, v, now, window_s=DROP_WINDOW_S):
+    """Median drop over the last window_s, or None with no reading in it."""
+    recent = v[t > now - window_s]
+    return float(np.median(recent)) if recent.size else None
 
 
-def steady_level(t, v, now, span_s=STATIC_S, std_db=STATIC_STD_DB, bin_s=STATIC_BIN_S):
+def steady_level(t, v, now, span_s=STATIC_S, std_db=STATIC_STD_DB):
     """Median drop over the last span_s if the link held steady, else None.
 
-    Steady means readings cover at least 90% of span_s and the std of the
-    bin_s means is under std_db.
+    Steady means readings cover at least 90% of span_s and the std of the raw
+    readings is under std_db.
     """
     keep = t > now - span_s
     t, v = t[keep], v[keep]
-    if v.size < 2 or t[-1] - t[0] < 0.9 * span_s:
-        return None
-    if bin_s > 0:
-        k = ((t - (now - span_s)) // bin_s).astype(int)
-        counts = np.bincount(k)
-        means = np.bincount(k, weights=v)[counts > 0] / counts[counts > 0]
-    else:
-        means = v
-    if means.size < 2 or means.std() >= std_db:
+    if v.size < 2 or t[-1] - t[0] < 0.9 * span_s or v.std() >= std_db:
         return None
     return float(np.median(v))
 
@@ -195,28 +174,8 @@ def hot_spot(img, centres, cells=None, frac=PEAK_FRAC):
     return float(x), float(y)
 
 
-class _Ring:
-    """Times and values of one link, oldest first. Halves itself when full."""
-
-    def __init__(self, cap=2048):
-        self.t = np.empty(cap)
-        self.v = np.empty(cap)
-        self.n = 0
-
-    def add(self, t, v):
-        if self.n == len(self.t):
-            keep = self.n // 2
-            self.t[:keep] = self.t[self.n - keep:self.n]
-            self.v[:keep] = self.v[self.n - keep:self.n]
-            self.n = keep
-        self.t[self.n] = t
-        self.v[self.n] = v
-        self.n += 1
-
-    def since(self, t0):
-        t = self.t[:self.n]
-        i = int(np.searchsorted(t, t0, side="right"))
-        return t[i:], self.v[i:self.n]
+def _dist(a, b):
+    return float(np.hypot(a[0] - b[0], a[1] - b[1]))
 
 
 class Xray:
@@ -224,7 +183,7 @@ class Xray:
 
         xr = Xray.from_nodes(nodes_doc)      # radio/nodes.json, 10 x 10
         xr.add(link, recv_t_ms, drop_db)     # every reading
-        out = xr.update(now_ms)              # about 10 times a second
+        out = xr.update(now_ms, kind)        # about 10 times a second; kind = pred.kind or None
         state["xray"], state["objects"] = out["xray"], out["objects"]
         xr.set_router(spot)                  # on router_moved / router_home
         xr.reset()                           # after a new baseline
@@ -245,8 +204,10 @@ class Xray:
     @classmethod
     def from_nodes(cls, doc, **kw):
         """Build from radio/nodes.json, already parsed. kw: w, h, alpha, excess_m."""
-        nodes, links, spots, square_m = from_nodes_json(doc)
-        return cls(nodes, links, router_spots=spots, square_m=square_m, **kw)
+        return cls({n["id"]: n["xyz_m"] for n in doc["nodes"]},
+                   [link["id"] for link in doc["links"]],
+                   router_spots={s["id"]: s["xyz_m"][:2] for s in doc.get("router_spots", [])},
+                   square_m=float(doc.get("frame", {}).get("size_m", [SQUARE_M])[0]), **kw)
 
     def rebuild(self):
         """Recompute W and P from the current node positions."""
@@ -263,39 +224,50 @@ class Xray:
 
     def reset(self):
         """Forget histories, static levels and objects (after a new baseline)."""
-        self._rings = {link: _Ring() for link in self.links}
+        self._hist = {link: deque(maxlen=2048) for link in self.links}   # (t_s, drop_db)
         self.static_link_db = np.zeros(len(self.links))
         self._objects = []
+        self._frozen_t = float("-inf")   # last tick with pred null or a person
 
     def add(self, link, t_ms, drop_db):
-        ring = self._rings.get(link)
-        if ring is not None:
-            ring.add(t_ms / 1000.0, float(drop_db))
+        hist = self._hist.get(link)
+        if hist is not None:
+            hist.append((t_ms / 1000.0, float(drop_db)))
 
-    def link_levels(self, now_s):
-        """Per-link moving levels, and the static levels (held while unsteady)."""
-        moving = np.zeros(len(self.links))
+    def link_levels(self, now_s, kind=None):
+        """Per-link people parts, static parts and the count of links heard in 1 s."""
+        if kind is None or kind == "person":
+            self._frozen_t = now_s
+        may_update = now_s - self._frozen_t >= STATIC_S
+        people = np.zeros(len(self.links))
         fresh = 0
         for k, link in enumerate(self.links):
-            t, v = self._rings[link].since(now_s - MOVING_LONG_S)
-            moving[k] = moving_level(t, v, now_s)
-            fresh += bool(np.any(t > now_s - MOVING_SHORT_S))
-            level = steady_level(t, v, now_s)
-            if level is not None:
-                self.static_link_db[k] = level
-        return moving, np.maximum(self.static_link_db, 0.0), fresh
+            hist = self._hist[link]
+            while hist and hist[0][0] <= now_s - STATIC_S:
+                hist.popleft()
+            t, v = np.array(hist).reshape(-1, 2).T
+            if may_update:
+                level = steady_level(t, v, now_s)
+                if level is not None:
+                    self.static_link_db[k] = level
+            drop = current_drop(t, v, now_s)
+            if drop is not None:
+                fresh += 1
+                people[k] = max(0.0, drop - self.static_link_db[k])
+        return people, np.maximum(self.static_link_db, 0.0), fresh
 
     def image(self, link_db):
         return np.maximum(self.P @ link_db, 0.0)
 
-    def update(self, now_ms):
-        """Returns {"xray": ..., "objects": [...], "events": [...]}.
+    def update(self, now_ms, kind=None):
+        """One tick. kind = pred.kind ("person" | "object" | "none"), or None
+        while pred is null. Returns {"xray": ..., "objects": [...], "events": [...]}.
 
         events are object_on / object_off as {"kind", "info"} for the event stream.
         """
         now = now_ms / 1000.0
-        moving, static, fresh = self.link_levels(now)
-        mov_img, sta_img = self.image(moving), self.image(static)
+        people, static, fresh = self.link_levels(now, kind)
+        mov_img, sta_img = self.image(people), self.image(static)
         g = self.grid
         xray = {"w": g.w, "h": g.h, "cell_m": round(g.cell_m, 4),
                 "origin_m": [round(g.origin_m[0], 4), round(g.origin_m[1], 4)],
@@ -308,9 +280,10 @@ class Xray:
                    for o in self._objects]
         return {"xray": xray, "objects": objects, "events": events}
 
-    def nearest_node(self, xy):
-        return min(self.nodes, key=lambda n: np.hypot(self.nodes[n][0] - xy[0],
-                                                      self.nodes[n][1] - xy[1]))
+    def nearest_node(self, xy, within_m=NEAR_M):
+        """The closest node if it is within within_m of xy, else None."""
+        best = min(self.nodes, key=lambda n: _dist(self.nodes[n], xy))
+        return best if _dist(self.nodes[best], xy) <= within_m else None
 
     def _find_objects(self, img, static):
         if static.max(initial=0.0) < OBJECT_MIN_DB:
@@ -331,10 +304,8 @@ class Xray:
     def _track(self, found, now):
         events, free = [], list(self._objects)
         for f in found:
-            match = min(free, default=None,
-                        key=lambda o: np.hypot(o["xy"][0] - f["xy"][0], o["xy"][1] - f["xy"][1]))
-            if match is not None and np.hypot(match["xy"][0] - f["xy"][0],
-                                              match["xy"][1] - f["xy"][1]) < OBJECT_MATCH_M:
+            match = min(free, default=None, key=lambda o: _dist(o["xy"], f["xy"]))
+            if match is not None and _dist(match["xy"], f["xy"]) < OBJECT_MATCH_M:
                 free.remove(match)
                 match.update(f, last=now)
             else:
