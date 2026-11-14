@@ -2,7 +2,8 @@
 
 The message formats every part of Radio Sight agrees on. Only Ivan changes this file. Need a change? Open an issue labeled `contract`, keep working with what's here, and switch when the change lands.
 
-Every adapter (fake feed, readers, bus, brain, screen) speaks exactly this.
+Every adapter (fake feed, readers, bus, brain, screen) speaks exactly this. At runtime, check only `v` and `type`; full schema checks run in tests and CI (contracts/).
+state.src mirrors the inputs; the screen shows LIVE only for src live with nonzero link rates.
 
 ## 1. Envelope and units
 ```
@@ -91,13 +92,15 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
  "board":{"cpu_temp_c":57.0,"cpu_mhz":2016,"cpu_pct":61}}
 {"v":2,"type":"event","t":1763149512200,"seq":120,"src":"live","id":"e123","kind":"enter","info":{"zone":2}}
    // kinds: enter, exit, zone_change, checkin, object_on, object_off, advice, advice_result, router_moved, router_home,
-   // recalibrating, cam_off, cam_on, cam_stalled, alert_on, alert_off, blind_on, blind_off, trained, baseline_done, drift.
+   // recalibrating, cam_off, cam_on, cam_stalled, alert_on, alert_off, blind_on, blind_off, trained, baseline_done, drift,
+   // reset (after the reset cmd), recording (info: {on, session}) after record_start/record_stop.
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
 ```
 **Screen -> brain:**
 ```jsonc
-{"v":2,"type":"cmd","cmd":"train|baseline|reset_alert|record_start|record_stop|label_mode|router_moved|router_home|relearn|truth","args":{}}
+{"v":2,"type":"cmd","cmd":"train|baseline|reset_alert|reset|record_start|record_stop|label_mode|router_moved|router_home|relearn|truth","args":{}}
    // record_start {session, purpose, walker}; label_mode {mode: person|object|off}; router_moved {spot}; truth {zone} (crowd game).
+   // reset = between judges: clears the alert, still timer, check-in, advice and narration.
 ```
 
 ## 6. Shared rules (every part computes the same thing)
@@ -109,6 +112,7 @@ Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, 
 Link health:
 - A link is stale when its rate over the last 2 s is < 0.4 x expected_hz.
 - It is blind when stale for >= 3 s, or when pred.kind == none and |median - base| > 6 dB for >= 3 s.
+  The jump rule (the second one) is off while the router is off S-home or a baseline is running.
 - health is blind when any classifier link is blind. Then pred is null and the screen shows SENSOR BLIND (never "empty").
   Alert timers pause. It clears after 3 s ok.
 Object (a training label): only in label_mode object. Every frame must have persons_in_frame == 0, and one or more
@@ -123,7 +127,10 @@ X-ray:
 - The grid covers the square plus 0.2 m on each side.
 - Weights per Wilson & Patwari: 1/sqrt(link length) inside an excess path <= 0.1 m.
 - P = (W^T W + alpha I)^-1 W^T, computed at startup and again on router_moved and router_home.
-- moving_db = last 1 s vs last 10 s. static_db = persistent change vs the baseline (>= 5 s, std < 0.8 dB).
+- Per link, static_db = the drop that has held >= 5 s with std < 0.8 dB, updated ONLY while pred is not null and
+  pred.kind != person (frozen while a person is present), so a person standing still never becomes an "object".
+- The people part per link = max(0, drop_db - static_db). xray.static_db = the image of the static parts;
+  xray.moving_db = the image of the people parts.
 - Static means "appeared since the baseline", never walls.
 Advice:
 - Fires when an object persists >= 5 s and its static_db peak lies within 0.5 m of pi5>unoq:wifi.
@@ -131,7 +138,7 @@ Advice:
 - The text is built from the result, never a fixed string.
 - before_dbm = median of pi5>unoq:wifi over the 3 s before router_moved.
 - after_dbm = median over 3 s, starting 2 s after router_moved.
-Router: while the router is off S-home, pred is null. On router_home, every pi5 link must sit within 1 dB of base
+Router: take the tray off and put the Pi back on S-home BEFORE sending router_home. While the router is off S-home, pred is null. On router_home, every pi5 link must sit within 1 dB of base
   for 3 s; otherwise the board runs an automatic 20 s baseline ("recalibrating").
 Narration:
 - At most one sentence every 8 s. Only for an event <= 3 s old.
