@@ -78,6 +78,11 @@
   text-transform: uppercase;
 }
 
+.room-label--spot {
+  translate: -50% -50%;
+  font-size: 0.7rem;
+}
+
 .room-legend {
   position: absolute;
   left: 1.25rem;
@@ -93,6 +98,18 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+.room-fps {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #8f8a7e;
+  background: #faf7ef;
+  color: #1c1b17;
+  font: 600 0.8rem/1 'Hanken Grotesk', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 .visually-hidden {
