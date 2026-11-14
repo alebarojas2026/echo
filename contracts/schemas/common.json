@@ -10,6 +10,7 @@
     },
     "envelope": {"$ref": "#/$defs/fields", "required": ["v", "type", "t", "seq", "src"]},
     "node": {"enum": ["unoq", "pi5", "east", "west"]},
+    "near": {"$comment": "The closest node within 0.5 m of xy_m, else null (distance checked in check.py).", "enum": ["unoq", "pi5", "east", "west", null]},
     "link": {"enum": ["pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble", "east>pi5:ble", "west>pi5:ble"]},
     "links": {"type": "array", "items": {"$ref": "#/$defs/link"}},
     "zone": {"type": "integer", "minimum": 0, "maximum": 4},

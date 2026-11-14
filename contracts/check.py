@@ -9,6 +9,7 @@ A jump in a producer's seq (lost messages) is a warning, not a failure.
 """
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from referencing import Registry, Resource
 
 SCHEMAS = Path(__file__).parent / "schemas"
 SHOW = 50  # print at most this many failures and warnings per file
+NODES = {"unoq": (1.0, 2.0), "pi5": (1.0, 0.0), "east": (2.0, 1.0), "west": (0.0, 1.0)}  # section 3, metres
+NEAR_M = 0.5
 
 
 def _load():
@@ -37,11 +40,23 @@ def errors(msg, schema=None):
             return [f"unknown type {schema!r} (expected one of {', '.join(TYPES)})"]
     found = sorted(VALIDATORS[schema].iter_errors(msg), key=lambda e: e.json_path)
     out = [f"{e.json_path}: {e.message[:160]}" for e in found]
-    if schema == "state" and not out and msg["xray"] is not None:
-        x = msg["xray"]
+    if schema == "state" and not out:
+        x = msg["xray"] or {"w": 0, "h": 0, "moving_db": [], "static_db": []}
         out += [f"$.xray.{k}: has {len(x[k])} cells, w*h is {x['w'] * x['h']}"
                 for k in ("moving_db", "static_db") if len(x[k]) != x["w"] * x["h"]]
+        things = [(f"$.objects[{i}]", o) for i, o in enumerate(msg["objects"])] + [("$.advice", msg["advice"])]
+        out += [err for where, thing in things if thing for err in _near(where, thing)]
     return out
+
+
+def _near(where, thing):
+    """near names the closest node within 0.5 m of xy_m, or null if none is that close (1 cm slack for rounding)."""
+    dist = {n: math.dist(xy, thing["xy_m"]) for n, xy in NODES.items()}
+    best = min(dist, key=dist.get)
+    want = best if dist[best] <= NEAR_M else None
+    if thing["near"] == want or (abs(dist[best] - NEAR_M) <= 0.01 and thing["near"] in (best, None)):
+        return []
+    return [f"{where}.near: {thing['near']!r}, but the closest node within {NEAR_M} m of {thing['xy_m']} is {want!r}"]
 
 
 def check_lines(lines, schema=None):
