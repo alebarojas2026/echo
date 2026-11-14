@@ -22,6 +22,7 @@ HEALTHY = {
     "ip -4 -o addr show dev eth0": (0, "2: eth0    inet 192.168.77.1/24 brd 192.168.77.255 scope global eth0\n"),
     "ping -c 1 -W 1 192.168.77.2": (0, ""),
     "nmcli -t -f NAME,DEVICE connection show --active": (0, "deadzone-ap:wlan0\ndeadzone-eth:eth0\nlo:lo\n"),
+    "cat /proc/sys/net/ipv4/ip_forward": (0, "1\n"),
     "ip -4 -o addr show dev wlan0": (0, "3: wlan0    inet 10.42.0.1/24 brd 10.42.0.255 scope global wlan0\n"),
 }
 
@@ -68,6 +69,7 @@ def test_prints_no_device_address(capsys):
     ("nmcli -t -f NAME,DEVICE connection show --active", (0, "deadzone-eth:eth0\n"),
      "deadzone-ap profile isn't active", "sudo bash pi/ap.sh"),
     ("ip -4 -o addr show dev wlan0", (0, ""), "wlan0 doesn't have 10.42.0.1/24", "sudo bash pi/ap.sh"),
+    ("cat /proc/sys/net/ipv4/ip_forward", (0, "0\n"), "forwarding: off", "nmcli connection up deadzone-ap"),
 ])
 def test_each_failure_names_its_fix(capsys, key, value, line, fix):
     code, out = report(capsys, fake({key: value}))

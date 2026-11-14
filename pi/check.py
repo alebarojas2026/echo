@@ -90,7 +90,16 @@ def hotspot(run=run):
     return True, "hotspot: up on 10.42.0.1/24", None
 
 
-CHECKS = (bluetooth, radio_node, radio_status, ethernet, hotspot)
+def forwarding(run=run):
+    """The demo laptop on the hotspot reaches the board through the Pi (the hotspot's shared mode forwards)."""
+    code, out = run("cat", "/proc/sys/net/ipv4/ip_forward")
+    if out.strip() != "1":
+        return False, "forwarding: off, so a laptop on the hotspot can't reach the board", \
+            "sudo nmcli connection up deadzone-ap (its shared mode turns forwarding on)"
+    return True, "forwarding: on (a laptop on the hotspot reaches 192.168.77.2)", None
+
+
+CHECKS = (bluetooth, radio_node, radio_status, ethernet, hotspot, forwarding)
 
 
 def main(run=run) -> int:
