@@ -72,19 +72,31 @@ def rssi(link, t):
     return json.dumps({"v": 2, "type": "rssi", "link": link, "dbm": -60, "recv_t": t})
 
 
-def fake_capture(sessions, links):
-    """Stands in for the bus: writes the session file with 10 readings per link."""
+def fake_capture(sessions, links, per_link=10):
+    """Stands in for the bus: writes the session file with per_link readings per link."""
     def capture(session, seconds, sleep=None):
         lines = [json.dumps({"v": 2, "type": "meta", "session": session})]
-        lines += [rssi(link, 1000 + 100 * i) for link in links for i in range(10)]
+        lines += [rssi(link, 1000 + 10 * i) for link in links for i in range(per_link)]
         (sessions / f"{session}.jsonl").write_text("\n".join(lines))
     return capture
 
 
 def test_links_all_flowing_and_the_capture_is_cleaned_up(tmp_path):
-    ok, text = check.check_links(5.0, capture=fake_capture(tmp_path, list(link_stats.LINKS)), sessions=tmp_path)
-    assert ok and text.startswith("links: pi5>unoq:wifi 2.0/s, pi5>unoq:ble 2.0/s")
+    ok, text = check.check_links(1.0, capture=fake_capture(tmp_path, list(link_stats.LINKS), per_link=25),
+                                 sessions=tmp_path)
+    assert ok and text.startswith("links: pi5>unoq:wifi 25.0/s, pi5>unoq:ble 25.0/s")
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_link_under_its_gate_rate_fails(tmp_path):
+    def capture(session, seconds, sleep=None):     # 10 readings each in 5 s = 2/s, Wi-Fi 50 = 10/s
+        lines = [rssi(link, 1000 + 100 * i) for link in link_stats.LINKS for i in range(10)]
+        lines += [rssi("pi5>unoq:wifi", 3000 + 10 * i) for i in range(40)]
+        (tmp_path / f"{session}.jsonl").write_text("\n".join(lines))
+    ok, text = check.check_links(5.0, capture=capture, sessions=tmp_path)
+    assert not ok
+    assert text.startswith("links: pi5>unoq:wifi under 20/s, pi5>unoq:ble under 20/s, east>unoq:ble under 7/s")
+    assert "journalctl -u radio-sight-wifi-rssi" in text
 
 
 def test_silent_links_are_named(tmp_path):

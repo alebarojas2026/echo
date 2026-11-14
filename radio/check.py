@@ -21,6 +21,10 @@ from .nodes import LINKS
 
 UNITS = ("radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan")
 
+# The gates' pass rates (radio/GATE.md): Gate 1 for the Wi-Fi link, Gate 2 for Bluetooth.
+GATE_HZ = {"pi5>unoq:wifi": 20.0, "pi5>unoq:ble": 20.0}
+GATE_BLE_HZ = 7.0
+
 
 def sh(cmd) -> tuple[int, str]:
     """Run a read-only command: (exit code, stdout). A missing program is exit code 127."""
@@ -108,6 +112,12 @@ def check_links(seconds: float, capture=link_stats.capture, sessions=link_stats.
     silent = [link for link in LINKS if link not in by_link]
     if silent:
         return False, f"links: nothing from {', '.join(silent)}" + (f" (flowing: {rates})" if rates else "")
+    slow = [f"{link} under {GATE_HZ.get(link, GATE_BLE_HZ):g}/s" for link in LINKS
+            if len(by_link[link]) / seconds < GATE_HZ.get(link, GATE_BLE_HZ)]
+    if slow:
+        hint = (" (Wi-Fi: journalctl -u radio-sight-wifi-rssi for the ping)"
+                if any(s.startswith("pi5>unoq:wifi") for s in slow) else "")
+        return False, f"links: {', '.join(slow)}, the gates' rates{hint}; {rates}"
     return True, f"links: {rates}"
 
 
