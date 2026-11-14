@@ -41,6 +41,16 @@ class NetworkDocTest(unittest.TestCase):
 
         self.assertNotIn("browser in kiosk mode", self.lower)
 
+    def test_link_bring_up_and_browser_ports_are_explicit(self):
+        for phrase in (
+            "sudo bash pi/eth.sh",
+            "sudo bash board/eth.sh",
+            "sudo bash pi/ap.sh",
+            "sudo bash radio/wifi_join.sh",
+            "http port `8080` and websocket port `8765`",
+        ):
+            self.assertIn(phrase, self.lower)
+
     def test_private_device_identifiers_are_absent(self):
         self.assertIsNone(
             re.search(r"\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b", self.text, re.I)

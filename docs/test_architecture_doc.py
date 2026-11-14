@@ -68,6 +68,8 @@ class ArchitectureDocTest(unittest.TestCase):
             self.assertIn(phrase, self.lower)
 
         self.assertNotIn("pi-driven display", self.lower)
+        self.assertIn("http://192.168.77.2:8080/?src=ws", self.lower)
+        self.assertIn("ws://192.168.77.2:8765/ws", self.lower)
 
 
 if __name__ == "__main__":

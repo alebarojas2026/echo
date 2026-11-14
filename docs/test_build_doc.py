@@ -27,6 +27,7 @@ class BuildDocTest(unittest.TestCase):
     def test_setup_steps_are_in_safe_order(self):
         steps = (
             "### finish internet installs first",
+            "### bring up the direct ethernet link",
             "### mark the layout with loose markers",
             "### calibrate the setup camera",
             "### start the pi's private hotspot",
@@ -50,6 +51,11 @@ class BuildDocTest(unittest.TestCase):
             "it runs no model",
             "laptop browser shows the local interface",
             "do not copy files or bundles over the hotspot",
+            "sudo bash pi/eth.sh",
+            "sudo bash board/eth.sh",
+            "sudo bash pi/ap.sh",
+            "sudo bash radio/wifi_join.sh",
+            "http://192.168.77.2:8080/?src=ws",
             "[network guide](network.md)",
             "do not plan around venue wi-fi",
             "no image or video is saved",

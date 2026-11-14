@@ -16,7 +16,7 @@ Use this guide when the live demo is not ready. Fix the first failed check, then
 ## The page does not load
 
 1. Confirm the laptop is joined to the Pi hotspot, then open `http://192.168.77.2:8080/proof.json`. If it loads, reopen the browser page at the URL ending in `?src=ws`.
-2. If it does not load, confirm the direct Ethernet path between the Pi and the UNO Q hub is connected. The Pi routes the laptop's light page traffic to the board over that cable.
+2. If it does not load, confirm the direct Ethernet path between the Pi and the UNO Q hub is connected. Ask Alexander to rerun `sudo bash pi/eth.sh` on the Pi and `sudo bash board/eth.sh` on the UNO Q if either cable address is missing.
 3. On the board, confirm `radio-sight-serve.service` is active.
 4. Do not move the Pi onto venue Wi-Fi. Radio Sight uses its own local network.
 
@@ -28,7 +28,7 @@ The web page loaded, but the latest state is stale.
 
 1. Confirm the laptop browser URL ends in `?src=ws`; without it, the page is not connected to the live feed.
 2. Confirm `radio-sight-brain.service` and `radio-sight-bus.service` are active on the board.
-3. Confirm the live WebSocket is bound to the board's Ethernet address and the page reconnects to it.
+3. Confirm the live WebSocket is bound to the board's Ethernet address and the Pi routes WebSocket port `8765` as well as HTTP port `8080` to the direct cable.
 4. Once fresh state resumes, verify the source badge says `live` before continuing.
 
 Do not call this state empty. The screen needs a current state message before it can make any room claim.

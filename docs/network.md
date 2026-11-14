@@ -18,8 +18,18 @@ The one Ethernet cable carries the Pi's radio messages and the board's page data
 3. During setup, the camera teacher sends labels to the same bus through the local App Lab router on port `5600`.
 4. The bus timestamps incoming messages and forwards them locally to the sensing model over UDP port `5601`.
 5. The sensing model publishes live contract v2 state to the laptop browser through a WebSocket at `ws://192.168.77.2:8765/ws`.
-6. The laptop joins the Pi hotspot and opens `http://192.168.77.2:8080/?src=ws`. The Pi routes that light browser traffic over the Ethernet cable to the board. The same local web service provides `/nodes.json` and `/proof.json`.
+6. The laptop joins the Pi hotspot and opens `http://192.168.77.2:8080/?src=ws`. The Pi routes HTTP port `8080` and WebSocket port `8765` over the Ethernet cable to the board. The same local web service provides `/nodes.json` and `/proof.json`.
 7. The narrator reaches its on-board language model through `http://127.0.0.1:8091`. That service is not exposed to the room network.
+
+## Link bring-up
+
+1. On the Pi, run `sudo bash pi/eth.sh` to configure its end of the direct cable.
+2. On the UNO Q, run `sudo bash board/eth.sh` to configure the board end and confirm the Pi is reachable.
+3. On the Pi, run `sudo bash pi/ap.sh` to start the private sensing hotspot.
+4. On the UNO Q, run `sudo bash radio/wifi_join.sh` to join that hotspot with power saving disabled.
+5. Join the demo laptop to the hotspot and open the live page. Keep hotspot use to the browser while a demo or recording is running.
+
+The scripts read local hotspot values and any interface override from the ignored `.env` file. Never put those values in a public command, issue, or document.
 
 ## Service map
 
