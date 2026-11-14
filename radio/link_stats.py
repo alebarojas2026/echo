@@ -5,6 +5,7 @@
 
 --capture sends record_start (purpose demo, which proof/ never scores) and record_stop to the bus on
 127.0.0.1:5600, so radio-sight-bus must be running; the bus writes data/sessions/<session>.jsonl.
+It refuses while the bus is recording something else, since record_start would end that recording.
 Use 30 s for the spread and 600 s for the drift (#228).
 
 Per link, over the rssi readings in the session (by recv_t):
@@ -84,6 +85,15 @@ def table(by_link: dict) -> str:
     return "\n".join(rows)
 
 
+def open_recording(sessions=None):
+    """The session the bus is recording now (its data/sessions/.open mark), or None."""
+    try:
+        session = json.loads(((sessions or SESSIONS) / ".open").read_text(encoding="utf-8"))["session"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return session if isinstance(session, str) else None
+
+
 def capture(session: str, seconds: float, bus=("127.0.0.1", 5600), sleep=time.sleep) -> None:
     """Have the bus record `seconds` of everything into data/sessions/<session>.jsonl."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -106,6 +116,9 @@ def main(argv=None) -> None:
     ap.add_argument("--capture", type=float, metavar="SECONDS", help="record this long through the bus first")
     ap.add_argument("--session", help="session id for --capture (default: flutter-<time>)")
     args = ap.parse_args(argv)
+    if args.capture and open_recording():
+        sys.exit(f"the bus is recording {open_recording()}: a capture would end that recording. "
+                 "Stop it first (record_stop), then capture.")
     if args.capture:
         args.session = args.session or time.strftime("flutter-%H%M%S")  # a new file: the bus appends to an old one
         bus = (os.environ.get("BUS_HOST", "127.0.0.1"), int(os.environ.get("BUS_PORT", "5600")))
