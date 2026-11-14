@@ -662,7 +662,7 @@ def record_to_disk(brain, feed, folder, session, path, purpose="train", walker=N
     meta = {"session": session, "purpose": purpose, "walker": walker}
     brain.on_cmd(cmd("record_start", **meta))
     msgs = sim_to_v2(path, seed=seed, mode=mode, meta=meta, t0=feed.t)
-    with open(folder / f"{session}.jsonl", "w") as f:
+    with open(folder / f"{session}.jsonl", "a") as f:   # the bus appends
         for m in msgs:
             f.write(json.dumps(m) + "\n")
             brain.on_message(m)
@@ -804,3 +804,28 @@ def test_the_automatic_baseline_after_router_home_keeps_the_place_and_the_model(
     assert brain.place_t == place and brain.model is not None and sorted(brain.sessions) == ["s01", "s02", "s10", "s11"]
     again = Brain(sessions_dir=tmp_path)                        # a restart after it keeps the model too
     assert again.base == brain.base and again.model is not None and again.place_t == place
+
+
+def test_a_session_name_used_again_trains_on_the_new_recording_only(tmp_path):
+    brain, feed = taught_on_disk(tmp_path)             # s10 = a walk in yesterday's room
+    old_lines = len((tmp_path / "s10.jsonl").read_text().splitlines())
+    brain.on_cmd(cmd("baseline"))
+    feed.play("empty_room", seed=60)
+    record_to_disk(brain, feed, tmp_path, "s10", "empty_room", seed=61)   # the same name, today
+    assert len((tmp_path / "s10.jsonl").read_text().splitlines()) > old_lines   # both are in the file
+    record_to_disk(brain, feed, tmp_path, "s51", "zone_tour", walker="w9", seed=62)
+    seen = {}
+    brain.spawn = lambda fit, done: (seen.update(n=[len(s["messages"]) for s in _fitted(fit)]), done(fit()))
+    brain.on_cmd(cmd("train"))
+    assert brain.model.train_sessions == ["s10", "s51"]
+    today = sum(1 for m in sim_to_v2("empty_room", seed=61) if m["type"] in ("rssi", "label"))
+    assert seen["n"][0] == today                       # none of yesterday's walk came along
+
+    again = Brain(sessions_dir=tmp_path)               # a restart reads the newest meta of s10, not the first
+    assert again.sessions["s10"]["meta"]["recv_t"] == brain.sessions["s10"]["meta"]["recv_t"]
+
+
+def _fitted(fit):
+    """Run a fit and hand back the sessions it read (the closure's own list)."""
+    fit()
+    return next(c.cell_contents for c in fit.__closure__ if isinstance(c.cell_contents, list))

@@ -44,8 +44,12 @@ EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session"
 LABEL_MODES = ("person", "object", "off")
 
 
-def read_session(path) -> List[dict]:
-    """The rssi and label messages of a session file written by the bus."""
+def read_session(path, since_t=None) -> List[dict]:
+    """The rssi and label messages of a session file written by the bus.
+
+    since_t: only messages received from then on. The bus appends, so a session name used
+    twice holds both recordings; the meta's recv_t picks out the one that was asked for.
+    """
     out = []
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -53,19 +57,29 @@ def read_session(path) -> List[dict]:
                 msg = json.loads(line)
             except ValueError:
                 continue   # a line cut short by a crash
-            if isinstance(msg, dict) and msg.get("type") in ("rssi", "label") and "recv_t" in msg:
+            if isinstance(msg, dict) and msg.get("type") in ("rssi", "label") and "recv_t" in msg \
+                    and (since_t is None or msg["recv_t"] >= since_t):
                 out.append(msg)
     return out
 
 
-def first_meta(path) -> Optional[dict]:
-    """The meta line that opens a session file, or None."""
+def last_meta(path) -> Optional[dict]:
+    """The meta line of the newest recording in a session file, or None."""
+    found = None
     try:
         with open(path, encoding="utf-8") as f:
-            msg = json.loads(f.readline())
-    except (OSError, ValueError):
+            for line in f:
+                if '"meta"' not in line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(msg, dict) and msg.get("type") == "meta":
+                    found = msg
+    except OSError:
         return None
-    return msg if isinstance(msg, dict) and msg.get("type") == "meta" else None
+    return found
 
 
 def now_ms() -> int:
@@ -221,7 +235,7 @@ class Brain:
         def fit():   # may run on another thread: touches nothing of ours
             for s in sessions:   # read back from the bus's files; nothing is kept after the fit
                 if s["messages"] is None:
-                    s["messages"] = read_session(s["path"])
+                    s["messages"] = read_session(s["path"], s["meta"].get("recv_t"))
             return Model(base, ver=ver).fit(sessions)
 
         def done(model):   # back on the loop; model None = the fit failed
@@ -317,7 +331,7 @@ class Brain:
         self.model, self.model_n = model, n
         for session in model.train_sessions:   # so train and relearn still find their recordings
             path = self.sessions_dir / f"{session}.jsonl"
-            meta = first_meta(path)
+            meta = last_meta(path)
             if meta:
                 self.sessions[session] = {"meta": meta, "messages": None, "path": path}
 
