@@ -11,10 +11,11 @@ import {
   SphereGeometry,
   Vector3,
 } from 'three'
-import type { ObjectMark, Pred } from './contract'
-import { SQUARE_M, zoneCenter } from './frame'
+import type { ObjectMark, Pred, Xray } from './contract'
+import { SQUARE_M, zoneAt, zoneCenter } from './frame'
 import { INK, OLIVE } from './palette'
 import { v3 } from './stage'
+import { shadowCentre } from './xray'
 import type { RoomView } from './view'
 
 // Where the radio thinks the person is: an olive ghost in pred.zone, a faint olive tile under each zone in
@@ -37,7 +38,20 @@ export function ghostSpots(pred: Pred | null): GhostSpot[] {
   return zones.map((zone, i) => ({ zone, weight: top > 0 ? Math.max(0.35, p[i] / top) * 0.6 : 0.5 }))
 }
 
-const GHOST_ALPHA = 0.55
+/**
+ * Where a lone ghost stands: on the person's radio shadow when that lies inside the zone's tile (kept 0.15 m
+ * in from its edges), so one person never shows up in two places; otherwise in the middle of the zone.
+ */
+export function ghostFloor(zone: number, shadow: [number, number] | null): [number, number] {
+  const centre = zoneCenter(zone)!
+  if (!shadow || zoneAt(shadow[0], shadow[1]) !== zone) return centre
+  const half = SQUARE_M / 4 - TILE_INSET_M
+  const clamp = (v: number, c: number) => Math.min(c + half, Math.max(c - half, v))
+  return [clamp(shadow[0], centre[0]), clamp(shadow[1], centre[1])]
+}
+
+const GHOST_ALPHA = 0.85
+const TILE_INSET_M = 0.15
 const TILE_ALPHA = 0.09
 
 interface Ghost {
@@ -87,13 +101,14 @@ export class Presence {
     view.addAnimator((dt) => this.ease(dt))
   }
 
-  update(pred: Pred | null, objects: ObjectMark[]) {
+  update(pred: Pred | null, objects: ObjectMark[], xray: Xray | null = null) {
+    const shadow = shadowCentre(xray)
     const spots = ghostSpots(pred)
     this.ghosts.forEach((g, i) => {
       const spot = spots[i]
       g.alphaTo = spot ? GHOST_ALPHA * spot.weight : 0
       if (!spot) return
-      const [x, y] = zoneCenter(spot.zone)!
+      const [x, y] = spots.length === 1 ? ghostFloor(spot.zone, shadow) : zoneCenter(spot.zone)!
       g.to.copy(v3([x, y, 0]))
       if (!g.placed) g.at.copy(g.to) // the first sighting appears in place; later ones glide
       g.placed = true
@@ -104,6 +119,8 @@ export class Presence {
     this.tiles.forEach((t, i) => (t.to = inSet.has(i + 1) ? TILE_ALPHA : 0))
     this.placeObjects(objects)
     this.view.host.dataset.ghost = spots.map((s) => s.zone).join(',')
+    const lone = spots.length === 1 ? ghostFloor(spots[0].zone, shadow) : null
+    this.view.host.dataset.ghostXy = lone ? `${lone[0].toFixed(2)},${lone[1].toFixed(2)}` : ''
     this.view.requestRender()
   }
 
@@ -119,7 +136,9 @@ export class Presence {
       b.label.hidden = !o
       if (!o) return
       b.mesh.position.copy(v3([o.xy_m[0], o.xy_m[1], 0.08]))
-      this.view.moveLabel(b.label, v3([o.xy_m[0], o.xy_m[1], 0.34]))
+      // The tag ends 0.3 m west of the object, so it never sits on the router or the router's name, and
+      // 0.15 m north of it, so an object by the router (the tray, T1) doesn't put it on the zone 3 name.
+      this.view.moveLabel(b.label, v3([o.xy_m[0] - 0.3, o.xy_m[1] + 0.15, 0.08]))
     })
     this.view.host.dataset.objects = String(objects.length)
   }

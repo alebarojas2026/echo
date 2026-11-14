@@ -127,3 +127,4 @@
 }
 
 .hud-details { margin-top: .75rem; }
+.hud-card [data-testid="no-data"] { color: var(--hud-secondary); }

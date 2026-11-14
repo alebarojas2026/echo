@@ -45,8 +45,10 @@ function agreement(score: Score | null | undefined) {
   return Math.round(100 * score.correct / score.total)
 }
 
-export function adaptHudState(state: ScreenState, proof: Proof | null) {
+export function adaptHudState(state: ScreenState, proof: Proof | null, receivedAt = Date.now(), now = Date.now()) {
+  const feedStatus = now - receivedAt > 1000 ? 'stale' : state.health.status
   return {
+    feedStatus,
     source: sourceLabels[state.src],
     camera: cameraLabels[state.cam],
     movement: state.alert.state,
@@ -56,7 +58,7 @@ export function adaptHudState(state: ScreenState, proof: Proof | null) {
     narration: state.narration,
     advice: state.advice,
     router: state.router,
-    prediction: state.health.status === 'blind' ? null : state.pred,
+    prediction: feedStatus === 'blind' || feedStatus === 'stale' ? null : state.pred,
     proof: {
       agreement: agreement(proof?.zone),
       personObjectScore: agreement(proof?.person_vs_object),

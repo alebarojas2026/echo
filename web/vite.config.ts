@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { existsSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineConfig, type Plugin } from 'vite'
@@ -44,6 +45,19 @@ async function boardJson(req: IncomingMessage, res: ServerResponse, next: () => 
   res.end(body)
 }
 
+// The room scan is optional: only a build that finds web/public/models/room.glb asks for it, so the kiosk
+// never logs a 404 for a missing file. Its alignment, if any, is web/public/models/room.json.
+function roomScan() {
+  if (!existsSync(new URL('./public/models/room.glb', import.meta.url))) return null
+  let fit = {}
+  try {
+    fit = JSON.parse(readFileSync(new URL('./public/models/room.json', import.meta.url), 'utf8'))
+  } catch {
+    // no alignment file: the scan is centred on the square
+  }
+  return { url: 'models/room.glb', fit }
+}
+
 function boardFiles(): Plugin {
   return {
     name: 'board-files',
@@ -54,6 +68,7 @@ function boardFiles(): Plugin {
 
 export default defineConfig({
   plugins: [boardFiles()],
+  define: { __ROOM_SCAN__: JSON.stringify(roomScan()) },
   build: { chunkSizeWarningLimit: 700 }, // three.js is most of the bundle; the board serves it locally
   // web/tests (Playwright) and web/src/game (node:test) have their own runners.
   test: { include: ['src/room/**/*.test.ts'] },

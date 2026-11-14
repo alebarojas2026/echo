@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { beamLook } from './beams'
+import { beamLook, nodePair } from './beams'
 import type { LinkState } from './contract'
 
 const link = (drop: number | null, status = 'ok'): LinkState => ({
@@ -33,5 +33,13 @@ describe('beam look', () => {
       expect(look.opacity).toBeGreaterThan(0.4)
     }
     expect(beamLook(undefined, false, none).status).toBe('missing')
+  })
+})
+
+describe('node pairs', () => {
+  it('gives twin links one key, so they share one "no signal" label', () => {
+    expect(nodePair('pi5>unoq:wifi')).toBe(nodePair('pi5>unoq:ble'))
+    expect(nodePair('east>pi5:ble')).not.toBe(nodePair('east>unoq:ble'))
+    expect(new Set(['pi5>unoq:wifi', 'pi5>unoq:ble', 'east>unoq:ble', 'west>unoq:ble', 'east>pi5:ble', 'west>pi5:ble'].map(nodePair)).size).toBe(5)
   })
 })

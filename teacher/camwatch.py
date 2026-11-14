@@ -67,6 +67,13 @@ def read_heartbeat(path):
         return None
 
 
+def discover_device(override=None, directory=Path("/dev/v4l/by-id")):
+    """Resolve USB capture index 0 anew on every poll, including after replug."""
+    if override is not None:
+        return Path(override)
+    return next((path for path in sorted(directory.glob("usb-*-video-index0")) if path.exists()), None)
+
+
 def run_action(app, action):
     # Keep lifecycle work off the polling thread so off/stalled heartbeats continue.
     for attempt in range(3):
@@ -81,7 +88,7 @@ def run_action(app, action):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--device", type=Path, default=Path(os.environ.get("TEACHER_DEVICE", "/dev/video0")))
+    parser.add_argument("--device", type=Path, default=os.environ.get("TEACHER_DEVICE"))
     parser.add_argument("--heartbeat", type=Path, default=os.environ.get("TEACHER_HEARTBEAT"))
     parser.add_argument("--app", default=os.environ.get("TEACHER_APP"), help="App Lab app path or user: alias")
     args = parser.parse_args(argv)
@@ -94,7 +101,8 @@ def main(argv=None):
 
         watcher = Watcher(send, lambda action: worker.submit(run_action, args.app, action))
         while True:
-            watcher.tick(int(time.time() * 1000), args.device.exists(), read_heartbeat(args.heartbeat))
+            device = discover_device(args.device)
+            watcher.tick(int(time.time() * 1000), device is not None and device.exists(), read_heartbeat(args.heartbeat))
             time.sleep(0.05)
 
 
