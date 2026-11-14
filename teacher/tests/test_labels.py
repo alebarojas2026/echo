@@ -1,4 +1,5 @@
 import json
+import pytest
 from teacher.applab.python.labels import Projection, Teacher, attach_processed_results
 
 
@@ -65,3 +66,30 @@ def test_result_hook_ignores_silence_control_and_missing_boxes():
     brick._process_message(None, json.dumps({"type": "classification", "result": {"bounding_boxes": [box()]}}))
     assert sent[-1]["mode"] == "object" and sent[-1]["persons_in_frame"] == 1
     assert brick.original_calls == 4
+
+
+@pytest.mark.parametrize("failure", ["mode", "send"])
+def test_adapter_failure_preserves_brick_processing(failure, caplog):
+    class FakeBrick:
+        original_calls = 0
+        def _process_message(self, ws, message):
+            self.original_calls += 1
+
+    sent = []
+    def mode():
+        if failure == "mode":
+            raise FileNotFoundError("mode unavailable")
+        return "person"
+
+    def send(label):
+        if failure == "send":
+            raise OSError("bus unavailable")
+        sent.append(label)
+
+    brick = FakeBrick()
+    attach_processed_results(brick, Teacher(projection(), send, mode=mode))
+    message = json.dumps({"type": "classification", "result": {"bounding_boxes": []}})
+    brick._process_message(None, message)
+    brick._process_message(None, message)
+    assert not sent and brick.original_calls == 2
+    assert len(caplog.records) == 1

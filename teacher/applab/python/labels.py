@@ -2,6 +2,7 @@
 
 from collections import deque
 import json
+import logging
 import math
 from pathlib import Path
 from statistics import median
@@ -107,12 +108,19 @@ def attach_processed_results(detector, teacher):
     No frame bytes are requested or retained. Missing/malformed results emit nothing.
     """
     original = detector._process_message
+    reported = set()
 
     def process(ws, message):
-        result = json.loads(message)
-        boxes = result.get("result", {}).get("bounding_boxes") if result.get("type") == "classification" else None
-        if isinstance(boxes, list):
-            teacher.processed(boxes)
+        try:
+            result = json.loads(message)
+            boxes = result.get("result", {}).get("bounding_boxes") if result.get("type") == "classification" else None
+            if isinstance(boxes, list):
+                teacher.processed(boxes)
+        except Exception as error:
+            kind = type(error)
+            if kind not in reported:
+                logging.getLogger(__name__).exception("teacher result adapter failed (%s)", kind.__name__)
+                reported.add(kind)
         return original(ws, message)
 
     detector._process_message = process
