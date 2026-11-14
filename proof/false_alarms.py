@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import subprocess
-from proof.provenance import prepare_update
+from proof.provenance import prepare_update, require_board
 
 
 def load_zones():
@@ -39,7 +39,17 @@ def intervals(messages):
 
 def analyze(messages, events, zones=None):
     zones = load_zones() if zones is None else zones
-    spans = intervals(messages)
+    if not events:
+        raise ValueError("missing events capture; absence of a capture is not zero events")
+    if not messages:
+        raise ValueError("missing session timestamps")
+    session_start, session_end = min(m["recv_t"] for m in messages), max(m["recv_t"] for m in messages)
+    capture_start, capture_end = min(m["recv_t"] for m in events), max(m["recv_t"] for m in events)
+    if capture_start < session_start or capture_end > session_end:
+        raise ValueError("events capture is outside the session recv_t range; check the board clock")
+    spans = [(max(a, capture_start), min(b, capture_end), label, since)
+             for a, b, label, since in intervals(messages)
+             if max(a, capture_start) < min(b, capture_end)]
     starts = [s[0] for s in spans]
     exposure_ms = sum(b - a for a, b, _, _ in spans)
     counts = {"checkin": 0, "alert_on": 0, "object_on": 0}
@@ -104,6 +114,7 @@ def main():
     messages = [m for a, _ in pairs for m in a]
     events = [e for _, b in pairs for e in b]
     if args.proof:
+        require_board()
         proof = json.loads(args.proof.read_text())
         commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
         args.proof.write_text(json.dumps(update_proof(proof, result, messages, events, commit), indent=2) + "\n")

@@ -19,16 +19,18 @@
     "health": {"type": "object", "properties": {"status": {"enum": ["ok", "degraded", "blind"]}, "blind": {"$ref": "common.json#/$defs/links"}, "reason": {"enum": ["rate", "jump", null]}},
       "required": ["status", "blind", "reason"], "additionalProperties": false},
     "pred": {
-      "$comment": "null before training, while blind, while recalibrating and while the router is off S-home.",
+      "$comment": "null before training, while blind, while recalibrating and while the router is off S-home. motion is null exactly when present is false.",
       "type": ["object", "null"],
       "properties": {"present": {"type": "boolean"}, "kind": {"enum": ["person", "object", "none"]}, "zone": {"$ref": "common.json#/$defs/zone"},
                      "zone_set": {"type": "array", "items": {"$ref": "common.json#/$defs/zone"}},
                      "probs": {"$comment": "[empty, z1, z2, z3, z4]", "type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1}, "minItems": 5, "maxItems": 5},
-                     "motion": {"$ref": "common.json#/$defs/motion"}, "still_s": {"type": "number", "minimum": 0}, "why": {"$ref": "common.json#/$defs/links"}},
-      "required": ["present", "kind", "zone", "zone_set", "probs", "motion", "still_s", "why"], "additionalProperties": false},
+                     "motion": {"enum": ["moving", "still", null]}, "still_s": {"type": "number", "minimum": 0}, "why": {"$ref": "common.json#/$defs/links"}},
+      "required": ["present", "kind", "zone", "zone_set", "probs", "motion", "still_s", "why"], "additionalProperties": false,
+      "if": {"type": "object", "properties": {"present": {"const": false}}}, "then": {"properties": {"motion": {"type": "null"}}},
+      "else": {"properties": {"motion": {"$ref": "common.json#/$defs/motion"}}}},
     "objects": {"type": "array", "items": {
       "type": "object",
-      "properties": {"xy_m": {"$ref": "common.json#/$defs/xy_m"}, "near": {"$ref": "common.json#/$defs/node"}, "since_s": {"type": "number", "minimum": 0}, "drop_db": {"type": "number"}},
+      "properties": {"xy_m": {"$ref": "common.json#/$defs/xy_m"}, "near": {"$ref": "common.json#/$defs/near"}, "since_s": {"type": "number", "minimum": 0}, "drop_db": {"type": "number"}},
       "required": ["xy_m", "near", "since_s", "drop_db"], "additionalProperties": false}},
     "xray": {
       "$comment": "null before the first baseline.",
@@ -48,7 +50,7 @@
                 "required": ["t", "link"], "additionalProperties": false},
     "advice": {
       "type": ["object", "null"],
-      "properties": {"id": {"type": "string"}, "cause": {"type": "string"}, "near": {"$ref": "common.json#/$defs/node"}, "xy_m": {"$ref": "common.json#/$defs/xy_m"},
+      "properties": {"id": {"type": "string"}, "cause": {"type": "string"}, "near": {"$ref": "common.json#/$defs/near"}, "xy_m": {"$ref": "common.json#/$defs/xy_m"},
                      "link": {"$ref": "common.json#/$defs/link"}, "to_spot": {"enum": ["S-W30", "S-E30"]}, "move_m": {"$ref": "common.json#/$defs/xy_m"},
                      "dist_change_m": {"type": "number"}, "text": {"type": "string"}, "before_dbm": {"type": "number"},
                      "after_dbm": {"type": ["number", "null"]}, "why": {"$ref": "common.json#/$defs/links"}},
