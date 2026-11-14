@@ -9,7 +9,7 @@ Radio Sight: Wi-Fi that understands the room. Radio links between 4 nodes around
 2. Work from GitHub issues with your tag, using the loop below. Don't wait for a person.
 3. Fix review comments on your open PRs before starting new work.
 4. **All hands-on hardware is Alexander's.** That means the board, the Pi, the webcam, the phones, tape, mounting and flashing. When a task needs it, comment `needs Alexander:` on the issue with the exact commands and what to look for, then take your next issue. Never ask Izet, Ivan or Alejandro to do hardware.
-5. Alexander's radio worker: start with the "Board bring-up" issue before the gate tests. Walk him through it step by step.
+5. **Alexander's workers: pause now.** At your next clean checkpoint, finish the commit you're on, push your branch, and post ONE comment on your open PR (or the issue you took) listing what's done, what's left, and anything half-finished. Then stop: take no new issues and open no new PRs. The radio, pi, board, bus and mcu lanes are being handed to other workers, who will build on what you pushed. Alexander keeps all the hands-on hardware (issue #95).
 6. Brain: #220 (the still timer) and #222 (SENSOR BLIND on the tray) come before every other brain issue. They decide whether the no-movement alert and the tray beat work in the demo.
 7. Lanes moved: advisor/ is now Izet's (Alexander is on hardware full time); narrator/ and teacher/ are now Alejandro's. Take those tags too.
 
