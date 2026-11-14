@@ -1,0 +1,52 @@
+{
+  "v": 2,
+  "frame": {
+    "units": "m",
+    "origin": "south-west corner of the square",
+    "x": "east",
+    "y": "north",
+    "z": "up",
+    "size_m": [2.0, 2.0],
+    "note": "If the square shrinks to 1.5 m, scale every coordinate."
+  },
+  "nodes": [
+    {"id": "unoq", "side": "N", "xyz_m": [1.0, 2.0, 1.0], "roles": ["receiver"]},
+    {"id": "pi5", "side": "S", "xyz_m": [1.0, 0.0, 1.0], "roles": ["router", "beacon", "receiver"]},
+    {"id": "east", "side": "E", "xyz_m": [2.0, 1.0, 1.0], "roles": ["beacon"]},
+    {"id": "west", "side": "W", "xyz_m": [0.0, 1.0, 1.0], "roles": ["beacon"]}
+  ],
+  "links": [
+    {"id": "pi5>unoq:wifi", "tx": "pi5", "rx": "unoq", "kind": "wifi", "expected_hz": null},
+    {"id": "pi5>unoq:ble", "tx": "pi5", "rx": "unoq", "kind": "ble", "expected_hz": null},
+    {"id": "east>unoq:ble", "tx": "east", "rx": "unoq", "kind": "ble", "expected_hz": null},
+    {"id": "west>unoq:ble", "tx": "west", "rx": "unoq", "kind": "ble", "expected_hz": null},
+    {"id": "east>pi5:ble", "tx": "east", "rx": "pi5", "kind": "ble", "expected_hz": null},
+    {"id": "west>pi5:ble", "tx": "west", "rx": "pi5", "kind": "ble", "expected_hz": null}
+  ],
+  "zone_rule": "zone = 1 + (x >= 1) + 2*(y < 1); 0 = empty",
+  "zones": [
+    {"id": 1, "corner": "NW", "name": "Bed", "still_alert_s": 60},
+    {"id": 2, "corner": "NE", "name": "Chair", "still_alert_s": null},
+    {"id": 3, "corner": "SW", "name": "Hall", "still_alert_s": null},
+    {"id": 4, "corner": "SE", "name": "Bathroom", "still_alert_s": 10}
+  ],
+  "router_spots": [
+    {"id": "S-home", "xyz_m": [1.0, 0.0, 1.0]},
+    {"id": "S-W30", "xyz_m": [0.7, 0.0, 1.0]},
+    {"id": "S-E30", "xyz_m": [1.3, 0.0, 1.0]}
+  ],
+  "router_spots_note": "Gate 7 sets the distance from S-home.",
+  "tray_spots": [
+    {"id": "T1", "xyz_m": [1.0, 0.2, 1.0]}
+  ],
+  "beacons": {
+    "match": "manufacturer data, never MAC",
+    "company_id": "FFFF",
+    "prefix_hex": "5253",
+    "payloads": [
+      {"node": "pi5", "id": "S", "data_hex": "FFFF525353"},
+      {"node": "east", "id": "E", "data_hex": "FFFF525345"},
+      {"node": "west", "id": "W", "data_hex": "FFFF525357"}
+    ]
+  }
+}
