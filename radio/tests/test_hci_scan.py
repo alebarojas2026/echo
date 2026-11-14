@@ -259,3 +259,27 @@ def test_steady_adverts_never_restart_the_scan():
     run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: None, stop=lambda: fake.drained,
         clock=lambda: t[0], say=lambda text: pytest.fail(text))
     assert scan_enables(fake) == 1
+
+
+def test_a_refused_command_family_falls_back_to_the_other():
+    said = []
+    fake = FakeController(ext=True, events=[fixture("legacy_report_east")],
+                          status={hci.LE_SET_EXT_SCAN_PARAMS: 0x0C})
+    scanner = BeaconScanner(hci.Hci(fake), "unoq")
+    seen = run(scanner, lambda *r: None, stop=lambda: fake.drained, say=said.append)
+    assert scanner.mode == "legacy" and seen == {"east>unoq:ble": [-61]}
+    assert hci.LE_SET_SCAN_PARAMS in fake.opcodes and fake.opcodes[-1] == hci.LE_SET_SCAN_ENABLE
+    assert said == ["scan refused (HCI command 0x2041: status 0x0C Command Disallowed); using the legacy commands"]
+
+
+def test_refused_both_ways_still_ends_with_the_status():
+    fake = FakeController(ext=True, status={hci.LE_SET_EXT_SCAN_PARAMS: 0x0C, hci.LE_SET_SCAN_PARAMS: 0x0C})
+    with pytest.raises(hci.HciError, match="0x200B: status 0x0C"):
+        run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: None, say=lambda text: None)
+
+
+def test_other_errors_are_not_retried():
+    fake = FakeController(status={hci.LE_SET_SCAN_PARAMS: 0x12})
+    with pytest.raises(hci.HciError, match="0x12"):
+        run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: None, say=lambda text: pytest.fail(text))
+    assert hci.LE_SET_EXT_SCAN_PARAMS not in fake.opcodes
