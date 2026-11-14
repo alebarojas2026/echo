@@ -21,7 +21,7 @@ INVALID = [
     "$.text",                       # more than 16 words
     "$.text",                       # a recap of 50 words, more than 45
     "$.model",                      # llm sentence without a model
-    "$.pred.probs",                 # 4 probs, not 5
+    "$.pred.probs",                 # 5 probs, the old four-zone shape: it is [empty, z1, z2] now
     "w*h is 25",                    # xray size does not match w x h
     "$.links",                      # links is [] before readings, never null
     "$.links[0].dbm",               # a listed link always has a reading
@@ -32,11 +32,16 @@ INVALID = [
     "$.pred.motion",                # nobody there but motion set
     "$.pred.zone",                  # nobody there but zone 3
     "$.pred.zone_set",              # nobody there but zone_set [3]
-    "$.objects[0].near",            # east is 1 m away
+    "$.objects[0].near",            # east is 0.8 m away
     "$.advice.before_dbm",           # shown before the router moves, so already measured
     "$.kind",                       # unknown event kind
     "$.args.mode",
     "unknown type 'ping'",
+    "$.zone",                       # zone 3: the desk layout has zones 1 and 2 only
+    "$.rx",                         # pi5>pi5b:wifi is heard by pi5b, not by the board
+    "$.alert.zone",                 # an alert in zone 4
+    "$.objects[0].near",            # the old tray spot: on the desk layout the board is the closest node, not pi5
+    "$.pred.why[0]",                # not one of the twelve links
     "bad JSON",
 ]
 

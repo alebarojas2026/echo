@@ -1,6 +1,8 @@
-# Contracts (v2, frozen)
+# Contracts (v2.1: the desk layout, frozen)
 
 The message formats every part of Radio Sight agrees on. Only Ivan changes this file. Need a change? Open an issue labeled `contract`, keep working with what's here, and switch when the change lands.
+
+v2.1 changes the layout only: section 3, and the places that named the old 2 x 2 m square, its four nodes, six links and four zones. Every message still carries `"v": 2`. Recordings, baselines and models made on the old layout don't fit this one.
 
 All numbers in the examples below are made-up format examples, not measurements. Real results live only in proof.json and PROOF.md.
 
@@ -20,13 +22,16 @@ Units: absolute signal in dBm (fields end in _dbm); differences in dB (_db); dis
 ## 2. Hosts, ports and binds
 ```
 Addresses:
-- Board (UNO Q) hub Ethernet: 192.168.77.2/24. Pi eth0: 192.168.77.1/24. The Ethernet cable carries all
-  traffic except sensing.
-- Sensing Wi-Fi: the Pi's 5 GHz hotspot, 10.42.0.1/24. The board's wlan0 gets DHCP from it.
+- Board (UNO Q) hub Ethernet: 192.168.77.2/24. Pi A (pi5) eth0: 192.168.77.1/24. The Ethernet cable carries all
+  traffic except sensing and Pi B's readings.
+- Sensing Wi-Fi: Pi A's 5 GHz hotspot, 10.42.0.1/24. The board's wlan0 gets DHCP from it.
+- Pi B (pi5b) has no Ethernet address. Its wlan0 joins the sensing hotspot (DHCP from 10.42.0.1/24), and that
+  link is itself a sensor (pi5>pi5b:wifi). Pi B's readings go to 192.168.77.2:5600 through Pi A, which forwards
+  hotspot -> Ethernet (the hotspot's shared mode), so on the board they arrive from 192.168.77.1.
 Ports:
 - bus: UDP 0.0.0.0:5600 on the board. Senders:
   - processes on the board send to 127.0.0.1:5600;
-  - the Pi sends to 192.168.77.2:5600;
+  - Pi A sends to 192.168.77.2:5600 over the cable; Pi B sends to the same address over the hotspot, through Pi A;
   - the App Lab camera teacher sends to msgpack-rpc-router:5600 (App Lab's host alias; gate 3 confirms it).
 - bus -> brain: UDP 127.0.0.1:5601.
 - brain: WebSocket ws://192.168.77.2:8765/ws (bound to 127.0.0.1 and 192.168.77.2 only).
@@ -36,29 +41,54 @@ Ports:
 
 ## 3. Nodes, links, frame and zones (radio/nodes.json, served as /nodes.json)
 ```
-Frame: metres. Origin = the square's south-west corner; x points east, y points north.
-  The square is 2.0 x 2.0 m (if we shrink to 1.5 m, scale every coordinate).
-Nodes, all 1.0 m high:
-  unoq  N (1.0, 2.0, 1.0)  receiver
-  pi5   S (1.0, 0.0, 1.0)  router + beacon + receiver
-  east  E (2.0, 1.0, 1.0)  beacon
-  west  W (0.0, 1.0, 1.0)  beacon
-Link id = "<tx>><rx>:<kind>". Links: pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble,
-  east>pi5:ble, west>pi5:ble. Each link in nodes.json carries expected_hz, written after the baseline capture.
-Zones: zone = 1 + (x >= 1) + 2*(y < 1); 0 = empty. 1 NW Bed, 2 NE Chair, 3 SW Hall, 4 SE Bathroom.
-  zones: [{id, name, still_alert_s}] with 1 -> 60, 2 -> null, 3 -> null, 4 -> 10.
-router_spots: S-home (1.0, 0.0, 1.0), S-W30 (0.7, 0.0, 1.0), S-E30 (1.3, 0.0, 1.0). Gate 7 sets the distance.
-tray_spots: T1 (1.0, 0.2, 1.0).
-Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by MAC.
+The desk layout: the sensing area is a strip of the judges' aisle against our desk, and every device sits on the desk.
+Frame: metres. Origin = the strip's aisle-side west corner; x points east along the desk, y points north towards the desk.
+  The strip is 1.6 x 0.6 m: 0 <= x <= 1.6, 0 <= y <= 0.6 (frame.strip_m). It is the only place a person stands.
+  The desk top lies behind it: its judge edge is y = 0.6, its back edge y = 1.1.
+  The whole layout is the rectangle 0 <= x <= 1.6, 0 <= y <= 1.1 (frame.size_m): the strip plus the desk top.
+Nodes, every antenna 1.0 m high (the desk plus a 25 cm box):
+  unoq  (1.1, 0.6, 1.0)   the board, at the desk's judge edge: receiver
+  pi5   (0.8, 1.1, 1.0)   Pi A, at the desk's back edge: router (the hotspot) + beacon S + receiver
+  pi5b  (0.5, 0.6, 1.0)   Pi B, at the desk's judge edge: beacon B + receiver
+  east  (1.6, 0.25, 1.0)  ESP32 beacon E, on the tip of a cardboard arm over the aisle
+  west  (0.0, 0.25, 1.0)  ESP32 beacon W, on the tip of a cardboard arm over the aisle
+Link id = "<tx>><rx>:<kind>". Twelve links, always in this order (nodes.json, feature vectors):
+   #  id              kind  tx    rx    where it runs
+   1  pi5>unoq:wifi   wifi  pi5   unoq  over the desk
+   2  pi5>unoq:ble    ble   pi5   unoq  over the desk
+   3  east>unoq:ble   ble   east  unoq  across the strip, East
+   4  west>unoq:ble   ble   west  unoq  across the strip, West and the middle
+   5  east>pi5:ble    ble   east  pi5   the strip's east end
+   6  west>pi5:ble    ble   west  pi5   the strip's west end
+   7  pi5b>unoq:ble   ble   pi5b  unoq  along the desk's judge edge
+   8  pi5>pi5b:wifi   wifi  pi5   pi5b  over the desk
+   9  pi5>pi5b:ble    ble   pi5   pi5b  over the desk
+  10  east>pi5b:ble   ble   east  pi5b  across the strip, East and the middle
+  11  west>pi5b:ble   ble   west  pi5b  across the strip, West
+  12  pi5b>pi5:ble    ble   pi5b  pi5   over the desk
+  Two are Wi-Fi (1 and 8: the board's and Pi B's reading of Pi A's hotspot signal). Ten are Bluetooth.
+  Links 1-6 keep the ids they had on the old layout; 7-12 are new with Pi B. All twelve are classifier links.
+  Each link in nodes.json carries expected_hz, written after the baseline capture.
+Zones: two, in the strip only, split at x = 0.8 (frame.zone_split_x_m).
+  zone = 1 + (x >= 0.8) when 0 <= x <= 1.6 and 0 <= y <= 0.6; anywhere else 0 = empty.
+  1 West "Living room", centre (0.4, 0.3). 2 East "Bathroom", centre (1.2, 0.3).
+  zones: [{id, side, name, centre_m, still_alert_s}] with 1 -> null, 2 -> 10.
+  The desk top (y > 0.6) is never a zone: only objects are there (the tray), never a person.
+router_spots: S-home (0.8, 1.1, 1.0), S-W30 (0.5, 1.1, 1.0), S-E30 (1.1, 1.1, 1.0): Pi A slides along the desk's
+  back edge. Gate 7 sets the distance.
+tray_spots: T1 (0.86, 1.0, 1.0).
+Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'B' | 'E' | 'W'>, never by MAC.
+  S = pi5, B = pi5b, E = east, W = west.
+Code takes ids, positions, links, zones and spots from nodes.json, not from constants of its own.
 ```
 
 ## 4. Inputs to the bus
 ```jsonc
 {"v":2,"type":"rssi","t":1763149512120,"seq":881,"src":"live","link":"east>pi5:ble","kind":"ble","tx":"east","rx":"pi5","dbm":-61}
 {"v":2,"type":"label","t":1763149512150,"seq":412,"src":"live","frame":18231,"mode":"person","persons_in_frame":1,
- "present":true,"zone":4,"foot_m":[1.42,0.61],"motion":"moving","conf":0.81,"clipped":false}
+ "present":true,"zone":2,"foot_m":[1.22,0.31],"motion":"moving","conf":0.81,"clipped":false}
    // One label per processed camera frame (5-10/s), including frames with nobody in them.
-   // present:false only on a processed frame with no foot point inside the square; then zone 0, foot_m null, motion null.
+   // present:false only on a processed frame with no foot point inside the strip; then zone 0, foot_m null, motion null.
    // seq: one counter per sending socket (a producer), shared across all message types it sends.
    // clipped:true -> zone, foot_m and motion are null, whatever present is, and the window is dropped. mode = the current label_mode.
 {"v":2,"type":"cam","t":1763149512200,"seq":77,"src":"live","state":"on","fps":9.6}
@@ -76,24 +106,24 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
 {"v":2,"type":"state","t":1763149512200,"seq":5012,"src":"live","cam":"on","router":"S-home",
  "links":[{"id":"east>pi5:ble","dbm":-63.0,"base_dbm":-58.1,"drop_db":4.9,"rate_hz":9.2,"expected_hz":9.5,"status":"ok","why":0.42}],
  "health":{"status":"ok","blind":[],"reason":null},                         // status ok|degraded|blind; reason rate|jump
- "pred":{"present":true,"kind":"person","zone":2,"zone_set":[2],"probs":[0.02,0.08,0.81,0.07,0.02],
-         "motion":"still","still_s":4.2,"why":["east>unoq:ble","pi5>unoq:wifi"]},
-        // probs = [empty, z1, z2, z3, z4]. kind = person | object | none.
+ "pred":{"present":true,"kind":"person","zone":2,"zone_set":[2],"probs":[0.04,0.11,0.85],
+         "motion":"still","still_s":4.2,"why":["east>unoq:ble","east>pi5b:ble"]},
+        // probs = [empty, z1, z2]: one entry for empty, then one per zone in nodes.json. kind = person | object | none.
         // pred is null before training, while health is blind, while recalibrating, and while the router is off S-home.
         // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
- "objects":[{"xy_m":[1.0,0.2],"near":"pi5","since_s":14.0,"drop_db":9.8}],
+ "objects":[{"xy_m":[0.86,1.0],"near":"pi5","since_s":14.0,"drop_db":9.8}],
         // near (here and in advice) = the closest node within 0.5 m of xy_m, or null when no node is that close.
         // Node positions are where the nodes are now: the router at its current spot after router_moved.
- "xray":{"w":10,"h":10,"cell_m":0.24,"origin_m":[-0.2,-0.2],"moving_db":[/* w*h */],"static_db":[/* w*h */],"n_links":6},
+ "xray":{"w":16,"h":12,"cell_m":0.125,"origin_m":[-0.2,-0.2],"moving_db":[/* w*h */],"static_db":[/* w*h */],"n_links":12},
         // The screen draws whatever w x h it receives. Cells are row by row from the south edge:
         // index = iy*w + ix, ix east from origin_m[0], iy north from origin_m[1]; cell centre = origin_m + (i+0.5)*cell_m.
- "alert":{"state":"counting","zone":4,"still_s":7.2,"limit_s":10},          // none|counting|check_on
+ "alert":{"state":"counting","zone":2,"still_s":7.2,"limit_s":10},          // none|counting|check_on
  "checkin":{"t":1763149511000,"link":"pi5>unoq:wifi"},                       // the last check-in, or null
- "advice":{"id":"a7","cause":"obstruction","near":"pi5","xy_m":[1.0,0.2],"link":"pi5>unoq:wifi","to_spot":"S-W30",
-           "move_m":[-0.3,0.0],"dist_change_m":0.02,"text":"An obstruction next to the router is blocking its link to the receiver. Move the router 30 cm west.",
+ "advice":{"id":"a7","cause":"obstruction","near":"pi5","xy_m":[0.86,1.0],"link":"pi5>unoq:wifi","to_spot":"S-W30",
+           "move_m":[-0.3,0.0],"dist_change_m":0.2,"text":"An obstruction next to the router is blocking its link to the receiver. Move the router 30 cm west.",
            "before_dbm":-71.2,"after_dbm":null,"why":["pi5>unoq:wifi","east>pi5:ble"]},   // or null
  "narration":{"text":"...","event_id":"e123","t":1763149513000,"source":"llm","gen_ms":6120},
- "teacher":{"present":true,"zone":3,"motion":"still"},                       // null when the camera is off
+ "teacher":{"present":true,"zone":1,"motion":"still"},                       // null when the camera is off
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
         // training is null unless a fit is running; while it runs: {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
         // train_s and ms_per_decision are null when nothing was measured (the fake brain), even when trained is true.
@@ -154,7 +184,9 @@ Armed (after hours: the space should be empty):
   the majority of the last 10 decisions, after it was not. It names the zone. Objects never raise it.
 - While health is blind or pred is null, no intrusion is raised and the screen says so (never "all clear").
 X-ray:
-- The grid covers the square plus 0.2 m on each side.
+- The grid covers the whole layout rectangle (frame.size_m: the strip and the desk top, 1.6 x 1.1 m) plus 0.2 m on each
+  side: x from -0.2 to 1.8, y from -0.2 to 1.3. The brain sends 16 x 12 cells of 0.125 m with origin_m [-0.2, -0.2].
+  The desk top is inside the grid because the tray and the router's link are there.
 - Weights per Wilson & Patwari: 1/sqrt(link length) inside an excess path <= 0.1 m.
 - P = (W^T W + alpha I)^-1 W^T, computed at startup and again on router_moved and router_home.
 - Per link, static_db = the drop that has held >= 5 s with the std of its 0.5 s means < 0.8 dB (raw readings are too noisy), updated ONLY while pred is not null and
@@ -171,8 +203,8 @@ Advice:
 - The text is built from the result, never a fixed string.
 - before_dbm = median of pi5>unoq:wifi over the last 3 s: kept current while the advice shows, frozen at router_moved, never null.
 - after_dbm = median over 3 s, starting 2 s after router_moved.
-Router: take the tray off and put the Pi back on S-home BEFORE sending router_home. While the router is off S-home, pred is null. On router_home, every pi5 link must sit within 1 dB of base
-  for 3 s; otherwise the board runs an automatic 20 s baseline ("recalibrating").
+Router: take the tray off and put Pi A back on S-home BEFORE sending router_home. While the router is off S-home, pred is null. On router_home, every pi5 link must sit within 1 dB of base
+  for 3 s (a pi5 link has pi5 as its tx or rx: links 1, 2, 5, 6, 8, 9 and 12; pi5b is a different node); otherwise the board runs an automatic 20 s baseline ("recalibrating").
 Narration:
 - At most one sentence every 8 s. Only for an event <= 3 s old.
 - At most 16 words (a recap: at most 3 sentences and 45 words). A banned word -> use the template sentence instead.
@@ -208,6 +240,8 @@ Board host: python -m bus | python -m radio.wifi_rssi | python -m radio.hci_scan
             python -m teacher.camwatch | python -m brain.main | python board/serve.py |
             llama-server (narrator/llm.service) | python -m narrator.narrate
 Board App Lab: the camera teacher app (teacher/applab/), set as the default app. Nothing else runs in App Lab.
-Pi: python -m pi.radio_node (root) | the hotspot profile from pi/ap.sh | the kiosk command from board/kiosk-notes.md
+Pi A: python -m pi.radio_node --node pi5 (root) | the hotspot profile from pi/ap.sh | the kiosk command from board/kiosk-notes.md
+Pi B: python -m pi.radio_node --node pi5b (root) | WIFI_LINK=pi5>pi5b:wifi python -m radio.wifi_rssi |
+      joined to the sensing hotspot, with BUS_HOST=192.168.77.2 for both programs. No hotspot, no Ethernet, no model.
 Every folder that's run as a module has an __init__.py.
 ```

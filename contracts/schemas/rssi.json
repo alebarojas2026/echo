@@ -19,6 +19,12 @@
     {"if": {"properties": {"link": {"const": "east>unoq:ble"}}}, "then": {"properties": {"tx": {"const": "east"}, "rx": {"const": "unoq"}, "kind": {"const": "ble"}}}},
     {"if": {"properties": {"link": {"const": "west>unoq:ble"}}}, "then": {"properties": {"tx": {"const": "west"}, "rx": {"const": "unoq"}, "kind": {"const": "ble"}}}},
     {"if": {"properties": {"link": {"const": "east>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "east"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}},
-    {"if": {"properties": {"link": {"const": "west>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "west"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}}
+    {"if": {"properties": {"link": {"const": "west>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "west"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "pi5b>unoq:ble"}}}, "then": {"properties": {"tx": {"const": "pi5b"}, "rx": {"const": "unoq"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "pi5>pi5b:wifi"}}}, "then": {"properties": {"tx": {"const": "pi5"}, "rx": {"const": "pi5b"}, "kind": {"const": "wifi"}}}},
+    {"if": {"properties": {"link": {"const": "pi5>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "pi5"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "east>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "east"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "west>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "west"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "pi5b>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "pi5b"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}}
   ]
 }

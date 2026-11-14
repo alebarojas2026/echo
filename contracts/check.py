@@ -18,7 +18,9 @@ from referencing import Registry, Resource
 
 SCHEMAS = Path(__file__).parent / "schemas"
 SHOW = 50  # print at most this many failures and warnings per file
-NODES = {"unoq": (1.0, 2.0), "pi5": (1.0, 0.0), "east": (2.0, 1.0), "west": (0.0, 1.0)}  # section 3, metres
+LAYOUT = json.loads((Path(__file__).parent.parent / "radio" / "nodes.json").read_text(encoding="utf-8"))  # section 3
+NODES = {n["id"]: tuple(n["xyz_m"][:2]) for n in LAYOUT["nodes"]}  # metres
+ROUTER_SPOTS = {s["id"]: tuple(s["xyz_m"][:2]) for s in LAYOUT["router_spots"]}
 NEAR_M = 0.5
 
 
@@ -45,13 +47,14 @@ def errors(msg, schema=None):
         out += [f"$.xray.{k}: has {len(x[k])} cells, w*h is {x['w'] * x['h']}"
                 for k in ("moving_db", "static_db") if len(x[k]) != x["w"] * x["h"]]
         things = [(f"$.objects[{i}]", o) for i, o in enumerate(msg["objects"])] + [("$.advice", msg["advice"])]
-        out += [err for where, thing in things if thing for err in _near(where, thing)]
+        nodes = {**NODES, "pi5": ROUTER_SPOTS[msg["router"]]}  # the router sits at its current spot
+        out += [err for where, thing in things if thing for err in _near(where, thing, nodes)]
     return out
 
 
-def _near(where, thing):
+def _near(where, thing, nodes=NODES):
     """near names the closest node within 0.5 m of xy_m, or null if none is that close (1 cm slack for rounding)."""
-    dist = {n: math.dist(xy, thing["xy_m"]) for n, xy in NODES.items()}
+    dist = {n: math.dist(xy, thing["xy_m"]) for n, xy in nodes.items()}
     best = min(dist, key=dist.get)
     want = best if dist[best] <= NEAR_M else None
     if thing["near"] == want or (abs(dist[best] - NEAR_M) <= 0.01 and thing["near"] in (best, None)):
