@@ -15,14 +15,16 @@ We built Radio Sight at MadHacks 2026 for the Qualcomm / N+1 track and its theme
 Radio Sight reads how people and objects change the radio links in a room. It combines those changes into a live radio map that can:
 
 - find real dead zones instead of guessing from a router's advertised range;
-- distinguish stationary obstructions from moving people;
+- use a radio X-ray to separate moving activity from persistent changes since the room baseline;
+- distinguish a person from an object without identifying the person;
 - report whether someone is present and moving;
+- recognize a deliberate check-in motion without a phone or button;
 - raise a no-movement alert when the radio pattern remains still for the configured period; and
-- explain what changed in plain language.
+- use an on-board narrator to explain what changed in plain language.
 
 During setup, an attached camera provides temporary location labels so the on-board model can learn the room's radio patterns. The camera is then unplugged. No image is saved, and live operation uses radio data alone. Processing stays on the Arduino UNO Q, powered by Qualcomm Dragonwing, so room data does not need to leave the device.
 
-Our measured localization accuracy is __. Our measured end-to-end update latency is __. Full methods and limits belong with those results so the demo stays honest.
+Our measured localization accuracy is __. Our measured person-vs-object accuracy is __. Our measured end-to-end update latency is __. Full methods and limits belong with those results so the demo stays honest.
 
 ## How we built it
 
@@ -30,7 +32,11 @@ We placed small radio nodes around a floor zone: the Arduino UNO Q, a Raspberry 
 
 The setup pipeline uses camera labels only as a temporary teacher. A small model trains on the UNO Q to associate link changes with locations. After setup, the camera is disconnected and the model predicts from radio measurements alone.
 
-The board combines the link measurements into a radio image of the room. Stable changes point to obstructions or persistent coverage problems; changing patterns point to human movement. A local web interface shows the room, radio links, dead zones, presence and movement status, and plain-language explanations. A placement advisor then suggests how to move equipment and verifies whether the change improved coverage.
+The board combines the link measurements into a radio X-ray of the room. Its moving layer compares the latest signal changes with the recent past. Its static layer shows persistent changes since the baseline; it does not label walls. The on-board model classifies presence, movement, location, and whether the pattern fits a person or an object.
+
+A check-in rule recognizes a deliberate back-and-forth radio pattern while the predicted zone stays unchanged. The same local pipeline runs the no-movement alert and pauses that alert whenever a radio link is blind.
+
+A local web interface shows the room, radio links, X-ray layers, dead zones, presence and movement status, and plain-language explanations. The dead-zone advisor uses the measured obstruction and link geometry to recommend a tested router position, then records the signal before and after the move. An on-board narrator turns fresh events into short explanations and uses a local template if its language model cannot produce a safe result in time.
 
 Everything runs locally. The system does not require a cloud service for inference, storage, or the live display.
 
@@ -40,15 +46,15 @@ Radio data is noisy. Signal strength changes when a door moves, a chair shifts, 
 
 The room also matters. A model trained against one layout cannot assume that every other space has the same radio paths. We designed setup as an explicit calibration step and kept the product focused on explaining the current room.
 
-Integrating the full path was another challenge: radio collection, temporary camera labels, on-board learning, live predictions, the room display, advice, and proof all had to agree on timing and message formats. Running the pipeline on the Arduino UNO Q forced us to keep each part small and deliberate.
+Integrating the full path was another challenge: radio collection, temporary camera labels, on-board learning, live predictions, check-in events, the room display, narration, advice, and proof all had to agree on timing and message formats. Running the pipeline on the Arduino UNO Q forced us to keep each part small and deliberate.
 
 ## Accomplishments
 
-We built a complete local loop from measurement to action. Radio Sight collects real link data, learns a room, runs without the setup camera, identifies dead zones, tracks presence and movement, explains its output, recommends a placement change, and measures the result after the change.
+We built a complete local loop from measurement to action. Radio Sight collects real link data, learns a room, runs without the setup camera, identifies dead zones, distinguishes person and object patterns, tracks presence and movement, recognizes a check-in, explains events with its on-board narrator, recommends a placement change, and measures the result after the change.
 
 We are especially proud that privacy is part of the architecture, not a promise added at the end. Camera input is temporary, images are never saved, and the live system works with the camera unplugged. The Qualcomm Dragonwing platform gives us enough on-device capability to keep the experience responsive without a cloud dependency.
 
-We also built proof into the project. The measured dead-zone improvement is __. The measured presence accuracy is __. The measured no-movement alert latency is __.
+We also built proof into the project. The measured dead-zone improvement is __. The measured presence accuracy is __. The measured person-vs-object accuracy is __. The measured no-movement alert latency is __.
 
 ## What we learned
 
