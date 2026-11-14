@@ -3,10 +3,18 @@
 The board service runs `python -m teacher.camwatch` without flags and loads the
 repository `.env` as its EnvironmentFile. Set `TEACHER_APP` to the installed App
 Lab alias, `TEACHER_HEARTBEAT` to the host path of the mounted heartbeat file, and
-optionally `TEACHER_DEVICE` to the Brio device path (default /dev/video0).
+optionally `TEACHER_DEVICE` to the Brio's stable capture path.
 Flags override these environment values. The container's TEACHER_HEARTBEAT uses
 the corresponding container mount path; it need not equal the host path string.
 The Python entry point reads its process environment; systemd loads `.env`.
+
+Without an override, each 50 ms poll discovers the first existing
+`/dev/v4l/by-id/usb-*-video-index0` entry. The expected Brio vendor/model pattern
+is `/dev/v4l/by-id/usb-*Logitech*BRIO*-video-index0`; inspect the board's actual
+vendor/model spelling. Keep the full local path, including any serial, in .env
+only. Other capture indexes, non-USB nodes and dangling symlinks are ignored.
+No match means off; `/dev/video0` is never used as automatic presence evidence.
+Presence alone means stalled until a processed-frame heartbeat establishes on.
 
 Run `python -m teacher.camwatch --app user:radio-sight-teacher --heartbeat
 <host-shared-directory>/heartbeat.json` on the **host**, not inside App Lab.
