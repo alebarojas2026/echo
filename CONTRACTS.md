@@ -97,7 +97,8 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
 ```
 Before readings, a baseline or training exists, the brain still sends state at about 10/s with these values:
-- links: [] until readings arrive (never null);
+- links: [] until readings arrive (never null). A link is listed once it has at least one reading (dbm is then a number);
+  before the baseline its base_dbm, drop_db and expected_hz are null, and status is "ok" or "stale" from its rate;
 - xray: null before the first baseline;
 - objects: [], advice: null, checkin: null, narration: null until each exists;
 - alert: {"state":"none","zone":null,"still_s":0,"limit_s":null} when nothing is counting;
