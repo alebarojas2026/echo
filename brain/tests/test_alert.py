@@ -216,3 +216,42 @@ def test_walking_out_clears_the_count():
     gone = {"present": False, "zone": 0, "zone_set": [], "kind": "none", "motion": None}
     watch, on_at = stand({i: gone for i in range(50, 200)}, seconds=15)
     assert on_at is None and watch.still_ms == 0 and watch.alert_block()["state"] == "none"
+
+
+def mixed(counts, seconds=4):
+    """4 s still in zone 4, then 10 decisions mixed as given ((pred, how many) pairs, interleaved)."""
+    watch = Watch(LIMITS, Led())
+    i = 0
+    for i in range(seconds * 10):
+        watch.on_pred(T0 + i * 100, STILL)
+    before = watch.still_ms
+    rest = [p for p, n in counts for _ in range(n)]
+    order = sorted(range(len(rest)), key=lambda k: (k % 3, k))    # shuffle them a little
+    for j, k in enumerate(order):
+        watch.on_pred(T0 + (i + 1 + j) * 100, rest[k])
+    return watch, before
+
+
+def test_no_zone_takes_over_without_6_of_the_last_10():
+    gone = {"present": False, "zone": 0, "zone_set": [], "kind": "none", "motion": None}
+    watch, before = mixed([(STILL, 3), (dict(STILL, zone=3, zone_set=[3]), 4), (gone, 3)])
+    assert watch.zone == 4 and watch.still_ms > before      # 4 of 10 is the most common, not a majority
+
+
+def test_no_kind_takes_over_without_6_of_the_last_10():
+    thing = dict(STILL, kind="object")
+    nothing = dict(STILL, kind="none")
+    watch, before = mixed([(STILL, 4), (thing, 3), (nothing, 3)])
+    assert watch._kind == "person" and watch.still_ms > before   # object and none are different kinds
+    watch, before = mixed([(STILL, 2), (thing, 2), (nothing, 6)])
+    assert watch._kind == "none" and watch.still_ms == 0         # 6 of 10 does take over
+
+
+def test_a_single_flipped_zone_still_cancels_a_wave_in_progress():
+    watch = Watch(LIMITS, Led())
+    watch.on_pred(T0, STILL)
+    marks = []
+    watch.checkin_rule.zone_changed = marks.append
+    watch.on_pred(T0 + 100, dict(STILL, zone=3, zone_set=[3]))   # one flipped decision
+    watch.on_pred(T0 + 200, STILL)
+    assert marks == [T0 + 100, T0 + 200] and watch.zone == 4     # raw changes reach the check-in rule
