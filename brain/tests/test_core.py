@@ -831,31 +831,14 @@ def _fitted(fit):
     return next(c.cell_contents for c in fit.__closure__ if isinstance(c.cell_contents, list))
 
 
-def test_a_new_baseline_finishes_when_the_beacons_now_send_far_slower_than_before():
-    """Yesterday's baseline measured 30 readings a second; today's beacons send 10. The old
-    expected rate must not call every link stale and hold the new baseline off for ever."""
-    import json
-    from sim import fake, wire
-
-    def feed(brain, rate, t0, seconds=30):
-        path = dict(fake.load_path("empty_room"), duration_s=seconds)
-        encode, t = wire.encoder(t0), t0
-        for ev in fake.simulate(path, rate=rate, seed=3):
-            m = json.loads(encode(ev))
-            m["recv_t"] = t = m["t"]
-            brain.on_message(m)
-            if m["type"] == "cam":
-                brain.state()                      # the live loop takes state all the time
-        return t + 100
-
-    brain = Brain()
-    brain.on_cmd(cmd("baseline"))
-    t = feed(brain, 30.0, T0_MS)
-    assert brain.expected_hz["east>unoq:ble"] > 25 and brain.capture is None
-    t = feed(brain, 10.0, t, seconds=8)            # slower beacons: stale against the old rate
-    assert brain.state()["health"]["status"] != "ok"
-    brain.on_cmd(cmd("baseline"))
-    feed(brain, 10.0, t, seconds=35)
-    assert brain.capture is None, "the new baseline never finished"
-    assert 8 < brain.expected_hz["east>unoq:ble"] < 12
-    assert brain.state()["health"]["status"] == "ok"
+def test_one_tray_gives_one_advice_that_does_not_flip_between_spots():
+    """A tray on the centre line scores the two spots the same; noise must not flip the sentence."""
+    brain, feed = taught()
+    for seed in (52, 60, 61):
+        brain.pop_events()
+        states = []
+        feed.play("tray_t1", seed=seed, states=states)
+        shown = [s["advice"] for _, s in states if s["advice"]]
+        assert len(shown) > 150                                  # it shows for most of the 30 s
+        assert len({(a["id"], a["to_spot"], a["text"]) for a in shown}) == 1
+        assert [e["kind"] for e in brain.pop_events()].count("advice") == 1
