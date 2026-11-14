@@ -38,3 +38,30 @@ test('shows blind while the feed is fresh, then no data when it goes stale', asy
   await expect(page.getByTestId('sensor-blind')).toBeHidden()
   await expect(page.getByTestId('pred-kind')).toHaveText('__')
 })
+test('controls emit v2 commands with selected arguments', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.commands = []
+    document.addEventListener('hud-command', event => window.commands.push(event.detail))
+  })
+  await page.goto(path)
+  await page.getByTestId('train-button').click()
+  await page.getByRole('button', { name: 'Baseline', exact: true }).click()
+  await page.getByLabel('Session').fill('demo-session')
+  await page.getByLabel('Purpose').selectOption('demo')
+  await page.getByLabel('Walker').fill('demo-walker')
+  await page.getByRole('button', { name: 'Start recording' }).click()
+  await page.getByRole('button', { name: 'Stop recording' }).click()
+  await page.getByLabel('Label mode', { exact: true }).selectOption('object')
+  await page.getByRole('button', { name: 'Set label mode' }).click()
+  await page.getByLabel('New router spot').selectOption('S-E30')
+  await page.getByRole('button', { name: 'Router moved' }).click()
+  await page.getByRole('button', { name: 'Router home' }).click()
+  await page.getByRole('button', { name: 'Reset alert' }).click()
+  await page.getByRole('button', { name: 'Reset demo' }).click()
+  expect(await page.evaluate(() => window.commands)).toEqual([
+    ['train', {}], ['baseline', {}],
+    ['record_start', { session: 'demo-session', purpose: 'demo', walker: 'demo-walker' }],
+    ['record_stop', {}], ['label_mode', { mode: 'object' }], ['router_moved', { spot: 'S-E30' }],
+    ['router_home', {}], ['reset_alert', {}], ['reset', {}],
+  ].map(([cmd, args]) => ({ v: 2, type: 'cmd', cmd, args })))
+})
