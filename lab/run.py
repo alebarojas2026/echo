@@ -49,7 +49,7 @@ DEFAULT_CFG = {
     "n_estimators": TR.FOREST["n_estimators"], "max_depth": TR.FOREST["max_depth"],
     "window_ms": F.WINDOW_MS,
     "cross_db": AL.CROSS_DB, "crossings": AL.CROSSINGS, "cross_window_ms": AL.CROSS_WINDOW_MS,
-    "smooth_n": AL.SMOOTH_N,
+    "smooth_n": AL.SMOOTH_N, "other_link_db": AL.OTHER_LINK_DB,
     "stale_frac": H.STALE_FRAC, "jump_db": H.JUMP_DB, "blind_after_s": H.BLIND_AFTER_S,
     "clear_after_s": H.CLEAR_AFTER_S,
     "alpha_rel": X.ALPHA_REL, "static_std_db": X.STATIC_STD_DB,
@@ -57,6 +57,7 @@ DEFAULT_CFG = {
 _TARGETS = {
     "window_ms": (F, "WINDOW_MS"), "cross_db": (AL, "CROSS_DB"), "crossings": (AL, "CROSSINGS"),
     "cross_window_ms": (AL, "CROSS_WINDOW_MS"), "smooth_n": (AL, "SMOOTH_N"),
+    "other_link_db": (AL, "OTHER_LINK_DB"),
     "stale_frac": (H, "STALE_FRAC"), "jump_db": (H, "JUMP_DB"), "blind_after_s": (H, "BLIND_AFTER_S"),
     "clear_after_s": (H, "CLEAR_AFTER_S"), "alpha_rel": (X, "ALPHA_REL"),
     "static_std_db": (X, "STATIC_STD_DB"),
@@ -486,7 +487,8 @@ def score(tl, plan, res, msgs):
     # SENSOR BLIND
     lo0, lo1 = plan["out_long"]
     bon = [a for a, k, _ in lev if k == "blind_on"]
-    m["blind_hit"] = any(lo0 <= a <= lo1 + 1.0 for a in bon)
+    blind_now = np.array([x[5] == "blind" for x in tk])
+    m["blind_hit"] = bool(np.any(blind_now & (t >= lo0) & (t <= lo1 + 1.0)))
     hits = [a for a in bon if lo0 <= a <= lo1 + 1.0]
     m["blind_latency_s"] = round(hits[0] - lo0, 2) if hits else None
     so0, so1 = plan["out_short"]
@@ -526,9 +528,9 @@ def score(tl, plan, res, msgs):
 
 # ---------------------------------------------------------------- replays
 
-CHECKIN_GRID = [{"cross_db": c, "crossings": n, "cross_window_ms": w, "smooth_n": s}
-                for c in (0.75, 1.0, 1.5, 2.0, 3.0) for n in (2, 3, 4, 6) for w in (1500, 2500, 3500)
-                for s in (1, 3)]
+CHECKIN_GRID = [{"cross_db": c, "crossings": n, "cross_window_ms": w, "other_link_db": o}
+                for c in (1.0, 1.5, 2.0, 3.0) for n in (3, 4, 6) for w in (1500, 2500, 3500)
+                for o in (3.0, 6.0, 99.0)]
 HEALTH_GRID = [{"stale_frac": s, "blind_after_s": b, "jump_db": j}
                for s in (0.3, 0.4, 0.5) for b in (2.0, 3.0, 4.0) for j in (4.0, 6.0, 8.0, 10.0)]
 XRAY_GRID = [{"alpha_rel": a, "static_std_db": s} for a in (0.03, 0.1, 0.3, 1.0) for s in (0.8, 1.5, 2.5, 4.0)]
@@ -547,18 +549,25 @@ def replay_checkin(res, plan, grid=CHECKIN_GRID):
     for g in grid:
         with patched(g):
             watch = AL.Watch(limits=LIMITS)
-            chk, i = [], 0
+            chk, gated, i, recent = [], [], 0, []
             rs = res["live_rssi"]
             for t, p in preds:
                 while i < len(rs) and rs[i]["recv_t"] <= t:
                     watch.on_rssi(rs[i])
                     i += 1
                 watch.on_pred(t, p)
-                chk += [(t - T0) / 1000 for k, _ in watch.pop_events() if k == "checkin"]
+                recent = (recent + [p is not None and p["motion"] == "still"])[-10:]
+                for k, _ in watch.pop_events():
+                    if k == "checkin":
+                        chk.append((t - T0) / 1000)
+                        if sum(recent) >= 7:   # variant: only while the person reads still
+                            gated.append((t - T0) / 1000)
         hit = [a for a in chk if w0 <= a <= w1 + 2.0]
+        ghit = [a for a in gated if w0 <= a <= w1 + 2.0]
         rows.append(dict(g, hit=bool(hit), false=len(chk) - len(hit),
                          false_per_min=(len(chk) - len(hit)) / max(person_min, 1e-6),
-                         latency_s=round(hit[0] - w0, 2) if hit else None))
+                         latency_s=round(hit[0] - w0, 2) if hit else None,
+                         hit_still=bool(ghit), false_per_min_still=(len(gated) - len(ghit)) / max(person_min, 1e-6)))
     return rows
 
 
@@ -574,17 +583,18 @@ def replay_health(res, plan, grid=HEALTH_GRID):
             hm = H.Health.from_nodes(NODES_DOC)
             hm.set_base(brain.base)
             hm.set_expected(brain.expected_hz)
-            on, i, rs = [], 0, res["live_rssi"]
+            on, i, rs, during = [], 0, res["live_rssi"], False
             for x in res["ticks"]:
                 t = x[0]
                 while i < len(rs) and rs[i]["recv_t"] <= t:
                     hm.add(rs[i]["link"], rs[i]["recv_t"], rs[i]["dbm"])
                     i += 1
                 out = hm.update(t, x[4], True, False)
+                during |= hm.blind and lo0 <= (t - T0) / 1000 <= lo1 + 1.0
                 on += [((t - T0) / 1000, e["info"].get("reason")) for e in out["events"] if e["kind"] == "blind_on"]
         hit = [a for a, _ in on if lo0 <= a <= lo1 + 1.0]
         false = [a for a, _ in on if not (lo0 <= a <= lo1 + 1.0) and not (so0 <= a <= so1 + 3.5)]
-        rows.append(dict(g, hit=bool(hit), latency_s=round(hit[0] - lo0, 2) if hit else None,
+        rows.append(dict(g, hit=during, latency_s=round(hit[0] - lo0, 2) if hit else None,
                          short=any(so0 <= a <= so1 + 3.5 for a, _ in on), false=len(false),
                          false_jump=len([1 for a, r in on if r == "jump" and a in false])))
     return rows
