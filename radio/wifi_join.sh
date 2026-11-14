@@ -6,7 +6,7 @@
 #
 # Install everything the board needs first: once it's on the hotspot it has no internet.
 # Needs SENSING_SSID, SENSING_PSK and SENSING_BSSID (or WIFI_BSSID) in the repo's .env. The BSSID
-# is the Pi hotspot's address: on the Pi, after pi/ap.sh, the addr line of `iw dev <its 5 GHz
+# is the Pi hotspot's address: on the Pi, after pi/ap.sh, the addr line of `/usr/sbin/iw dev <its 5 GHz
 # interface> info`.
 set -euo pipefail
 
