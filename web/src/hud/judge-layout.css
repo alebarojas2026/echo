@@ -1,0 +1,12 @@
+.judge.shell-hud { width:640px; height:100vh; overflow:hidden; }
+.judge.shell-hud footer { flex-shrink:0; }
+.judge.shell-hud .judge-moment { min-height:184px; }
+.judge.shell-hud .judge-extra:empty { display:none; }
+.judge.shell-hud .judge-narrator { max-height:68px; overflow:hidden; }
+.judge.shell-hud footer dl { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 24px; }
+@media(min-width:1101px) and (max-height:800px) {
+  .judge.shell-hud { width:640px; height:150vh; transform:scale(.6666667); transform-origin:top left; }
+}
+@media(max-width:1100px) {
+  .judge.shell-hud { width:100%; height:100vh; overflow:auto; }
+}
