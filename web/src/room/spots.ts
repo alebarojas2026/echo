@@ -1,6 +1,6 @@
 import { Mesh, MeshBasicMaterial, RingGeometry, Shape, ShapeGeometry } from 'three'
 import type { Advice } from './contract'
-import { HOME_SPOT, ROUTER_SPOTS } from './frame'
+import { HOME_SPOT, ROUTER_SPOTS, spotName } from './frame'
 import { INK, LINE, OLIVE } from './palette'
 import { v3 } from './stage'
 import type { RoomView } from './view'
@@ -9,7 +9,6 @@ import type { RoomView } from './view'
 // floor from S-home to advice.to_spot. Olive here means "you can act here": move the router this way.
 
 const ARROW_Y_M = -0.13 // just south of the square's edge, clear of the spot rings
-const SPOT_NAMES: Record<string, string> = { 'S-home': 'home', 'S-W30': '30 cm W', 'S-E30': '30 cm E' }
 
 /** The arrow to draw for this advice and router spot: from S-home to the advised spot, or null. */
 export function adviceArrow(advice: Advice | null, router: string): { from: string; to: string; done: boolean } | null {
@@ -50,7 +49,7 @@ export class RouterSpots {
       mesh.position.copy(v3([x, y, 0.003]))
       view.scene.add(mesh)
       this.rings.set(id, mat)
-      view.addLabel(SPOT_NAMES[id] ?? id, v3([x, y - 0.26, 0]), 'room-label--spot')
+      view.addLabel(spotName(id), v3([x, y - 0.26, 0]), 'room-label--spot')
     }
     this.arrow = new Mesh(arrowGeometry(0.3), new MeshBasicMaterial({ color: OLIVE, transparent: true, depthWrite: false }))
     this.arrow.rotation.x = -Math.PI / 2
