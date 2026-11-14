@@ -5,14 +5,17 @@ Use this checklist for the live demo. It follows `CONTRACTS.md` v2. Do not fill 
 ## Preflight
 
 - [ ] Connect the board and Pi with the direct Ethernet cable.
-- [ ] Confirm the Pi's 5 GHz sensing hotspot is running and the board joined it.
-- [ ] Open `http://192.168.77.2:8080` on the demo screen.
+- [ ] Ask Alexander to run `sudo bash pi/eth.sh` on the Pi and `sudo bash board/eth.sh` on the UNO Q.
+- [ ] Ask Alexander to run `sudo bash pi/ap.sh` on the Pi and `sudo bash radio/wifi_join.sh` on the UNO Q.
+- [ ] Join the demo laptop to the Pi's 5 GHz hotspot. Do not copy files or bundles over it during a demo or recording.
+- [ ] Open `http://192.168.77.2:8080/?src=ws` in the laptop browser.
 - [ ] Confirm `/nodes.json` and `/proof.json` load from the same address.
 - [ ] Confirm the live WebSocket at `ws://192.168.77.2:8765/ws` is producing contract v2 `state` messages.
 - [ ] Confirm the source badge says `live`, the feed is fresh, and `health.status` is `ok`.
 - [ ] Put the router at `S-home`. Predictions are intentionally unavailable anywhere else.
 - [ ] Connect the setup camera and confirm `cam-status` reports `on`.
 - [ ] Keep the square clear of people and movable objects before the baseline.
+- [ ] Let the narrator warm its local model in the background. Do not delay the demo; the template path remains available.
 
 Do not start the demo while the screen says `NO DATA` or `SENSOR BLIND`. Neither state means that the room is empty.
 
@@ -35,7 +38,7 @@ If the baseline or training fails, fix the failed preflight item and repeat the 
 3. **No-movement alert:** Ask the judge to remain still in a zone with a configured limit. Wait for the alert banner; do not call it anything else.
 4. **Wave check-in:** Ask for the practiced back-and-forth motion without changing zones. Wait for the `checkin-toast` and confirm the alert clears.
 5. **Tray vs person:** Place the metal tray at its marked spot. Show the object marker only after the radio state reports an object rather than a person.
-6. **Router advice:** Wait for the generated `advice-text`, show the recommended spot and before value, move the router there, and send `router_moved` with that spot. A null prediction during the move is expected. Wait for the after value and advice result; report improvement only from measured proof data, otherwise show `__`.
+6. **Router advice:** First confirm `pi5>unoq:wifi` is dropping now with `drop_db` of at least `3 dB`; advice does not appear without that live drop. Then wait for the generated `advice-text`, show the recommended spot and before value, move the router there, and send `router_moved` with that spot. A null prediction during the move is expected. Wait for the after value and advice result; report improvement only from measured proof data, otherwise show `__`.
 7. **Camera unplug:** Follow the camera-unplug proof below and keep the disconnected cable visible.
 8. **Proof:** Finish on the proof strip. Every missing measurement must remain `__`.
 
@@ -58,7 +61,9 @@ Alexander handles the tray and Pi. Keep software commands with the operator.
 3. Ask Alexander to return the Pi to `S-home`.
 4. Only then send `router_home`.
 5. Wait until prediction resumes or the automatic baseline finishes, then confirm health is `ok`.
-6. Stop any active recording and send `reset` before the next judge.
+6. Stop any active recording and send `reset`.
+7. Keep the screen visible until the end-of-demo recap appears. If local generation is unavailable, wait for the fact-based template recap; do not invent a summary.
+8. The narrator warms its normal sentence prompt again in the background after the recap. Do not hold the next judge for that warmup.
 
 Call the alert a `no-movement alert`. Reset it with a check-in or the reset control.
 
@@ -96,7 +101,7 @@ Return the router to `S-home` and send `router_home`. If the home links do not r
 
 ### Narration is unavailable
 
-Continue with the on-board template explanation. Do not delay or invent an event description while waiting for the language model.
+Continue with the on-board template explanation. The narrator keeps warming the local model in the background after startup, a failed model call, and the recap. Do not delay or invent an event description while waiting for the language model.
 
 ## After the demo
 
