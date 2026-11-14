@@ -1,5 +1,7 @@
 import './room.css'
+import { Beams } from './beams'
 import type { Feed } from './feed'
+import { Mirror } from './mirror'
 import { Stage } from './stage'
 import { RoomView } from './view'
 
@@ -13,6 +15,8 @@ export function mountRoom(host: HTMLElement, feed: Feed): Room {
   host.classList.add('room')
   const view = new RoomView(host)
   const stage = new Stage(view)
+  const mirror = new Mirror(host)
+  const beams = new Beams(view, mirror)
 
   let router: string | null = null
   feed.subscribe(({ state, stale }) => {
@@ -24,6 +28,7 @@ export function mountRoom(host: HTMLElement, feed: Feed): Room {
       router = state.router
       stage.placeNodes(router)
     }
+    beams.update(state)
   })
   return { view, stage }
 }
