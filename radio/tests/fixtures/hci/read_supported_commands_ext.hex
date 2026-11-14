@@ -1,0 +1,10 @@
+# Command Complete for Read Local Supported Commands (7.4.2), from a controller with extended scanning
+04 0e 44          # event packet, Command Complete, 68 parameter bytes
+01                # Num_HCI_Command_Packets
+02 10             # opcode 0x1002
+00                # status: success
+# Supported_Commands, 64 octets (6.27). Only the LE bits this code reads are set.
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   # octets 0-15
+00 00 00 00 00 00 00 00 00 f7 ff 00 00 00 00 00   # octets 16-31: 25 and 26 = legacy LE adv and scan commands
+00 00 00 00 00 60 00 00 00 00 00 00 00 00 00 00   # octets 32-47: 37 bit 5 = Set Ext Scan Params, bit 6 = Set Ext Scan Enable
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   # octets 48-63
