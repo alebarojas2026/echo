@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -219,3 +220,78 @@ def test_python_dash_m_bus_runs(tmp_path):
         proc.wait(5)
         producer.close()
         brain.close()
+
+
+def test_a_new_bus_carries_on_with_the_open_recording(bus, tmp_path):
+    bus.handle(cmd("record_start", session="held1", purpose="heldout", walker="w1"), B)
+    bus.handle(msg(1), A)
+    bus.close()                                         # systemd stops or restarts the bus
+    again = Bus(sessions=tmp_path, send=lambda data: None)
+    assert again.recorder.session == "held1"
+    again.handle(msg(2), A)
+    again.handle(cmd("record_stop"), B)
+    assert [(m["type"], m.get("seq")) for m in lines(tmp_path / "held1.jsonl")] == \
+        [("meta", 1), ("rssi", 1), ("rssi", 2)]       # one meta line: it just carries on
+    assert not (tmp_path / ".open").exists()
+    assert not Bus(sessions=tmp_path).recorder.recording
+
+
+def test_record_stop_ends_it_for_the_next_bus_too(bus, tmp_path):
+    bus.handle(cmd("record_start", session="s1", purpose="train", walker=None), B)
+    bus.handle(cmd("record_stop"), B)
+    assert not Bus(sessions=tmp_path).recorder.recording
+
+
+def test_a_stale_or_bad_mark_is_dropped(bus, tmp_path):
+    bus.handle(cmd("record_start", session="old1", purpose="train", walker=None), B)
+    bus.close()
+    old = time.time() - 3600                            # the bus was off for an hour
+    os.utime(tmp_path / "old1.jsonl", (old, old))
+    assert not Bus(sessions=tmp_path).recorder.recording
+    assert not (tmp_path / ".open").exists()
+    (tmp_path / ".open").write_text(json.dumps({"session": "../evil"}))
+    assert not Bus(sessions=tmp_path).recorder.recording
+    (tmp_path / ".open").write_text("not json")
+    assert not Bus(sessions=tmp_path).recorder.recording
+
+
+def test_a_killed_bus_process_loses_nothing_from_the_recording(tmp_path):
+    port = free_port()
+    argv = [sys.executable, "-m", "bus", "--host", "127.0.0.1", "--port", str(port),
+            "--forward", f"127.0.0.1:{free_port()}", "--sessions", str(tmp_path)]
+    producer = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    path = tmp_path / "held2.jsonl"
+
+    def readings(seqs, expect_lines):
+        for seq in seqs:
+            producer.sendto(msg(seq), ("127.0.0.1", port))
+        deadline = time.time() + 5
+        while (not path.exists() or len(path.read_text().splitlines()) < expect_lines) and time.time() < deadline:
+            time.sleep(0.02)
+
+    first = subprocess.Popen(argv, cwd=REPO, stderr=subprocess.PIPE, text=True)
+    try:
+        assert "listening on" in first.stderr.readline()
+        producer.sendto(cmd("record_start", session="held2", purpose="heldout", walker="w1"), ("127.0.0.1", port))
+        readings(range(1, 21), 21)
+    finally:
+        first.kill()                                    # no clean shutdown at all
+        first.wait(5)
+        first.stderr.close()
+    second = subprocess.Popen(argv, cwd=REPO, stderr=subprocess.PIPE, text=True)
+    try:
+        log = [second.stderr.readline() for _ in range(2)]
+        readings(range(21, 41), 41)
+        producer.sendto(cmd("record_stop"), ("127.0.0.1", port))
+        deadline = time.time() + 5
+        while (tmp_path / ".open").exists() and time.time() < deadline:
+            time.sleep(0.02)
+    finally:
+        second.terminate()
+        second.wait(5)
+        second.stderr.close()
+        producer.close()
+    assert any("appending to it again" in line for line in log)
+    got = lines(path)
+    assert [m["type"] for m in got] == ["meta"] + ["rssi"] * 40
+    assert [m["seq"] for m in got[1:]] == list(range(1, 41))
