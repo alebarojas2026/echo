@@ -8,7 +8,8 @@ from sim.wire import encoder
 # Made-up addresses, built from pieces so no address-shaped text sits in the repo.
 PARTS = ["02", "00", "5e", "10", "00", "01"]
 MACS = [":".join(PARTS), "-".join(PARTS).upper(), ".".join("".join(PARTS)[i:i + 4] for i in (0, 4, 8)),
-        "_".join(PARTS).upper(), "".join(PARTS)]
+        "_".join(PARTS).upper()]
+BARE = "".join(PARTS)
 RSSI = {"v": 2, "type": "rssi", "t": 1763149512120, "seq": 881, "src": "live", "recv_t": 1763149512125,
         "link": "east>pi5:ble", "kind": "ble", "tx": "east", "rx": "pi5", "dbm": -61}
 
@@ -48,6 +49,18 @@ def test_bluez_object_path_loses_its_address():
     path = "/org/bluez/hci0/dev_" + "_".join(PARTS).upper()
     out, found = clean({**RSSI, "path": path})
     assert out["path"] == "/org/bluez/hci0/dev_[removed]" and found == ["mac"]
+
+
+@pytest.mark.parametrize("key", ["src_mac", "peer_addr", "ap_bssid", "SRC_MAC"])
+def test_bare_12_hex_is_blanked_under_an_address_field(key):
+    out, found = clean({**RSSI, key: BARE, "seen": {key: [BARE.upper(), "ok"]}})
+    assert out[key] == "[removed]" and out["seen"][key] == ["[removed]", "ok"] and found == ["mac", "mac"]
+
+
+def test_bare_12_hex_elsewhere_is_left_alone():
+    msg = {**RSSI, "commit": "88d33ac1f2e4", "uuid": "0000feaa-0000-1000-8000-00805f9b34fb",
+           "model": "m3-5f9b34fb12aa", "note": BARE, "raw": [BARE]}
+    assert clean(msg) == (msg, [])
 
 
 def test_nested_identifiers_are_deleted():

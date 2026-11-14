@@ -6,7 +6,8 @@
 What it does to every JSON line:
   - deletes any field whose name says it holds an identifier (mac, bssid, ssid, name, ...);
   - blanks anything shaped like a MAC address inside any other text (with :, -, _ or . between
-    the bytes, or 12 hex digits in a row).
+    the bytes); 12 hex digits in a row are blanked only under a field named like an address
+    (its name contains mac, addr or bssid).
 Contract fields (CONTRACTS.md v2) are never touched, so a scrubbed file still replays.
 """
 import argparse
@@ -18,29 +19,33 @@ import sys
 ID_KEYS = {"mac", "bssid", "ssid", "essid", "addr", "address", "bdaddr", "peer", "name",
            "device", "device_name", "local_name", "complete_local_name", "hostname", "host"}
 # Address shapes, none of them inside a longer run of hex digits:
-#   aa:bb:cc:dd:ee:ff   AA-BB-CC-DD-EE-FF   AA_BB_CC_DD_EE_FF (BlueZ paths, dev_AA_BB_...)
-#   aabb.ccdd.eeff      aabbccddeeff (no separators)
+#   aa:bb:cc:dd:ee:ff   AA-BB-CC-DD-EE-FF   AA_BB_CC_DD_EE_FF (BlueZ paths, dev_AA_BB_...)   aabb.ccdd.eeff
 _H = "[0-9A-Fa-f]"
 MAC = re.compile(rf"(?<!{_H})(?:{_H}{{2}}([:_-])(?:{_H}{{2}}\1){{4}}{_H}{{2}}"
-                 rf"|{_H}{{4}}\.{_H}{{4}}\.{_H}{{4}}"
-                 rf"|{_H}{{12}})(?!{_H})")
+                 rf"|{_H}{{4}}\.{_H}{{4}}\.{_H}{{4}})(?!{_H})")
+# 12 hex digits with no separators look like any other hex (a short commit hash, the end of a
+# UUID), so they are only blanked under a field whose name says it holds an address.
+BARE = re.compile(rf"(?<!{_H}){_H}{{12}}(?!{_H})")
+ADDRESS_KEY = re.compile(r"mac|addr|bssid", re.IGNORECASE)
 BLANK = "[removed]"
 
 
-def _clean(value, found: list):
+def _clean(value, found: list, address: bool = False):
+    """`address` is true for values under a field named like an address (src_mac, peer_addr, ...)."""
     if isinstance(value, dict):
         out = {}
         for k, v in value.items():
             if k.lower() in ID_KEYS:
                 found.append(k)
             else:
-                out[_clean(k, found)] = _clean(v, found)
+                out[_clean(k, found)] = _clean(v, found, bool(ADDRESS_KEY.search(k)))
         return out
     if isinstance(value, list):
-        return [_clean(v, found) for v in value]
+        return [_clean(v, found, address) for v in value]
     if isinstance(value, str):
-        found.extend("mac" for _ in MAC.finditer(value))
-        return MAC.sub(BLANK, value)
+        for pattern in (MAC, BARE) if address else (MAC,):
+            found.extend("mac" for _ in pattern.finditer(value))
+            value = pattern.sub(BLANK, value)
     return value
 
 
