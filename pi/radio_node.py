@@ -40,11 +40,7 @@ import time
 from radio import hci
 from radio.hci_scan import BeaconScanner, kept, make_bus_emitter, open_controller
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-HCI_IDX: int = int(os.environ.get("HCI_IFACE", "0"))
+HCI_IDX: int = int(os.environ.get("HCI_IFACE", "0").strip().removeprefix("hci") or "0")  # "0" or "hci0"
 BUS_HOST: str = os.environ.get("BUS_HOST", "192.168.77.2")
 BUS_PORT: int = int(os.environ.get("BUS_PORT", "5600"))
 
@@ -52,6 +48,10 @@ RX = "pi5"
 
 # 20 ms interval in 0.625 ms units: 20 / 0.625 = 32 = 0x0020
 ADV_INTERVAL_HCI: int = 32
+# Core 4.x made 100 ms (0x00A0) the floor for non-connectable adverts; 5.0 dropped it. A controller
+# that still applies it answers 0x12 (Invalid HCI Command Parameters), and then this is used.
+ADV_INTERVAL_4X_MIN: int = 0x00A0
+INVALID_PARAMS = 0x12
 
 HCI_RESET = 0x0C03
 LE_SET_ADV_PARAMS = 0x2006
@@ -73,15 +73,11 @@ _MFR_DATA = bytes.fromhex("FFFF525353")
 _ADV_DATA = bytes([len(_MFR_DATA) + 1, 0xFF]) + _MFR_DATA
 
 
-# ---------------------------------------------------------------------------
-# Advertising commands
-# ---------------------------------------------------------------------------
-
-def build_adv_params_params() -> bytes:
+def build_adv_params_params(interval: int = ADV_INTERVAL_HCI) -> bytes:
     """15 parameter bytes for LE Set Advertising Parameters (20 ms, non-connectable undirected)."""
     p = bytearray(15)
-    struct.pack_into("<H", p, 0, ADV_INTERVAL_HCI)
-    struct.pack_into("<H", p, 2, ADV_INTERVAL_HCI)
+    struct.pack_into("<H", p, 0, interval)
+    struct.pack_into("<H", p, 2, interval)
     p[4] = 0x03   # ADV_NONCONN_IND
     p[5] = 0x00   # own address: public
     p[6] = 0x00   # peer address: public
@@ -109,20 +105,27 @@ def build_adv_enable_cmd(enable: bool) -> bytes:
     return hci.command_packet(LE_SET_ADV_ENABLE, bytes([0x01 if enable else 0x00]))
 
 
-def start_advertising(dev: hci.Hci) -> None:
+def start_advertising(dev: hci.Hci, interval: int = ADV_INTERVAL_HCI) -> int:
+    """Advertise beacon S. Returns the interval the controller took (0.625 ms units)."""
     dev.command(LE_SET_ADV_ENABLE, bytes([0x00]), check=False)
-    dev.command(LE_SET_ADV_PARAMS, build_adv_params_params())
+    try:
+        dev.command(LE_SET_ADV_PARAMS, build_adv_params_params(interval))
+    except hci.HciError as e:
+        if e.status != INVALID_PARAMS or interval >= ADV_INTERVAL_4X_MIN:
+            raise
+        print(f"[pi.radio_node] this controller refuses a {interval * 0.625:.0f} ms advert interval; "
+              f"advertising every {ADV_INTERVAL_4X_MIN * 0.625:.0f} ms instead, so pi5 adverts/s will be lower",
+              file=sys.stderr, flush=True)
+        interval = ADV_INTERVAL_4X_MIN
+        dev.command(LE_SET_ADV_PARAMS, build_adv_params_params(interval))
     dev.command(LE_SET_ADV_DATA, build_adv_data_params())
     dev.command(LE_SET_ADV_ENABLE, bytes([0x01]))
+    return interval
 
 
 def stop_advertising(dev: hci.Hci) -> None:
     dev.command(LE_SET_ADV_ENABLE, bytes([0x00]), check=False)
 
-
-# ---------------------------------------------------------------------------
-# Packets seen on the socket
-# ---------------------------------------------------------------------------
 
 def completed_opcode(packet: bytes):
     """The opcode a Command Complete event answers, or None for any other packet."""
@@ -136,10 +139,6 @@ def is_advert(packet: bytes) -> bool:
     return (len(packet) >= 4 and packet[0] == hci.EVENT_PKT and packet[1] == hci.EV_LE_META
             and packet[3] in (hci.LE_ADV_REPORT, hci.LE_EXT_ADV_REPORT))
 
-
-# ---------------------------------------------------------------------------
-# Sending to the bus
-# ---------------------------------------------------------------------------
 
 class BusSender:
     """emit(link, dbm) to the bus that never raises: a reading that can't be sent is dropped and counted.
@@ -162,17 +161,14 @@ class BusSender:
             self.error = e
 
 
-# ---------------------------------------------------------------------------
-# Main loop
-# ---------------------------------------------------------------------------
-
-def set_up(dev: hci.Hci, scanner: BeaconScanner) -> None:
-    """Advertise beacon S and scan, from whatever state the controller is in.
+def set_up(dev: hci.Hci, scanner: BeaconScanner, interval: int = ADV_INTERVAL_HCI) -> int:
+    """Advertise beacon S and scan, from whatever state the controller is in. Returns the advert interval.
 
     Both turn themselves off first, because their parameters can't change while they're on.
     """
-    start_advertising(dev)
+    interval = start_advertising(dev, interval)
     scanner.start()
+    return interval
 
 
 def status_line(counts: dict, seconds: float, bus: BusSender, redone: int) -> str:
@@ -207,7 +203,7 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
         # command families must not be mixed on one controller.
         scanner.ext = False
         scanner.mode = "legacy"
-        set_up(dev, scanner)
+        interval = set_up(dev, scanner)
         now = clock()
         last_advert = last_status = now
         redo_at = None
@@ -237,7 +233,7 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
                     quiet_told = True
                 redo_at = now
             if redo_at is not None and now >= redo_at:
-                set_up(dev, scanner)
+                interval = set_up(dev, scanner, interval)
                 redone += 1
                 redo_at = None
                 last_advert = clock()

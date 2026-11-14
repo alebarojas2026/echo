@@ -133,9 +133,7 @@ def test_controller_with_ext_scan_uses_legacy_opcodes_only():
 
 
 
-# ---------------------------------------------------------------------------
 # Failure paths: no Ethernet, the board not listening, the controller reset or gone
-# ---------------------------------------------------------------------------
 
 import errno
 import os
@@ -270,3 +268,29 @@ def test_controller_down_or_gone_exits_nonzero_for_systemd(monkeypatch, fake):
         radio_node.main(["--seconds", "5"])
     assert stopped.value.code not in (0, None)
     assert "Is Bluetooth on?" in str(stopped.value.code)
+
+
+def test_controller_that_refuses_20_ms_gets_100_ms(capsys):
+    class Pre50(FakeController):  # a controller that keeps Core 4.x's 100 ms floor
+        def send(self, packet):
+            self.status[LE_SET_ADV_PARAMS] = 0x12 if packet == build_adv_params_cmd() else 0
+            super().send(packet)
+
+    fake = Pre50(events=[fixture("legacy_report_east")])
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=lambda: fake.drained, log=lambda line: None)
+    params = [struct.unpack_from("<H", p, 4)[0] for p in fake.sent
+              if struct.unpack_from("<H", p, 1)[0] == LE_SET_ADV_PARAMS]
+    assert params == [0x0020, 0x00A0]
+    assert fake.sent.count(ADV_ON) == 1
+    assert "advertising every 100 ms instead" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value, dev", [("0", 0), ("hci0", 0), ("1", 1), ("hci1", 1), (" hci0 ", 0)])
+def test_hci_iface_takes_a_number_or_a_name(monkeypatch, value, dev):
+    import importlib
+    monkeypatch.setenv("HCI_IFACE", value)
+    try:
+        assert importlib.reload(radio_node).HCI_IDX == dev
+    finally:
+        monkeypatch.delenv("HCI_IFACE")
+        importlib.reload(radio_node)
