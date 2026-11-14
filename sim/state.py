@@ -14,8 +14,8 @@ finishes its "baseline" 1 s in and its "training" 2 s in, sending both events.
 import argparse
 import math
 import time
-from collections import deque
-from statistics import median
+from collections import Counter, deque
+from statistics import mean, median, pstdev
 
 from . import fake
 from .wire import encoder
@@ -26,6 +26,9 @@ BASELINE_AT_S, TRAINED_AT_S = 1.0, 2.0
 STALE_RATIO, BLIND_AFTER_S, CLEAR_AFTER_S = 0.4, 3.0, 3.0   # section 6, link health
 OBJECT_AFTER_S, STATIC_AFTER_S, CHECKIN_AFTER_S = 2.0, 5.0, 1.25
 ADVICE_WITHIN_M, RESULT_WAIT_S, MEDIAN_S = 0.5, 2.0, 3.0    # section 6, advice
+JUMP_DB, STEADY_DB = 6.0, 0.8        # section 6: the jump rule, and what counts as a steady drop
+MOVING_RUN, RECENT = 5, 10           # section 6: the still timer is judged on smoothed decisions
+OBJECT_GONE_S = 1.0                  # section 6: a removed object's link comes down after about 1 s
 NEAR_M = 0.5   # section 5: near is the closest node within this distance, else null
 WIFI = "pi5>unoq:wifi"
 IDLE_ALERT = {"state": "none", "zone": None, "still_s": 0, "limit_s": None}
@@ -73,6 +76,8 @@ class Brain:
         self.path, self.rate, self.start_ms = path, rate, start_ms
         self.readings = {fake.link_id(*l): deque() for l in fake.LINKS}   # (t, dbm), last few seconds
         self.last_dbm, self.stale_since, self.ok_since, self.blind = {}, {}, {}, set()
+        self.off_since, self.back_since, self.jumped = {}, {}, set()   # the jump rule
+        self.recent, self.anchor = deque(maxlen=RECENT), ("none", 0)   # last decisions as (kind, zone, moving)
         self.still_s = self.alert_s = 0.0
         self.last_t = self.zone = None
         self.checkin = self.narration = self.advice = None
@@ -130,6 +135,38 @@ class Brain:
                         "why": 0.0})
         return out
 
+    def _steady(self, link: str, since: float, t: float) -> bool:
+        """Section 6: the std of the link's 0.5 s means, over the time since it went off base
+        (2 s at least, 5 s at most), is under 0.8 dB."""
+        span = min(5.0, max(2.0, t - since))
+        bins = {}
+        for at, dbm in self.readings[link]:
+            # The newest half second is left out: when the level comes back, that bin moves first,
+            # and a drop that has just ended must not read as an unsteady one for a moment.
+            if t - span < at <= t - 0.5:
+                bins.setdefault(int((t - at) / 0.5), []).append(dbm)
+        means = [mean(v) for v in bins.values()]
+        return len(means) >= 2 and pstdev(means) < STEADY_DB
+
+    def _jumps(self, t: float, links: list, kind: str, home: bool) -> None:
+        """Section 6: a link is blind when nobody and nothing is there and it has sat more than 6 dB
+        off its base for 3 s. A reading below base that holds steady is an object, not a jump."""
+        for l in links:
+            link, drop = l["id"], l["drop_db"]
+            if drop is None or abs(drop) <= JUMP_DB or kind != "none" or not home:
+                self.off_since.pop(link, None)
+                if link in self.jumped and t - self.back_since.setdefault(link, t) >= CLEAR_AFTER_S:
+                    self.jumped.discard(link)
+                    self.back_since.pop(link, None)
+                continue
+            self.back_since.pop(link, None)
+            since = self.off_since.setdefault(link, t)
+            if t - since >= BLIND_AFTER_S and not (drop > 0 and self._steady(link, since, t)):
+                self.jumped.add(link)
+        for l in links:
+            if l["id"] in self.jumped:
+                l["status"] = "blind"
+
     def _advise(self, t: float, things: list, spot: str, nodes: dict) -> None:
         """Section 6: an object that stays 5 s within 0.5 m of the router link gets advice."""
         home = fake.NODES
@@ -179,14 +216,19 @@ class Brain:
         spot = fake.latest(path.get("router"), t, "spot", "S-home")
         cam = fake.latest(path.get("camera"), t, "state", "on")
         nodes = {**fake.NODES, "pi5": fake.ROUTER_SPOTS[spot]}
+        # an object shows 2 s after it lands, and goes about 1 s after it is taken away (its link's
+        # static part comes down at once, whoever else is in the room)
         things = [o for o in path.get("objects") or []
-                  if fake.active(o, t) and t - o.get("t_on", 0.0) >= OBJECT_AFTER_S]
+                  if o.get("t_on", 0.0) + OBJECT_AFTER_S <= t < o.get("t_off", math.inf) + OBJECT_GONE_S]
+        kind = "person" if pos else "object" if things else "none"
 
         links = self._links(t, baseline)
-        blind = sorted(self.blind) if baseline else []
         stale = [l["id"] for l in links if l["status"] != "ok"]
+        if baseline:
+            self._jumps(t, links, kind, spot == "S-home")
+        blind = sorted(self.blind | self.jumped) if baseline else []
         health = {"status": "blind" if blind else "degraded" if stale else "ok", "blind": blind,
-                  "reason": "rate" if stale else None}
+                  "reason": "rate" if stale else "jump" if blind else None}
 
         # how much of each link's drop the person explains, for "why"
         share = {fake.link_id(*l): fake.drop(pos, nodes[l[0]], nodes[l[1]], fake.PERSON_DROP_DB, fake.PERSON_WIDTH_M)
@@ -196,10 +238,25 @@ class Brain:
             l["why"] = round(share[l["id"]] / total, 2) if total > 0.5 else 0.0
         why = [k for k, v in sorted(share.items(), key=lambda kv: -kv[1]) if v > 1.0][:2]
 
-        still = bool(pos) and not moving and zone == self.zone
-        self.still_s = self.still_s + dt if still else 0.0
+        # The still timer is judged on smoothed decisions (section 6). A decision can be wrong for a
+        # moment: a path's "flickers" make the fake brain say moving while the person stands still.
+        moving = moving or (bool(pos) and any(fake.active(f, t) for f in path.get("flickers") or []))
+        self.recent.append((kind, zone, moving))
+        top, votes = Counter((k, z) for k, z, _ in self.recent).most_common(1)[0]
+        if top != self.anchor and votes > len(self.recent) / 2:   # another zone or kind holds the majority
+            self.anchor, self.still_s, self.alert_s = top, 0.0, 0.0
+        run = 0
+        for _, _, was_moving in reversed(self.recent):
+            if not was_moving:
+                break
+            run += 1
+        still = self.anchor[0] == "person" and run < MOVING_RUN
+        if run >= MOVING_RUN:                            # 5 moving decisions in a row (0.5 s)
+            self.still_s = self.alert_s = 0.0
+        elif still:
+            self.still_s += dt
         self.zone = zone
-        limit = STILL_ALERT_S.get(zone)
+        limit = STILL_ALERT_S.get(self.anchor[1])
         if not (still and limit):
             self.alert_s = 0.0
         elif not blind:                                  # alert timers pause while blind
@@ -215,7 +272,6 @@ class Brain:
 
         pred = None
         if trained and not blind and spot == "S-home":
-            kind = "person" if pos else "object" if things else "none"
             probs = [0.03] * 5
             probs[zone] = 0.88
             pred = {"present": bool(pos), "kind": kind, "zone": zone, "zone_set": [zone] if pos else [],
@@ -223,7 +279,7 @@ class Brain:
                     "still_s": round(self.still_s, 1), "why": why}
         alert = dict(IDLE_ALERT)
         if pred and still and limit:
-            alert = {"state": "check_on" if self.alert_s >= limit else "counting", "zone": zone,
+            alert = {"state": "check_on" if self.alert_s >= limit else "counting", "zone": self.anchor[1],
                      "still_s": round(self.alert_s, 1), "limit_s": limit}
 
         objects = [{"xy_m": [o["x"], o["y"]],

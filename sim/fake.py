@@ -138,6 +138,9 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
                 if active(w, t) and w.get("link", "pi5>unoq:wifi") == link:
                     dbm += w.get("amp_db", 4.0) * math.sin(
                         2 * math.pi * w.get("hz", 2.0) * (t - w.get("t_on", 0.0)))
+            for j in path.get("jumps") or []:   # a link whose level shifts for no reason in the room
+                if active(j, t) and j["link"] == link:
+                    dbm += j["db"] + j.get("wobble_db", 0.0) * math.sin(2 * math.pi * 0.4 * (t - j.get("t_on", 0.0)))
             if pos:
                 d = drop(pos, nodes[tx], nodes[rx], PERSON_DROP_DB, PERSON_WIDTH_M)
                 if moving:  # a moving body makes the drop flutter
