@@ -109,12 +109,12 @@
 }
 
 .room-label--ghost.room-label--wave {
-  color: #3dd68c;
+  color: var(--action);
 }
 
 .room-label--alert {
   translate: 0 -50%;
-  color: #f2555a;
+  color: var(--fault);
   font-size: 24px;
   font-weight: 700;
 }
