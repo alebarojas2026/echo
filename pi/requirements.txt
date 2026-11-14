@@ -1,4 +1,3 @@
-# pi package requirements
-# Pi radio node requires Python standard library only (raw HCI, UDP sockets).
-pytest>=8.0
-jsonschema>=4.18
+# Nothing to install: the Pi radio node (python -m pi.radio_node) uses only the Python 3
+# standard library and BlueZ, both already on Raspberry Pi OS. Tests need pytest and
+# contracts/requirements.txt, which CI installs.

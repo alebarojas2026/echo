@@ -1,4 +1,2 @@
-# radio package requirements
-# Core readers (wifi_rssi, hci_scan) require Python standard library only.
-pytest>=8.0
-jsonschema>=4.18
+# Nothing to install: the radio readers (wifi_rssi, hci_scan) and the gate reports use only
+# the Python 3 standard library. Tests need pytest and contracts/requirements.txt, which CI installs.
