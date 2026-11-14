@@ -32,11 +32,14 @@ export function viewOptions(params: URLSearchParams): ViewOptions {
   }
 }
 
-// North straight up the screen, seen from the south and about 63 degrees up, so the zones read 1 2 / 3 4.
-// Framing is for the contract's 2 m square and scales with the square from nodes.json.
-const VIEW_DIR = new Vector3(0, 2.0, 1).normalize()
-const TARGET_M = new Vector3(0, 0.45, 0.05)
-const FIT_RADIUS_M = 1.5
+// North straight up the screen, seen from the south and 52 degrees up, so the zones read 1 2 / 3 4 and the
+// plinth, the low walls and the 1 m stands read as a scale model. A narrow 20 degree lens keeps the far edge
+// nearly as wide as the near one. Framing is for the contract's 2 m square and scales with nodes.json.
+const ELEV_DEG = 52
+const VIEW_DIR = new Vector3(0, Math.sin((ELEV_DEG * Math.PI) / 180), Math.cos((ELEV_DEG * Math.PI) / 180))
+const TARGET_M = new Vector3(0, 0.4, 0.1)
+const FIT_RADIUS_M = 1.45
+export const FOV_DEG = 20
 
 /** Points the camera at the square and backs off until it fits the narrower field of view. */
 export function fitCamera(camera: PerspectiveCamera, width: number, height: number) {
@@ -55,7 +58,7 @@ export function fitCamera(camera: PerspectiveCamera, width: number, height: numb
 export class RoomView {
   readonly renderer: WebGLRenderer
   readonly scene = new Scene()
-  readonly camera = new PerspectiveCamera(30, 1, 0.1, 40)
+  readonly camera = new PerspectiveCamera(FOV_DEG, 1, 0.1, 60)
   readonly labelLayer: HTMLElement
   private readonly labels: Label[] = []
   private readonly animators = new Set<Animator>()

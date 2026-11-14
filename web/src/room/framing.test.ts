@@ -1,14 +1,14 @@
 import { PerspectiveCamera, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { NODES, SQUARE_M, toScene, type Vec3 } from './frame'
-import { fitCamera } from './view'
+import { FOV_DEG, fitCamera } from './view'
 
 // The room's canvas on the 1920x1080 kiosk: everything right of the panels' 640 px rail.
 const W = 1280
 const H = 1080
 
 function camera() {
-  const cam = new PerspectiveCamera(30, 1, 0.1, 40)
+  const cam = new PerspectiveCamera(FOV_DEG, 1, 0.1, 60)
   fitCamera(cam, W, H)
   return cam
 }
