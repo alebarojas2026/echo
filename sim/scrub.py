@@ -5,7 +5,8 @@
 
 What it does to every JSON line:
   - deletes any field whose name says it holds an identifier (mac, bssid, ssid, name, ...);
-  - blanks anything that looks like a MAC address inside any other text.
+  - blanks anything shaped like a MAC address inside any other text (with :, -, _ or . between
+    the bytes, or 12 hex digits in a row).
 Contract fields (CONTRACTS.md v2) are never touched, so a scrubbed file still replays.
 """
 import argparse
@@ -16,9 +17,13 @@ import sys
 # Field names that hold a device identifier, wherever they appear in a message.
 ID_KEYS = {"mac", "bssid", "ssid", "essid", "addr", "address", "bdaddr", "peer", "name",
            "device", "device_name", "local_name", "complete_local_name", "hostname", "host"}
-# aa:bb:cc:dd:ee:ff, AA-BB-CC-DD-EE-FF and aabb.ccdd.eeff
-MAC = re.compile(r"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}([:-]))(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}(?![0-9A-Fa-f])"
-                 r"|(?<![0-9A-Fa-f])[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}(?![0-9A-Fa-f])")
+# Address shapes, none of them inside a longer run of hex digits:
+#   aa:bb:cc:dd:ee:ff   AA-BB-CC-DD-EE-FF   AA_BB_CC_DD_EE_FF (BlueZ paths, dev_AA_BB_...)
+#   aabb.ccdd.eeff      aabbccddeeff (no separators)
+_H = "[0-9A-Fa-f]"
+MAC = re.compile(rf"(?<!{_H})(?:{_H}{{2}}([:_-])(?:{_H}{{2}}\1){{4}}{_H}{{2}}"
+                 rf"|{_H}{{4}}\.{_H}{{4}}\.{_H}{{4}}"
+                 rf"|{_H}{{12}})(?!{_H})")
 BLANK = "[removed]"
 
 

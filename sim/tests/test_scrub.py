@@ -7,7 +7,8 @@ from sim.wire import encoder
 
 # Made-up addresses, built from pieces so no address-shaped text sits in the repo.
 PARTS = ["02", "00", "5e", "10", "00", "01"]
-MACS = [":".join(PARTS), "-".join(PARTS).upper(), ".".join("".join(PARTS)[i:i + 4] for i in (0, 4, 8))]
+MACS = [":".join(PARTS), "-".join(PARTS).upper(), ".".join("".join(PARTS)[i:i + 4] for i in (0, 4, 8)),
+        "_".join(PARTS).upper(), "".join(PARTS)]
 RSSI = {"v": 2, "type": "rssi", "t": 1763149512120, "seq": 881, "src": "live", "recv_t": 1763149512125,
         "link": "east>pi5:ble", "kind": "ble", "tx": "east", "rx": "pi5", "dbm": -61}
 
@@ -43,13 +44,21 @@ def test_mac_addresses_are_blanked_anywhere(mac):
     assert {k: v for k, v in out.items() if k in RSSI} == RSSI
 
 
+def test_bluez_object_path_loses_its_address():
+    path = "/org/bluez/hci0/dev_" + "_".join(PARTS).upper()
+    out, found = clean({**RSSI, "path": path})
+    assert out["path"] == "/org/bluez/hci0/dev_[removed]" and found == ["mac"]
+
+
 def test_nested_identifiers_are_deleted():
     out, found = clean({**RSSI, "adv": {"name": "Kitchen Speaker", "mfg": "FFFF5253", "peer": MACS[0]}})
     assert out["adv"] == {"mfg": "FFFF5253"} and sorted(found) == ["name", "peer"]
 
 
 def test_numbers_and_ids_that_only_look_a_bit_like_macs_survive():
-    msg = {**RSSI, "session": "s12", "event_id": "e123", "mfg": "FFFF 52 53 45", "time": "12:30:45", "hex": "0a1b2c3d4e5f6a"}
+    msg = {**RSSI, "session": "s12", "event_id": "e123", "mfg": "FFFF 52 53 45", "time": "12:30:45",
+           "hex14": "0a1b2c3d4e5f6a", "hex10": "0a1b2c3d4e", "uuid": "0000feaa-0000-1000-8000", "snake": "aa_bb_cc_dd",
+           "commit": "88d33ac", "big": 176314951212, "word": "radio_sight_v2"}
     assert clean(msg) == (msg, [])
 
 
