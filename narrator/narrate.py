@@ -3,17 +3,16 @@
     python -m narrator.narrate                                   # live
     python -m narrator.narrate --once enter --info '{"zone": 2}'  # one sentence, printed only
 
-Reads events from the brain's WebSocket, asks the small model on llama-server for
-one sentence and sends a `narration` message to the bus (CONTRACTS.md sections 4-6).
-
-Rules (section 6): at most one sentence every 8 s, only for an event no more than
-3 s old, at most 16 words. The template sentence for the event is used instead when
-the model is slow (over 8 s), unreachable, or says something it must not.
+Brain events in (WebSocket), one sentence from llama-server, a `narration` message out to the
+bus (CONTRACTS.md sections 4-6). At most one sentence every 8 s, only for events up to 3 s old,
+at most 16 words. The event's template sentence is used when the model is slow (over 8 s),
+unreachable, or says something it must not.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import concurrent.futures
 import json
 import re
 import socket
@@ -31,12 +30,10 @@ MAX_AGE_MS = 3000     # only for events up to 3 s old
 LLM_TIMEOUT_S = 8.0   # slower than this -> template
 MAX_WORDS = 16
 
-EVENT_KINDS = (
-    "enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice",
-    "advice_result", "router_moved", "router_home", "recalibrating", "cam_off", "cam_on",
-    "cam_stalled", "alert_on", "alert_off", "blind_on", "blind_off", "trained",
-    "baseline_done", "drift",
-)
+EVENT_KINDS = ("enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice",
+               "advice_result", "router_moved", "router_home", "recalibrating", "cam_off", "cam_on",
+               "cam_stalled", "alert_on", "alert_off", "blind_on", "blind_off", "trained",
+               "baseline_done", "drift")
 ZONES = {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}  # name, still_alert_s
 NODES = {"unoq": "receiver", "pi5": "router", "east": "east beacon", "west": "west beacon"}
 
@@ -54,9 +51,9 @@ BANNED = re.compile(
     re.IGNORECASE,
 )
 CAMERA = re.compile(r"\bcam(era)?s?\b", re.IGNORECASE)
+POOL = concurrent.futures.ThreadPoolExecutor(max_workers=2)  # model calls, so a hung one can be abandoned
 NUMBER = re.compile(r"\d+(?:\.\d+)?")
-PUNCT = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"',
-                       "–": "-", "—": "-"})
+PUNCT = str.maketrans("\u2018\u2019\u201c\u201d\u2013\u2014", "''\"\"--")
 
 
 def log(*parts) -> None:
@@ -170,22 +167,10 @@ class LlamaServer:
 
 def within(timeout_s: float, fn, *args):
     """fn(*args), or TimeoutError if it takes longer than timeout_s."""
-    box = {}
-
-    def run():
-        try:
-            box["value"] = fn(*args)
-        except BaseException as e:  # handed back to the caller below
-            box["error"] = e
-
-    worker = threading.Thread(target=run, daemon=True)
-    worker.start()
-    worker.join(timeout_s)
-    if worker.is_alive():
-        raise TimeoutError(f"no reply in {timeout_s:g} s")
-    if "error" in box:
-        raise box["error"]
-    return box["value"]
+    try:
+        return POOL.submit(fn, *args).result(timeout=timeout_s)
+    except concurrent.futures.TimeoutError:
+        raise TimeoutError(f"no reply in {timeout_s:g} s") from None
 
 
 def clean(text: str) -> str:
@@ -243,7 +228,8 @@ class Narrator:
         event = self.pending
         if event is None:
             return None
-        if now - event.get("t", 0) > self.max_age_ms:
+        t = event.get("t")
+        if not isinstance(t, (int, float)) or now - t > self.max_age_ms:
             self.pending = None
             return None
         if self.last_sent_ms is not None and now - self.last_sent_ms < self.gap_ms:
