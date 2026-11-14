@@ -62,6 +62,19 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 `brain/core.py` holds the rules with no sockets, so tests drive it with a fake clock.
 Link health (`brain/health.py`), the x-ray and objects (`brain/xray.py`) and the check-in and alert (`brain/alert.py`) are fed from here: every reading goes to all three, and their output fills `links`, `health`, `xray`, `objects`, `alert` and `checkin`. `pred` is null while health is blind, and the LED grid then shows "?". `advice` comes from `advisor.advise` while the router is on S-home; the brain adds `before_dbm` (the median of `pi5>unoq:wifi` over the last 3 s, kept current) and sends an `advice` event when a new one appears.
 
+Events for the narrator, each with only the info keys `contracts/schemas/event.json` allows (zone, link, node, before_dbm, after_dbm, on, session) and no nulls:
+
+| Events | Sent when | info |
+|---|---|---|
+| `enter`, `exit`, `zone_change` | the decision's zone has held for 5 decisions in a row (0.5 s), so one flickering decision says nothing | `zone` (for `exit`, the zone they left from) |
+| `checkin`, `alert_on`, `alert_off` | from the check-in and alert rules | `zone`, and `link` on a check-in |
+| `object_on`, `object_off` | from the x-ray | `zone`, `link`, `node` |
+| `blind_on`, `blind_off` | from link health | `link` |
+| `advice`, `advice_result`, `router_moved`, `router_home`, `recalibrating`, `drift` | the router and advice steps | `link`, `node`, `before_dbm`, `after_dbm` as they apply |
+| `cam_on`, `cam_off`, `cam_stalled` | the camera's state changes, or it sends nothing for 3 s (off) | none |
+| `trained`, `baseline_done`, `reset` | as named | none |
+| `recording` | `record_start` and `record_stop` | `on`, `session` |
+
 The automatic baseline after `router_home` also runs with the camera unplugged; with the camera on it must still see nobody. A baseline asked for with the `baseline` cmd always needs the camera.
 
 ## Check-in and no-movement alert (`brain/alert.py`)
