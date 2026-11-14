@@ -24,7 +24,8 @@ python -m sim.send zone_tour --loop    # in another
 
 `sim.send` sends the same feed as `sim.fake`, one message per UDP datagram, to the
 bus at `127.0.0.1:5600`, at real speed and stamped with the real clock. Give it a
-recorded `.jsonl` file instead of a path name and it replays that file (`"src":"replay"`).
+recorded `.jsonl` file instead of a path name and it replays that file (`"src":"replay"`,
+with `seq` renumbered from 1 because the whole file now comes from one socket).
 Options: `--host`, `--port`, `--rate`, `--seed`, `--speed`, `--loop`.
 
 ## The room

@@ -1,12 +1,13 @@
 """Send the fake feed to the bus over UDP at real speed, so the whole system runs with no hardware.
 
     python -m sim.send zone_tour                      # a scripted path, src "sim"
-    python -m sim.send data/sessions/s12.jsonl        # a recording, src "replay"
+    python -m sim.send data/sessions/s12.jsonl        # a recording, src "replay", seq renumbered
     python -m sim.send zone_tour --loop --speed 2
 
 One JSON message per datagram, to 127.0.0.1:5600 (the bus, CONTRACTS.md section 2).
 """
 import argparse
+import itertools
 import socket
 import time
 
@@ -45,11 +46,12 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     out = UdpOut(args.host, args.port)
     encode = encoder()  # one producer: seq keeps counting across loops
+    replay_seq = itertools.count(1)  # same for a recording: one socket, one fresh counter
     try:
         while True:
             if args.source.endswith(".jsonl"):
                 with open(args.source) as f:
-                    pace(read(f), out=out, speed=args.speed)
+                    pace(read(f, replay_seq), out=out, speed=args.speed)
             else:
                 start_ms = int(time.time() * 1000)
                 events = simulate(load_path(args.source), rate=args.rate, seed=args.seed)

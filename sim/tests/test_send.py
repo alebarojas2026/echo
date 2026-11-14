@@ -69,3 +69,35 @@ def test_recording_is_sent_as_replay(tmp_path, bus):
 
 def test_nobody_listening_is_not_an_error(tmp_path):
     assert send.main([short_path(tmp_path), "--port", "9", "--speed", "200"]) > 0
+
+
+def test_recording_with_several_producers_goes_out_as_one(tmp_path, bus):
+    radio, camera = encoder(1763149500000, src="live"), encoder(1763149500000, src="live")
+    events = [e for e in fake.simulate(fake.load_path("zone_tour")) if e["t"] < 0.4]
+    lines = [(camera if e["type"] in ("label", "cam") else radio)(e) for e in events]
+    recorded = [json.loads(l)["seq"] for l in lines]
+    assert recorded != sorted(recorded)  # two counters interleaved, as the bus records them
+    f = tmp_path / "s.jsonl"
+    f.write_text("\n".join(lines) + "\n")
+    sent = send.main([str(f), "--port", port(bus), "--speed", "50"])
+    msgs = receive(bus, sent)
+    assert [m["seq"] for m in msgs] == list(range(1, len(lines) + 1))
+    for got, line in zip(msgs, lines):  # nothing else in the line changes
+        want = {**json.loads(line), "src": "replay", "seq": got["seq"]}
+        assert got == want
+
+
+def test_replay_seq_keeps_counting_across_loops(tmp_path, bus, monkeypatch):
+    encode = encoder(1763149500000, src="live")
+    f = tmp_path / "s.jsonl"
+    f.write_text("\n".join(encode({"type": "cam", "t": i / 10, "state": "on", "fps": 7.5}) for i in range(3)) + "\n")
+    rounds = iter([None, None, KeyboardInterrupt])
+
+    def pace_twice_then_stop(timed, **kw):
+        if next(rounds) is KeyboardInterrupt:
+            raise KeyboardInterrupt
+        return fake.pace(timed, **kw)
+
+    monkeypatch.setattr(send, "pace", pace_twice_then_stop)
+    sent = send.main([str(f), "--port", port(bus), "--speed", "50", "--loop"])
+    assert [m["seq"] for m in receive(bus, sent)] == [1, 2, 3, 4, 5, 6]
