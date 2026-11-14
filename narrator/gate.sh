@@ -14,7 +14,7 @@ LOG=/tmp/narrator-gate.log
 fail() { echo "FAIL: $*"; exit 1; }
 
 pgrep -f 'brain\.main' >/dev/null || fail "the brain is not running; start it first (python -m brain.main)"
-curl -sf "$LLM/health" >/dev/null || fail "llama-server does not answer on $LLM/health (systemctl status llm)"
+curl -sf "$LLM/health" >/dev/null || fail "llama-server does not answer on $LLM/health (systemctl status radio-sight-llm)"
 
 # Warm-up without the 8 s cap, so the timed sentence never queues behind it.
 "$PY" -c 'import sys; from narrator import narrate as n; n.warm_up(n.LlamaServer(sys.argv[1], 120))' "$LLM"

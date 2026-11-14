@@ -15,7 +15,15 @@ sentence starts being written, so a 6 s model still speaks every 8 s. While it w
 it keeps the most important event, not the newest (alert, check-in and camera-off come first), and
 it never narrates `router_moved` or `advice`, which the screen already shows. When the model is slow
 (over 8 s), down, or says a banned word, the event's template sentence goes out instead, with
-`"source": "template"`. The rules are in CONTRACTS.md sections 4-6; the banned words and the
+`"source": "template"`.
+
+On the board, llama-server takes a while to load the model after boot and answers "connection
+refused" or HTTP 503 until then; those events get their template sentence. The narrator warms the
+model's prompt cache in the background and keeps retrying until the server answers. It warms it
+again after a failed model call (the server may have restarted) and after each recap, whose prompt
+takes the server's one cache slot. A model call that is still waiting for a free worker when its
+8 s run out is dropped, never sent. A `reset` drops any event still waiting, so the recap is the
+next thing said. The rules are in CONTRACTS.md sections 4-6; the banned words and the
 templates are at the top of `narrate.py`. Besides the standard library it needs only
 `websockets`, which is in /opt/rs/venv.
 
