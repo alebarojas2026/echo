@@ -11,7 +11,7 @@ import itertools
 import socket
 import time
 
-from .fake import load_path, pace, simulate
+from .fake import load_path, lossy, pace, simulate
 from .replay import read
 from .wire import encoder
 
@@ -43,6 +43,7 @@ def main(argv=None) -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--speed", type=float, default=1.0, help="2 = twice as fast")
     ap.add_argument("--loop", action="store_true", help="start over at the end, forever")
+    ap.add_argument("--loss", type=float, default=0.0, help="share of messages to drop, e.g. 0.05")
     args = ap.parse_args(argv)
     out = UdpOut(args.host, args.port)
     encode = encoder()  # one producer: seq keeps counting across loops
@@ -55,8 +56,8 @@ def main(argv=None) -> int:
             else:
                 start_ms = int(time.time() * 1000)
                 events = simulate(load_path(args.source), rate=args.rate, seed=args.seed)
-                pace(((e["t"], encode({**e, "t": e["t"] + start_ms / 1000})) for e in events),
-                     out=out, speed=args.speed)
+                lines = ((e["t"], encode({**e, "t": e["t"] + start_ms / 1000})) for e in events)
+                pace(lossy(lines, args.loss, args.seed), out=out, speed=args.speed)
             if not args.loop:
                 break
     except KeyboardInterrupt:
