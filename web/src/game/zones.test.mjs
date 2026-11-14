@@ -33,3 +33,10 @@ test('a new layout replaces the zones; a file without zones changes nothing', as
   assert.deepEqual(ZONES, { 1: 'Hall' })
   restore(before)
 })
+
+test('the desk strip: zones with a side, west first', () => {
+  const before = saved()
+  useZones({ zones: [{ id: 2, side: 'E', name: 'Bathroom', still_alert_s: 10 }, { id: 1, side: 'W', name: 'Living room', still_alert_s: null }] })
+  assert.deepEqual(zoneList(), [{ id: 1, name: 'Living room', hint: 'Zone 1, west' }, { id: 2, name: 'Bathroom', hint: 'Zone 2, east' }])
+  restore(before)
+})

@@ -2,8 +2,8 @@
 // otherwise, so a new layout reaches both pages without a code change. No DOM in here.
 export const ZONES = { 1: 'Bed', 2: 'Chair', 3: 'Hall', 4: 'Bathroom' }
 export const CORNERS = { 1: 'NW', 2: 'NE', 3: 'SW', 4: 'SE' }
-const WORDS = { NW: 'north-west', NE: 'north-east', SW: 'south-west', SE: 'south-east' }
-const ORDER = ['NW', 'NE', 'SW', 'SE']
+const WORDS = { NW: 'north-west', NE: 'north-east', SW: 'south-west', SE: 'south-east', W: 'west', E: 'east' }
+const ORDER = ['NW', 'NE', 'SW', 'SE', 'W', 'E']
 
 // Take the zones from a parsed nodes.json. Returns false (and changes nothing) if it has none.
 export function useZones(nodes) {
@@ -14,12 +14,13 @@ export function useZones(nodes) {
   for (const k of Object.keys(CORNERS)) delete CORNERS[k]
   for (const z of list) {
     ZONES[z.id] = z.name.trim()
-    if (typeof z.corner === 'string') CORNERS[z.id] = z.corner
+    const where = z.corner ?? z.side   // the square's zones have a corner, the desk strip's a side
+    if (typeof where === 'string') CORNERS[z.id] = where
   }
   return true
 }
 
-// The zones in floor order (north-west first, as they sit on the floor; by id when there's no corner),
+// The zones in floor order (north-west first, or west first on a strip; by id when there's neither),
 // each with the small line under its name: "Zone 1, north-west".
 export function zoneList() {
   const rank = (id) => (ORDER.includes(CORNERS[id]) ? ORDER.indexOf(CORNERS[id]) : ORDER.length)
