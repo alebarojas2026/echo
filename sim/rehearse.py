@@ -14,12 +14,14 @@ import tempfile
 
 from brain.core import Brain
 from bus.core import Bus
+from narrator import narrate
+from narrator import recap as recaps
 
 from . import fake
 from .wire import encoder
 
 START_MS = 1_763_149_500_000
-FEED, SCREEN = ("127.0.0.1", 50000), ("127.0.0.1", 50001)   # stand-in sender addresses for the bus
+FEED, SCREEN, NARRATOR = ("127.0.0.1", 50000), ("127.0.0.1", 50001), ("127.0.0.1", 50002)   # stand-in senders
 Z = {1: (0.5, 1.5), 2: (1.5, 1.5), 3: (0.5, 0.5), 4: (1.5, 0.5)}   # zone centres
 TRAY = {"x": 1.0, "y": 0.2, "drop_db": 10}                         # the metal tray at T1
 
@@ -82,8 +84,21 @@ def demo_script():
         ("router back home", home, reset, "state", lambda s: s["router"] == "S-home" and s["pred"] is not None),
         ("reset between judges", reset, finish, "state",
          lambda s: s["alert"]["state"] == "none" and s["checkin"] is None and s["narration"] is None),
+        ("recap after the reset", reset, finish, "state", recap_shown),
     ]
     return path, commands, beats
+
+
+def recap_shown(s) -> bool:
+    """The end-of-demo recap is on the screen and fits the
+    recap limits (section 6). With no model in the rehearsal it is the template recap."""
+    n = s["narration"]
+    return bool(n and n["source"] == "template" and recaps.problem(n["text"], [n["text"]], camera_off=True) is None
+                and "router" in n["text"] and "zone" in n["text"])
+
+
+def no_model(messages):
+    raise ConnectionRefusedError("no model in the rehearsal")
 
 
 class Stack:
@@ -97,6 +112,20 @@ class Stack:
                        send=lambda data: self.brain.on_message(json.loads(data)))
         self.outbox = []   # commands the brain passes to the bus
         self.brain = Brain(sessions_dir=folder, to_bus=self.outbox.append)
+        # The narrator's recap, as on the board: brain events in, a narration to the bus on reset.
+        self.narrator = narrate.Narrator(no_model, self._narration, clock=lambda: self.now, sleep=lambda s: None)
+        self.recap = recaps.Recap(self.narrator, no_model)
+
+    def _narration(self, msg: dict) -> None:
+        self.bus.handle(json.dumps(msg).encode(), NARRATOR)
+
+    def _events(self) -> None:
+        new = self.brain.pop_events()
+        self.events += new
+        for e in new:
+            kept = self.recap.observe(e)
+            if kept:
+                self.recap.write(kept, e)
 
     def cmd(self, name: str, **args) -> None:
         """A command from the screen. As over real sockets, the bus hears it after the brain has
@@ -117,7 +146,7 @@ class Stack:
             if e["t"] * 10 >= ticks:
                 ticks += 1
                 self.states.append(self.brain.state())
-                self.events += self.brain.pop_events()
+                self._events()
         self.now = t0 + round(path["duration_s"] * 1000)
         return t0
 
@@ -137,7 +166,7 @@ class Stack:
         self.cmd("label_mode", mode="off")
         self.cmd("train")
         self.states.append(self.brain.state())
-        self.events += self.brain.pop_events()
+        self._events()
         return [e["kind"] for e in self.events]
 
 

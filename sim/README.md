@@ -204,7 +204,7 @@ python -m sim.rehearse          # PASS/FAIL per beat, exit 1 if any beat fails
 Plays the whole demo, in runbook order, through the real bus and brain code and checks that each
 beat reaches the screen's state or events: baseline, training, empty room, walk in, the four zones,
 the no-movement alert, the wave check-in, camera unplugged, tray near the router, advice, router
-moved and home, reset. It prints how long each beat took to show.
+moved and home, reset, and the narrator's end-of-demo recap (the template one, since there is no model). It prints how long each beat took to show.
 
 Bus and brain are joined in one process and time follows the feed, so about three minutes of room
 time runs in a few seconds. The UDP and WebSocket hops are not part of it. It needs the brain's
