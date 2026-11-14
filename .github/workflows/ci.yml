@@ -1,0 +1,89 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: "**/requirements.txt"
+      - run: pip install pytest -r contracts/requirements.txt
+
+      # One step per lane so a failure names the lane. A lane is skipped until it has test files,
+      # and every lane runs even if an earlier one failed.
+      - name: tests advisor
+        if: ${{ !cancelled() && hashFiles('advisor/**/test_*.py') != '' }}
+        run: lane=advisor; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests board
+        if: ${{ !cancelled() && hashFiles('board/**/test_*.py') != '' }}
+        run: lane=board; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests brain
+        if: ${{ !cancelled() && hashFiles('brain/**/test_*.py') != '' }}
+        run: lane=brain; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests bus
+        if: ${{ !cancelled() && hashFiles('bus/**/test_*.py') != '' }}
+        run: lane=bus; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests contracts
+        if: ${{ !cancelled() && hashFiles('contracts/**/test_*.py') != '' }}
+        run: lane=contracts; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests mcu
+        if: ${{ !cancelled() && hashFiles('mcu/**/test_*.py') != '' }}
+        run: lane=mcu; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests narrator
+        if: ${{ !cancelled() && hashFiles('narrator/**/test_*.py') != '' }}
+        run: lane=narrator; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests pi
+        if: ${{ !cancelled() && hashFiles('pi/**/test_*.py') != '' }}
+        run: lane=pi; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests proof
+        if: ${{ !cancelled() && hashFiles('proof/**/test_*.py') != '' }}
+        run: lane=proof; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests radio
+        if: ${{ !cancelled() && hashFiles('radio/**/test_*.py') != '' }}
+        run: lane=radio; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests scripts
+        if: ${{ !cancelled() && hashFiles('scripts/**/test_*.py') != '' }}
+        run: lane=scripts; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests sim
+        if: ${{ !cancelled() && hashFiles('sim/**/test_*.py') != '' }}
+        run: lane=sim; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests teacher
+        if: ${{ !cancelled() && hashFiles('teacher/**/test_*.py') != '' }}
+        run: lane=teacher; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+
+      - name: contract fixtures
+        if: ${{ !cancelled() }}
+        run: python -m contracts.check contracts/fixtures/valid*
+
+      # sim is still moving to contract v2, so this one is allowed to fail for now.
+      - name: sim output vs contract
+        if: ${{ !cancelled() && hashFiles('sim/fake.py') != '' }}
+        continue-on-error: true
+        run: python -m sim.fake zone_tour --fast | python -m contracts.check -
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        if: ${{ hashFiles('web/package.json') != '' }}
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: web build
+        if: ${{ hashFiles('web/package.json') != '' }}
+        working-directory: web
+        run: npm ci && npx vite build

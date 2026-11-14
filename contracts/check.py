@@ -67,7 +67,7 @@ def check_lines(lines):
             continue
         count += 1
         try:
-            msg = json.loads(line)
+            msg = json.loads(line.strip())
         except ValueError as e:
             failures.append((no, f"bad JSON: {e}"))
             continue
@@ -78,7 +78,7 @@ def check_lines(lines):
         who = producer(msg)
         prev = last.get(who)
         if prev is not None and seq != prev + 1:
-            gap = f"{seq - prev - 1} lost" if seq > prev else "went back"
+            gap = f"{seq - prev - 1} lost" if seq > prev else "repeated" if seq == prev else "went back"
             warnings.append((no, f"{who}: seq {prev} -> {seq} ({gap})"))
         last[who] = seq
     if count == 0:
