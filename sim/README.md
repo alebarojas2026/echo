@@ -144,3 +144,21 @@ text: bytes joined by `:`, `-`, `_` or `.`. Twelve hex digits in a row are blank
 field whose name contains `mac`, `addr` or `bssid` (for example `src_mac`), because elsewhere they
 look like any other hex, such as a short commit hash or the end of a UUID. Contract fields are never touched, so a scrubbed file still replays. It cannot spot a
 device name hidden in a field with an unrelated name, so skim the file before committing.
+
+## Fake brain state for the screen
+
+```
+python -m sim.state zone_tour            # real time, JSON lines on stdout
+python -m sim.state wave_checkin --fast
+```
+
+Turns any path into the `state` (10 a second) and `event` messages of CONTRACTS.md section 5,
+with `"src":"sim"`, so the room, HUD and game can be built before the real brain is ready.
+
+This is a perfect brain: it reads the answer from the script instead of working it out from
+radio, so it says nothing about how well the real one does. What it does follow from section 6:
+link health (stale, then SENSOR BLIND after 3 s, clear after 3 s ok), `pred` null while blind or
+while the router is off `S-home`, the no-movement alert with the zone limits, check-in on a wave,
+objects and the X-ray grid. `narration` is a fixed template sentence for the latest event and
+`advice` is always null. The contract needs numbers in `model` and `board`, so they are 0, which
+here means "not measured". Every message passes `python -m contracts.check`.
