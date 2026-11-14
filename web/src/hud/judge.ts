@@ -1,4 +1,5 @@
 import './judge.css'
+import { changingText } from './changing-text'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
 import { fetchProof } from '../room/hud-host'
@@ -23,6 +24,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   `
   const field = (id: string) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`)!
   const set = (id: string, text: string) => { field(id).textContent = text }
+  const headlineText = changingText(field('judge-headline'))
   const debug = root.querySelector('.debug')!
   for (const id of ['pred-zone', 'pred-zone-set', 'pred-kind', 'pred-motion', 'why-links', 'router-spot', 'narrator-source', 'no-data', 'sensor-blind']) {
     const value = document.createElement('dd')
@@ -53,7 +55,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   let disposed = false
   const render = (state: StateMsg | null, stale: boolean) => {
     const [headline, detail] = judgeMoment(state, stale)
-    set('judge-headline', headline)
+    headlineText.set(headline)
     set('judge-detail', detail)
     set('source-badge', state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO')
     field('cam-status').hidden = Object.keys(extraPanels).some(path => path.includes('camera'))
@@ -83,7 +85,8 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposed = true; clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
+
 
