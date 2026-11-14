@@ -96,3 +96,17 @@ python -m sim.replay data/sessions/tour.jsonl --speed 4 --loop
 Replay waits between lines according to their timestamps (`recv_t` when the bus
 recorded one, otherwise `t`). Lines come out with `"src":"replay"` and without
 `recv_t`; nothing else changes. It works on real recorded sessions too. `data/sessions/` is git-ignored, so recordings stay local.
+
+## Scrub a session before committing it
+
+Recordings stay local (`data/sessions/` is git-ignored). To keep one, scrub it into `data/sessions/keep/`:
+
+```
+python -m sim.scrub data/sessions/s12.jsonl data/sessions/keep/s12.jsonl
+python -m sim.scrub --check data/sessions/keep/s12.jsonl    # exit 1 if any identifier is left
+```
+
+It deletes fields that hold a device identifier (`mac`, `bssid`, `ssid`, `addr`, `name`,
+`local_name`, `hostname`, ...) and blanks anything shaped like a MAC address in any other
+text. Contract fields are never touched, so a scrubbed file still replays. It cannot spot a
+device name hidden in a field with an unrelated name, so skim the file before committing.
