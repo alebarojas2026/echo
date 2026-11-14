@@ -19,7 +19,7 @@ import os
 import socket
 from pathlib import Path
 
-from websockets.asyncio.server import broadcast, serve
+from websockets.asyncio.server import broadcast, serve as ws_serve
 from websockets.exceptions import ConnectionClosed
 
 from brain.alert import led_grid
@@ -58,6 +58,25 @@ class _BusIn(asyncio.DatagramProtocol):
             return
         if isinstance(msg, dict) and msg.get("v") == 2:   # section 1: check v and type at runtime
             self.brain.on_message(msg)
+
+
+async def serve(handler, host, port):
+    """websockets' serve, once a plain bind shows that host is an address of this machine.
+
+    That bind fails with the OS's own EADDRNOTAVAIL when the address isn't here yet. asyncio's
+    create_server hides it: it skips the address and raises "could not bind on any address" with
+    errno None (the board's Python 3.13 does this, and so do current 3.11 and 3.12)."""
+    family, kind, proto, _, addr = (await asyncio.get_running_loop().getaddrinfo(
+        host, 0, type=socket.SOCK_STREAM))[0]
+    with socket.socket(family, kind, proto) as s:
+        s.bind(addr)
+    return await ws_serve(handler, host, port)
+
+
+def _not_up_yet(e: OSError) -> bool:
+    """The address isn't on this machine yet, so retrying makes sense. errno None is create_server's
+    "could not bind on any address", in case the address drops between the check and its bind."""
+    return e.errno in (errno.EADDRNOTAVAIL, None)
 
 
 async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=WS_HOSTS, ws_port=8765,
@@ -103,19 +122,23 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
         finally:
             clients.discard(ws)
 
-    servers, waiting = [], []
+    servers, waiting, failed = [], [], []
     for host in ws_hosts:
         try:
             servers.append(await serve(screen, host, ws_port))
         except OSError as e:
-            if e.errno != errno.EADDRNOTAVAIL:
-                raise
+            if not _not_up_yet(e):
+                # Retrying won't fix this one (the port is taken, say). Carry on with the other
+                # addresses; it still stops the brain below if none of them is listening.
+                log.error("can't listen on %s:%s: %s; not retrying", host, ws_port, e)
+                failed.append(e)
+                continue
             # The address isn't on this machine yet: on the board, the brain starts
             # before the Ethernet link is up. Keep trying in the background.
             log.warning("%s:%s is not up yet (%s); retrying every %g s", host, ws_port, e, retry_s)
             waiting.append(host)
     if not servers:
-        raise OSError(f"could not listen on any of {ws_hosts}")
+        raise failed[0] if failed else OSError(f"could not listen on any of {ws_hosts}")
     port = servers[0].sockets[0].getsockname()[1]   # the same port everywhere, also when ws_port is 0
 
     async def listen_later(host):
@@ -123,8 +146,11 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
             await asyncio.sleep(retry_s)
             try:
                 servers.append(await serve(screen, host, port))
-            except OSError:
-                continue
+            except OSError as e:
+                if _not_up_yet(e):
+                    continue
+                log.error("can't listen on %s:%s: %s; not retrying", host, port, e)
+                return
             log.info("now listening on %s:%s", host, port)
             return
 
