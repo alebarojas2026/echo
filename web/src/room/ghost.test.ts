@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Pred } from './contract'
-import { ghostFloor, ghostSpots, turn } from './ghost'
+import { turn } from './figure'
+import { ghostFloor, ghostSpots } from './ghost'
 
 const pred = (over: Partial<Pred>): Pred => ({
   present: true, kind: 'person', zone: 2, zone_set: [2], probs: [0.02, 0.08, 0.81, 0.07, 0.02],
