@@ -12,34 +12,44 @@ python -m sim.fake my_path.json            # real time, JSON lines on stdout
 python -m sim.fake my_path.json --fast     # all at once, for recording a file
 ```
 
-Options: `--rate 15` (readings per link per second, 10-20), `--seed 0` (same seed, same data).
+Options: `--rate 15` (readings per link per second, 10-20), `--seed 0` (same seed, same data),
+`--start-ms` (epoch ms of the first message; default is now).
 
 ## The room
 
+Nodes, links and zones are the ones in CONTRACTS.md section 3.
+
 ```
-y=2 +-----n2-----+      zones:  2 | 3
-    |  2  |  3   |              --+--
-    n3----+-----n1              0 | 1
-    |  0  |  1   |
-y=0 +-----n0-----+
-   x=0          x=2   (metres)
+y=2 +----unoq----+      zones:  1 Bed   | 2 Chair       0 = empty
+    |  1  |  2   |              --------+-----------
+  west----+----east             3 Hall  | 4 Bathroom
+    |  3  |  4   |
+y=0 +----pi5-----+
+   x=0          x=2   (metres, x east, y north)
 ```
 
-Four nodes at the midpoints of the sides, 6 links. A person near the line between
-two nodes drops that link by up to 8 dB; every reading also has about 1 dB of noise.
+Six links: `pi5>unoq:wifi`, `pi5>unoq:ble`, `east>unoq:ble`, `west>unoq:ble`, `east>pi5:ble`, `west>pi5:ble`.
+A person near the line between two nodes drops that link by up to 8 dB; every reading also has
+about 1 dB of noise. Each diagonal link crosses exactly one zone.
 
 ## Output
 
-One JSON object per line. Until the shared contract lands this is:
+One JSON object per line, in the CONTRACTS.md v2 format (sections 1 and 4), with `"src":"sim"`:
 
 ```
-{"type":"rssi","t":1.2,"link":"n0-n1","rssi":-47}
-{"type":"label","t":1.2,"zone":3,"present":true,"moving":false}
+{"v":2,"type":"meta","t":1763149500000,"seq":1,"src":"sim","session":"sim-zone_tour","purpose":"demo","walker":"sim"}
+{"v":2,"type":"rssi","t":1763149500000,"seq":2,"src":"sim","link":"pi5>unoq:wifi","kind":"wifi","tx":"pi5","rx":"unoq","dbm":-45}
+{"v":2,"type":"label","t":1763149500000,"seq":8,"src":"sim","frame":0,"mode":"person","persons_in_frame":1,"present":true,"zone":3,"foot_m":[0.0,0.5],"motion":"moving","conf":0.81,"clipped":false}
+{"v":2,"type":"cam","t":1763149500000,"seq":9,"src":"sim","state":"on","fps":7.5}
 ```
 
-`t` is seconds since the start. `rssi` is dBm. Labels come about 5 times a second;
-`zone` is `null` when nobody is there. The format lives in one function,
-`encode` in `sim/wire.py`. Change it there and nowhere else.
+- `meta` once at the start, `rssi` for every link on every tick, `label` 7.5 times a second
+  (empty frames too), `cam` once a second.
+- The whole feed is one producer: `seq` goes up by one per line.
+- With nobody in the room a label has `present:false`, `zone:0`, `foot_m:null`, `motion:null`.
+- `motion` follows the contract rule: moving means faster than 0.25 m/s over the last second.
+
+The format lives in `sim/wire.py`. Change it there and nowhere else.
 
 ## Path files
 
@@ -47,12 +57,15 @@ One JSON object per line. Until the shared contract lands this is:
 {
   "duration_s": 20,
   "person": [{"t": 0, "x": 0.5, "y": 0.5}, {"t": 5, "x": 1.5, "y": 1.5}, {"t": 15, "x": null}],
-  "objects": [{"x": 1.0, "y": 0.15, "drop_db": 6}]
+  "objects": [{"x": 1.0, "y": 0.15, "drop_db": 6}],
+  "label_mode": "person",
+  "meta": {"purpose": "train"}
 }
 ```
 
 The person walks in straight lines between waypoints and holds the last one.
 `"x": null` means they left. `"person": null` is an empty room. Objects never move.
+`label_mode` (default `person`) and `meta` (overrides for the `meta` message) are optional.
 
 ## Tests
 
@@ -67,10 +80,10 @@ Use the short name: `python -m sim.fake zone_tour`.
 
 | Name | What happens | Length |
 |---|---|---|
-| `zone_tour` | Walk in, stand 5 s in each zone (0, 1, 3, 2), walk out | 34 s |
-| `stand_still` | Walk into zone 3, stand still 15 s, walk out | 24 s |
+| `zone_tour` | Walk in, stand 5 s in each zone (3, 4, 2, 1), walk out | 32 s |
+| `stand_still` | Walk into zone 4 (10 s alert limit), stand still 15 s, walk out | 20 s |
 | `empty_room` | Nobody there, noise only | 30 s |
-| `metal_object` | Empty room, metal object next to `n1`: a steady drop on `n1`'s three links | 30 s |
+| `metal_object` | Empty room, metal object next to `east`: a steady drop on both `east` links, `label_mode` object | 30 s |
 
 ## Replay a recording
 
@@ -80,6 +93,6 @@ python -m sim.replay data/sessions/tour.jsonl                    # play at real 
 python -m sim.replay data/sessions/tour.jsonl --speed 4 --loop
 ```
 
-Replay prints the lines unchanged and waits between them according to their
-timestamps. It works on real recorded sessions too; timestamps do not need to
-start at zero. `data/sessions/` is git-ignored, so recordings stay local.
+Replay waits between lines according to their timestamps (`recv_t` when the bus
+recorded one, otherwise `t`). Lines come out with `"src":"replay"` and without
+`recv_t`; nothing else changes. It works on real recorded sessions too. `data/sessions/` is git-ignored, so recordings stay local.

@@ -3,14 +3,15 @@
     python -m sim.replay data/sessions/tour.jsonl
     python -m sim.replay data/sessions/tour.jsonl --speed 4 --loop
 
-Works on files made by `python -m sim.fake NAME --fast` and on real recorded
-sessions, as long as `wire.time_of` can read each line's timestamp.
+Works on files made by `python -m sim.fake NAME --fast` and on sessions the
+bus recorded. Lines come out with src "replay" and without recv_t; everything
+else is unchanged. Pacing follows recv_t when a line has it, otherwise t.
 """
 import argparse
 import sys
 
 from .fake import pace
-from .wire import time_of
+from .wire import as_replay, time_of
 
 
 def read(file):
@@ -18,7 +19,7 @@ def read(file):
     for line in file:
         line = line.strip()
         if line:
-            yield time_of(line), line
+            yield time_of(line), as_replay(line)
 
 
 def main(argv=None) -> None:

@@ -1,22 +1,45 @@
 """The one place that knows what a message looks like on the wire.
 
-The shared contract (CONTRACTS.md) is not frozen yet. When it lands, change
-`encode` (and `time_of` if the timestamp field moves) and nothing else.
+Speaks CONTRACTS.md v2, sections 1 and 4. If the contract changes, change
+this file and nothing else.
 
-Internal events are plain dicts:
-    {"kind": "rssi",  "t": 1.2, "link": "n0-n1", "rssi": -47}
-    {"kind": "label", "t": 1.2, "zone": 3, "present": True, "moving": False}
+Internal events already use the contract's field names; they only lack the
+envelope and carry `t` in seconds since the start of the run:
+    {"type": "rssi", "t": 1.2, "link": "east>pi5:ble", "kind": "ble",
+     "tx": "east", "rx": "pi5", "dbm": -61}
 """
+import itertools
 import json
 
+VERSION = 2
 
-def encode(event: dict) -> str:
-    """Internal event -> one JSON line (no trailing newline)."""
-    msg = {"type": event["kind"]}
-    msg.update((k, v) for k, v in event.items() if k != "kind")
+
+def _dump(msg: dict) -> str:
     return json.dumps(msg, separators=(",", ":"))
 
 
+def encoder(start_ms: int = 0, src: str = "sim"):
+    """Return encode(event) -> one JSON line. One encoder = one producer (one seq counter)."""
+    seq = itertools.count(1)
+
+    def encode(event: dict) -> str:
+        msg = {"v": VERSION, "type": event["type"],
+               "t": start_ms + round(event["t"] * 1000), "seq": next(seq), "src": src}
+        msg.update((k, v) for k, v in event.items() if k not in ("type", "t"))
+        return _dump(msg)
+
+    return encode
+
+
 def time_of(line: str) -> float:
-    """Timestamp in seconds of one JSON line. Used by replay for pacing."""
-    return float(json.loads(line)["t"])
+    """Seconds, for pacing a replay. Uses the bus's recv_t when the line has one."""
+    msg = json.loads(line)
+    return msg.get("recv_t", msg["t"]) / 1000.0
+
+
+def as_replay(line: str) -> str:
+    """Mark a recorded line as replayed; the bus stamps a fresh recv_t."""
+    msg = json.loads(line)
+    msg["src"] = "replay"
+    msg.pop("recv_t", None)
+    return _dump(msg)
