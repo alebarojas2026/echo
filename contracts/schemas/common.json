@@ -23,6 +23,6 @@
     "narration_text": {"$comment": "Section 6: at most 16 words.", "type": "string", "pattern": "^\\s*\\S+(\\s+\\S+){0,15}\\s*$"},
     "event_kind": {"enum": ["enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice", "advice_result",
                             "router_moved", "router_home", "recalibrating", "cam_off", "cam_on", "cam_stalled", "alert_on",
-                            "alert_off", "blind_on", "blind_off", "trained", "baseline_done", "drift"]}
+                            "alert_off", "blind_on", "blind_off", "trained", "baseline_done", "drift", "reset", "recording"]}
   }
 }
