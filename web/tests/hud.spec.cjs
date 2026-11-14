@@ -26,3 +26,15 @@ for (const source of ['live', 'replay']) {
     await expect(page.getByTestId('advice-text')).toHaveText('__')
   })
 }
+
+test('shows blind while the feed is fresh, then no data when it goes stale', async ({ page }) => {
+  await page.clock.install()
+  await page.goto(path + '?blind&pause')
+  await expect(page.getByTestId('sensor-blind')).toBeVisible()
+  await expect(page.getByTestId('no-data')).toBeHidden()
+  await expect(page.getByTestId('alert-banner')).toBeEmpty()
+  await page.clock.fastForward(1001)
+  await expect(page.getByTestId('no-data')).toBeVisible()
+  await expect(page.getByTestId('sensor-blind')).toBeHidden()
+  await expect(page.getByTestId('pred-kind')).toHaveText('__')
+})

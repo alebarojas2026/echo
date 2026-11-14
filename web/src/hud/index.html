@@ -13,8 +13,14 @@
       import { adaptHudState } from './state.ts'
       import { mockFeed } from './mock.ts'
 
-      const { state, proof } = mockFeed(new URLSearchParams(location.search))
-      renderHud(document.querySelector('#hud'), adaptHudState(state, proof))
+      const params = new URLSearchParams(location.search)
+      const { state, proof } = mockFeed(params)
+      const root = document.querySelector('#hud')
+      renderHud(root, adaptHudState(state, proof))
+      if (params.has('pause')) {
+        const receivedAt = Date.now()
+        setTimeout(() => renderHud(root, adaptHudState(state, proof, receivedAt)), 1001)
+      }
     </script>
   </body>
 </html>
