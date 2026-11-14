@@ -16,6 +16,7 @@ class CreditsDocTest(unittest.TestCase):
             "pytest",
             "Unpinned",
             "MIT",
+            "`brain/`",
             "`bus/`",
             "`sim/`",
             "`narrator/`",
@@ -29,11 +30,13 @@ class CreditsDocTest(unittest.TestCase):
             "`>=12`",
             "BSD-3-Clause",
             "NumPy",
+            "scikit-learn",
             "OpenCV (`cv2`)",
             "Apache-2.0",
             "Not pinned in this repository",
             "`advisor/`",
             "`brain/`",
+            "`narrator/`",
             "`teacher/`",
         ):
             self.assertIn(phrase, self.text)
@@ -52,8 +55,21 @@ class CreditsDocTest(unittest.TestCase):
             "TypeScript",
             "`^7.0.2`",
             "`@types/three`",
+            "`@playwright/test`",
+            "`1.60.0`",
             "`contracts/`",
             "`web/`",
+            "`web/tests/`",
+        ):
+            self.assertIn(phrase, self.text)
+
+    def test_current_brain_manifest_dependencies_are_credited(self):
+        for phrase in (
+            "NumPy",
+            "scikit-learn",
+            "websockets",
+            "pytest",
+            "unpinned in `brain/`",
         ):
             self.assertIn(phrase, self.text)
 
