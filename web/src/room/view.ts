@@ -244,6 +244,7 @@ export class RoomView {
     for (const step of this.animators) busy = step(dt) || busy
     this.renderer.render(this.scene, this.camera)
     if (this.labelsDirty) this.placeLabels()
+    this.declutter()
     if (busy) this.requestRender()
     else this.lastFrameAt = 0
   }
@@ -258,4 +259,39 @@ export class RoomView {
       el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`
     }
   }
+
+  /**
+   * Where two words overlap (on a laptop's smaller canvas the scene shrinks but words stay at least 28 px), the
+   * less important one steps back until there is room again. Nothing overlaps on the 1920 x 1080 screen, so
+   * there nothing ever steps back.
+   */
+  private declutter() {
+    const shown = this.labels.filter(({ el }) => !el.hidden && el.textContent)
+    const boxes = shown.map(({ el }) => el.getBoundingClientRect())
+    const ranks = shown.map(({ el }) => labelRank(el))
+    const yielding = new Set<HTMLElement>()
+    for (let i = 0; i < shown.length; i++) {
+      for (let j = i + 1; j < shown.length; j++) {
+        const a = boxes[i]
+        const b = boxes[j]
+        if (ranks[i] === ranks[j] || a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top) continue
+        yielding.add(ranks[i] < ranks[j] ? shown[i].el : shown[j].el)
+      }
+    }
+    for (const { el } of this.labels) el.classList.toggle('room-label--yield', yielding.has(el))
+  }
+}
+
+/** Which words win when two overlap: what is happening now beats where things are. */
+const RANKS: [string, number][] = [
+  ['room-label--object', 3],
+  ['room-label--alert', 3],
+  ['room-label--wave', 3],
+  ['room-label--spot', 2],
+  ['room-label--beam', 2],
+  ['room-label--zone', 1],
+]
+
+function labelRank(el: HTMLElement): number {
+  return Math.max(0, ...RANKS.filter(([cls]) => el.classList.contains(cls)).map(([, rank]) => rank))
 }
