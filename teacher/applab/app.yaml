@@ -1,0 +1,4 @@
+name: Radio Sight Teacher
+description: Temporary floor-zone labels from the camera, held in memory only.
+bricks:
+  - arduino:video_object_detection

@@ -37,9 +37,15 @@ def time_of(line: str) -> float:
     return msg.get("recv_t", msg["t"]) / 1000.0
 
 
-def as_replay(line: str) -> str:
-    """Mark a recorded line as replayed; the bus stamps a fresh recv_t."""
+def as_replay(line: str, seq: int | None = None) -> str:
+    """Mark a recorded line as replayed; the bus stamps a fresh recv_t.
+
+    A recording interleaves several producers, each with its own seq. When it is
+    sent again from one socket, pass a fresh `seq` so the bus sees one producer.
+    """
     msg = json.loads(line)
     msg["src"] = "replay"
+    if seq is not None:
+        msg["seq"] = seq
     msg.pop("recv_t", None)
     return _dump(msg)
