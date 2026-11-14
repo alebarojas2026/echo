@@ -57,49 +57,24 @@ function buildShell(): Group {
   west.position.copy(v3([lo, mid, WALL_M / 2]))
   g.add(west)
 
-  const edge = new LineBasicMaterial({ color: LINE })
-  g.add(
-    segments(
-      [
-        // floor edge
-        [lo, lo, 0], [hi, lo, 0],
-        [hi, lo, 0], [hi, hi, 0],
-        [lo, hi, 0], [hi, hi, 0],
-        [lo, lo, 0], [lo, hi, 0],
-        // wall tops and the corner
-        [lo, hi, WALL_M], [hi, hi, WALL_M],
-        [lo, lo, WALL_M], [lo, hi, WALL_M],
-        [lo, hi, 0], [lo, hi, WALL_M],
-        [hi, hi, 0], [hi, hi, WALL_M],
-        [lo, lo, 0], [lo, lo, WALL_M],
-      ],
-      edge,
-    ),
-  )
+  // Floor edge, wall tops and the three wall corners.
+  const w = WALL_M
+  const walls: Vec3[] = [[lo, hi, w], [hi, hi, w], [lo, lo, w], [lo, hi, w], [lo, hi, 0], [lo, hi, w],
+    [hi, hi, 0], [hi, hi, w], [lo, lo, 0], [lo, lo, w]]
+  const floorEdge = outline([[lo, lo, 0], [hi, lo, 0], [hi, hi, 0], [lo, hi, 0]])
+  g.add(segments([...floorEdge, ...walls], new LineBasicMaterial({ color: LINE })))
 
   // The sensing square and its four zones.
   const s = SQUARE_M
-  g.add(
-    segments(
-      [
-        [0, 0, 0], [s, 0, 0],
-        [s, 0, 0], [s, s, 0],
-        [s, s, 0], [0, s, 0],
-        [0, s, 0], [0, 0, 0],
-      ],
-      new LineBasicMaterial({ color: INK }),
-    ),
-  )
-  g.add(
-    segments(
-      [
-        [mid, 0, 0], [mid, s, 0],
-        [0, mid, 0], [s, mid, 0],
-      ],
-      new LineDashedMaterial({ color: LINE, dashSize: 0.06, gapSize: 0.05 }),
-    ),
-  )
+  g.add(segments(outline([[0, 0, 0], [s, 0, 0], [s, s, 0], [0, s, 0]]), new LineBasicMaterial({ color: INK })))
+  const dash = new LineDashedMaterial({ color: LINE, dashSize: 0.06, gapSize: 0.05 })
+  g.add(segments([[mid, 0, 0], [mid, s, 0], [0, mid, 0], [s, mid, 0]], dash))
   return g
+}
+
+/** Segment pairs that join the points in order and close the loop. */
+function outline(pts: Vec3[]): Vec3[] {
+  return pts.flatMap((p, i) => [p, pts[(i + 1) % pts.length]])
 }
 
 interface NodeMesh {

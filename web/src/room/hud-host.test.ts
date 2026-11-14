@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Feed } from './feed'
 import { hostHud } from './hud-host'
 
-const feed = { source: 'mock' } as Feed
+const feed = { source: 'mock' }
 const root = () => ({ hidden: false }) as HTMLElement
 
 describe('hud host', () => {
