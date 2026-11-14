@@ -10,9 +10,11 @@
     <main id="hud"></main>
     <script type="module">
       import { renderHud } from './index.ts'
-      import { readHudState } from './state.ts'
+      import { adaptHudState } from './state.ts'
+      import { mockFeed } from './mock.ts'
 
-      renderHud(document.querySelector('#hud'), readHudState())
+      const { state, proof } = mockFeed(new URLSearchParams(location.search))
+      renderHud(document.querySelector('#hud'), adaptHudState(state, proof))
     </script>
   </body>
 </html>

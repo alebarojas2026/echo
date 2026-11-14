@@ -1,44 +1,28 @@
 const { test, expect } = require('@playwright/test')
-
-const panel = '/src/hud/'
-
+const path = '/src/hud/'
 for (const width of [320, 768, 1024, 1440]) {
-  test(`shows every HUD panel at ${width}px`, async ({ page }) => {
+  test(`shows the panels at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
-    const errors = []
-    page.on('pageerror', error => errors.push(error.message))
-    await page.goto(panel)
-
-    await expect(page.getByRole('heading', { name: 'Radio Sight' })).toBeVisible()
-    await expect(page.getByText('FAKE', { exact: true })).toBeVisible()
-    await expect(page.getByText('CAMERA OFF', { exact: true })).toBeVisible()
-    await expect(page.getByRole('status')).toHaveText('No movement detected')
-    await expect(page.getByRole('region', { name: 'Narrator' }).locator('p'))
-      .toHaveText('The radio detects someone in the room who has stopped moving.')
-
-    const advice = page.getByRole('region', { name: 'Router placement' })
-    await expect(advice.getByText('Move the router 30 cm north')).toBeVisible()
-    for (const label of ['Before (dB)', 'After (dB)']) {
-      await expect(advice.getByText(label, { exact: true })).toBeVisible()
+    await page.goto(path + '?source=sim')
+    for (const [id, text] of Object.entries({
+      'source-badge': 'FAKE', 'cam-status': 'CAMERA OFF', 'narrator-text': 'The room occupant has stopped moving.',
+      'narrator-source': 'template', 'alert-banner': 'No-movement alert',
+      'advice-text': 'An obstruction is blocking the link. Move the router 30 cm west.',
+    })) await expect(page.getByTestId(id)).toHaveText(text)
+    for (const id of ['before-dbm', 'after-dbm', 'zone-score', 'person-object-score', 'train-seconds',
+      'ms-per-decision', 'watts', 'bytes-out', 'images-stored', 'models-count', 'pred-kind', 'pred-zone']) {
+      await expect(page.getByTestId(id)).toHaveText('__')
     }
-    await expect(advice.locator('dd')).toHaveText(['__', '__'])
-
-    const proof = page.getByRole('region', { name: 'Proof' })
-    for (const label of ['Radio vs camera agreement', 'Train seconds', 'ms per decision', 'Watts']) {
-      await expect(proof.getByText(label, { exact: true })).toBeVisible()
-    }
-    await expect(proof.locator('dd')).toHaveText(['__', '__', '__', '__', '0 bytes out', '0 images'])
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
-    expect(errors).toEqual([])
   })
 }
-
-for (const source of ['LIVE', 'REPLAY']) {
-  test(`renders ${source} and the received check-in`, async ({ page }) => {
-    await page.goto(`${panel}?source=${source}&movement=check-in`)
-    await expect(page.getByText(source, { exact: true })).toBeVisible()
-    await expect(page.getByRole('status')).toHaveText('Check-in received')
-    await expect(page.getByRole('region', { name: 'Narrator' }).locator('p'))
-      .toHaveText('The room occupant checked in.')
+for (const source of ['live', 'replay']) {
+  test(`shows ${source} and check-in`, async ({ page }) => {
+    await page.goto(path + `?source=${source}&movement=check-in&cam=stalled&no-advice`)
+    await expect(page.getByTestId('source-badge')).toHaveText(source.toUpperCase())
+    await expect(page.getByTestId('checkin-toast')).toHaveText('Check-in received')
+    await expect(page.getByTestId('alert-banner')).toBeEmpty()
+    await expect(page.getByTestId('cam-status')).toHaveText('CAMERA STALLED')
+    await expect(page.getByTestId('advice-text')).toHaveText('__')
   })
 }

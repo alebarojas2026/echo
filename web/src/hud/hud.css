@@ -125,3 +125,5 @@
   .hud-narrator { grid-area: span 2 / 1; }
   .hud-proof dl { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
+
+.hud-details { margin-top: .75rem; }
