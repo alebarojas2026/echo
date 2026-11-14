@@ -159,12 +159,12 @@ class LlamaServer:
     """llama-server's OpenAI-style chat endpoint. Call it with chat messages;
     it returns (text, model name). A reply cut off by max_tokens comes back empty."""
 
-    def __init__(self, url: str = LLM_URL, timeout_s: float = LLM_TIMEOUT_S):
+    def __init__(self, url: str = LLM_URL, timeout_s: float = LLM_TIMEOUT_S, max_tokens: int = 40):
         self.url = url.rstrip("/") + "/v1/chat/completions"
-        self.timeout_s = timeout_s
+        self.timeout_s, self.max_tokens = timeout_s, max_tokens
 
     def __call__(self, messages: list[dict]) -> tuple[str, str | None]:
-        body = {"messages": messages, "max_tokens": 40, "temperature": 0.2,
+        body = {"messages": messages, "max_tokens": self.max_tokens, "temperature": 0.2,
                 "stop": ["\n"], "cache_prompt": True}
         req = urllib.request.Request(self.url, data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
@@ -224,6 +224,9 @@ class Narrator:
         self.seq = 0
         self.last_start_ms = None   # when the last sentence started being written
         self.last_sent_ms = None
+        # narrate() and the recap (narrator/recap.py) run on their own threads and share the
+        # gap, seq and socket: whoever sends holds this from the gap wait through the send.
+        self.lock = threading.Lock()
 
     def observe(self, msg: dict) -> None:
         """Take any message from the brain."""
@@ -281,19 +284,25 @@ class Narrator:
         start = self.clock()
         text, source, model, why = self.sentence(event)
         gen_ms = self.clock() - start
-        if self.last_sent_ms is not None:   # a quick sentence after a slow one waits its turn:
-            wait_ms = self.last_sent_ms + self.gap_ms - self.clock()   # the screen gets one per 8 s
-            if wait_ms > 0:
-                self.sleep(wait_ms / 1000)
-        t = self.clock()
-        self.seq += 1
-        msg = {"v": 2, "type": "narration", "t": t, "seq": self.seq, "src": event.get("src", "live"),
-               "text": text, "event_id": event.get("id"), "event_kind": event["kind"],
-               "gen_ms": gen_ms, "source": source, "model": model}
-        self.send(msg)
-        self.last_sent_ms = t
+        msg = self.send_spaced(text=text, event_id=event.get("id"), event_kind=event["kind"],
+                               gen_ms=gen_ms, source=source, model=model, src=event.get("src", "live"))
         log(f"{event.get('id')} {event['kind']} -> {source} {gen_ms} ms ({why}): {text}")
         return msg
+
+    def send_spaced(self, src: str, **fields) -> dict:
+        """Send one narration no sooner than gap_ms after the last one, and return it.
+        A quick sentence after a slow one waits its turn: the screen gets one per 8 s."""
+        with self.lock:
+            if self.last_sent_ms is not None:
+                wait_ms = self.last_sent_ms + self.gap_ms - self.clock()
+                if wait_ms > 0:
+                    self.sleep(wait_ms / 1000)
+            t = self.clock()
+            self.seq += 1
+            msg = {"v": 2, "type": "narration", "t": t, "seq": self.seq, "src": src, **fields}
+            self.send(msg)
+            self.last_sent_ms = t
+            return msg
 
     def step(self) -> dict | None:
         event = self.due(self.clock())
@@ -334,12 +343,19 @@ def udp_sender(bus: str = BUS):
     return send
 
 
-async def serve(messages, narrator: Narrator, poll_s: float = 0.1) -> None:
+async def serve(messages, narrator: Narrator, poll_s: float = 0.1, recap=None) -> None:
     """Feed brain messages to the narrator and narrate whenever an event is due.
-    Returns once the messages end and nothing is left to narrate."""
+    Returns once the messages end and nothing is left to narrate.
+    recap (narrator/recap.py), if given, writes the end-of-demo recap when a reset arrives."""
+    recaps = []
+
     async def feed():
         async for msg in messages:
             narrator.observe(msg)
+            events = recap.observe(msg) if recap else None
+            if events:   # written off the loop, so events keep flowing meanwhile
+                recaps.append(asyncio.create_task(asyncio.to_thread(recap.write, events, msg)))
+        await asyncio.gather(*recaps)
 
     feeder = asyncio.create_task(feed())
     while not (feeder.done() and narrator.pending is None):
@@ -378,7 +394,11 @@ def main(argv=None) -> int:
         return 0
 
     threading.Thread(target=warm_up, args=(llm,), daemon=True).start()
-    asyncio.run(serve(brain_messages(args.ws), Narrator(llm, udp_sender(args.bus))))
+    from narrator.recap import MAX_TOKENS, TIMEOUT_S, Recap   # here, because recap imports this module
+
+    narrator = Narrator(llm, udp_sender(args.bus))
+    recap = Recap(narrator, LlamaServer(args.llm, timeout_s=TIMEOUT_S, max_tokens=MAX_TOKENS))
+    asyncio.run(serve(brain_messages(args.ws), narrator, recap=recap))
     return 0
 
 
