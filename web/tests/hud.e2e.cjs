@@ -91,7 +91,8 @@ test('mounted controls send commands and proof refresh stops on disposal', async
   let count = 0
   await page.route('**/proof.json', route => route.fulfill({ json: { bytes_out: ++count } }))
   await page.clock.install()
-  await page.goto(path)
+  await page.route('**/isolated-hud', route => route.fulfill({ contentType: 'text/html', body: '<main></main>' }))
+  await page.goto('/isolated-hud')
   await page.evaluate(async () => {
     const { mountHud } = await import('/src/hud/index.ts')
     const { mockFeed } = await import('/src/hud/mock.ts')
