@@ -52,14 +52,25 @@ DEFAULT_CFG = {
     "smooth_n": AL.SMOOTH_N,
     "stale_frac": H.STALE_FRAC, "jump_db": H.JUMP_DB, "blind_after_s": H.BLIND_AFTER_S,
     "clear_after_s": H.CLEAR_AFTER_S,
-    "alpha_rel": X.ALPHA_REL,
+    "alpha_rel": X.ALPHA_REL, "static_std_db": X.STATIC_STD_DB,
 }
 _TARGETS = {
     "window_ms": (F, "WINDOW_MS"), "cross_db": (AL, "CROSS_DB"), "crossings": (AL, "CROSSINGS"),
     "cross_window_ms": (AL, "CROSS_WINDOW_MS"), "smooth_n": (AL, "SMOOTH_N"),
     "stale_frac": (H, "STALE_FRAC"), "jump_db": (H, "JUMP_DB"), "blind_after_s": (H, "BLIND_AFTER_S"),
     "clear_after_s": (H, "CLEAR_AFTER_S"), "alpha_rel": (X, "ALPHA_REL"),
+    "static_std_db": (X, "STATIC_STD_DB"),
 }
+_steady_level = X.steady_level
+
+
+def _steady_now(t, v, now, span_s=None, std_db=None):
+    """xray.steady_level binds its threshold at import; this reads the live constant."""
+    return _steady_level(t, v, now, X.STATIC_S if span_s is None else span_s,
+                         X.STATIC_STD_DB if std_db is None else std_db)
+
+
+X.steady_level = _steady_now
 
 
 @contextlib.contextmanager
@@ -112,6 +123,7 @@ PROTOCOL = {
     "spot_jitter_m": 0.12,    # how far from the zone centre people actually stand
     "tray_jitter_m": 0.05,    # how far from T1 the tray ends up in the live demo
     "wave_dist_m": 0.5,       # the waver's distance from the router-receiver line
+    "object_s": 15.0,         # how long each tray placement is recorded for training
 }
 
 
@@ -157,7 +169,7 @@ def build(seed: int, env: rf.Env, live_person: dict = None, wave: dict = None, s
         sc.stand(1.5)
         sc.place(*spot, width_m=0.3, depth_db=tray_db)
         sc.leave()
-        sc.idle(15.0)
+        sc.idle(proto["object_s"])
         sc.enter(helper)
         sc.walk_to(spot[0] + 0.3, spot[1])
         sc.stand(1.0)
@@ -514,11 +526,13 @@ def score(tl, plan, res, msgs):
 
 # ---------------------------------------------------------------- replays
 
-CHECKIN_GRID = [{"cross_db": c, "crossings": n, "cross_window_ms": w}
-                for c in (1.0, 1.5, 2.0, 2.5, 3.0) for n in (3, 4, 5, 6) for w in (1500, 2500, 3500)]
+CHECKIN_GRID = [{"cross_db": c, "crossings": n, "cross_window_ms": w, "smooth_n": s}
+                for c in (0.75, 1.0, 1.5, 2.0, 3.0) for n in (2, 3, 4, 6) for w in (1500, 2500, 3500)
+                for s in (1, 3)]
 HEALTH_GRID = [{"stale_frac": s, "blind_after_s": b, "jump_db": j}
                for s in (0.3, 0.4, 0.5) for b in (2.0, 3.0, 4.0) for j in (4.0, 6.0, 8.0, 10.0)]
-ALPHA_GRID = [{"alpha_rel": a} for a in (0.01, 0.03, 0.1, 0.3, 1.0, 3.0)]
+XRAY_GRID = [{"alpha_rel": a, "static_std_db": s} for a in (0.03, 0.1, 0.3, 1.0) for s in (0.8, 1.5, 2.5, 4.0)]
+ALERT_HYST = (1, 3, 5, 10)   # reset the still timer only after this many "moving" decisions in a row
 
 
 def replay_checkin(res, plan, grid=CHECKIN_GRID):
@@ -576,7 +590,29 @@ def replay_health(res, plan, grid=HEALTH_GRID):
     return rows
 
 
-def replay_xray(res, plan, grid=ALPHA_GRID):
+def replay_alert(res, plan, hyst=ALERT_HYST):
+    """Re-run the no-movement alert with a hysteresis on "moving" (1 = the rule as written)."""
+    T0 = rf.T0_MS
+    sp = plan["spans"]
+    a0 = sp["alert4"][0][0]
+    w1 = sp["wave"][0][1]
+    rows = []
+    for h in hyst:
+        watch, run_len, on = AL.Watch(limits=LIMITS), 0, []
+        for x in res["ticks"]:
+            p = None if x[1] is None else {"present": x[1] > 0, "zone": x[1] or None, "kind": x[2], "motion": x[3]}
+            if p is not None and p["kind"] == "person":
+                run_len = run_len + 1 if p["motion"] == "moving" else 0
+                p["motion"] = "moving" if run_len >= h else "still"
+            watch.on_pred(x[0], p)
+            on += [(x[0] - T0) / 1000 for k, _ in watch.pop_events() if k == "alert_on"]
+        good = [a for a in on if a0 + 8.0 <= a <= w1 + 0.5]
+        rows.append({"hyst": h, "hit": bool(good), "latency_s": round(good[0] - a0, 2) if good else None,
+                     "false": len(on) - len(good)})
+    return rows
+
+
+def replay_xray(res, plan, grid=XRAY_GRID):
     """Re-run the X-ray and the advisor on the same live readings and predicted kinds."""
     T0 = rf.T0_MS
     brain = res["brain"]
@@ -636,6 +672,7 @@ def session(seed=0, env=None, cfg=None, live_person=None, wave=None, smoke=False
         out["checkin_grid"] = replay_checkin(res, plan)
         out["health_grid"] = replay_health(res, plan)
         out["xray_grid"] = replay_xray(res, plan)
+        out["alert_grid"] = replay_alert(res, plan)
     out["timing"] = {"simulate_s": round(t1 - t0, 2), "brain_s": round(t2 - t1, 2),
                      "replay_s": round(time.perf_counter() - t2, 2), "messages": len(msgs),
                      "sim_minutes": round(tl.T / 60, 2)}
