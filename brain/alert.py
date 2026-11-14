@@ -8,7 +8,10 @@ Check-in (a rule, not learned): on pi5>unoq:wifi, >= 4 alternating crossings of
 and no other link's drop changing by > 3 dB. Gate 8 tunes the constants below.
 
 Alert: still_s counts while kind == person, motion == still and the zone is
-unchanged. check_on when still_s >= the zone's still_alert_s (null never
+unchanged. At 10 decisions a second a 10 s stand needs 100 clean decisions in
+a row, so the decisions are smoothed first: the zone and the kind are the
+majority of the last 10 decisions (6 of 10, else no change), and the timer only resets after 5 "moving"
+decisions in a row. One blip doesn't restart the count; real walking does. check_on when still_s >= the zone's still_alert_s (null never
 alerts; objects never alert). It clears on a check-in or on reset_alert, and
 on nothing else. The timer pauses while pred is null (sensor blind).
 
@@ -33,6 +36,9 @@ MEDIAN_MS = 1000        # the rolling median's length
 SMOOTH_N = 3            # readings averaged before comparing, so 1 dB noise can't cross
 OTHER_LINK_DB = 3.0     # no other link may change by more than this
 OTHER_BIN_MS = 500      # ... comparing 0.5 s means
+SMOOTH_DECISIONS = 10   # zone and kind are the majority of this many decisions (1 s)
+SMOOTH_MAJORITY = 6     # ... and a value needs this many of them to take over
+MOVING_RUN = 5          # "moving" decisions in a row (0.5 s) before the still timer resets
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 
 
@@ -139,6 +145,16 @@ class CheckIn:
         return True
 
 
+def _majority(values: list, current):
+    """The value that holds a real majority of the decisions (6 of 10 once there are 10),
+    otherwise the current one stays."""
+    need = min(SMOOTH_MAJORITY, len(values) // 2 + 1)
+    for v in set(values):
+        if values.count(v) >= need:
+            return v
+    return current
+
+
 class Watch:
     """The check-in and alert rules together, driving the LED grid."""
 
@@ -155,6 +171,10 @@ class Watch:
         self._events: List[tuple] = []
         self._person = False
         self._shown: Optional[int] = None   # what the LED grid shows now (-1 = "?")
+        self._recent: deque = deque(maxlen=SMOOTH_DECISIONS)   # (zone, kind) per decision
+        self._kind = "none"                                    # person | object | none, smoothed
+        self._raw_zone = 0                                     # the zone of the last single decision
+        self._moving_run = 0
 
     def on_rssi(self, msg: dict) -> None:
         t = msg["recv_t"]
@@ -171,17 +191,25 @@ class Watch:
         if pred is None:
             self._show(-1)
             return
-        zone = (pred.get("zone") or 0) if pred.get("present") else 0
-        self._person = pred.get("kind") == "person"
-        self._show(-1 if len(pred.get("zone_set") or []) >= 2 else zone)
-        if zone != self.zone:
+        raw_zone = (pred.get("zone") or 0) if pred.get("present") else 0
+        raw_person = pred.get("kind") == "person"
+        self._show(-1 if len(pred.get("zone_set") or []) >= 2 else raw_zone)
+        if raw_zone != self._raw_zone:             # the check-in wants pred.zone itself unchanged
+            self._raw_zone = raw_zone
+            self.checkin_rule.zone_changed(t)
+        self._recent.append((raw_zone, pred.get("kind") or "none"))
+        zone = _majority([z for z, _ in self._recent], self.zone)
+        self._kind = _majority([k for _, k in self._recent], self._kind)
+        self._person = self._kind == "person"
+        moving = raw_person and pred.get("motion") == "moving"
+        self._moving_run = self._moving_run + 1 if moving else 0
+        if zone != self.zone:                      # a change that held for most of the last second
             self.zone = zone
             self.still_ms = 0
-            self.checkin_rule.zone_changed(t)
-        elif self._person and pred.get("motion") == "still":
-            self.still_ms += dt
+        elif not self._person or self._moving_run >= MOVING_RUN:
+            self.still_ms = 0                      # nobody, or real walking
         else:
-            self.still_ms = 0
+            self.still_ms += dt                    # still, give or take a blip
         limit = self.limits.get(zone) if self._person else None
         if not self.alerting and limit is not None and self.still_ms >= limit * 1000:
             self.alerting, self.alert_zone = True, zone

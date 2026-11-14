@@ -48,6 +48,31 @@ describe('hud host', () => {
     expect(renderHud.mock.calls.at(-1)![1]).toEqual({ seq: 2, proof })
   })
 
+  it('passes the feed age and redraws when the feed goes stale', () => {
+    let now = 5000
+    const listeners: ((s: FeedSnapshot) => void)[] = []
+    let snap: FeedSnapshot = { state: mockState('tour', 1, 0), receivedAt: 4000, stale: false, connected: true, source: 'mock' }
+    const feed = {
+      source: 'mock',
+      current: () => snap,
+      subscribe: (fn: (s: FeedSnapshot) => void) => {
+        listeners.push(fn)
+        fn(snap)
+        return () => {}
+      },
+    } as unknown as Feed
+    const renderHud = vi.fn()
+    const adaptHudState = vi.fn((_s: unknown, _p: unknown, receivedAt: number, at: number) => ({ age: at - receivedAt }))
+    hostHud(root(), feed, { renderHud, adaptHudState }, async () => null, () => now)
+    expect(renderHud.mock.calls.at(-1)![1]).toEqual({ age: 1000 })
+    const calls = renderHud.mock.calls.length
+    now = 5200
+    snap = { ...snap, stale: true } // same state, but the feed has gone quiet
+    for (const fn of listeners) fn(snap)
+    expect(renderHud.mock.calls.length).toBe(calls + 1)
+    expect(renderHud.mock.calls.at(-1)![1]).toEqual({ age: 1200 })
+  })
+
   it('draws older static panels once', () => {
     const { feed } = fakeFeed()
     const renderHud = vi.fn()

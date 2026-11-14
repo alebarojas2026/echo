@@ -174,3 +174,15 @@ template sentence for the latest event.
 The `demo` path walks the whole story in order: walk in, wave a check-in, tray at T1 and the
 advice, router moved and home, camera off, stand still until the alert, a wave that clears it,
 a blind link, walk out (64 s).
+
+To feed a browser, serve the same messages on the brain's WebSocket:
+
+```
+python -m sim.ws demo --loop             # ws://127.0.0.1:8765/ws
+```
+
+Every connected screen gets the same messages at real speed. `cmd` messages from the screen are
+read: `reset_alert` clears the alert, `reset` also clears the still timer, check-in, advice and
+narration, and the rest are accepted and ignored. Options: `--host`, `--port`, `--rate`, `--seed`,
+`--speed`, `--loop`. The crowd game page can point at it with `?ws=ws://127.0.0.1:8765/ws`; its
+rounds count as practice because the source is `sim`.

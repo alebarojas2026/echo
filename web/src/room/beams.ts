@@ -5,12 +5,12 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import type { LinkState, StateMsg } from './contract'
 import { LINK_IDS, SQUARE_M, nodePosition, parseLinkId, type Vec3 } from './frame'
 import type { Mirror } from './mirror'
-import { INK, INK_2, OLIVE } from './palette'
+import { ACTION, FAULT, LINK, PERSON } from './palette'
 import { v3 } from './stage'
 import type { RoomView } from './view'
 
-// One thin ink line per radio link (contract section 3), drawn between the node heads.
-// It dims as drop_db rises, turns olive when the link is in pred.why, and breaks into dashes when blind.
+// One thin neutral line per radio link (contract section 3), drawn between the node heads.
+// It dims as drop_db rises, turns amber (the person's colour) when the link is in pred.why, and breaks into dashes when blind.
 
 export interface BeamLook {
   status: string // ok | stale | blind | missing
@@ -37,9 +37,10 @@ export function beamLook(link: LinkState | undefined, why: boolean, blind: Reado
   }
 }
 
-const INK_C = new Color(INK)
-const BROKEN_C = new Color(INK_2)
-const OLIVE_C = new Color(OLIVE)
+const LINK_C = new Color(LINK)
+const BROKEN_C = new Color(FAULT)
+const WHY_C = new Color(PERSON)
+const WAVE_C = new Color(ACTION)
 
 interface Beam {
   id: string
@@ -47,7 +48,8 @@ interface Beam {
   line: Line2
   mat: LineMaterial
   look: BeamLook
-  olive: number // 0..1, eased
+  amber: number // 0..1, eased toward the person colour
+  green: number // 0..1, eased toward the check-in colour
 }
 
 /** The two nodes a link joins, in a fixed order, so twin links (wifi and ble) share one key. */
@@ -63,10 +65,12 @@ export class Beams {
   /** Shown instead of any per-link label while state.links is still empty (no readings yet). */
   private readonly waiting: HTMLElement
   private router: string | null = null
+  /** The link that just carried a wave check-in, drawn green and wide while the wave shows. */
+  private waveLink: string | null = null
 
   constructor(private readonly view: RoomView, private readonly mirror: Mirror) {
     for (const id of LINK_IDS) {
-      const mat = new LineMaterial({ color: INK, linewidth: 1.5, transparent: true, dashSize: 0.08, gapSize: 0.09 })
+      const mat = new LineMaterial({ color: LINK, linewidth: 1.5, transparent: true, dashSize: 0.08, gapSize: 0.09 })
       const line = new Line2(new LineGeometry(), mat)
       view.scene.add(line)
       const pair = nodePair(id)
@@ -75,7 +79,7 @@ export class Beams {
         label.hidden = true
         this.pairLabels.set(pair, label)
       }
-      this.beams.push({ id, pair, line, mat, look: beamLook(undefined, false, new Set()), olive: 0 })
+      this.beams.push({ id, pair, line, mat, look: beamLook(undefined, false, new Set()), amber: 0, green: 0 })
     }
     this.waiting = view.addLabel('Waiting for radio readings', v3([SQUARE_M / 2, SQUARE_M / 2, 0]), 'room-label--caption')
     this.waiting.hidden = true
@@ -84,6 +88,12 @@ export class Beams {
     })
     view.addAnimator((dt) => this.ease(dt))
     this.place('S-home')
+  }
+
+  setWave(link: string | null) {
+    if (link === this.waveLink) return
+    this.waveLink = link
+    this.view.requestRender()
   }
 
   update(state: StateMsg) {
@@ -137,11 +147,16 @@ export class Beams {
     for (const b of this.beams) {
       const { mat, look } = b
       mat.opacity += (look.opacity - mat.opacity) * k
-      mat.linewidth += (look.width - mat.linewidth) * k
-      b.olive += ((look.why ? 1 : 0) - b.olive) * k
-      mat.color.copy(look.broken ? BROKEN_C : INK_C).lerp(OLIVE_C, b.olive)
-      busy ||= Math.abs(look.opacity - mat.opacity) > 0.005 || Math.abs(look.width - mat.linewidth) > 0.02 ||
-        Math.abs((look.why ? 1 : 0) - b.olive) > 0.005
+      const wave = b.id === this.waveLink && !look.broken
+      const width = wave ? 6 : look.width
+      mat.linewidth += (width - mat.linewidth) * k
+      b.amber += ((look.why ? 1 : 0) - b.amber) * k
+      b.green += ((wave ? 1 : 0) - b.green) * k
+      mat.color.copy(look.broken ? BROKEN_C : LINK_C).lerp(WHY_C, b.amber).lerp(WAVE_C, b.green)
+      if (wave) mat.opacity += (1 - mat.opacity) * k
+      busy ||= Math.abs((wave ? 1 : look.opacity) - mat.opacity) > 0.005 || Math.abs(width - mat.linewidth) > 0.02 ||
+        Math.abs((wave ? 1 : 0) - b.green) > 0.005 ||
+        Math.abs((look.why ? 1 : 0) - b.amber) > 0.005
     }
     return busy
   }

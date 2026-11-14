@@ -1,12 +1,12 @@
 import { Mesh, MeshBasicMaterial, RingGeometry, Shape, ShapeGeometry } from 'three'
 import type { Advice } from './contract'
 import { HOME_SPOT, ROUTER_SPOTS, spotName } from './frame'
-import { INK, LINE, OLIVE } from './palette'
+import { ACTION, EDGE, TEXT } from './palette'
 import { v3 } from './stage'
 import type { RoomView } from './view'
 
-// Floor marks for the router spots (contract section 3) and, while advice is set, an olive arrow on the
-// floor from S-home to advice.to_spot. Olive here means "you can act here": move the router this way.
+// Floor marks for the router spots (contract section 3) and, while advice is set, a green arrow on the
+// floor from S-home to advice.to_spot. Green means "something to do": move the router this way.
 
 const ARROW_Y_M = -0.13 // just south of the square's edge, clear of the spot rings
 
@@ -43,7 +43,7 @@ export class RouterSpots {
   constructor(private readonly view: RoomView) {
     const ring = new RingGeometry(0.04, 0.055, 32)
     for (const [id, [x, y]] of Object.entries(ROUTER_SPOTS)) {
-      const mat = new MeshBasicMaterial({ color: LINE })
+      const mat = new MeshBasicMaterial({ color: EDGE })
       const mesh = new Mesh(ring, mat)
       mesh.rotation.x = -Math.PI / 2
       mesh.position.copy(v3([x, y, 0.003]))
@@ -51,7 +51,7 @@ export class RouterSpots {
       this.rings.set(id, mat)
       view.addLabel(spotName(id), v3([x, y - 0.26, 0]), 'room-label--spot')
     }
-    this.arrow = new Mesh(arrowGeometry(0.3), new MeshBasicMaterial({ color: OLIVE, transparent: true, depthWrite: false }))
+    this.arrow = new Mesh(arrowGeometry(0.3), new MeshBasicMaterial({ color: ACTION, transparent: true, depthWrite: false }))
     this.arrow.rotation.x = -Math.PI / 2
     this.arrow.visible = false
     view.scene.add(this.arrow)
@@ -59,7 +59,7 @@ export class RouterSpots {
   }
 
   update(router: string, advice: Advice | null) {
-    for (const [id, mat] of this.rings) mat.color.setHex(id === router ? INK : LINE)
+    for (const [id, mat] of this.rings) mat.color.setHex(id === router ? TEXT : EDGE)
     const arrow = adviceArrow(advice, router)
     this.view.host.dataset.adviceArrow = arrow ? arrow.to : ''
     this.growTo = arrow ? 1 : 0

@@ -9,7 +9,7 @@ The project currently uses these third-party packages. An entry marked `Not pinn
 | Library | Version | License | Role | Used by | Project link |
 |---|---|---|---|---|---|
 | pytest | Unpinned | MIT | Test | `brain/`, `bus/`, `sim/`, `narrator/` | [pytest](https://pytest.org/) |
-| websockets | `>=12` in `narrator/`; unpinned in `brain/` | BSD-3-Clause | Runtime | `brain/`, `narrator/` | [websockets](https://websockets.readthedocs.io/) |
+| websockets | `>=12` in `narrator/`; `==17.1` in `scripts/`; unpinned in `brain/` | BSD-3-Clause | Runtime and demo check | `brain/`, `narrator/`, `scripts/` | [websockets](https://websockets.readthedocs.io/) |
 | NumPy | Unpinned | BSD-3-Clause | Runtime and benchmark | `advisor/`, `board/`, `brain/` | [NumPy](https://numpy.org/) |
 | scikit-learn | Unpinned | BSD-3-Clause | Runtime and benchmark | `board/`, `brain/` | [scikit-learn](https://scikit-learn.org/) |
 | OpenCV (`cv2`) | Not pinned in this repository | Apache-2.0 | Runtime | `teacher/` | [OpenCV](https://opencv.org/) |
@@ -21,6 +21,10 @@ The project currently uses these third-party packages. An entry marked `Not pinn
 | TypeScript | `^7.0.2` | Apache-2.0 | Type checking | `web/` | [TypeScript](https://www.typescriptlang.org/) |
 | `@types/three` | `^0.187.0` | MIT | Development types | `web/` | [DefinitelyTyped](https://github.com/DefinitelyTyped/DefinitelyTyped) |
 | `@playwright/test` | `1.60.0` | Apache-2.0 | Browser test | `web/tests/` | [Playwright](https://playwright.dev/) |
+| `@gltf-transform/core` | `^4.5.1` | MIT | 3D asset preparation | `web/` | [glTF Transform](https://gltf-transform.dev/) |
+| `@gltf-transform/extensions` | `^4.5.1` | MIT | 3D asset preparation | `web/` | [glTF Transform](https://gltf-transform.dev/) |
+| `@gltf-transform/functions` | `^4.5.1` | MIT | 3D asset preparation | `web/` | [glTF Transform](https://gltf-transform.dev/) |
+| meshoptimizer | `^1.3.0` | MIT | 3D asset preparation | `web/` | [meshoptimizer](https://github.com/zeux/meshoptimizer) |
 | Arduino App Bricks | Not pinned in this repository | MPL-2.0 | Runtime | `teacher/applab/` | [app-bricks-py](https://github.com/arduino/app-bricks-py) |
 
 As implementation dependencies land, this table should list every direct third-party library with its declared version, license, project link, and the Radio Sight module that uses it. The checked-in manifest in each module remains the source of truth.

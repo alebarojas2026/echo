@@ -87,6 +87,41 @@ class CreditsDocTest(unittest.TestCase):
             self.assertEqual(row[1], "Unpinned")
             self.assertIn("`board/`", row[4])
 
+    def test_demo_check_websocket_dependency_is_credited(self):
+        websocket_row = next(
+            line for line in self.text.splitlines() if line.startswith("| websockets |")
+        )
+        for phrase in ("`==17.1` in `scripts/`", "BSD-3-Clause", "`scripts/`"):
+            self.assertIn(phrase, websocket_row)
+
+    def test_scan_preparation_dependencies_are_credited(self):
+        rows = {
+            columns[0].strip(): columns
+            for line in self.text.splitlines()
+            if line.startswith("|")
+            for columns in ([column.strip() for column in line.split("|")[1:-1]],)
+            if columns
+        }
+
+        for library in (
+            "`@gltf-transform/core`",
+            "`@gltf-transform/extensions`",
+            "`@gltf-transform/functions`",
+        ):
+            row = rows[library]
+            self.assertEqual(row[1], "`^4.5.1`")
+            self.assertEqual(row[2], "MIT")
+            self.assertEqual(row[3], "3D asset preparation")
+            self.assertIn("`web/`", row[4])
+            self.assertIn("https://gltf-transform.dev/", row[5])
+
+        meshoptimizer = rows["meshoptimizer"]
+        self.assertEqual(meshoptimizer[1], "`^1.3.0`")
+        self.assertEqual(meshoptimizer[2], "MIT")
+        self.assertEqual(meshoptimizer[3], "3D asset preparation")
+        self.assertIn("`web/`", meshoptimizer[4])
+        self.assertIn("https://github.com/zeux/meshoptimizer", meshoptimizer[5])
+
     def test_app_lab_bricks_are_credited(self):
         for phrase in (
             "Arduino App Bricks",

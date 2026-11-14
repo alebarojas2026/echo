@@ -27,6 +27,10 @@ JUMP_DB = 6.0
 BLIND_AFTER_S = 3.0
 CLEAR_AFTER_S = 3.0
 EPS_S = 1e-6           # float slack on the timers
+STEADY_S = 5.0         # a steady drop is judged over up to this long (the x-ray's static test)
+STEADY_MIN_S = 2.0     # ... and needs at least this much of it
+STEADY_STD_DB = 0.8    # std of the 0.5 s means under this = steady
+STEADY_BIN_S = 0.5
 
 
 class _Link:
@@ -35,6 +39,7 @@ class _Link:
         self.expected_hz = expected_hz
         self.base_dbm = base_dbm
         self.readings = deque()      # (t_s, dbm), last RATE_WINDOW_S only
+        self.trail = deque()         # (t_s, dbm), last STEADY_S, for the steady-drop test
         self.blind = False
         self.reason = None           # "rate" | "jump" while blind
         self.stale_since = None
@@ -52,17 +57,19 @@ class _Link:
 
         stale = (judge_rate and self.expected_hz is not None
                  and rate < STALE_FRAC * self.expected_hz)
-        jump = (nobody and dbm is not None and self.base_dbm is not None
-                and abs(dbm - self.base_dbm) > JUMP_DB)
+        off_base = (nobody and dbm is not None and self.base_dbm is not None
+                    and abs(dbm - self.base_dbm) > JUMP_DB)
         self.stale_since = (self.stale_since if self.stale_since is not None else now) if stale else None
-        self.jump_since = (self.jump_since if self.jump_since is not None else now) if jump else None
+        self.jump_since = (self.jump_since if self.jump_since is not None else now) if off_base else None
+        # A drop that holds steady is an object in the way (the tray), not a broken link.
+        jump = off_base and not (dbm < self.base_dbm and self._steady_since(self.jump_since, now))
         ok = not stale and not jump
         self.ok_since = (self.ok_since if self.ok_since is not None else now) if ok else None
 
         if not self.blind:
             if self.stale_since is not None and now - self.stale_since >= BLIND_AFTER_S - EPS_S:
                 self.blind, self.reason = True, "rate"
-            elif self.jump_since is not None and now - self.jump_since >= BLIND_AFTER_S - EPS_S:
+            elif jump and now - self.jump_since >= BLIND_AFTER_S - EPS_S:
                 self.blind, self.reason = True, "jump"
         elif self.ok_since is not None and now - self.ok_since >= CLEAR_AFTER_S - EPS_S:
             self.blind, self.reason = False, None
@@ -77,6 +84,23 @@ class _Link:
                 "expected_hz": self.expected_hz,
                 "status": status,
                 "_stale": stale}
+
+
+    def _steady_since(self, since, now):
+        """True when the readings since `since` (at most the last STEADY_S) hold steady:
+        they span most of that time and the std of their 0.5 s means is under STEADY_STD_DB."""
+        while self.trail and self.trail[0][0] <= now - STEADY_S:
+            self.trail.popleft()
+        t0 = max(since, now - STEADY_S)
+        span = now - t0
+        pts = [(t, d) for t, d in self.trail if t >= t0]
+        if span < STEADY_MIN_S - EPS_S or len(pts) < 2 or pts[-1][0] - pts[0][0] < 0.8 * span:
+            return False
+        bins = {}
+        for t, d in pts:
+            bins.setdefault(int((t - t0) // STEADY_BIN_S), []).append(d)
+        means = [sum(v) / len(v) for v in bins.values()]
+        return len(means) >= 2 and float(np.std(means)) < STEADY_STD_DB
 
 
 class Health:
@@ -121,6 +145,9 @@ class Health:
         lk = self.links.get(link)
         if lk is not None:
             lk.readings.append((t_ms / 1000.0, float(dbm)))
+            lk.trail.append((t_ms / 1000.0, float(dbm)))
+            while lk.trail[0][0] <= t_ms / 1000.0 - STEADY_S:   # never more than the last 5 s
+                lk.trail.popleft()
 
     def update(self, now_ms, kind=None, router_home=True, baseline_running=False):
         """One tick. kind = the classifier's pred.kind ("person" | "object" | "none"),
