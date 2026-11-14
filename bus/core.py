@@ -12,12 +12,17 @@ data/sessions/<session>.jsonl and writes a meta line built from its args. Every
 message after that is appended, with recv_t, until record_stop. The brain gets
 cmd messages from the screen on its own path, so the bus never forwards them.
 
+An open recording outlives the bus process: data/sessions/.open names it until
+record_stop, so a bus that crashed or was restarted carries on appending to the
+same file (if it was written to in the last RESUME_WITHIN_S seconds) and says so.
+
 A producer is one sending socket (address and port). Each process should send
 from a single socket for its whole life, or its seq gaps can't be counted.
 """
 import argparse
 import json
 import logging
+import os
 import re
 import signal
 import socket
@@ -30,6 +35,8 @@ SESSIONS_DIR = REPO / "data" / "sessions"
 SESSION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 PURPOSES = {"train", "heldout", "object", "crowd", "demo"}
 MAX_DATAGRAM = 65535
+OPEN_MARK = ".open"
+RESUME_WITHIN_S = 600
 
 log = logging.getLogger("bus")
 
@@ -75,6 +82,7 @@ class Recorder:
 
     def __init__(self, folder):
         self.folder = Path(folder)
+        self.mark = self.folder / OPEN_MARK
         self.session = None
         self.lines = 0
         self._file = None
@@ -90,8 +98,35 @@ class Recorder:
         self._file = open(path, "a", encoding="utf-8", newline="\n")
         self.session = session
         self.lines = 0
+        tmp = self.mark.with_name(OPEN_MARK + ".tmp")
+        tmp.write_text(json.dumps({"session": session}), encoding="utf-8")
+        os.replace(tmp, self.mark)
         self.write(meta)
         return path
+
+    def resume(self, now: float) -> str | None:
+        """Reopen the recording a bus before this one left open. Returns its session id, or None.
+
+        The meta line is already in the file, so it just carries on. A mark whose file hasn't been
+        written to for RESUME_WITHIN_S is stale (the bus was off for a while) and is dropped.
+        """
+        try:
+            session = json.loads(self.mark.read_text(encoding="utf-8"))["session"]
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        path = self.folder / f"{session}.jsonl"
+        try:
+            fresh = isinstance(session, str) and SESSION_ID.match(session) and \
+                now - path.stat().st_mtime <= RESUME_WITHIN_S
+        except OSError:
+            fresh = False
+        if not fresh:
+            self.mark.unlink(missing_ok=True)
+            return None
+        self._file = open(path, "a", encoding="utf-8", newline="\n")
+        self.session = session
+        self.lines = 0
+        return session
 
     def write(self, msg: dict) -> None:
         if self._file is None:
@@ -101,6 +136,12 @@ class Recorder:
         self.lines += 1
 
     def stop(self) -> None:
+        """record_stop: close the file and forget it."""
+        self.close()
+        self.mark.unlink(missing_ok=True)
+
+    def close(self) -> None:
+        """The process is ending: close the file but keep the mark, so the next bus carries on."""
         if self._file is not None:
             self._file.close()
         self._file = None
@@ -110,6 +151,9 @@ class Recorder:
 class Bus:
     def __init__(self, sessions=SESSIONS_DIR, send=None, clock=now_ms):
         self.recorder = Recorder(sessions)
+        resumed = self.recorder.resume(time.time())  # file times are wall-clock
+        if resumed:
+            log.warning("the bus restarted while recording %s: appending to it again", resumed)
         self.producers: dict[str, Producer] = {}
         self.bad = 0
         self.send = send or (lambda data: None)
@@ -200,7 +244,10 @@ class Bus:
         return lines
 
     def close(self) -> None:
-        self.stop_session()
+        if self.recorder.recording:
+            log.info("closing with %s still recording: the next bus carries on with it (%d lines here)",
+                     self.recorder.session, self.recorder.lines)
+        self.recorder.close()
 
     def _drop(self, key: str, why: str) -> None:
         self.bad += 1
