@@ -272,6 +272,20 @@ def main():
                       [(f"zone/kind majority of {k}", hs, [a.get((h, k), {}).get("hit", (None,))[0] for h in hs])
                        for k in ks], "reset only after N moving decisions in a row (now N = 1)",
                       "share of zone-4 alerts that fire", ylim=(0, 1), color=svg.FAULT)
+    fix = load("xrayfix")
+    if fix:
+        from lab.protocol import best_spots
+        md += ["### Ghost objects and stale advice: candidate fixes (main, nominal room)", "",
+               "clamp: a link's static part follows it back down. gate: advise only while pi5>unoq:wifi drops >= 3 dB.", "",
+               "| fix | tray found | ghost object s / session | advice appears | advice right | advice with no tray s / session |",
+               "|---|---|---|---|---|---|"]
+        for name in ("none", "clamp", "gate", "clamp+gate"):
+            g = [(r, x) for r in fix for x in r.get("xrayfix_grid", []) if x["fix"] == name]
+            right = [x["advice"] in best_spots(r["metrics"]["tray_xy"], tol_db=1.5) for r, x in g if x["advice"]]
+            md.append(f"| {name} | {np.mean([x['detected'] for _, x in g]):.2f} | {np.mean([x['ghost_s'] for _, x in g]):.1f} | "
+                      f"{np.mean([x['advice'] is not None for _, x in g]):.2f} | {np.mean(right):.2f} | "
+                      f"{np.mean([x['advice_ghost_s'] for _, x in g]):.1f} |")
+        md.append("")
     keys = [("heldout_acc", "mean", "held-out zone"), ("live_zone_acc", "mean", "live zone"),
             ("live_empty_acc", "mean", "empty reads empty"), ("object_kind_frac", "mean", "tray = object"),
             ("alert_hit", "rate", "alert fires"), ("checkin_hit", "rate", "check-in"),
