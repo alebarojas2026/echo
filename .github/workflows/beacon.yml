@@ -1,0 +1,61 @@
+name: beacon
+
+# Builds the XIAO ESP32-S3 beacon firmware for E and W and checks the advertising data in each build
+# against radio/hci.py and radio/nodes.json.
+on:
+  pull_request:
+    paths: ["beacon/**", "radio/hci.py", "radio/nodes.py", "radio/nodes.json", ".github/workflows/beacon.yml"]
+  push:
+    branches: [main]
+    paths: ["beacon/**", "radio/hci.py", "radio/nodes.py", "radio/nodes.json", ".github/workflows/beacon.yml"]
+
+concurrency:
+  group: beacon-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  ARDUINO_CLI_VERSION: 1.6.0
+  ESP32_CORE: esp32:esp32@3.3.12
+  ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        beacon: [E, W]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: arduino-cli from arduino.cc
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://downloads.arduino.cc/arduino-cli/arduino-cli_${ARDUINO_CLI_VERSION}_Linux_64bit.tar.gz"
+          curl -fsSLO "https://downloads.arduino.cc/arduino-cli/${ARDUINO_CLI_VERSION}-checksums.txt"
+          grep "_Linux_64bit.tar.gz" "${ARDUINO_CLI_VERSION}-checksums.txt" | sha256sum -c -
+          mkdir -p "$HOME/bin"
+          tar xzf "arduino-cli_${ARDUINO_CLI_VERSION}_Linux_64bit.tar.gz" -C "$HOME/bin" arduino-cli
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: cache the esp32 core
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.arduino15
+            !~/.arduino15/staging
+          key: arduino15-${{ env.ESP32_CORE }}-cli-${{ env.ARDUINO_CLI_VERSION }}
+
+      - name: esp32 core from Espressif's index
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+          arduino-cli core install "$ESP32_CORE" --additional-urls "$ESP32_INDEX"
+
+      - name: compile beacon ${{ matrix.beacon }}
+        run: |
+          arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3 --warnings all \
+            --build-property "compiler.cpp.extra_flags=-DBEACON_ID='${{ matrix.beacon }}'" \
+            --build-path "$RUNNER_TEMP/beacon-${{ matrix.beacon }}" beacon
+
+      - name: advertising data matches the scanners
+        run: python3 beacon/check_advert.py "$RUNNER_TEMP/beacon-${{ matrix.beacon }}/beacon.ino.bin" ${{ matrix.beacon }}
