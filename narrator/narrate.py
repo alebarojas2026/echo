@@ -4,8 +4,9 @@
     python -m narrator.narrate --once enter --info '{"zone": 2}'  # one sentence, printed only
 
 Brain events in (WebSocket), one sentence from llama-server, a `narration` message out to the
-bus (CONTRACTS.md sections 4-6). At most one sentence every 8 s, only for events up to 3 s old,
-at most 16 words. The event's template sentence is used when the model is slow (over 8 s),
+bus (CONTRACTS.md sections 4-6). At most one sentence every 8 s, only for events up to 3 s old
+when writing starts, at most 16 words. While a sentence is being written or the gap is running,
+the most important waiting event is kept, not the newest. The event's template sentence is used when the model is slow (over 8 s),
 unreachable, or says something it must not.
 """
 from __future__ import annotations
@@ -34,6 +35,10 @@ EVENT_KINDS = ("enter", "exit", "zone_change", "checkin", "object_on", "object_o
                "advice_result", "router_moved", "router_home", "recalibrating", "cam_off", "cam_on",
                "cam_stalled", "alert_on", "alert_off", "blind_on", "blind_off", "trained",
                "baseline_done", "drift")
+# Which waiting event to keep, most important first. Kinds not listed rank below all of these.
+PRIORITY = ("alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
+            "recalibrating", "trained", "zone_change", "exit")
+NEVER = ("router_moved", "advice")   # the screen already says these itself
 ZONES = {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}  # name, still_alert_s
 NODES = {"unoq": "receiver", "pi5": "router", "east": "east beacon", "west": "west beacon"}
 
@@ -62,6 +67,11 @@ def log(*parts) -> None:
 
 def now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def rank(kind: str) -> int:
+    """Lower is more important."""
+    return PRIORITY.index(kind) if kind in PRIORITY else len(PRIORITY)
 
 
 # ---------------------------------------------------------------- templates
@@ -206,12 +216,13 @@ class Narrator:
     """
 
     def __init__(self, llm, send, clock=now_ms, timeout_s=LLM_TIMEOUT_S,
-                 gap_ms=GAP_MS, max_age_ms=MAX_AGE_MS):
-        self.llm, self.send, self.clock = llm, send, clock
+                 gap_ms=GAP_MS, max_age_ms=MAX_AGE_MS, sleep=time.sleep):
+        self.llm, self.send, self.clock, self.sleep = llm, send, clock, sleep
         self.timeout_s, self.gap_ms, self.max_age_ms = timeout_s, gap_ms, max_age_ms
-        self.pending = None       # newest event not yet narrated
+        self.pending = None       # the most important event not yet narrated
         self.cam = None           # on | off | stalled, from the brain
         self.seq = 0
+        self.last_start_ms = None   # when the last sentence started being written
         self.last_sent_ms = None
 
     def observe(self, msg: dict) -> None:
@@ -221,20 +232,33 @@ class Narrator:
         elif msg.get("type") == "event" and msg.get("kind") in EVENT_KINDS:
             if msg["kind"] in ("cam_off", "cam_on"):
                 self.cam = msg["kind"][4:]
-            self.pending = msg
+            if msg["kind"] in NEVER:
+                return
+            waiting = self.pending
+            # A waiting event gives way to one at least as important, or once it is too old to be
+            # narrated anyway. A minor event never pushes out a key one that can still be said.
+            if (waiting is None or rank(msg["kind"]) <= rank(waiting["kind"])
+                    or not self._fresh(waiting, msg.get("t"))):
+                self.pending = msg
+
+    def _fresh(self, event: dict, now) -> bool:
+        t = event.get("t")
+        return isinstance(t, (int, float)) and isinstance(now, (int, float)) and now - t <= self.max_age_ms
 
     def due(self, now: int) -> dict | None:
         """The pending event if it may be narrated now. Drops it once it is too old."""
         event = self.pending
         if event is None:
             return None
-        t = event.get("t")
-        if not isinstance(t, (int, float)) or now - t > self.max_age_ms:
+        if not self._fresh(event, now):
             self.pending = None
             return None
-        if self.last_sent_ms is not None and now - self.last_sent_ms < self.gap_ms:
+        # The gap runs from when the last sentence started being written, so a slow model
+        # does not stretch it: a 6 s sentence still leaves room for one every 8 s.
+        if self.last_start_ms is not None and now - self.last_start_ms < self.gap_ms:
             return None
         self.pending = None
+        self.last_start_ms = now
         return event
 
     def sentence(self, event: dict) -> tuple[str, str, str | None, str]:
@@ -256,14 +280,19 @@ class Narrator:
         """Build, send and return the narration for one event."""
         start = self.clock()
         text, source, model, why = self.sentence(event)
+        gen_ms = self.clock() - start
+        if self.last_sent_ms is not None:   # a quick sentence after a slow one waits its turn:
+            wait_ms = self.last_sent_ms + self.gap_ms - self.clock()   # the screen gets one per 8 s
+            if wait_ms > 0:
+                self.sleep(wait_ms / 1000)
         t = self.clock()
         self.seq += 1
         msg = {"v": 2, "type": "narration", "t": t, "seq": self.seq, "src": event.get("src", "live"),
                "text": text, "event_id": event.get("id"), "event_kind": event["kind"],
-               "gen_ms": t - start, "source": source, "model": model}
+               "gen_ms": gen_ms, "source": source, "model": model}
         self.send(msg)
         self.last_sent_ms = t
-        log(f"{event.get('id')} {event['kind']} -> {source} {t - start} ms ({why}): {text}")
+        log(f"{event.get('id')} {event['kind']} -> {source} {gen_ms} ms ({why}): {text}")
         return msg
 
     def step(self) -> dict | None:
