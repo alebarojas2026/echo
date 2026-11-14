@@ -10,8 +10,8 @@ The project currently uses these third-party packages. An entry marked `Not pinn
 |---|---|---|---|---|---|
 | pytest | Unpinned | MIT | Test | `brain/`, `bus/`, `sim/`, `narrator/` | [pytest](https://pytest.org/) |
 | websockets | `>=12` in `narrator/`; unpinned in `brain/` | BSD-3-Clause | Runtime | `brain/`, `narrator/` | [websockets](https://websockets.readthedocs.io/) |
-| NumPy | Unpinned | BSD-3-Clause | Runtime | `advisor/`, `brain/` | [NumPy](https://numpy.org/) |
-| scikit-learn | Unpinned | BSD-3-Clause | Runtime | `brain/` | [scikit-learn](https://scikit-learn.org/) |
+| NumPy | Unpinned | BSD-3-Clause | Runtime and benchmark | `advisor/`, `board/`, `brain/` | [NumPy](https://numpy.org/) |
+| scikit-learn | Unpinned | BSD-3-Clause | Runtime and benchmark | `board/`, `brain/` | [scikit-learn](https://scikit-learn.org/) |
 | OpenCV (`cv2`) | Not pinned in this repository | Apache-2.0 | Runtime | `teacher/` | [OpenCV](https://opencv.org/) |
 | jsonschema | `>=4.18` | MIT | Test and CI | `contracts/` | [jsonschema](https://python-jsonschema.readthedocs.io/) |
 | referencing | Transitive, unpinned | MIT | Validation support | `contracts/` | [referencing](https://referencing.readthedocs.io/) |

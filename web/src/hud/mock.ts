@@ -11,7 +11,7 @@ export function mockFeed(params: URLSearchParams) {
     src: source === 'live' || source === 'replay' ? source : 'sim',
     cam: camera === 'on' || camera === 'stalled' ? camera : 'off',
     router: 'S-home',
-    health: { status: 'ok' },
+    health: { status: params.has('blind') ? 'blind' : 'ok' },
     pred: null,
     alert: {
       state: checkedIn ? 'none' : movement === 'counting' ? 'counting' : 'check_on',

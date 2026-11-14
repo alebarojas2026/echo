@@ -1,0 +1,4 @@
+# LE Extended Advertising Report (7.7.65.13) with two reports: east with no RSSI, then the Pi at -90
+04 3e 40 0d 02    # LE Meta, 64 parameter bytes, subevent 0x0D, Num_Reports 2
+10 00 01 e1 e2 e3 e4 e5 e6 01 00 ff 7f 7f 00 00 00 00 00 00 00 00 00 07 06 ff ff ff 52 53 45   # RSSI 127 = not available
+10 00 01 f1 f2 f3 f4 f5 f6 01 00 ff 7f a6 00 00 00 00 00 00 00 00 00 07 06 ff ff ff 52 53 53   # the Pi ("S"), RSSI -90

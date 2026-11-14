@@ -1,0 +1,4 @@
+# LE Advertising Report (7.7.65.2) that says 2 reports but ends inside the second one
+04 3e 17 02 02    # LE Meta, 23 parameter bytes, subevent 0x02, Num_Reports 2
+03 01 a1 a2 a3 a4 a5 a6 07 06 ff ff ff 52 53 45 c3            # east, RSSI -61
+03 01 a1 a2                                                    # cut off

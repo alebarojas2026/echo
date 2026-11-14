@@ -44,6 +44,7 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 
 - Reads bus messages on UDP 127.0.0.1:5601.
 - Sends section 5 `state` about 10 times a second, and `event` messages as they happen, on `ws://<host>:8765/ws` (127.0.0.1 and 192.168.77.2).
+- If 192.168.77.2 isn't on the machine yet (the board's Ethernet comes up after the brain starts), it listens on 127.0.0.1 and retries the other address every 2 s until it binds. No restart needed. On a laptop it just keeps retrying quietly.
 - Takes `cmd` messages from the screen and passes each one on to the bus (127.0.0.1:5600) so it gets recorded.
 
 | cmd | What the brain does |
@@ -70,3 +71,23 @@ Link health (`brain/health.py`), the x-ray and objects (`brain/xray.py`) and the
 - **LED grid:** `show_zone(n)` when the shown zone changes (`-1`, the "?", while `pred` is null or spans 2 or more zones), `alert(on)` when the alert turns on or off, `smile()` on a check-in. `led_grid()` gives the Bridge version on the board and a stand-in elsewhere.
 
 The constants at the top of the file are what gate 8 tunes.
+
+## Recording steps for training
+
+How the sessions are walked decides what the model can learn. These steps come from the simulation lab (#221, #224), not from measurements; the held-out score in PROOF.md is what counts. Redo all of it in the presentation room, after the baseline there.
+
+**Before anything:** run a `baseline` with nobody in the camera's view.
+
+**Person sessions** (`record_start` with purpose `train`, `label_mode` person), one per walker:
+1. Stand still for about 10 s on each of the four marked spots, one per zone. Without long stands the model never learns "still", and the no-movement alert can't count.
+2. Then walk freely around the square for about 30 s.
+3. Record at least 3 different walkers, more if there's time. A walker used for the held-out score (purpose `heldout`) must not appear in any `train` session.
+
+**Empty session** (purpose `train`, `label_mode` person): 30 s with nobody in the square.
+
+**Object session** (purpose `object`, `label_mode` object), with nobody in the camera's view while the tray is down:
+1. Put the tray exactly on the T1 mark for at least 15 s.
+2. Move it about 5 cm to one side for at least 15 s, then about 5 cm to the other side for at least 15 s.
+3. Step out of view each time before counting. Windows with anybody in frame, and the 2 s after, are left out of training.
+
+In the demo, put the tray back on the same T1 mark. The model recognises it only near where it was recorded.

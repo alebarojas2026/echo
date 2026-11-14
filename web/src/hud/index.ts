@@ -24,6 +24,8 @@ export function renderHud(root: HTMLElement, state: HudState) {
         </section>
         <section class="hud-card hud-movement" aria-labelledby="hud-movement">
           <h2 id="hud-movement">Room status</h2>
+          <p data-testid="no-data" role="status" hidden>NO DATA</p>
+          <p data-testid="sensor-blind" role="status" hidden>SENSOR BLIND</p>
           <p data-testid="alert-banner" role="status"></p>
           <p data-testid="checkin-toast" role="status"></p>
           <small data-testid="alert-zone"></small>
@@ -61,15 +63,19 @@ export function renderHud(root: HTMLElement, state: HudState) {
     `
   }
 
+  const blind = state.feedStatus === 'blind'
+  const stale = state.feedStatus === 'stale'
+  root.querySelector('[data-testid="no-data"]')?.toggleAttribute('hidden', !stale)
+  root.querySelector('[data-testid="sensor-blind"]')?.toggleAttribute('hidden', !blind)
   const pred = state.prediction
   const values = {
     'source-badge': state.source,
     'cam-status': state.camera,
     'narrator-text': state.narration?.text ?? '__',
     'narrator-source': state.narration?.source ?? '',
-    'alert-banner': state.alert,
-    'alert-zone': state.alertZone == null ? '' : `Zone ${state.alertZone}`,
-    'checkin-toast': state.checkin ? 'Check-in received' : '',
+    'alert-banner': blind || stale ? '' : state.alert,
+    'alert-zone': blind || stale || state.alertZone == null ? '' : `Zone ${state.alertZone}`,
+    'checkin-toast': !blind && !stale && state.checkin ? 'Check-in received' : '',
     'pred-kind': pred?.kind ?? '__',
     'pred-motion': pred?.motion ?? '__',
     'pred-zone': measurement(pred?.zone),
