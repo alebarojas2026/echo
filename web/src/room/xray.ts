@@ -186,7 +186,7 @@ function legend(): HTMLElement {
   el.className = 'room-legend'
   el.setAttribute('aria-hidden', 'true')
   el.innerHTML = `
-    <span><svg width="18" height="12" viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" rx="4" fill="#4F5E2E" fill-opacity="0.25" stroke="#4F5E2E" stroke-width="1.4"/></svg>Person</span>
-    <span><svg width="18" height="12" viewBox="0 0 18 12"><path d="M1 12L7 0M6 12L12 0M11 12L17 0" stroke="#1C1B17" stroke-opacity="0.6" stroke-width="1.6"/></svg>Object</span>`
+    <span><svg width="28" height="18" viewBox="0 0 28 18"><rect x="1" y="1" width="26" height="16" rx="6" fill="#4F5E2E" fill-opacity="0.25" stroke="#4F5E2E" stroke-width="2"/></svg>Person</span>
+    <span><svg width="28" height="18" viewBox="0 0 28 18"><path d="M2 18L11 0M9 18L18 0M16 18L25 0M23 18L28 8" stroke="#1C1B17" stroke-opacity="0.6" stroke-width="2"/></svg>Object</span>`
   return el
 }
