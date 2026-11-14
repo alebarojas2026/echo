@@ -9,7 +9,7 @@ No restart or timer-derived empty label is involved. If the file is missing or
 invalid the adapter emits no label and retries on the next real result.
 
 The host round-trip test sends the actual screen command through Brain.on_cmd,
-uses a shared temporary file and a fake processed frame, and verifies the UDP
+uses a shared temporary file and a fake processed frame, and verifies the serialized
 label within 1 s for every mode. It also tests recovery from a missing file.
 Tests skip when the brain live-loop package is not yet available.
 
