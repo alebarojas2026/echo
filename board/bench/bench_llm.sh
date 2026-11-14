@@ -5,8 +5,7 @@
 # Prints prompt and generation tokens/s, wall time, PASS at 8 s or less, then the brain's times.
 set -u
 cd "$(dirname "$0")/../.."
-PY=${PY:-$(ls .venv/bin/python /opt/rs/venv/bin/python 2>/dev/null | head -1)}
-PY=${PY:-python3}
+PY=${PY:-$( (ls .venv/bin/python /opt/rs/venv/bin/python 2>/dev/null; echo python3) | head -1)}
 LLM=${LLM:-http://127.0.0.1:8091}
 LOG=$(mktemp)
 fail() { echo "FAIL: $*"; exit 1; }

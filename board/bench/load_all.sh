@@ -8,8 +8,7 @@
 set -u
 cd "$(dirname "$0")/../.."
 SECS=${SECS:-300} EVERY=${EVERY:-2}
-PY=${PY:-$(ls .venv/bin/python /opt/rs/venv/bin/python 2>/dev/null | head -1)}
-PY=${PY:-python3}
+PY=${PY:-$( (ls .venv/bin/python /opt/rs/venv/bin/python 2>/dev/null; echo python3) | head -1)}
 LLM=${LLM:-http://127.0.0.1:8091}
 OUT=${OUT:-/tmp/rs-load-$(date +%H%M%S)}
 BRAIN=${BRAIN:-bench}

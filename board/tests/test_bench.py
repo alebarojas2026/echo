@@ -40,8 +40,7 @@ def test_llm_time_sends_the_narrator_prompt_and_reads_the_timings():
         (r,) = llm_time.run(f"http://127.0.0.1:{server.server_port}", out=lambda s: None)
     finally:
         server.shutdown()
-    assert (r["prompt_n"], r["prompt_tok_s"], r["gen_n"], r["gen_tok_s"]) == (31, 80.5, 9, 9.25)
-    assert r["problem"] is None   # the narrator would put this sentence on screen
+    assert (r["prompt_n"], r["prompt_tok_s"], r["gen_n"], r["gen_tok_s"], r["problem"]) == (31, 80.5, 9, 9.25, None)
     warm, sent = FakeLlama.bodies   # the warm-up goes first and isn't counted
     assert sent["cache_prompt"] and "alert_on" in sent["messages"][-1]["content"]
     assert [llm_time.verdict([dict(r, wall_ms=w)])[0] for w in (8000, 8001, None)] == [True, False, False]
@@ -69,8 +68,7 @@ def test_sample_reads_proc_and_sys_and_flags_throttling(tmp_path):
     assert system[1] == "system" and system[3] == pytest.approx(75.0)
     assert system[4] == pytest.approx((3900000 - 1852000) / 1024)
     assert system[5:] == [85.0, 1401.0, 1401.0] and b["top"] == 2016.0
-    assert llama[1:4] == ["llama-server", 42, pytest.approx(75.0)]   # 150 jiffies in 2 s
-    assert llama[4] == pytest.approx(110000 * 4 / 1024)
+    assert llama[1:5] == ["llama-server", 42, pytest.approx(75.0), pytest.approx(110000 * 4 / 1024)]
     lines, throttled = sample.summary([system, llama], 2016.0)
     assert throttled and "over 80 C in 1" in lines[-1] and "capped under 2016.0 MHz" in lines[-1]
     assert any(line.startswith("llama-server") for line in lines)

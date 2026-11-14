@@ -1,4 +1,4 @@
-"""Times the brain's hot path on sim data: features, forest predict, health, X-ray, advisor.
+"""Times the brain's hot path on sim data: features, predict, health, alert, X-ray, advisor.
 
     python board/bench/bench_brain.py                  # 10 Hz for 60 s, from the repo root
     python board/bench/bench_brain.py --trees 30 --depth 10 --hz 5
@@ -25,12 +25,13 @@ import sklearn
 
 from advisor.advise import advise
 from brain import features as F, train as T
+from brain.alert import Watch
 from brain.health import Health
 from brain.xray import Xray
 from sim import fake, wire
 
 T0_MS = 1_763_149_500_000
-STEPS = ("ingest", "predict", "health", "xray", "advisor", "state_json")
+STEPS = ("ingest", "predict", "health", "alert", "xray", "advisor", "state_json")
 FEED = dict(fake.load_path("zone_tour"), name="bench", duration_s=60,
             objects=[{"x": 1.0, "y": 0.2, "drop_db": 10, "t_on": 32}])   # the tray at T1
 
@@ -77,6 +78,7 @@ def run(seconds=60.0, hz=10.0, trees=None, depth=None, walkers=3, fast=False, ou
     hm = Health.from_nodes(nodes, base_dbm=base)
     hm.set_expected({k: sum(m.get("link") == k for m in empty) / 30.0 for k in base})
     xr, win, msgs = Xray.from_nodes(nodes), F.Windower(base), feed(seconds)
+    watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]})   # no LED grid
     times = {s: [] for s in STEPS + ("tick",)}
     seen = dict.fromkeys(("pred", "blind", "objects", "advice"), 0)
     raw, pending, stop, n = None, None, [], int(seconds * hz)
@@ -99,6 +101,7 @@ def run(seconds=60.0, hz=10.0, trees=None, depth=None, walkers=3, fast=False, ou
                     link, t_ms, dbm = pending["link"], pending["recv_t"], pending["dbm"]
                     xr.add(link, t_ms, base[link] - dbm)
                     hm.add(link, t_ms, dbm)
+                    watch.on_rssi(pending)
                 pending = None
             t.append(time.perf_counter())
             for w in new:   # like brain/core.py: predict every new 0.1 s window, whatever the rate
@@ -108,6 +111,8 @@ def run(seconds=60.0, hz=10.0, trees=None, depth=None, walkers=3, fast=False, ou
             t.append(time.perf_counter())
             health = hm.update(now, raw and raw["kind"])
             pred = None if hm.blind else raw
+            t.append(time.perf_counter())
+            watch.on_pred(now, pred)
             t.append(time.perf_counter())
             xo = xr.update(now, pred and pred["kind"])
             t.append(time.perf_counter())

@@ -8,7 +8,7 @@ from the repo root; on the board, use the services' venv (`PY=/opt/rs/venv/bin/p
 
 1. **`python board/bench/bench_brain.py`** (any machine). Trains the real model on sim sessions,
    then runs the brain's hot path at 10 Hz for 60 s (decode and windowing, predict, health,
-   X-ray, advisor, state JSON) on a zone tour, then the tray at T1. Prints p50/p95/max ms per
+   alert, X-ray, advisor, state JSON) on a zone tour, then the tray at T1. Prints p50/p95/max ms per
    step and its CPU use; PC numbers are only relative. `--trees`, `--depth`, `--hz`, `--seconds`.
 2. **`bash board/bench/bench_llm.sh`** (board, llama-server up). Times one narrator sentence
    (the narrator's own prompt) while bench_brain.py runs: prompt tokens/s, generation tokens/s,
@@ -23,9 +23,7 @@ from the repo root; on the board, use the services' venv (`PY=/opt/rs/venv/bin/p
      `llm_time.py` asks for a sentence every 8 s instead, the most the contract allows.
    - With sudo it also runs the BLE scan. No camera needed; a running App Lab app shows up too.
 
-## Fine or trouble
-
-Our margins, not measurements; only the narrator's 8 s comes from the contract.
+## Fine or trouble (our margins; only the narrator's 8 s comes from the contract)
 
 | | Fine | Trouble |
 |---|---|---|
