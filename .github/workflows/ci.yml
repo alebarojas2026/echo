@@ -5,9 +5,11 @@ on:
   push:
     branches: [main]
 
+# A pull request cancels its older runs. On main each commit gets its own group, because GitHub
+# drops a queued run in a busy group even when cancel-in-progress is false.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}  # every push to main gets its own result
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   python:

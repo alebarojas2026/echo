@@ -14,6 +14,10 @@ LATENCY.md. Declare negative empty/still session ids in the folder's
 combined before calculating percentiles; negative-event counts and observed
 minutes are summed before calculating rates. No stage overwrites a combined
 measurement with only the last session. See FALSE_ALARMS.md for valid observations.
+Negative recordings must be heldout sessions captured after a model exists.
+An empty events/state capture is listed as missing, even if the file exists.
+The final checklist includes all three power modes, images stored and model
+inventory; those remain missing until actually measured.
 
 Power and egress remain missing until measured separately. Requires the scoring,
 latency and false-event modules to be present on main; missing dependencies stop

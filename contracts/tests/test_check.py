@@ -27,6 +27,10 @@ INVALID = [
     "$.links[0].status",            # blind before the baseline
     "$.alert.zone",                 # counting with no zone
     "$.model.ver",                  # trained but no version
+    "$.motion",                     # clipped but motion set
+    "$.pred.motion",                # nobody there but motion set
+    "$.objects[0].near",            # east is 1 m away
+    "$.advice.before_dbm",           # shown before the router moves, so already measured
     "$.kind",                       # unknown event kind
     "$.args.mode",
     "unknown type 'ping'",

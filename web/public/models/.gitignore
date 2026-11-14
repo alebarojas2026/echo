@@ -1,0 +1,2 @@
+# Room scans ship inside web/dist (push-web.sh), never in git: they are pictures of a real room.
+*.glb

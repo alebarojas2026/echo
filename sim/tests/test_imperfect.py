@@ -17,9 +17,17 @@ def test_clipped_labels_have_no_zone_or_foot_point():
     assert clipped and {round(e["t"]) for e in clipped} <= {6, 7, 8, 9}
     assert all(6 <= e["t"] < 9 for e in clipped)
     for e in clipped:
-        assert (e["zone"], e["foot_m"], e["present"], e["persons_in_frame"], e["motion"]) == (None, None, True, 1, "still")
+        assert (e["zone"], e["foot_m"], e["motion"], e["present"], e["persons_in_frame"]) == (None, None, None, True, 1)
     clear = [e for e in got if not e["clipped"] and e["present"]]
     assert all(e["zone"] in (1, 2) and e["foot_m"] for e in clear)
+
+
+def test_clipped_while_walking_also_has_no_motion():
+    path = {"duration_s": 3, "person": [{"t": 0, "x": 0.2, "y": 0.5}, {"t": 3, "x": 1.8, "y": 0.5}],
+            "clipped": [{"t_on": 1, "t_off": 2}]}
+    got = labels(path)
+    assert {e["motion"] for e in got if e["clipped"]} == {None}
+    assert {e["motion"] for e in got if not e["clipped"]} == {"moving"}
 
 
 def test_clipping_needs_a_person_in_frame():
@@ -29,9 +37,16 @@ def test_clipping_needs_a_person_in_frame():
     assert {(e["clipped"], e["zone"]) for e in got if e["t"] >= 2} == {(False, 0)}
 
 
+# CONTRACTS.md says a clipped label has motion null. The label schema catches up in #173; until then
+# it reports exactly this for a clipped label, and nothing else may fail.
+SCHEMA_LAG = {"$.motion: None is not one of ['moving', 'still']"}
+
+
 def test_clipped_feed_passes_the_contract_checker():
     encode = encoder(1763149500000)
-    assert all(errors(json.loads(encode(e))) == [] for e in fake.simulate(fake.load_path("clipped_feet")))
+    for e in fake.simulate(fake.load_path("clipped_feet")):
+        found = set(errors(json.loads(encode(e))))
+        assert found <= (SCHEMA_LAG if e.get("clipped") else set()), (e["t"], found)
 
 
 def test_brain_drops_windows_with_a_clipped_label():

@@ -147,14 +147,14 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
                    "kind": kind, "tx": tx, "rx": rx, "dbm": round(dbm)}
         cam = latest(path.get("camera"), t, "state", "on")
         if cam == "on" and i % label_every == 0:  # one label per camera frame, empty frames too
-            # clipped: the camera sees the person but not their feet, so no zone and no foot point
+            # clipped: the camera sees the person but not their feet, so no zone, foot point or motion
             clipped = bool(pos) and any(active(c, t) for c in path.get("clipped") or [])
             yield {"type": "label", "t": t, "frame": i // label_every,
                    "mode": path.get("label_mode", "person"),
                    "persons_in_frame": int(pos is not None), "present": pos is not None,
                    "zone": None if clipped else zone_of(*pos) if pos else 0,
                    "foot_m": [round(pos[0], 2), round(pos[1], 2)] if pos and not clipped else None,
-                   "motion": ("moving" if moving else "still") if pos else None,
+                   "motion": ("moving" if moving else "still") if pos and not clipped else None,
                    "conf": round(rng.uniform(0.75, 0.95), 2), "clipped": clipped}
         if i % round(rate) == 0 or cam != cam_was:  # camera watch: every second and on any change
             yield {"type": "cam", "t": t, "state": cam,
