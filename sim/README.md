@@ -92,6 +92,8 @@ Optional extras, all timed in seconds from the start:
 | `waves` | `[{"t_on": 14, "t_off": 16.5, "link": "pi5>unoq:wifi", "amp_db": 4, "hz": 2}]` | A waving hand: the link swings up and down |
 | `camera` | `[{"t": 14, "state": "off"}]` | Camera state (`on`, `off`, `stalled`); labels stop unless it is `on` |
 | `clipped` | `[{"t_on": 6, "t_off": 9}]` | The camera cannot see the person's feet: labels have `clipped: true` with `zone`, `foot_m` and `motion` null |
+| `jumps` | `[{"link": "east>unoq:ble", "db": 9, "t_on": 5, "t_off": 12}]` | A link's level shifts by `db` with nothing in the room to explain it (`wobble_db` makes it unsteady) |
+| `flickers` | `[{"t_on": 7.0, "t_off": 7.3}]` | Fake brain only: its decision says moving for that long while the person stands still |
 
 ## Tests
 
@@ -117,6 +119,8 @@ Use the short name: `python -m sim.fake zone_tour`.
 | `camera_unplug` | The zone tour with the camera unplugged at 14 s | 32 s |
 | `clipped_feet` | Stand in zone 2 then zone 1; labels are clipped from 6 s to 9 s | 18 s |
 | `demo` | The whole demo in order, for the fake brain (see below) | 64 s |
+| `still_flicker` | Stand still in zone 4 with one 0.3 s moving flicker; the alert must still fire at 10 s | 18 s |
+| `tray_removed` | Person in zone 2 throughout; tray at T1 from 5 s to 14 s, gone from the picture about 1 s later | 20 s |
 
 ## Replay a recording
 
@@ -164,7 +168,11 @@ It starts like a real one: `links` is empty until readings arrive, `xray` is nul
 baseline and `pred` is null until training. To keep paths short the fake baseline finishes 1 s in
 and the fake training 2 s in, each with its event (`baseline_done`, `trained`).
 
-From section 6 it follows: link health (stale, then SENSOR BLIND after 3 s, clear after 3 s ok),
+From section 6 it follows: link health (stale, then SENSOR BLIND after 3 s, clear after 3 s ok;
+the jump rule for a link more than 6 dB off its base for 3 s with nobody and nothing there, skipping
+a steady drop below base), the still timer on smoothed decisions (it resets after 5 moving
+decisions in a row or when another zone holds the majority of the last 10), an object leaving the
+picture about 1 s after it is removed even with a person present,
 `pred` null while blind or while the router is off `S-home`, the no-movement alert with the zone
 limits, check-in on a wave, objects, the X-ray grid, and advice: an object that stays 5 s within
 0.5 m of `pi5>unoq:wifi` gets an `advice` with a router spot, `before_dbm`, and `after_dbm` once
