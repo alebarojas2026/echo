@@ -63,13 +63,9 @@ def measurements(proof):
     primary = {
         "Zone accuracy": (zone_value, zone_n),
         "Radio vs camera zone agreement": (zone_value, zone_n),
-        "Presence accuracy": ("__", "__"),
         "Person vs object accuracy": (po_value, po_n),
         "Time to train on the board": (display(proof.get("train_s"), " s"), "__"),
         "Time per decision": (timing_value, "__"),
-        "End-to-end update latency": ("__", "__"),
-        "No-movement alert latency": ("__", "__"),
-        "Dead-zone improvement": ("__", "__"),
         "Board power draw": (watt_value, "__"),
     }
     extras = [
@@ -121,8 +117,9 @@ def render(document, proof):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--proof", type=Path, default=Path("proof.json"))
-    parser.add_argument("--document", type=Path, default=Path("PROOF.md"))
+    root = Path(__file__).resolve().parents[1]
+    parser.add_argument("--proof", type=Path, default=root / "proof" / "proof.json")
+    parser.add_argument("--document", type=Path, default=root / "PROOF.md")
     parser.add_argument("--output", type=Path, help="explicit output path; omit to preview on stdout")
     args = parser.parse_args()
     output = render(args.document.read_text(encoding="utf-8"), json.loads(args.proof.read_text(encoding="utf-8")))

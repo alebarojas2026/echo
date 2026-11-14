@@ -37,7 +37,7 @@ def test_measured_values_and_provenance():
     assert "| False presence episodes per minute | 0 |" in output
     assert "| Person vs object accuracy | __ |" in output
     assert "Unchanged prose." in output and "abc1234" in output
-    assert "| End-to-end update latency | __ | measured video method | __ | __ | __ |" in output
+    assert "| End-to-end update latency | pending | measured video method | 10 planned | | |" in output
 
 
 def test_idempotent_and_does_not_mutate_report():
@@ -52,7 +52,7 @@ def test_missing_values_never_invented():
     output = render(DOCUMENT, {})
     assert "| Zone accuracy (radio vs camera agreement) | __ |" in output
     assert "| Images stored | __ |" in output
-    assert "pending" not in output and "planned" not in output
+    assert "| Zone accuracy (radio vs camera agreement) | __ | held-out sessions | __ | __ | __ |" in output
 
 
 @pytest.mark.parametrize("change", [
@@ -77,3 +77,10 @@ def test_escaped_method_pipes_stay_idempotent():
     document = DOCUMENT.replace("held-out sessions", "held-out \\| sessions")
     output = render(document, report())
     assert render(output, report()) == output
+
+
+def test_independently_measured_dead_zone_row_is_preserved():
+    row = "| Dead-zone improvement | 12 Mbps | iperf3 before/after | 5 trials | 2026-11-14 | abc1234 |"
+    document = DOCUMENT + "\n" + row + "\n"
+    assert row in render(document, {})
+    assert row in render(document, report())
