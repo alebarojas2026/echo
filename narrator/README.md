@@ -59,7 +59,7 @@ build/bin/llama-server --version
 
 - `GGML_NATIVE=ON` compiles for this CPU (Cortex-A53, Armv8.0 with NEON). Build it on the board;
   don't copy a binary from another machine.
-- `BUILD_SHARED_LIBS=OFF` gives one self-contained binary, the path `llm.service` runs.
+- `BUILD_SHARED_LIBS=OFF` gives one self-contained binary, the path `radio-sight-llm.service` runs.
 - `-j 2` because some llama.cpp files need a lot of memory to compile; four jobs at once can run
   the 4 GB board out of memory. Expect the build to take a while.
 - "OpenSSL not found, HTTPS support disabled" during `cmake` is fine: the model is downloaded
@@ -75,14 +75,13 @@ echo "7671c0c304e6ce5a7fc577bcb12aba01e2c155cc2efd29b2213c95b18edaf6ed  /opt/rs/
 
 ## 3. Run it as a service
 
-From the repo root on the board:
+`narrator/llm.service` is installed as `radio-sight-llm.service` along with the other units
+(board/units/README.md). From the repo root on the board:
 
 ```
-sudo cp narrator/llm.service /etc/systemd/system/llm.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now llm.service
+sudo board/deploy.sh --install --no-pi   # or without --no-pi once the Pi is up
 curl -s http://127.0.0.1:8091/health     # {"status":"ok"} once the model is loaded
-journalctl -u llm -n 40                  # model load, threads, buffer sizes
+journalctl -u radio-sight-llm -n 40      # model load, threads, buffer sizes
 ```
 
 The unit runs `--threads 2 --threads-batch 2 --parallel 1 --ctx-size 1024` on 127.0.0.1:8091,
@@ -90,7 +89,7 @@ with `CPUAffinity=2 3` and `Nice=10`.
 
 ## 4. Gate
 
-With llm.service up and the brain running:
+With radio-sight-llm.service up and the brain running:
 
 ```
 bash narrator/gate.sh

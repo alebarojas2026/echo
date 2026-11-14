@@ -9,7 +9,7 @@ import math
 from pathlib import Path
 import platform
 import random
-from statistics import pstdev
+from statistics import mean, pstdev
 import subprocess
 
 
@@ -89,7 +89,10 @@ def object_evidence(messages, end, base):
                   if m.get("type") == "rssi" and m.get("link") == link
                   and end - 3000 <= m["recv_t"] < end]
         if len(points) >= 2 and points[-1][0] - points[0][0] >= 2000:
-            values = [v for _, v in points]
+            buckets = {}
+            for t, value in points:
+                buckets.setdefault(int(t // 500), []).append(value)
+            values = [mean(v) for _, v in sorted(buckets.items())]
             if all(baseline - v >= 3 for v in values) and pstdev(values) < 0.8:
                 return True
     return False
@@ -185,7 +188,7 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
             "threshold_zone": {"correct": baseline_correct if baseline_total else None, "total": baseline_total or None},
             "person_vs_object": {"correct": po_correct if po_total else None, "total": po_total or None,
                                  "tray_placements": None},
-            "false_alarms_per_min": false_alarms * 60000 / empty_ms if empty_ms else None,
+            "false_alarms_per_min": None,
             "train_s": replay.train_s if on_board else None,
             "ms_per_decision": {"p50": percentile(durations, 0.5), "p95": percentile(durations, 0.95)},
             "watts": {"idle": None, "teaching": None, "radio_only": None, "source": None},
@@ -193,11 +196,20 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
             "measured_at": datetime.now(timezone.utc).isoformat(), "commit": commit}
 
 
+def read_baseline(path):
+    """Read the section 6 baseline artifact, retaining the earlier summary adapter."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if "links" in data:
+        return ({k: v["base_dbm"] for k, v in data["links"].items()},
+                {k: v["expected_hz"] for k, v in data["links"].items()})
+    return data["base_dbm"], data["expected_hz"]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--train", nargs="+", required=True, type=Path)
     parser.add_argument("--heldout", nargs="+", required=True, type=Path)
-    parser.add_argument("--baseline", required=True, type=Path, help="JSON with base_dbm and expected_hz from the empty-room capture")
+    parser.add_argument("--baseline", type=Path, default=Path(__file__).resolve().parents[1] / "data/sessions/baseline.json")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().with_name("proof.json"))
     parser.add_argument("--on-board", action="store_true", help="record timing only on the UNO Q")
     parser.add_argument("--allow-sim", action="store_true", help="self-tests only; output cannot be named proof.json")
@@ -217,9 +229,9 @@ def main():
         parser.error("synthetic training cannot produce measured proof")
     from brain.train import Model
 
-    baseline = json.loads(args.baseline.read_text())
-    model = Model(baseline["base_dbm"]).fit(training)
-    adapter = BrainReplay(model, baseline["base_dbm"], baseline["expected_hz"])
+    base, rates = read_baseline(args.baseline)
+    model = Model(base).fit(training)
+    adapter = BrainReplay(model, base, rates)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     report = score(heldout, adapter, args.on_board, args.allow_sim, commit)
     args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")

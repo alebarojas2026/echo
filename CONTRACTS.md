@@ -60,7 +60,7 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
    // One label per processed camera frame (5-10/s), including frames with nobody in them.
    // present:false only on a processed frame with no foot point inside the square; then zone 0, foot_m null, motion null.
    // seq: one counter per sending socket (a producer), shared across all message types it sends.
-   // clipped:true -> zone and foot_m are null and the window is dropped. mode = the current label_mode.
+   // clipped:true -> zone, foot_m and motion are null, whatever present is, and the window is dropped. mode = the current label_mode.
 {"v":2,"type":"cam","t":1763149512200,"seq":77,"src":"live","state":"on","fps":9.6}
    // From teacher/camwatch.py: every 1 s and at once on any change. state = on | off | stalled.
 {"v":2,"type":"narration","t":1763149513000,"seq":9,"src":"live","text":"Someone just walked into zone 2.",
@@ -79,7 +79,9 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
          "motion":"still","still_s":4.2,"why":["east>unoq:ble","pi5>unoq:wifi"]},
         // probs = [empty, z1, z2, z3, z4]. kind = person | object | none.
         // pred is null before training, while health is blind, while recalibrating, and while the router is off S-home.
+        // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
  "objects":[{"xy_m":[1.0,0.2],"near":"pi5","since_s":14.0,"drop_db":9.8}],
+        // near (here and in advice) = the closest node within 0.5 m of xy_m, or null when no node is that close.
  "xray":{"w":10,"h":10,"cell_m":0.24,"origin_m":[-0.2,-0.2],"moving_db":[/* w*h */],"static_db":[/* w*h */],"n_links":6},
         // The screen draws whatever w x h it receives. Cells are row by row from the south edge:
         // index = iy*w + ix, ix east from origin_m[0], iy north from origin_m[1]; cell centre = origin_m + (i+0.5)*cell_m.
@@ -150,7 +152,7 @@ Advice:
 - Fires when an object persists >= 5 s and its static_db peak lies within 0.5 m of pi5>unoq:wifi.
 - Picks the router spot (not S-home) whose new link has the lowest summed static_db along its ellipse.
 - The text is built from the result, never a fixed string.
-- before_dbm = median of pi5>unoq:wifi over the 3 s before router_moved.
+- before_dbm = median of pi5>unoq:wifi over the last 3 s: kept current while the advice shows, frozen at router_moved, never null.
 - after_dbm = median over 3 s, starting 2 s after router_moved.
 Router: take the tray off and put the Pi back on S-home BEFORE sending router_home. While the router is off S-home, pred is null. On router_home, every pi5 link must sit within 1 dB of base
   for 3 s; otherwise the board runs an automatic 20 s baseline ("recalibrating").
