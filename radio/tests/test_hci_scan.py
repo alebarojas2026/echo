@@ -291,3 +291,39 @@ def test_the_service_keeps_nothing():
     assert run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: sent.append(r), stop=lambda: fake.drained,
                keep=False) is None
     assert len(sent) == 100     # west and pi5 from each packet, all still sent
+
+
+def run_main(monkeypatch, capsys, argv, events):
+    """hci_scan.main() on the fake controller, sending to a local socket. Returns (stderr, messages)."""
+    from radio import hci_scan
+    bus = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    bus.bind(("127.0.0.1", 0))
+    bus.settimeout(0.5)
+    monkeypatch.setenv("BUS_HOST", "127.0.0.1")
+    monkeypatch.setenv("BUS_PORT", str(bus.getsockname()[1]))
+    fake = FakeController(events=events, at_end=KeyboardInterrupt)
+    monkeypatch.setattr(hci_scan, "open_controller", lambda dev: hci.Hci(fake))
+    monkeypatch.setattr(hci_scan.signal, "signal", lambda *a: None)
+    hci_scan.main(argv)
+    got = []
+    while True:
+        try:
+            got.append(json.loads(bus.recv(4096)))
+        except socket.timeout:
+            break
+    bus.close()
+    return capsys.readouterr().err, got
+
+
+def test_main_gate_run_prints_the_summary(monkeypatch, capsys):
+    err, got = run_main(monkeypatch, capsys, ["--node", "unoq", "--seconds", "60"],
+                        [fixture("legacy_report_east"), fixture("legacy_reports_three")])
+    assert "legacy scan, duplicates not filtered, rx unoq" in err
+    assert "east>unoq:ble" in err and "adverts/s" in err
+    assert [m["link"] for m in got] == ["east>unoq:ble", "west>unoq:ble", "pi5>unoq:ble"]
+
+
+def test_main_service_sends_but_prints_no_summary(monkeypatch, capsys):
+    err, got = run_main(monkeypatch, capsys, ["--node", "unoq"], [fixture("legacy_report_east")])
+    assert "adverts/s" not in err
+    assert [m["link"] for m in got] == ["east>unoq:ble"]
