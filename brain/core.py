@@ -44,8 +44,12 @@ EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session"
 LABEL_MODES = ("person", "object", "off")
 
 
-def read_session(path) -> List[dict]:
-    """The rssi and label messages of a session file written by the bus."""
+def read_session(path, since_t=None) -> List[dict]:
+    """The rssi and label messages of a session file written by the bus.
+
+    since_t: only messages received from then on. The bus appends, so a session name used
+    twice holds both recordings; the meta's recv_t picks out the one that was asked for.
+    """
     out = []
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -53,19 +57,29 @@ def read_session(path) -> List[dict]:
                 msg = json.loads(line)
             except ValueError:
                 continue   # a line cut short by a crash
-            if isinstance(msg, dict) and msg.get("type") in ("rssi", "label") and "recv_t" in msg:
+            if isinstance(msg, dict) and msg.get("type") in ("rssi", "label") and "recv_t" in msg \
+                    and (since_t is None or msg["recv_t"] >= since_t):
                 out.append(msg)
     return out
 
 
-def first_meta(path) -> Optional[dict]:
-    """The meta line that opens a session file, or None."""
+def last_meta(path) -> Optional[dict]:
+    """The meta line of the newest recording in a session file, or None."""
+    found = None
     try:
         with open(path, encoding="utf-8") as f:
-            msg = json.loads(f.readline())
-    except (OSError, ValueError):
+            for line in f:
+                if '"meta"' not in line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(msg, dict) and msg.get("type") == "meta":
+                    found = msg
+    except OSError:
         return None
-    return msg if isinstance(msg, dict) and msg.get("type") == "meta" else None
+    return found
 
 
 def now_ms() -> int:
@@ -114,6 +128,7 @@ class Brain:
         self.feed_t = 0
         self.src = "live"
         self.base: Dict[str, float] = {}
+        self.place_t: Optional[int] = None    # when the operator's last baseline finished: "this place"
         self.expected_hz: Dict[str, float] = {}
         self.windower: Optional[F.Windower] = None
         self.window: Optional[dict] = None
@@ -202,8 +217,10 @@ class Brain:
         handler(args)
 
     def _cmd_baseline(self, args):
+        """A baseline asked for by hand means a new place (or a new layout): when it finishes, the
+        model and the recordings made before it are dropped from use. The files stay on disk."""
         self._cmd_label_mode({"mode": "off"})
-        self._start_capture()
+        self._start_capture(new_place=True)
 
     def _cmd_train(self, args):
         if self.training or not self.base:
@@ -213,18 +230,18 @@ class Brain:
             return
         self.training = {"started_t": self.now(), "progress": None,
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
-        base, ver = dict(self.base), f"m{self.model_n + 1}"
+        base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
 
         def fit():   # may run on another thread: touches nothing of ours
             for s in sessions:   # read back from the bus's files; nothing is kept after the fit
                 if s["messages"] is None:
-                    s["messages"] = read_session(s["path"])
+                    s["messages"] = read_session(s["path"], s["meta"].get("recv_t"))
             return Model(base, ver=ver).fit(sessions)
 
         def done(model):   # back on the loop; model None = the fit failed
             self.training = None
-            if model is None:
-                return
+            if model is None or place != self.place_t:
+                return   # the fit failed, or the place changed while it ran: that model is for the old one
             self.model, self.model_n = model, self.model_n + 1
             self._save_model()
             self.decision_ms.clear()
@@ -235,7 +252,7 @@ class Brain:
         self.spawn(fit, done)
 
     def _cmd_relearn(self, args):
-        """Forget the current model and train again from the recorded sessions."""
+        """Forget the current model and train again from this place's recorded sessions."""
         self.model = self.pred = None
         self._cmd_train(args)
 
@@ -285,11 +302,14 @@ class Brain:
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         tmp = self.sessions_dir / "model.pkl.tmp"
         with open(tmp, "wb") as f:
-            pickle.dump({"ver": self.model.ver, "base": self.model.base, "model": self.model}, f)
+            pickle.dump({"ver": self.model.ver, "base": self.model.base, "place_t": self.place_t,
+                         "model": self.model}, f)
         os.replace(tmp, self.sessions_dir / "model.pkl")   # never a half-written file
 
     def _load_model(self) -> None:
-        """Bring back the last model if it was fit on the baseline we just loaded.
+        """Bring back the last model if it was fit in the place whose baseline we just loaded.
+
+        The automatic baseline after router_home keeps the place, so the model survives it.
 
         model.pkl is our own file in data/sessions; nothing else is ever unpickled.
         """
@@ -299,15 +319,19 @@ class Brain:
             with open(self.sessions_dir / "model.pkl", "rb") as f:
                 doc = pickle.load(f)
             model, ver = doc["model"], str(doc["ver"])
-            if doc["base"] != self.base or not model.trained:
-                return   # the room was re-baselined since: the model is stale
+            if doc.get("place_t") is not None:
+                same_place = doc["place_t"] == self.place_t
+            else:
+                same_place = doc["base"] == self.base   # a file from before place_t was written
+            if not same_place or not model.trained:
+                return   # baselined by hand since: the model is for another place
             n = int(ver.lstrip("m"))
         except Exception:
             return       # no file, another scikit-learn, a damaged file: start untrained
         self.model, self.model_n = model, n
         for session in model.train_sessions:   # so train and relearn still find their recordings
             path = self.sessions_dir / f"{session}.jsonl"
-            meta = first_meta(path)
+            meta = last_meta(path)
             if meta:
                 self.sessions[session] = {"meta": meta, "messages": None, "path": path}
 
@@ -352,7 +376,7 @@ class Brain:
                 if m is None or abs(m - self.base[link]) > SETTLE_DB:
                     self.recalibrating, self._old_base = True, dict(self.base)
                     self._cmd_label_mode({"mode": "off"})
-                    self._start_capture()
+                    self._start_capture(new_place=False)
                     self.emit("recalibrating", {"link": link})
                     return
 
@@ -410,25 +434,52 @@ class Brain:
                          for link in self.base}}
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         (self.sessions_dir / "baseline.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+        # place.json: when this place began (the last baseline asked for by hand). proof/ and a
+        # restart use recordings from then on only. An automatic baseline leaves it alone.
+        (self.sessions_dir / "place.json").write_text(json.dumps({"t": self.place_t}) + "\n", encoding="utf-8")
 
     def _load_baseline(self) -> None:
         if not self.sessions_dir:
             return
         try:
-            links = json.loads((self.sessions_dir / "baseline.json").read_text(encoding="utf-8"))["links"]
+            doc = json.loads((self.sessions_dir / "baseline.json").read_text(encoding="utf-8"))
+            links = doc["links"]
             base = {k: float(v["base_dbm"]) for k, v in links.items() if k in self.links}
             expected = {k: float(v["expected_hz"]) for k, v in links.items() if k in self.links}
         except (OSError, ValueError, KeyError, TypeError):
             return   # no file, or not one of ours: start without a baseline
         if base:
             self._set_baseline(base, expected)
+            self.place_t = self._read_place(doc.get("t"))
+
+    def _read_place(self, baseline_t) -> Optional[int]:
+        """place.json's time; without that file, the baseline's own time."""
+        try:
+            t = json.loads((self.sessions_dir / "place.json").read_text(encoding="utf-8"))["t"]
+        except (OSError, ValueError, KeyError, TypeError):
+            t = baseline_t
+        return int(t) if isinstance(t, (int, float)) else None
 
     def _watch_events(self):
         for kind, info in self.watch.pop_events():
             self.emit(kind, info)
 
-    def _start_capture(self):
-        self.capture = {"start": None, "messages": []}
+    def _start_capture(self, new_place: Optional[bool] = None):
+        """new_place None = keep what the running capture was asked for (a restart of its 20 s)."""
+        if new_place is None:
+            new_place = bool(self.capture and self.capture["new_place"])
+        self.capture = {"start": None, "messages": [], "new_place": new_place}
+
+    def _new_place(self, now) -> None:
+        """The operator's baseline finished: nothing learned before it is used from here on.
+
+        The model goes (pred is null until the next train) and so do the recordings held for
+        training; a recording still open carries on, it belongs to this place. Files stay on disk.
+        """
+        self.place_t = now
+        self.model = self.pred = self._raw = self.raw_kind = None
+        self.sessions = {}
+        self.decision_ms.clear()
 
     def _capture_ok(self, now) -> bool:
         """Section 6: health ok, the camera on and seeing nobody, label_mode off, every link reporting.
@@ -452,10 +503,12 @@ class Brain:
             elif self.capture["start"] is None:
                 self.capture["start"] = now
             elif now - self.capture["start"] >= BASELINE_MS:
-                msgs, self.capture = self.capture["messages"], None
+                msgs, new_place, self.capture = self.capture["messages"], self.capture["new_place"], None
                 expected = {link: round(sum(1 for m in msgs if m["link"] == link) / (BASELINE_MS / 1000), 1)
                             for link in self.links}
                 self._set_baseline(F.baseline(msgs), expected)
+                if new_place or self.place_t is None:
+                    self._new_place(now)
                 self._save_baseline(now)
                 self.emit("baseline_done", {})
                 if self.recalibrating:   # how far did the room move from the old baseline?

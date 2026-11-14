@@ -662,7 +662,7 @@ def record_to_disk(brain, feed, folder, session, path, purpose="train", walker=N
     meta = {"session": session, "purpose": purpose, "walker": walker}
     brain.on_cmd(cmd("record_start", **meta))
     msgs = sim_to_v2(path, seed=seed, mode=mode, meta=meta, t0=feed.t)
-    with open(folder / f"{session}.jsonl", "w") as f:
+    with open(folder / f"{session}.jsonl", "a") as f:   # the bus appends
         for m in msgs:
             f.write(json.dumps(m) + "\n")
             brain.on_message(m)
@@ -731,9 +731,10 @@ def test_a_restart_brings_the_model_back_without_a_new_walk(tmp_path):
 
 def test_a_model_from_another_baseline_or_a_damaged_file_is_not_loaded(tmp_path):
     brain, feed = taught_on_disk(tmp_path)
+    old = dict(brain.base)
     brain.on_cmd(cmd("baseline"))                      # the room is baselined again, with the tray down
     feed.play("metal_object", seed=7)
-    assert brain.base != brain.model.base
+    assert brain.base != old
     assert Brain(sessions_dir=tmp_path).model is None  # stale for this baseline
     (tmp_path / "model.pkl").write_bytes(b"not a pickle")
     assert Brain(sessions_dir=tmp_path).model is None
@@ -748,3 +749,83 @@ def test_a_failed_model_write_still_announces_the_trained_model(tmp_path, monkey
     assert brain.model is not None and brain.state()["model"]["trained"]
     assert "trained" in [e["kind"] for e in brain.events]
     assert not (tmp_path / "model.pkl").exists()
+
+
+# ---- a new place: the kit is packed up and set down somewhere else ----
+
+def test_a_baseline_by_hand_is_a_new_place_and_old_recordings_are_never_trained_on_again(tmp_path):
+    import json
+    brain, feed = taught_on_disk(tmp_path)             # yesterday's room: s01, s02, s10, s11
+    assert brain.state()["model"]["trained"]
+    brain.pop_events()
+
+    brain.on_cmd(cmd("baseline"))                      # today's room
+    states = []
+    feed.play("empty_room", seed=60, states=states)
+    assert "baseline_done" in [e["kind"] for e in brain.pop_events()]
+    s = brain.state()
+    assert s["pred"] is None and s["model"]["trained"] is False and s["model"]["train_sessions"] == []
+    assert states[5][1]["model"]["trained"]            # the old model stays until the new baseline is in
+
+    brain.on_cmd(cmd("train"))                         # nothing recorded here yet: nothing to train on
+    brain.on_cmd(cmd("relearn"))
+    assert brain.model is None and brain.training is None
+
+    record_to_disk(brain, feed, tmp_path, "s50", "empty_room", seed=61)
+    record_to_disk(brain, feed, tmp_path, "s51", "zone_tour", walker="w9", seed=62)
+    brain.on_cmd(cmd("train"))
+    assert brain.state()["model"]["train_sessions"] == ["s50", "s51"]
+    assert (tmp_path / "s10.jsonl").exists()           # yesterday's walks are kept, just not used
+    assert json.loads((tmp_path / "place.json").read_text())["t"] == brain.place_t
+
+    again = Brain(sessions_dir=tmp_path)               # and a restart agrees
+    assert again.place_t == brain.place_t and again.model.train_sessions == ["s50", "s51"]
+    again.on_cmd(cmd("relearn"))
+    assert again.state()["model"]["train_sessions"] == ["s50", "s51"]
+
+
+def test_a_fit_that_finishes_after_the_place_changed_is_thrown_away():
+    pending = []
+    brain, feed = taught(spawn=lambda fit, done: pending.append((fit, done)))
+    fit, done = pending[0]                             # still fitting on the old room's walks
+    brain.on_cmd(cmd("baseline"))
+    feed.play("empty_room", seed=60)
+    assert brain.place_t is not None and brain.capture is None
+    done(fit())
+    assert brain.model is None and brain.training is None
+    assert "trained" not in [e["kind"] for e in brain.events]
+
+
+def test_the_automatic_baseline_after_router_home_keeps_the_place_and_the_model(tmp_path):
+    brain, feed = taught_on_disk(tmp_path)
+    place, old = brain.place_t, dict(brain.base)
+    router_run(brain, feed, "router_move", moved_at=40, home_at=45, edit_path=tray_stays)
+    assert brain.base != old and not brain.recalibrating        # it did recalibrate
+    assert brain.place_t == place and brain.model is not None and sorted(brain.sessions) == ["s01", "s02", "s10", "s11"]
+    again = Brain(sessions_dir=tmp_path)                        # a restart after it keeps the model too
+    assert again.base == brain.base and again.model is not None and again.place_t == place
+
+
+def test_a_session_name_used_again_trains_on_the_new_recording_only(tmp_path):
+    brain, feed = taught_on_disk(tmp_path)             # s10 = a walk in yesterday's room
+    old_lines = len((tmp_path / "s10.jsonl").read_text().splitlines())
+    brain.on_cmd(cmd("baseline"))
+    feed.play("empty_room", seed=60)
+    record_to_disk(brain, feed, tmp_path, "s10", "empty_room", seed=61)   # the same name, today
+    assert len((tmp_path / "s10.jsonl").read_text().splitlines()) > old_lines   # both are in the file
+    record_to_disk(brain, feed, tmp_path, "s51", "zone_tour", walker="w9", seed=62)
+    seen = {}
+    brain.spawn = lambda fit, done: (seen.update(n=[len(s["messages"]) for s in _fitted(fit)]), done(fit()))
+    brain.on_cmd(cmd("train"))
+    assert brain.model.train_sessions == ["s10", "s51"]
+    today = sum(1 for m in sim_to_v2("empty_room", seed=61) if m["type"] in ("rssi", "label"))
+    assert seen["n"][0] == today                       # none of yesterday's walk came along
+
+    again = Brain(sessions_dir=tmp_path)               # a restart reads the newest meta of s10, not the first
+    assert again.sessions["s10"]["meta"]["recv_t"] == brain.sessions["s10"]["meta"]["recv_t"]
+
+
+def _fitted(fit):
+    """Run a fit and hand back the sessions it read (the closure's own list)."""
+    fit()
+    return next(c.cell_contents for c in fit.__closure__ if isinstance(c.cell_contents, list))
