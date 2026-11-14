@@ -2,6 +2,8 @@
 
 The message formats every part of Radio Sight agrees on. Only Ivan changes this file. Need a change? Open an issue labeled `contract`, keep working with what's here, and switch when the change lands.
 
+All numbers in the examples below are made-up format examples, not measurements. Real results live only in proof.json and PROOF.md.
+
 Every adapter (fake feed, readers, bus, brain, screen) speaks exactly this. At runtime, check only `v` and `type`; full schema checks run in tests and CI (contracts/).
 state.src mirrors the inputs; the screen shows LIVE only for src live with nonzero link rates.
 
@@ -157,6 +159,7 @@ Screen: NO DATA (grey) when the last state is > 1 s old (the feed is stale). SEN
 ```
 
 ## 7. proof.json (served as /proof.json)
+The values below show the format only; they are not results.
 ```jsonc
 {"zone":{"correct":47,"total":52,"ci95":[0.79,0.96],"sessions":["s21","s22"],"walkers":5,"method":"held-out, see PROOF.md"},
  "threshold_zone":{"correct":38,"total":52},
