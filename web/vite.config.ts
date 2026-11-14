@@ -66,10 +66,37 @@ function boardFiles(): Plugin {
   }
 }
 
+// Pages the board serves besides the screen, each at its own path: http://<board>:8080/game/ and /phone/.
+// A page is built only once its file exists, so the phone page joins the build when it lands.
+const PAGES: Record<string, string> = {
+  game: 'src/game/index.html',
+  phone: 'src/game/phone/index.html',
+}
+const pages = Object.entries(PAGES).filter(([, file]) => existsSync(new URL(file, import.meta.url)))
+
+/** Writes each extra page to dist/<name>/index.html instead of dist/src/.../index.html. */
+function pagePaths(): Plugin {
+  return {
+    name: 'page-paths',
+    enforce: 'post',
+    generateBundle(_, bundle) {
+      for (const [name, file] of pages) {
+        const page = bundle[file]
+        if (!page || page.type !== 'asset') continue
+        delete bundle[file]
+        this.emitFile({ type: 'asset', fileName: `${name}/index.html`, source: page.source })
+      }
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [boardFiles()],
+  plugins: [boardFiles(), pagePaths()],
   define: { __ROOM_SCAN__: JSON.stringify(roomScan()) },
-  build: { chunkSizeWarningLimit: 700 }, // three.js is most of the bundle; the board serves it locally
+  build: {
+    chunkSizeWarningLimit: 700, // three.js is most of the bundle; the board serves it locally
+    rolldownOptions: { input: { main: 'index.html', ...Object.fromEntries(pages) } },
+  },
   // web/tests (Playwright) and web/src/game (node:test) have their own runners.
   test: { include: ['src/room/**/*.test.ts'] },
 })
