@@ -3,15 +3,18 @@
     python lab/soak/soak.py --hours 2.2 --out lab/soak/runs/r1
     python lab/soak/report.py lab/soak/runs/r1
 
-sim.send (the cycling paths) -> lab/soak/proxy.py (drops, duplicates, jitter, a silent link,
-camera off) -> bus -> brain -> narrator (template mode: no model is listening) and the screen in
-headless Chromium (?src=ws, lab/soak/probe.mjs). Every few minutes one fault from CHAOS.
-Everything runs at real speed: bus and brain stamp time with the wall clock, so a faster sim
-would only change the link rates the brain judges health by.
+The sim feed (lab/soak/feeder.py: sim.send's loop, cycling the paths in one process) ->
+lab/soak/proxy.py (drops, duplicates, jitter, a silent link, camera off) -> bus -> brain ->
+narrator (template mode: no model is listening) and the screen in headless Chromium (?src=ws,
+lab/soak/probe.mjs). Every few minutes one fault from CHAOS. Everything runs at real speed: bus
+and brain stamp time with the wall clock, so a faster sim would only change the link rates the
+brain judges health by. Every process but the browser runs at above-normal priority, so other
+load on a shared PC doesn't starve them (the board runs nothing else at their level).
 
 Writes to --out: logs/<process>.log, monitor.jsonl (connects, gaps, transitions, events, contract
-errors), segments.jsonl (which path played when), chaos.jsonl, procs.jsonl (RSS, handles, CPU every
-10 s), probe.jsonl (the screen every 500 ms), sessions/ (the bus's recordings), summary.json.
+errors), proxy.jsonl (pauses in the sim feed), segments.jsonl (which path played when),
+chaos.jsonl, procs.jsonl (RSS, handles, CPU every 10 s), probe.jsonl (the screen every 500 ms),
+sessions/ (the bus's recordings), summary.json.
 Dev only. Needs psutil and websockets; `npm install` in lab/soak for the probe.
 """
 import argparse
@@ -20,6 +23,7 @@ import glob
 import json
 import os
 import random
+import socket
 import subprocess
 import sys
 import threading
@@ -34,10 +38,9 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO))
 from contracts.check import errors  # noqa: E402
-from proxy import ChaosProxy  # noqa: E402
 
 PY = sys.executable
-BUS, BRAIN_IN, PROXY, WS, WEB = 5600, 5601, 5610, 8765, 8080
+BUS, BRAIN_IN, PROXY, PROXY_CTL, WS, WEB = 5600, 5601, 5610, 5611, 8765, 8080
 LINKS = ["pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble", "east>pi5:ble", "west>pi5:ble"]
 CYCLE = ["zone_tour", "stand_still", "metal_object", "wave_checkin", "dropped_link", "camera_unplug", "empty_room"]
 TRAINING = [("empty_room", "train"), ("zone_tour", "train"), ("stand_still", "train"),
@@ -76,20 +79,28 @@ class Procs:
             "narrator": [PY, "-m", "narrator.narrate", "--llm", "http://127.0.0.1:9", "--bus", f"127.0.0.1:{BUS}"],
             "web": [PY, "board/serve.py", "--host", "127.0.0.1", "--port", str(WEB)],
             "probe": ["node", str(HERE / "probe.mjs"), f"http://127.0.0.1:{WEB}/?src=ws"] + ([chrome] if chrome else []),
+            "proxy": [PY, str(HERE / "proxy.py"), "--listen", str(PROXY), "--bus", f"127.0.0.1:{BUS}", "--control", str(PROXY_CTL)],
+            "feeder": [PY, str(HERE / "feeder.py"), str(PROXY)],
         }
 
     def start(self, name):
         self.starts[name] += 1
         env = dict(os.environ, PYTHONUNBUFFERED="1")
-        if name == "probe":
-            out, err = open(self.run.out / "probe.jsonl", "a"), open(self.run.out / "logs" / "probe.log", "a")
+        stdin = None
+        if name in ("probe", "proxy"):
+            out, err = open(self.run.out / f"{name}.jsonl", "a"), open(self.run.out / "logs" / f"{name}.log", "a")
+        elif name == "feeder":
+            stdin, out, err = subprocess.PIPE, subprocess.PIPE, open(self.run.out / "logs" / "feeder.log", "a")
         else:
             if name in self._logs:
                 self._logs[name].close()
             out = err = self._logs[name] = open(self.run.out / "logs" / f"{name}.log", "a", encoding="utf-8")
             out.write(f"=== soak: start #{self.starts[name]} at {time.strftime('%H:%M:%S')}\n")
             out.flush()
-        self.procs[name] = p = subprocess.Popen(self.argv[name], cwd=REPO, stdout=out, stderr=err, env=env)
+        self.procs[name] = p = subprocess.Popen(self.argv[name], cwd=REPO, stdin=stdin, stdout=out, stderr=err, env=env,
+                                                text=name == "feeder", bufsize=1 if name == "feeder" else -1)
+        if name != "probe":
+            above_normal(p.pid)
         self.run.log("chaos.jsonl", kind="start", proc=name, pid=p.pid)
         return p
 
@@ -127,6 +138,28 @@ class Procs:
             except psutil.Error:
                 self.run.log("procs.jsonl", proc=name, pid=p.pid, alive=False)
         self.run.log("procs.jsonl", proc="system", cpu=psutil.cpu_percent(None))
+
+
+def above_normal(pid):
+    try:
+        psutil.Process(pid).nice(psutil.ABOVE_NORMAL_PRIORITY_CLASS if os.name == "nt" else -5)
+    except (psutil.Error, AttributeError, OSError):
+        pass
+
+
+class ProxyCtl:
+    """Sends a fault to lab/soak/proxy.py and returns its counts."""
+
+    def __init__(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.settimeout(2)
+
+    def __call__(self, **cmd):
+        self.sock.sendto(json.dumps(cmd).encode(), ("127.0.0.1", PROXY_CTL))
+        try:
+            return json.loads(self.sock.recv(65535))
+        except (socket.timeout, OSError):
+            return {}
 
 
 class Monitor:
@@ -242,16 +275,18 @@ class Monitor:
 
 
 class Ctx:
-    path = chaos = None
+    path = chaos = feeder = None
     training = False
 
 
 def play(run, ctx, path, seed, training=False):
-    ctx.path = path
+    ctx.path, feeder = path, ctx.feeder
     t0 = now()
-    rc = subprocess.call([PY, "-m", "sim.send", path, "--host", "127.0.0.1", "--port", str(PROXY), "--seed", str(seed)],
-                         cwd=REPO, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    run.log("segments.jsonl", path=path, seed=seed, start=round(t0, 3), end=round(now(), 3), training=training, rc=rc)
+    feeder.stdin.write(f"{path} {seed}\n")
+    for line in feeder.stdout:
+        if '"end"' in line:
+            break
+    run.log("segments.jsonl", path=path, seed=seed, start=round(t0, 3), end=round(now(), 3), training=training)
 
 
 def train(run, ctx, mon, rnd):
@@ -304,22 +339,21 @@ def chaos(run, ctx, mon, procs, proxy, need, every_s, record_min):
         ctx.chaos, t0 = action, now()
         rec = {"kind": "chaos", "action": action, "start": round(t0, 3), "path": ctx.path}
         if action == "packets":
-            before = dict(proxy.counts)
-            proxy.set_packets(0.10, 0.05, 100)
+            before = proxy(packets=[0.10, 0.05, 100])
             run.stop.wait(90)
-            proxy.set_packets()
-            rec["proxy"] = {k: proxy.counts[k] - before[k] for k in before}
+            after = proxy(packets=[0, 0, 0])
+            rec["proxy"] = {k: after.get(k, 0) - v for k, v in before.items()}
         elif action == "silence":
             link = LINKS[(n // len(CHAOS)) % len(LINKS)]
-            proxy.silence(link, 10)
+            proxy(silence=[link, 10])
             rec["link"] = link
             rec["blind_s"] = mon.wait(lambda s: link in s["health"]["blind"], 15)
             rec["clear_after_silence_s"] = mon.wait(lambda s: link not in s["health"]["blind"] and now() > t0 + 10, 40)
         elif action == "cam":
-            proxy.camera(False)
+            proxy(camera=False)
             rec["off_s"] = mon.wait(lambda s: s["cam"] == "off" and s["teacher"] is None, 10)
             run.stop.wait(30)
-            proxy.camera(True)
+            proxy(camera=True)
             rec["on_s"] = mon.wait(lambda s: s["cam"] == "on", 10)
         elif action in ("brain", "bus"):
             procs.kill(action)
@@ -357,14 +391,16 @@ def main():
     ap.add_argument("--hours", type=float, default=2.0)
     ap.add_argument("--out", default=str(HERE / "runs" / time.strftime("%Y%m%d-%H%M")))
     ap.add_argument("--chaos-every", type=float, default=150, help="seconds between faults")
-    ap.add_argument("--record-min", type=float, default=20, help="minutes of one long demo recording")
+    ap.add_argument("--record-min", type=float, default=8, help="minutes of one long demo recording")
     a = ap.parse_args()
     run, ctx = Run(a.out), Ctx()
     shells = sorted(glob.glob(os.path.expanduser("~/AppData/Local/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell.exe")))
     procs = Procs(run, shells[-1] if shells else None)
-    proxy = ChaosProxy(("127.0.0.1", PROXY), ("127.0.0.1", BUS)).start()
-    for name in ("bus", "brain", "narrator", "web"):
+    above_normal(os.getpid())
+    proxy = ProxyCtl()
+    for name in ("bus", "brain", "narrator", "web", "proxy", "feeder"):
         procs.start(name)
+    ctx.feeder = procs.procs["feeder"]
     mon = Monitor(run, ctx)
     procs.start("probe")
     need = threading.Event()
@@ -382,12 +418,11 @@ def main():
             print(f"{(now() - t_start) / 60:5.1f} min  states {mon.counts['state']}  events {mon.counts['event']}  "
                   f"contract errors {sum(mon.bad.values())}  path {ctx.path}  chaos {ctx.chaos}", flush=True)
             json.dump({"counts": mon.counts, "bad": mon.bad, "seq_jumps": mon.seq_jumps, "rate": mon.rate,
-                       "proxy": proxy.counts, "starts": procs.starts, "start": t_start, "now": now()},
+                       "proxy": proxy(), "starts": procs.starts, "start": t_start, "now": now()},
                       open(run.out / "summary.json", "w"), indent=1)
             time.sleep(10)
     finally:
         run.stop.set()
-        proxy.stop()
         for name in list(procs.procs):
             procs.kill(name)
         print("done:", run.out)
