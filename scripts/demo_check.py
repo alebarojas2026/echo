@@ -53,7 +53,7 @@ def main():
         try:
             check()
         except Exception as error:
-            print(f"FAIL {name}: {error or type(error).__name__}")
+            print(f"FAIL {name}: {str(error) or type(error).__name__}")
             failed = True
         else:
             print(f"PASS {name}")
