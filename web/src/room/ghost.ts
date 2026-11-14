@@ -119,7 +119,9 @@ export class Presence {
       b.label.hidden = !o
       if (!o) return
       b.mesh.position.copy(v3([o.xy_m[0], o.xy_m[1], 0.08]))
-      this.view.moveLabel(b.label, v3([o.xy_m[0], o.xy_m[1], 0.34]))
+      // The tag ends 0.3 m west of the object, so it never sits on the router or the router's name, and
+      // 0.15 m north of it, so an object by the router (the tray, T1) doesn't put it on the zone 3 name.
+      this.view.moveLabel(b.label, v3([o.xy_m[0] - 0.3, o.xy_m[1] + 0.15, 0.08]))
     })
     this.view.host.dataset.objects = String(objects.length)
   }
