@@ -5,7 +5,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import type { Alert, Checkin } from './contract'
 import { SQUARE_M, zoneCenter } from './frame'
 import { FAULT, PERSON } from './palette'
-import { v3, type Stage } from './stage'
+import { v3 } from './stage'
 import type { RoomView } from './view'
 
 // The no-movement alert on the floor, and the wave check-in window.
@@ -57,6 +57,14 @@ export function alertLook(alert: Alert | null): AlertLook {
     : { zone: alert.zone, color: PERSON, fill: 0.15, width: 3, breathe: false }
 }
 
+/** Where the alert's word goes: on the floor just outside the square, level with the zone's name, on the
+ *  zone's own side (east zones to the east, west zones to the west). Returns the point and whether it's west. */
+export function alertWordAt(zone: number): [[number, number, number], boolean] {
+  const east = zone === 2 || zone === 4
+  const north = zone === 1 || zone === 2
+  return [[east ? SQUARE_M + 0.08 : -0.08, north ? SQUARE_M - 0.2 : 0.2, 0], !east]
+}
+
 const INSET_M = 0.03 // the outline sits just inside the zone, clear of the square and zone lines
 
 export class AlertMarks {
@@ -68,10 +76,10 @@ export class AlertMarks {
   private width = 0
   private clock = 0
   private readonly still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
-  /** Red is a status colour, so the alert also says it in words, next to the zone's name. */
+  /** Red is a status colour, so the fired alert also says it in words, just outside the square by its zone. */
   private readonly word: HTMLElement
 
-  constructor(private readonly view: RoomView, private readonly stage: Stage) {
+  constructor(private readonly view: RoomView) {
     const side = SQUARE_M / 2 - 2 * INSET_M
     this.fill = new Mesh(new PlaneGeometry(side, side), new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }))
     this.fill.rotation.x = -Math.PI / 2
@@ -98,8 +106,8 @@ export class AlertMarks {
     this.view.host.dataset.alertZone = look.zone ? String(look.zone) : ''
     this.word.hidden = alert?.state !== 'check_on' || !look.zone
     if (!this.word.hidden) {
-      const at = this.stage.alertWordAt(look.zone!)
-      this.word.classList.toggle('room-label--zone-east', look.zone === 2 || look.zone === 4)
+      const [at, west] = alertWordAt(look.zone!)
+      this.word.classList.toggle('room-label--alert-west', west)
       this.view.moveLabel(this.word, v3(at))
     }
     this.view.requestRender()

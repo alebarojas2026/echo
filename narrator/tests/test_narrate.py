@@ -69,11 +69,88 @@ def test_event_that_goes_stale_during_the_gap_is_dropped():
     assert [m["event_id"] for m in sent] == ["e1"]
 
 
-def test_newest_event_wins_and_other_messages_are_ignored():
+def test_newest_of_equally_important_events_wins_and_other_messages_are_ignored():
     msg = one("Someone moved to zone 3.", event(id="e1"),
-              event(id="e2", kind="zone_change", info={"zone": 3}),
+              event(id="e2", info={"zone": 3}),
               event(id="e3", kind="party"), {"v": 2, "type": "state", "t": NOW, "cam": "on"})
     assert msg["event_id"] == "e2"
+
+
+# ---------------------------------------------------------------- which event, and when (a slow model)
+
+def play(script, model_ms=6000, until_s=40):
+    """Run a scripted event stream against a fake model that takes model_ms per sentence
+    (a number, or a list used in turn). Returns the narrations, with send times in "t"."""
+    clock, sent = Clock(), []
+    times = list(model_ms) if isinstance(model_ms, list) else None
+
+    def llm(msgs):
+        clock.t += times.pop(0) if times else model_ms if not isinstance(model_ms, list) else 1000
+        return msgs[-1]["content"].split("Facts: ")[1], "test-model"   # says the facts back
+
+    def sleep(seconds):
+        clock.t += round(seconds * 1000)
+
+    nar = n.Narrator(llm, sent.append, clock=clock, sleep=sleep)
+    waiting = sorted(script, key=lambda e: e["t"])
+    while clock.t <= NOW + until_s * 1000:
+        while waiting and waiting[0]["t"] <= clock.t:   # events that arrived meanwhile, in order
+            nar.observe(waiting.pop(0))
+        if nar.step() is None:
+            clock.t += 100
+    return sent
+
+
+def at(seconds, kind, id, zone=4):
+    return event(kind=kind, t=NOW + round(seconds * 1000), id=id, info={"zone": zone})
+
+
+def test_checkin_that_arrives_while_a_zone_change_waits_is_narrated():
+    sent = play([at(0, "enter", "e1"), at(6.0, "zone_change", "e2"), at(7.0, "checkin", "e3")])
+    assert [(m["event_id"], m["event_kind"]) for m in sent] == [("e1", "enter"), ("e3", "checkin")]
+    assert [m["t"] - NOW for m in sent] == [6000, 14000]   # written from 0 s and from 8 s
+    assert [m["gen_ms"] for m in sent] == [6000, 6000]
+
+
+def test_minor_events_never_push_out_a_key_one():
+    sent = play([at(0, "enter", "e1"), at(5.5, "alert_on", "e2"), at(6.5, "zone_change", "e3"),
+                 at(7.0, "exit", "e4"), at(7.5, "party", "e5"), at(7.9, "object_off", "e6")])
+    assert [m["event_id"] for m in sent] == ["e1", "e2"]
+    order = ["alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
+             "recalibrating", "trained", "zone_change", "exit", "object_off"]
+    assert [n.rank(k) for k in order] == sorted(n.rank(k) for k in order)
+    for i, key in enumerate(order[:-1]):          # every key event survives every lesser one after it
+        sent = play([at(0, "enter", "e1"), at(6.0, key, "key"), at(7.0, order[i + 1], "minor")])
+        assert sent[-1]["event_id"] == "key", (key, order[i + 1])
+
+
+def test_a_key_event_too_old_to_say_gives_way_to_a_newer_minor_one():
+    sent = play([at(0, "enter", "e1"), at(1.0, "checkin", "e2"), at(7.0, "exit", "e3")])
+    assert [m["event_id"] for m in sent] == ["e1", "e3"]   # at 8 s the check-in is 7 s old
+
+
+def test_event_must_be_at_most_3_s_old_when_writing_starts():
+    sent = play([at(0, "enter", "e1"), at(4.9, "checkin", "e2")])
+    assert [m["event_id"] for m in sent] == ["e1"]         # 3.1 s old at the 8 s slot
+    sent = play([at(0, "enter", "e1"), at(5.0, "checkin", "e2")])
+    assert [m["event_id"] for m in sent] == ["e1", "e2"]   # exactly 3 s old
+
+
+def test_router_moved_and_advice_are_never_narrated():
+    sent = play([at(0, "router_moved", "e1"), at(0.5, "advice", "e2"), at(10, "enter", "e3"),
+                 at(17, "advice", "e4"), at(17.5, "router_moved", "e5")])
+    assert [m["event_id"] for m in sent] == ["e3"]
+
+
+def test_no_two_sentences_are_less_than_8_s_apart():
+    busy = [at(i * 0.7, kind, f"e{i}") for i, kind in enumerate(
+        ["enter", "zone_change", "checkin", "exit", "enter", "alert_on", "zone_change", "object_on"] * 7)]
+    for model_ms in (6000, 100, [6000, 200, 7000, 100, 3000, 6000, 50]):
+        sent = play(list(busy), model_ms=model_ms, until_s=50)
+        times = [m["t"] for m in sent]
+        assert len(sent) >= 5 and all(b - a >= 8000 for a, b in zip(times, times[1:])), model_ms
+    steady = play(list(busy), model_ms=6000, until_s=50)
+    assert [b["t"] - a["t"] for a, b in zip(steady, steady[1:])] == [8000] * (len(steady) - 1)   # every 8 s, not 14
 
 
 # ---------------------------------------------------------------- age cutoff
@@ -228,7 +305,7 @@ def test_serve_narrates_events_from_a_fake_feed():
     async def feed():
         yield {"v": 2, "type": "state", "t": n.now_ms(), "cam": "on"}
         yield event(t=n.now_ms(), id="e1")
-        yield event(t=n.now_ms(), id="e2", kind="zone_change", info={"zone": 4})
+        yield event(t=n.now_ms(), id="e2", info={"zone": 4})
 
     nar, sent = make("Someone moved over to zone 4.", clock=n.now_ms)
     asyncio.run(n.serve(feed(), nar, poll_s=0.01))

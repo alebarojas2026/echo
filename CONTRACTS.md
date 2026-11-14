@@ -83,6 +83,7 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
         // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
  "objects":[{"xy_m":[1.0,0.2],"near":"pi5","since_s":14.0,"drop_db":9.8}],
         // near (here and in advice) = the closest node within 0.5 m of xy_m, or null when no node is that close.
+        // Node positions are where the nodes are now: the router at its current spot after router_moved.
  "xray":{"w":10,"h":10,"cell_m":0.24,"origin_m":[-0.2,-0.2],"moving_db":[/* w*h */],"static_db":[/* w*h */],"n_links":6},
         // The screen draws whatever w x h it receives. Cells are row by row from the south edge:
         // index = iy*w + ix, ix east from origin_m[0], iy north from origin_m[1]; cell centre = origin_m + (i+0.5)*cell_m.

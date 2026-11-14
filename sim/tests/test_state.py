@@ -166,3 +166,79 @@ def test_object_far_from_every_node_has_no_near_but_still_gets_advice():
     assert [(e["kind"], e["info"].get("node", "-")) for e in events[2:]] == [("object_on", "-"), ("advice", "-")]   # no node to name
     assert at(states, 5)["narration"]["text"] == "Something new is sitting in the room."
     assert state.near(fake.NODES, (1.0, 0.2)) == "pi5" and state.near(fake.NODES, (1.0, 0.6)) is None
+
+
+# ---- the three section 6 rules the fake brain follows since the contract update ----
+
+def states_of(path):
+    msgs = list(state.run(path))
+    return [m for m in msgs if m["type"] == "state"], [m for m in msgs if m["type"] == "event"]
+
+
+def test_one_moving_flicker_does_not_reset_the_still_timer():
+    states, events = run("still_flicker")
+    assert at(states, 7.1)["pred"]["motion"] == "moving"            # the wrong decision is shown as it is
+    assert at(states, 7.6)["pred"]["still_s"] > at(states, 6.9)["pred"]["still_s"] > 4   # and the timer runs on
+    fired = next(e["t"] for e in events if e["kind"] == "alert_on")
+    plain = dict(fake.load_path("still_flicker"), flickers=[])
+    assert fired == next(e["t"] for e in states_of(plain)[1] if e["kind"] == "alert_on")
+    assert 11.0 <= fired <= 12.0                                    # 10 s after standing still begins
+
+
+def test_five_moving_decisions_in_a_row_do_reset_it():
+    long = dict(fake.load_path("still_flicker"), flickers=[{"t_on": 7.0, "t_off": 7.6}])
+    states, events = states_of(long)
+    assert at(states, 7.35)["pred"]["still_s"] > 4 and at(states, 7.7)["pred"]["still_s"] < 0.3
+    assert not [e for e in events if e["kind"] == "alert_on"]       # only 8.4 s left before they walk out
+
+
+def test_another_zone_resets_the_still_timer_once_it_holds_the_majority():
+    hop = {"name": "h", "duration_s": 12, "person": [{"t": 0, "x": 0.9, "y": 0.5}, {"t": 6, "x": 0.9, "y": 0.5},
+                                                      {"t": 6.2, "x": 1.1, "y": 0.5}]}   # a short step, zone 3 to 4
+    states, _ = states_of(hop)
+    assert at(states, 6.4)["pred"]["zone"] == 4 and at(states, 6.4)["pred"]["still_s"] > 3   # not yet the majority
+    assert at(states, 6.9)["pred"]["still_s"] < 0.5
+    assert at(states, 6.4)["alert"] == IDLE and at(states, 8)["alert"]["zone"] == 4
+
+
+def jump(db, **extra):
+    return {"name": "j", "duration_s": 20, "person": None,
+            "jumps": [{"link": "east>unoq:ble", "db": db, "t_on": 5, "t_off": 12, **extra}]}
+
+
+def test_jump_rule_blinds_a_link_that_sits_off_base():
+    states, events = states_of(jump(+9))   # above base: never an object
+    assert at(states, 7)["health"]["status"] == "ok"
+    blind = at(states, 10)
+    assert blind["health"] == {"status": "blind", "blind": ["east>unoq:ble"], "reason": "jump"} and blind["pred"] is None
+    assert [l["status"] for l in blind["links"] if l["id"] == "east>unoq:ble"] == ["blind"]
+    assert at(states, 18)["health"]["status"] == "ok" and at(states, 18)["pred"]["kind"] == "none"
+    assert [(e["kind"], e["info"]) for e in events[2:]] == [("blind_on", {"link": "east>unoq:ble"}),
+                                                            ("blind_off", {"link": "east>unoq:ble"})]
+    assert 8.0 <= events[2]["t"] <= 9.5    # 3 s after the 1 s median crossed 6 dB
+
+
+def test_jump_rule_skips_a_steady_drop_below_base_but_not_an_unsteady_one():
+    steady, _ = states_of(jump(-9))
+    assert {s["health"]["status"] for s in steady} == {"ok"}          # a steady drop is an object, not a broken link
+    shaky, events = states_of(jump(-11, wobble_db=4))
+    assert at(shaky, 11)["health"]["reason"] == "jump" and "blind_on" in kinds(events)
+
+
+def test_jump_rule_is_off_with_someone_there_or_the_router_away():
+    with_person = dict(jump(+9), person=[{"t": 0, "x": 0.5, "y": 0.5}])
+    away = dict(jump(+9), router=[{"t": 0, "spot": "S-W30"}])
+    for path in (with_person, away):
+        assert {s["health"]["status"] for s in states_of(path)[0]} == {"ok"}
+
+
+def test_removed_tray_disappears_within_about_a_second_with_a_person_present():
+    states, events = run("tray_removed")
+    assert at(states, 13.9)["objects"] and at(states, 13.9)["pred"]["kind"] == "person"
+    assert at(states, 14.5)["objects"]                      # its link is still coming down
+    gone = at(states, 15.1)
+    assert gone["objects"] == [] and set(gone["xray"]["static_db"]) == {0.0}
+    assert gone["pred"]["kind"] == "person" and gone["pred"]["zone"] == 2
+    off = next(e["t"] for e in events if e["kind"] == "object_off")
+    assert 14.9 <= off <= 15.1
+    assert max(at(states, 13)["xray"]["static_db"]) > 5     # the static picture did build up with the person there

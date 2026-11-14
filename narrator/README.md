@@ -10,7 +10,10 @@ python -m narrator.narrate --once enter --info '{"zone": 2}'  # one sentence, pr
 
 It reads events from the brain (ws://127.0.0.1:8765/ws), asks llama-server on 127.0.0.1:8091
 for one sentence and sends a `narration` message to the bus (UDP 127.0.0.1:5600). At most one
-sentence every 8 s, only for events up to 3 s old, at most 16 words. When the model is slow
+sentence every 8 s, only for events up to 3 s old, at most 16 words. The 8 s gap runs from when a
+sentence starts being written, so a 6 s model still speaks every 8 s. While it writes or waits,
+it keeps the most important event, not the newest (alert, check-in and camera-off come first), and
+it never narrates `router_moved` or `advice`, which the screen already shows. When the model is slow
 (over 8 s), down, or says a banned word, the event's template sentence goes out instead, with
 `"source": "template"`. The rules are in CONTRACTS.md sections 4-6; the banned words and the
 templates are at the top of `narrate.py`. Besides the standard library it needs only

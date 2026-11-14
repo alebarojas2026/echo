@@ -11,6 +11,7 @@ recalibration and drift, advice, and the narrator's enter/exit events.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import pickle
 import statistics
@@ -37,6 +38,7 @@ SETTLE_MS = 3_000        # after router_home, pi5 links must sit near base this 
 SETTLE_DB = 1.0          # ... within this of base, else an automatic baseline runs
 ADVICE_MEDIAN_MS = 3_000 # before_dbm and after_dbm are medians over this long
 AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
+ZONE_HOLD = 5            # decisions in a row (0.5 s) before enter, exit or zone_change is said
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 LABEL_MODES = ("person", "object", "off")
@@ -95,6 +97,9 @@ class Brain:
         self.settle: Optional[int] = None         # when router_home came, while its 3 s check runs
         self.recalibrating = False                # the automatic baseline after a failed check
         self._old_base: Dict[str, float] = {}
+        self._said_zone = 0                        # the zone last announced (0 = nobody)
+        self._next_zone = (0, 0)                   # (a different zone, decisions in a row)
+        self._said_cam = "off"                     # the camera state last announced
         self.sessions_dir = Path(sessions_dir) if sessions_dir else None
         self.want_session: Optional[str] = None   # the id from record_start
         self.raw_kind: Optional[str] = None   # the classifier's kind, even while pred is withheld
@@ -271,6 +276,12 @@ class Brain:
         """data/sessions/model.pkl, so a restarted brain predicts without a new walk."""
         if not self.sessions_dir:
             return
+        try:
+            self._write_model()
+        except (OSError, pickle.PicklingError) as e:   # a failed write must never hide a trained model
+            logging.getLogger("brain").warning("could not save the model: %s", e)
+
+    def _write_model(self) -> None:
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         tmp = self.sessions_dir / "model.pkl.tmp"
         with open(tmp, "wb") as f:
@@ -480,6 +491,28 @@ class Brain:
         self.watch.on_pred(self.window["end"], pred)
         pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
+        self._announce(pred["zone"] if pred["present"] else 0)
+
+    def _announce(self, zone: int) -> None:
+        """enter, exit and zone_change, once the new zone has held for ZONE_HOLD decisions.
+
+        One flickering decision is not somebody walking in. Hidden spans (pred null) are skipped:
+        whatever holds once pred is back gets announced then.
+        """
+        if zone == self._said_zone:
+            self._next_zone = (zone, 0)
+            return
+        n = self._next_zone[1] + 1 if self._next_zone[0] == zone else 1
+        self._next_zone = (zone, n)
+        if n < ZONE_HOLD:
+            return
+        if self._said_zone == 0:
+            self.emit("enter", {"zone": zone})
+        elif zone == 0:
+            self.emit("exit", {"zone": self._said_zone})   # the zone they left from
+        else:
+            self.emit("zone_change", {"zone": zone})
+        self._said_zone = zone
 
     def emit(self, kind: str, info: dict) -> None:
         # event.json allows only these keys in info, and no nulls.
@@ -535,8 +568,11 @@ class Brain:
         links = [self._link_row(row, weights) for row in health["links"]
                  if row["id"] in self._heard]   # a link is listed once it has a reading
         self._update_advice(now, xray, links)
-        self._seq += 1
         cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
+        if cam != self._said_cam and cam in ("on", "off", "stalled"):
+            self._said_cam = cam
+            self.emit(f"cam_{cam}", {})
+        self._seq += 1
         lb = self.label
         teacher = None
         if cam == "on" and lb and now - lb["recv_t"] <= TEACHER_FRESH_MS and not lb.get("clipped"):

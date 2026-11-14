@@ -19,14 +19,14 @@
     "health": {"type": "object", "properties": {"status": {"enum": ["ok", "degraded", "blind"]}, "blind": {"$ref": "common.json#/$defs/links"}, "reason": {"enum": ["rate", "jump", null]}},
       "required": ["status", "blind", "reason"], "additionalProperties": false},
     "pred": {
-      "$comment": "null before training, while blind, while recalibrating and while the router is off S-home. motion is null exactly when present is false.",
+      "$comment": "null before training, while blind, while recalibrating and while the router is off S-home. present false -> zone 0, zone_set [] and motion null; motion is null only then.",
       "type": ["object", "null"],
       "properties": {"present": {"type": "boolean"}, "kind": {"enum": ["person", "object", "none"]}, "zone": {"$ref": "common.json#/$defs/zone"},
                      "zone_set": {"type": "array", "items": {"$ref": "common.json#/$defs/zone"}},
                      "probs": {"$comment": "[empty, z1, z2, z3, z4]", "type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1}, "minItems": 5, "maxItems": 5},
                      "motion": {"enum": ["moving", "still", null]}, "still_s": {"type": "number", "minimum": 0}, "why": {"$ref": "common.json#/$defs/links"}},
       "required": ["present", "kind", "zone", "zone_set", "probs", "motion", "still_s", "why"], "additionalProperties": false,
-      "if": {"type": "object", "properties": {"present": {"const": false}}}, "then": {"properties": {"motion": {"type": "null"}}},
+      "if": {"type": "object", "properties": {"present": {"const": false}}}, "then": {"properties": {"zone": {"const": 0}, "zone_set": {"maxItems": 0}, "motion": {"type": "null"}}},
       "else": {"properties": {"motion": {"$ref": "common.json#/$defs/motion"}}}},
     "objects": {"type": "array", "items": {
       "type": "object",
@@ -58,7 +58,8 @@
       "additionalProperties": false},
     "narration": {
       "type": ["object", "null"],
-      "properties": {"text": {"$ref": "common.json#/$defs/narration_text"}, "event_id": {"type": "string"}, "t": {"type": "integer", "minimum": 0},
+      "$comment": "Mirrors the last narration, a recap included. It carries no event_kind, so its text gets the recap limit (section 6).",
+      "properties": {"text": {"$ref": "common.json#/$defs/recap_text"}, "event_id": {"type": "string"}, "t": {"type": "integer", "minimum": 0},
                      "source": {"$ref": "common.json#/$defs/narration_source"}, "gen_ms": {"type": "number", "minimum": 0}},
       "required": ["text", "event_id", "t", "source", "gen_ms"], "additionalProperties": false},
     "teacher": {
@@ -67,13 +68,13 @@
       "properties": {"present": {"type": "boolean"}, "zone": {"$ref": "common.json#/$defs/zone"}, "motion": {"enum": ["moving", "still", null]}},
       "required": ["present", "zone", "motion"], "additionalProperties": false},
     "model": {
-      "$comment": "ver, train_s and ms_per_decision are null before training.",
+      "$comment": "ver, train_s and ms_per_decision are null before training. Once trained, ver is set; train_s and ms_per_decision stay null when nothing was measured (the fake brain).",
       "type": "object",
       "properties": {"trained": {"type": "boolean"}, "ver": {"type": ["string", "null"]}, "train_s": {"type": ["number", "null"], "minimum": 0},
                      "ms_per_decision": {"type": ["number", "null"], "minimum": 0}, "windows": {"type": "integer", "minimum": 0},
                      "train_sessions": {"type": "array", "items": {"type": "string"}}, "training": {"$comment": "Only null is shown in the doc."}},
       "required": ["trained", "ver", "train_s", "ms_per_decision", "windows", "train_sessions", "training"], "additionalProperties": false,
-      "if": {"properties": {"trained": {"const": true}}}, "then": {"properties": {"ver": {"type": "string"}, "train_s": {"type": "number"}, "ms_per_decision": {"type": "number"}}}},
+      "if": {"properties": {"trained": {"const": true}}}, "then": {"properties": {"ver": {"type": "string"}}}},
     "board": {"$comment": "a field it can't read is null", "type": "object",
               "properties": {"cpu_temp_c": {"type": ["number", "null"]}, "cpu_mhz": {"type": ["number", "null"], "minimum": 0}, "cpu_pct": {"type": ["number", "null"], "minimum": 0}},
       "required": ["cpu_temp_c", "cpu_mhz", "cpu_pct"], "additionalProperties": false}

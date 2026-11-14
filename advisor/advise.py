@@ -13,7 +13,9 @@ the south edge. Cell index i = iy * w + ix, and its centre is
 origin_m + (ix + 0.5, iy + 0.5) * cell_m.
 
 Advice fires when an object has been there for >= 5 s and its static_db peak
-lies within 0.5 m of the router-to-receiver Wi-Fi line. For every router spot
+lies within 0.5 m of the router-to-receiver Wi-Fi line. It also needs
+pi5>unoq:wifi to be dropping at least 3 dB right now (state.links), so a
+blockage that has gone gets no advice. For every router spot
 except S-home we draw the new link from that spot to the receiver and add up
 static_db over the cells inside its ellipse (excess path <= 0.1 m, as in
 Wilson & Patwari). The spot with the lowest sum wins.
@@ -37,6 +39,11 @@ NEXT_TO_M = 0.5        # an object without "near" is next to a node only this cl
 def advise(xray, links, nodes, objects):
     """Return the section 5 advice dict, or None."""
     if not xray or xray.get("static_db") is None or len(xray["static_db"]) == 0 or not objects:
+        return None
+    # Only advise while the Wi-Fi link is actually dropping now. The X-ray can keep an
+    # object for a while after it is taken away; the link itself can't.
+    wifi = next((lk for lk in links or [] if lk.get("id") == WIFI_LINK), None)
+    if wifi is None or wifi.get("drop_db") is None or wifi["drop_db"] < WHY_DROP_DB:
         return None
 
     cx, cy, static = _grid(xray)

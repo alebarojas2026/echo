@@ -84,7 +84,7 @@ def test_baseline_takes_20_s_and_sets_base_and_expected_rate():
     s = brain.state()
     assert [l["id"] for l in s["links"]] == list(F.LINKS)
     assert len(s["xray"]["moving_db"]) == s["xray"]["w"] * s["xray"]["h"]
-    assert [e["kind"] for e in brain.pop_events()] == ["baseline_done"]
+    assert [e["kind"] for e in brain.pop_events()] == ["baseline_done", "cam_on"]   # cam_on with the first state
     assert brain.label_mode == "off"
 
 
@@ -591,6 +591,69 @@ def test_a_dismissed_advice_can_come_back_after_the_object_has_gone():
     assert at(states, 45)["advice"] is not None
     assert "advice" in [e["kind"] for e in brain.pop_events()]
 
+
+# ---- the event stream for the narrator (#38) ----
+
+def test_a_session_gives_the_narrator_enter_checkin_object_advice_and_cam_off():
+    brain, feed = taught()
+    brain.pop_events()
+    feed.play("wave_checkin", seed=1, states=[])      # walk into zone 4, stand, wave, walk out
+    feed.play("tray_t1", seed=3, states=[])           # the tray at T1 from 25 to 55 s
+    feed.play("camera_unplug", seed=2, states=[])     # a zone tour; the camera is unplugged at 14 s
+    events = brain.pop_events()
+    got = [e["kind"] for e in events]
+    for kind in ("enter", "checkin", "object_on", "advice", "cam_off", "exit", "zone_change", "alert_on",
+                 "alert_off", "object_off"):
+        assert kind in got, kind
+    assert not check_all(events)
+
+    def info(kind, n=0):
+        return [e["info"] for e in events if e["kind"] == kind][n]
+
+    assert info("enter") == {"zone": 4}
+    assert info("checkin") == {"zone": 4, "link": "pi5>unoq:wifi"}
+    assert info("exit") == {"zone": 4}                              # where they left from
+    assert info("object_on")["node"] == "pi5" and info("advice")["node"] == "pi5"
+    assert isinstance(info("advice")["before_dbm"], float)
+    assert info("cam_off") == {}
+    tour = [e["info"]["zone"] for e in events if e["kind"] in ("enter", "zone_change")][1:]
+    assert tour == [3, 4, 2, 1]                                     # the tour's zones, each said once
+    seqs = [e["seq"] for e in events]
+    assert seqs == sorted(seqs) and len({e["id"] for e in events}) == len(events)
+
+
+def test_one_flickering_decision_is_not_an_enter():
+    brain = Brain()
+    for zone in (0, 0, 2, 0, 0, 3, 3, 0):
+        brain._announce(zone)
+    assert brain.events == []
+    for _ in range(5):
+        brain._announce(2)
+    brain._announce(2)
+    assert [(e["kind"], e["info"]) for e in brain.events] == [("enter", {"zone": 2})]
+
+
+def test_camera_events_follow_the_camera_state():
+    brain = Brain()
+    t = T0_MS
+
+    def cam(state, after_ms):
+        nonlocal t
+        t += after_ms
+        brain.on_message({"v": 2, "type": "cam", "recv_t": t, "state": state, "fps": 9.0})
+        brain.on_message({"v": 2, "type": "rssi", "recv_t": t, "link": "pi5>unoq:wifi", "dbm": -50, "src": "sim"})
+        brain.state()
+
+    brain.state()
+    assert brain.events == []                 # off at start is not news
+    cam("on", 0), cam("on", 1000), cam("stalled", 1000), cam("on", 1000), cam("off", 1000)
+    assert [e["kind"] for e in brain.pop_events()] == ["cam_on", "cam_stalled", "cam_on", "cam_off"]
+    cam("on", 1000)
+    brain.on_message({"v": 2, "type": "rssi", "recv_t": t + 4000, "link": "pi5>unoq:wifi", "dbm": -50, "src": "sim"})
+    brain.state()                             # no cam message for over 3 s: it's off
+    assert [e["kind"] for e in brain.pop_events()] == ["cam_on", "cam_off"]
+
+
 # ---- a restart keeps the model (#270); recordings don't pile up in memory (#271) ----
 
 def record_to_disk(brain, feed, folder, session, path, purpose="train", walker=None, seed=0, mode=None):
@@ -674,3 +737,14 @@ def test_a_model_from_another_baseline_or_a_damaged_file_is_not_loaded(tmp_path)
     assert Brain(sessions_dir=tmp_path).model is None  # stale for this baseline
     (tmp_path / "model.pkl").write_bytes(b"not a pickle")
     assert Brain(sessions_dir=tmp_path).model is None
+
+
+def test_a_failed_model_write_still_announces_the_trained_model(tmp_path, monkeypatch):
+    def full_disk(self):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Brain, "_write_model", full_disk)
+    brain, _ = taught_on_disk(tmp_path)
+    assert brain.model is not None and brain.state()["model"]["trained"]
+    assert "trained" in [e["kind"] for e in brain.events]
+    assert not (tmp_path / "model.pkl").exists()

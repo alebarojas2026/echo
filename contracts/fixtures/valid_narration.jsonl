@@ -1,2 +1,3 @@
 {"v":2,"type":"narration","t":1763149513000,"seq":9,"src":"live","text":"Someone just walked into zone 2.","event_id":"e123","event_kind":"enter","gen_ms":6120,"source":"llm","model":"<model name>"}
 {"v":2,"type":"narration","t":1763149521000,"seq":10,"src":"live","text":"Someone just walked into zone 2 (Chair).","event_id":"e124","event_kind":"enter","gen_ms":12,"source":"template","model":null}
+{"v":2,"type":"narration","t":1763149530000,"seq":11,"src":"live","text":"Over the demo, one person walked from the bed to the chair and sat still. Then they went to the bathroom and came back out. A tray beside the router blocked its link, so the router moved 30 cm west.","event_id":"e125","event_kind":"recap","gen_ms":9800,"source":"llm","model":"<model name>"}

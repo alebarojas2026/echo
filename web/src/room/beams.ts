@@ -33,7 +33,7 @@ export function beamLook(link: LinkState | undefined, why: boolean, blind: Reado
     why: why && !broken,
     // A link that explains the prediction stays readable however far it has dropped.
     opacity: broken ? 0.6 : status === 'stale' ? lit * 0.6 : why ? Math.max(lit, 0.8) : lit,
-    width: why && !broken ? 3 : 1.5,
+    width: why && !broken ? 5 : 3, // 1.5 px is half an arcminute from 3 m; 3 px is the least that reads
   }
 }
 
@@ -70,7 +70,7 @@ export class Beams {
 
   constructor(private readonly view: RoomView, private readonly mirror: Mirror) {
     for (const id of LINK_IDS) {
-      const mat = new LineMaterial({ color: LINK, linewidth: 1.5, transparent: true, dashSize: 0.08, gapSize: 0.09 })
+      const mat = new LineMaterial({ color: LINK, linewidth: 3, transparent: true, dashSize: 0.08, gapSize: 0.09 })
       const line = new Line2(new LineGeometry(), mat)
       view.scene.add(line)
       const pair = nodePair(id)
@@ -148,7 +148,7 @@ export class Beams {
       const { mat, look } = b
       mat.opacity += (look.opacity - mat.opacity) * k
       const wave = b.id === this.waveLink && !look.broken
-      const width = wave ? 6 : look.width
+      const width = wave ? 7 : look.width
       mat.linewidth += (width - mat.linewidth) * k
       b.amber += ((look.why ? 1 : 0) - b.amber) * k
       b.green += ((wave ? 1 : 0) - b.green) * k
