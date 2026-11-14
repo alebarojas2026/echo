@@ -4,11 +4,15 @@ Radio Sight was built at MadHacks 2026 for the Qualcomm / N+1 track, following t
 
 ## Libraries
 
-The repository does not yet contain third-party dependency manifests, so no software library names or versions are recorded here. As implementation dependencies land, this section should list every direct third-party library with its version, license, project link, and the Radio Sight module that uses it. The checked-in manifest in each module remains the source of truth.
+The committed dependency manifests currently declare one third-party package:
 
 | Library | Version | License | Used by | Project link |
 |---|---|---|---|---|
-| _Add from committed dependency manifests_ | _Add version_ | _Add license_ | _Add module_ | _Add link_ |
+| pytest | Unpinned | MIT | `bus/`, `sim/` | [pytest](https://pytest.org/) |
+
+`pytest` is development and test tooling. No third-party runtime library is currently declared in a committed manifest.
+
+As implementation dependencies land, this table should list every direct third-party library with its declared version, license, project link, and the Radio Sight module that uses it. The checked-in manifest in each module remains the source of truth.
 
 ## Research
 
