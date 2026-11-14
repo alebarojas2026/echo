@@ -46,12 +46,13 @@ python -m brain.main --feed-clock    # with a recorded file played faster than r
 | cmd | What the brain does |
 |---|---|
 | `baseline` | Sets label mode off and captures 20 s; a person in frame restarts it. Then `baseline_done`. |
-| `record_start`, `record_stop` | The bus records. The brain keeps its own copy of the session from the bus's `meta` message until `record_stop`. |
+| `record_start`, `record_stop` | Sends a `recording` event. The bus records. The brain keeps its own copy of the session from the bus's `meta` message until `record_stop`. |
 | `train` | Trains on the kept sessions with purpose `train` or `object`, off the loop. Then `trained`. |
 | `relearn` | Drops the model and trains again. |
 | `label_mode` | Writes the mode to `--mode-file` (or `TEACHER_MODE_FILE`), which the camera teacher reads. |
 | `router_moved`, `router_home` | Sets `router`; `pred` is null while it is off S-home. |
 | `reset_alert` | Restarts the still timer. |
+| `reset` | Between judges: clears the still timer and narration. Then `reset`. |
 | `truth` | Kept for the crowd game. |
 
 `brain/core.py` holds the rules with no sockets, so tests drive it with a fake clock.

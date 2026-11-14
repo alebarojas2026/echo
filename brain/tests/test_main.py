@@ -75,7 +75,7 @@ async def _scenario():
         assert state["model"]["ms_per_decision"] is not None
 
         # States arrive about 10 times a second.
-        await until(lambda m: m["type"] == "state" and m["seq"] >= brain._seq["state"])  # skip the backlog
+        await until(lambda m: m["type"] == "state" and m["seq"] >= brain._seq)  # skip the backlog
         t0 = loop.time()
         for _ in range(10):
             await until(lambda m: m["type"] == "state")
