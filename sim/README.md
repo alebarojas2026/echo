@@ -15,6 +15,19 @@ python -m sim.fake my_path.json --fast     # all at once, for recording a file
 Options: `--rate 15` (readings per link per second, 10-20), `--seed 0` (same seed, same data),
 `--start-ms` (epoch ms of the first message; default is now).
 
+## Run the whole system with no hardware
+
+```
+python -m bus                          # in one terminal (and brain, web server, ...)
+python -m sim.send zone_tour --loop    # in another
+```
+
+`sim.send` sends the same feed as `sim.fake`, one message per UDP datagram, to the
+bus at `127.0.0.1:5600`, at real speed and stamped with the real clock. Give it a
+recorded `.jsonl` file instead of a path name and it replays that file (`"src":"replay"`,
+with `seq` renumbered from 1 because the whole file now comes from one socket).
+Options: `--host`, `--port`, `--rate`, `--seed`, `--speed`, `--loop`.
+
 ## The room
 
 Nodes, links and zones are the ones in CONTRACTS.md section 3.
