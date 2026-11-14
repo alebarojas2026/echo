@@ -9,14 +9,10 @@ from sim.wire import encoder
 STATE_KEYS = {"type", "t", "cam", "router", "links", "health", "pred", "objects", "xray", "alert", "checkin",
               "advice", "narration", "teacher", "model", "board"}
 IDLE = {"state": "none", "zone": None, "still_s": 0, "limit_s": None}
-# Known gaps between what the fake brain sends and the schemas on main. Nothing else may fail.
-# - The schema wants numbers once trained is true; the fake brain measures nothing, so it sends null
-#   (contract issue #184).
-# - CONTRACTS.md now says pred.motion and near can be null; the schemas catch up in #173.
-UNMEASURED = {"$.model.train_s: None is not of type 'number'", "$.model.ms_per_decision: None is not of type 'number'",
-              "$.pred.motion: None is not one of ['moving', 'still']",
-              "$.objects[0].near: None is not one of ['unoq', 'pi5', 'east', 'west']",
-              "$.advice.near: None is not one of ['unoq', 'pi5', 'east', 'west']"}
+# The one known gap between what the fake brain sends and the schema on main: the schema wants numbers
+# once trained is true, and the fake brain measures nothing, so it sends null (contract issue #184).
+# Nothing else may fail.
+UNMEASURED = {"$.model.train_s: None is not of type 'number'", "$.model.ms_per_decision: None is not of type 'number'"}
 
 
 def run(name):
