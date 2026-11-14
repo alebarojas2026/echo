@@ -23,7 +23,8 @@ fi
 
 : "${SENSING_SSID:?set SENSING_SSID in .env}"
 : "${SENSING_PSK:?set SENSING_PSK in .env}"
-: "${SENSING_IFACE:?set SENSING_IFACE in .env}"
+# The Pi 5's built-in Wi-Fi. Set SENSING_IFACE in .env for anything else.
+SENSING_IFACE="${SENSING_IFACE:-wlan0}"
 
 # 1. Set regulatory domain to US and verify
 iw reg set US
@@ -37,7 +38,10 @@ CON_NAME="deadzone-ap"
 # Remove any stale profile with the same name.
 nmcli connection delete "$CON_NAME" 2>/dev/null || true
 
-# 2. Force WPA2, channel 36, and 20 MHz channel width
+# 2. Force WPA2, channel 36, and 20 MHz channel width. Priority 100 beats any
+#    saved client profile on the same interface (the phone hotspot used for
+#    installs sits at 0), so after a reboot the Pi starts this hotspot instead
+#    of joining the phone.
 nmcli connection add \
     type wifi \
     ifname "$SENSING_IFACE" \
@@ -45,6 +49,7 @@ nmcli connection add \
     autoconnect yes \
     ssid "$SENSING_SSID" \
     -- \
+    connection.autoconnect-priority 100 \
     wifi.mode ap \
     wifi.band a \
     wifi.channel 36 \
