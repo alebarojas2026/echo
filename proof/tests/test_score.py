@@ -49,7 +49,7 @@ def test_scores_counts_baseline_and_null_unmeasured_values():
 
 def test_false_presence_episodes_and_nonoverlapping_empty_time():
     result = score([session()], FakeReplay((0, 4, 4, 0, 4, 4, 0, 0, 0, 0, 0)))
-    assert result["false_alarms_per_min"] == 120  # two episodes / one observed second
+    assert result["false_alarms_per_min"] is None  # measured only by proof.false_alarms
 
 
 def test_blind_and_unlabeled_are_not_empty_predictions():

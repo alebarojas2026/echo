@@ -29,10 +29,9 @@ threshold and mapping are fixed before evaluation. Person/object agreement uses
 person labels and object-mode windows with no people plus >=2 s stable radio
 drop >=3 dB and std of 0.5 s means <0.8 dB. Physical tray placement counts remain null.
 
-False alarms means **false presence episodes during labeled-empty observation**,
-not no-movement alerts. Count transitions to person and divide by nonoverlapping
-empty observation time at the 0.1 s decision cadence; blind/unlabeled time is
-excluded. The 95% interval resamples whole sessions (2,000 deterministic bootstrap
+The section 7 false-event rate is populated only by `proof.false_alarms`, counting
+false check-ins, no-movement alerts and objects per observed empty/still minute.
+The zone scorer leaves that field null. The 95% interval resamples whole sessions (2,000 deterministic bootstrap
 draws), keeping overlapping windows together. It is null with fewer than two
 usable sessions; small session counts give weak evidence even with many windows.
 

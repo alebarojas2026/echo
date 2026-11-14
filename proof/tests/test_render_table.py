@@ -34,7 +34,7 @@ def test_measured_values_and_provenance():
     assert "8/10 (80.0%); 95% CI 50.0–100.0%" in output
     assert "10 decisions; 2 sessions; 2 walkers" in output
     assert "p50 2 ms; p95 4 ms" in output
-    assert "| False presence episodes per minute | 0 |" in output
+    assert "| False check-in, alert and object events per minute | 0 |" in output
     assert "| Person vs object accuracy | __ |" in output
     assert "Unchanged prose." in output and "abc1234" in output
     assert "| End-to-end update latency | pending | measured video method | 10 planned | | |" in output

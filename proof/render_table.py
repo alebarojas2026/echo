@@ -70,8 +70,8 @@ def measurements(proof):
     }
     extras = [
         ("Threshold zone baseline", threshold_value, "Fixed 3 dB strongest-link baseline", threshold_n),
-        ("False presence episodes per minute", display(proof.get("false_alarms_per_min")),
-         "Episodes / labeled-empty minutes; see proof/README.md", "__"),
+        ("False check-in, alert and object events per minute", display(proof.get("false_alarms_per_min")),
+         "False events / observed empty or still minutes; see proof/FALSE_ALARMS.md", "__"),
         ("Bytes sent out", display(proof.get("bytes_out")), "Measured network egress", "__"),
         ("Images stored", display(proof.get("images_stored")), "Measured storage audit", "__"),
         ("Models on board", display(proof.get("models_on_board")), "Installed model inventory", "__"),

@@ -188,7 +188,7 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
             "threshold_zone": {"correct": baseline_correct if baseline_total else None, "total": baseline_total or None},
             "person_vs_object": {"correct": po_correct if po_total else None, "total": po_total or None,
                                  "tray_placements": None},
-            "false_alarms_per_min": false_alarms * 60000 / empty_ms if empty_ms else None,
+            "false_alarms_per_min": None,
             "train_s": replay.train_s if on_board else None,
             "ms_per_decision": {"p50": percentile(durations, 0.5), "p95": percentile(durations, 0.95)},
             "watts": {"idle": None, "teaching": None, "radio_only": None, "source": None},
