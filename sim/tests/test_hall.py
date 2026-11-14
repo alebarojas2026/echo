@@ -64,16 +64,16 @@ def test_hall_readings_are_weak_few_and_uneven_and_in_time_order():
     for link in hall_ids(path):
         mine = [e for e in events if e.get("link") == link]
         assert all(e["type"] == "rssi" and e["kind"] == "ble" and link == f'{e["tx"]}>{e["rx"]}:ble' for e in mine)
-        quiet = [e for e in mine if e["t"] < 19]
-        assert 4 < len(quiet) / 19 < 11                          # about 30% of 22 adverts a second
+        quiet = [e for e in mine if e["t"] < 34]
+        assert 4 < len(quiet) / 34 < 11                          # about 30% of 22 adverts a second
         gaps = [b["t"] - a["t"] for a, b in zip(quiet, quiet[1:])]
         assert max(gaps) > 4 * min(gaps)                         # uneven, not a steady beat
         core = fake.baseline("east", "unoq", "ble")
         assert max(e["dbm"] for e in quiet) < core - 15          # far weaker than a link of the square
-    walked = [e["dbm"] for e in events if e.get("link") == "h>unoq:ble" and 21 <= e["t"] < 22]
-    before = [e["dbm"] for e in events if e.get("link") == "h>unoq:ble" and 10 <= e["t"] < 19]
+    walked = [e["dbm"] for e in events if e.get("link") == "h>unoq:ble" and 36 <= e["t"] < 37]
+    before = [e["dbm"] for e in events if e.get("link") == "h>unoq:ble" and 10 <= e["t"] < 34]
     assert sum(walked) / len(walked) < sum(before) / len(before) - 3      # the walk dips the level
-    assert not [e for e in events if e.get("tx") == "j" and 44.1 <= e["t"] < 54]   # the outage silences j
+    assert not [e for e in events if e.get("tx") == "j" and 59.1 <= e["t"] < 69]   # the outage silences j
 
 
 def test_same_seed_same_hall_readings():
@@ -91,18 +91,18 @@ def test_fake_brain_hall_rows_quiet_then_movement_then_stale():
     for r in early["hall"]:
         assert set(r) == ROW_KEYS and (r["activity"], r["moving"], r["stale"]) == (0.0, False, False)
         assert r["xy_m"] == path["hall"]["beacons"][r["tx"]] and r["rate_hz"] > 0
-    walk = at(all_states, 22)                                    # somebody on h's path, both receivers
+    walk = at(all_states, 37)                                    # somebody on h's path, both receivers
     assert [(r["tx"], r["moving"]) for r in walk["hall"]] == [("h", True), ("j", False)] * 2
     assert row(walk, "h>unoq:ble")["activity"] == 1.0
-    assert 0.0 < row(at(all_states, 25), "h>unoq:ble")["activity"] < 1.0       # fading out after the walk
-    assert row(at(all_states, 27), "h>unoq:ble")["moving"] is False
-    assert [(r["tx"], r["moving"]) for r in at(all_states, 34)["hall"]] == [("h", False), ("j", True)] * 2
-    gone = at(all_states, 50)                                    # j is silent: stale, and nothing claimed
+    assert 0.0 < row(at(all_states, 40), "h>unoq:ble")["activity"] < 1.0       # fading out after the walk
+    assert row(at(all_states, 42), "h>unoq:ble")["moving"] is False
+    assert [(r["tx"], r["moving"]) for r in at(all_states, 49)["hall"]] == [("h", False), ("j", True)] * 2
+    gone = at(all_states, 65)                                    # j is silent: stale, and nothing claimed
     for link in ("j>unoq:ble", "j>pi5:ble"):
         assert row(gone, link) == {**row(gone, link), "stale": True, "activity": 0.0, "moving": False, "rate_hz": 0.0}
     assert row(gone, "h>unoq:ble")["stale"] is False
-    assert row(at(all_states, 58), "j>unoq:ble")["stale"] is False
-    last = at(all_states, 64)                                    # a walk only the board's link sees
+    assert row(at(all_states, 73), "j>unoq:ble")["stale"] is False
+    last = at(all_states, 79)                                    # a walk only the board's link sees
     assert row(last, "h>unoq:ble")["moving"] is True and row(last, "h>pi5:ble")["moving"] is False
 
 

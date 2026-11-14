@@ -105,7 +105,7 @@ exactly the output it always gave.
 ```json
 "hall": {
   "beacons": {"h": [3.0, 19.0], "j": [-14.0, 6.0]},
-  "walks": [{"tx": "h", "t_on": 20, "t_off": 23}, {"tx": "h", "rx": "unoq", "t_on": 62, "t_off": 65}]
+  "walks": [{"tx": "h", "t_on": 35, "t_off": 38}, {"tx": "h", "rx": "unoq", "t_on": 77, "t_off": 80}]
 }
 ```
 
@@ -127,9 +127,10 @@ Like the rest of the fake brain it reads the answer from the script: `moving` wh
 link and for about 2 s after it, `stale` (with activity 0 and moving false) while the link has
 fewer than 4 readings in 2 s. The real rule is in brain/hall.py.
 
-The ready-made path is `hall/hall_walk` (75 s; it lives in `sim/paths/hall/`): quiet for 20 s, a
-walk along h's path at 20 s, along j's at 32 s, j silent from 44 s to 54 s (stale), and at 62 s a
-walk that only `h>unoq:ble` sees. A person stands in the square the whole time.
+The ready-made path is `hall/hall_walk` (90 s; it lives in `sim/paths/hall/`): quiet for 35 s, a
+walk along h's path at 35 s, along j's at 47 s, j silent from 59 s to 69 s (stale), and at 77 s a
+walk that only `h>unoq:ble` sees. A person stands in the square the whole time. The first walk
+comes that late because the real brain needs about 25 s of a link before it knows its quiet level.
 
 ```
 python -m sim.ws hall/hall_walk --loop       # the screen, with no board and no brain
