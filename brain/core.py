@@ -175,7 +175,10 @@ class Brain:
                 # Only recordings that training reads are held, and only until record_stop
                 # finds the bus's file on disk. A long demo recording costs no memory.
                 keep = msg.get("purpose") in TRAIN_PURPOSES
-                self.open_session = {"meta": msg, "messages": [] if keep else None}
+                # The bus opens its file before it sends this meta, so on the board nothing is
+                # held here at all, however long the recording runs.
+                held = keep and self._session_path(msg.get("session")) is None
+                self.open_session = {"meta": msg, "keep": keep, "messages": [] if held else None}
         elif kind == "cam":
             self.cam = (t, msg.get("state"))
         elif kind == "narration":
@@ -225,6 +228,7 @@ class Brain:
     def _cmd_train(self, args):
         if self.training or not self.base:
             return
+        self._find_sessions()
         sessions = [dict(s) for s in self.sessions.values() if s["meta"].get("purpose") in TRAIN_PURPOSES]
         if not sessions:
             return
@@ -282,12 +286,43 @@ class Brain:
     def _keep_open_session(self) -> Optional[str]:
         s, self.open_session = self.open_session, None
         session = s["meta"].get("session") if s else None
-        if session and s["messages"] is not None:
-            path = self.sessions_dir / f"{session}.jsonl" if self.sessions_dir else None
-            if path is not None and path.exists():
-                s = {"meta": s["meta"], "messages": None, "path": path}   # the bus has it on disk
-            self.sessions[session] = s
+        if session and s["keep"]:
+            path = self._session_path(session)
+            if path is not None:
+                self.sessions[session] = {"meta": s["meta"], "messages": None, "path": path}   # the bus has it on disk
+            elif s["messages"] is not None:
+                self.sessions[session] = {"meta": s["meta"], "messages": s["messages"]}
         return session
+
+    def _session_path(self, session) -> Optional[Path]:
+        """The bus's file for a session, if we share its folder and the file is there."""
+        if not (self.sessions_dir and session):
+            return None
+        path = self.sessions_dir / f"{session}.jsonl"
+        return path if path.exists() else None
+
+    def _find_sessions(self) -> None:
+        """Pick up this place's train and object recordings from the bus's files.
+
+        After a restart (or one in the middle of a recording) nothing here remembers them, but
+        the files do. Only recordings whose meta is from this place are taken: a file not
+        written since before place_t is skipped without being read.
+        """
+        if not self.sessions_dir or self.place_t is None:
+            return
+        for path in sorted(self.sessions_dir.glob("*.jsonl")):
+            name = path.stem
+            if name in self.sessions or name == self.want_session or "." in name:   # x.states.jsonl, x.events.jsonl
+                continue
+            try:
+                if path.stat().st_mtime * 1000 < self.place_t:
+                    continue
+            except OSError:
+                continue
+            meta = last_meta(path)
+            if meta and meta.get("session") == name and meta.get("purpose") in TRAIN_PURPOSES \
+                    and isinstance(meta.get("recv_t"), (int, float)) and meta["recv_t"] >= self.place_t:
+                self.sessions[name] = {"meta": meta, "messages": None, "path": path}
 
     def _save_model(self) -> None:
         """data/sessions/model.pkl, so a restarted brain predicts without a new walk."""
