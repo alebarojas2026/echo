@@ -124,9 +124,10 @@ class DemoRunbookTest(unittest.TestCase):
     def test_desk_layout_and_same_layout_recovery_are_explicit(self):
         for phrase in (
             "power pi b",
-            "three `25 cm` boxes",
-            "two cardboard arms",
-            "string knotted at `0`, `0.5`, `0.8`, `1.1`, and `1.6 m`",
+            "three devices for one spot",
+            "pi b about a metre away at desk height",
+            "bluetooth detects people",
+            "lean aside",
             "step up to the desk",
             "baseline {keep_model: true}",
             "camera unplugged",

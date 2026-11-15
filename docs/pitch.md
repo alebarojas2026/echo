@@ -8,13 +8,13 @@ Radio Sight brings safety and after-hours security to buildings using the Wi-Fi 
 
 _Start with the setup camera disconnected. Ask the judge to step into the sensing area._
 
-> This is Radio Sight: Wi-Fi that understands the room. The radio links changed when you stepped in, so it found a person without identifying you. That decision was made on the Arduino UNO Q.
+> Walk between two devices and the signal gives you away. Radio Sight found someone in this spot without identifying you. That decision was made on the Arduino UNO Q.
 
 ### Teach the room
 
 _Connect the setup camera and start a fresh lesson on the judge._
 
-> Buildings and people differ, so we teach the radio here. This temporary camera provides zone and motion labels for a short lesson. The Arduino UNO Q learns the radio pattern locally on its Qualcomm Dragonwing CPU. It saves no image.
+> Buildings and people differ, so we teach the radio here. A temporary camera labels presence and motion for a short lesson. The Arduino UNO Q learns locally on its Qualcomm Dragonwing CPU. It saves no image.
 
 ### Camera unplug
 
@@ -26,7 +26,7 @@ _Unplug the camera in one continuous shot and keep the cable visible._
 
 _Ask the judge to move, then stand still._
 
-> Radio Sight still reports your presence, zone, and movement state. It does not need a clear view, and standing still does not make you disappear. A blind radio link produces no prediction, never a false all-clear.
+> Most Wi-Fi sensing only sees movement. Ours sees you standing still. Here, Bluetooth between the devices senses presence and motion in one spot. Wi-Fi is for the dead-zone demonstration.
 
 ### Arm the space
 
@@ -38,7 +38,7 @@ _Ask the judge to step out. Arm the room only when the armed-mode feature gate p
 
 _Ask the judge to re-enter. Show the phone page only after it displays the live intrusion event._
 
-> Your return creates one local intrusion alert for this entry. It names the zone, not the person. The phone is only another screen on our private network.
+> Step in and stay here. Once the board confirms the sustained presence, the phone shows the intrusion alert. It reports someone in this spot without identifying them.
 
 ### Ask the room
 
@@ -54,14 +54,14 @@ _Finish on the proof strip._
 
 ## Five-minute finalist extension
 
-Open with the whole-hall view and movement paths, then run the same eight beats in the same order. After **Proof**, add one or two of these only if the measured path is ready:
+Run the same one-spot demo with the Arduino and two Pis. After **Proof**, add one or two of these only if the measured path is ready:
 
-- show a no-movement alert and clear it with a deliberate check-in;
+- show a no-movement alert, ask the judge to lean aside for the “I'm okay” check, and wait for the check-in confirmation;
 - place the tray, explain the person-versus-object result, and demonstrate router advice with measured before-and-after values;
 - show the end-of-demo recap from recorded local events; or
 - invite judges to try the crowd game, clearly labeled as a finalist interaction rather than a crowd-counting claim.
 
-The Pi and optional beacons stand in for radios and access points already spread through a building. The product direction is to reuse that infrastructure, not to require this exact collection of development boards in every room.
+The three devices are the Arduino UNO Q and two Pis. The UNO Q and Pi A sit on the desk; Pi B sits about a metre away at desk height. They stand in for radios and access points already in a building. This kit detects one spot.
 
 ## Feature gates
 

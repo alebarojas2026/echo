@@ -12,7 +12,9 @@ We built Radio Sight at MadHacks 2026 for the Qualcomm / N+1 track and the theme
 
 ## What it does
 
-Radio Sight reads changes across Wi-Fi and Bluetooth links around a sensing area. A model on the Arduino UNO Q reports presence, movement, zone, and whether a learned pattern looks like a person or object. It does not identify anyone or count a crowd.
+Walk between two devices and the signal gives you away. Radio Sight reads the Bluetooth paths between an Arduino UNO Q and two Pis to report presence and motion in one spot. Wi-Fi is the separate dead-zone demonstration. It does not identify anyone or count a crowd.
+
+Most Wi-Fi sensing only sees movement. Ours sees you standing still. In this kit, the people-sensing signal is Bluetooth; the camera teaches the local model, then is unplugged.
 
 ### Who it is for
 
@@ -23,7 +25,7 @@ Radio Sight reads changes across Wi-Fi and Bluetooth links around a sensing area
 
 ### What's new
 
-A temporary camera teaches the radio model on the board. It supplies zone and motion labels for a short room lesson, saves no image, and is then unplugged. Training and live inference run on the UNO Q's Dragonwing CPU, while the Raspberry Pi provides network and radio and runs no model.
+A temporary camera teaches the radio model on the board. It supplies presence and motion labels for a short room lesson, saves no image, and is then unplugged. Training and live inference run on the UNO Q's Dragonwing CPU. Pi A provides the network and radio; Pi B adds radio paths. Neither Pi runs a model.
 
 The primary story uses the same eight beats as our runbook:
 
@@ -65,7 +67,7 @@ The Arduino UNO Q is the computing hub. Versioned local messages bring in radio 
 
 The setup camera sends labels, not saved images. After a successful lesson, the camera is then unplugged. A blind required link produces no prediction rather than an empty-room claim, and unmeasured proof values stay unpublished.
 
-Our development boards stand in for access points and radios that are already distributed through a building. The Pi supplies the private hotspot and one radio path; the UNO Q and beacon nodes supply the other measured paths. A production deployment would integrate with compatible building radios instead of placing this exact set of boards in every room.
+Our three development devices stand in for access points and radios that are already distributed through a building. The Arduino UNO Q and Pi A sit together on the desk; Pi B sits about a metre away at desk height. A person stands between Pi B and the desk devices. A production deployment would integrate with compatible building radios.
 
 A laptop browser shows the local interface over the Pi's private hotspot. The Pi routes it to the UNO Q over direct Ethernet. The web interface presents the live room, changed links, predictions, armed state, alerts, event records, narration, and proof without sending the sensing loop to a cloud service.
 
@@ -73,7 +75,7 @@ A laptop browser shows the local interface over the Pi's private hotspot. The Pi
 
 Radio data is noisy. Doors, furniture, interference, transmission bursts, and small body turns can all change a link. We had to distinguish a person from an object, keep stillness from looking like absence, and keep a failed radio link from becoming a false all-clear.
 
-The model also belongs to its room. Node placement, layout, and materials change the paths, so setup needs a clean baseline and a short labeled lesson. Presence may transfer as a product capability, but detailed zone and motion behavior must be taught and tested in each deployment.
+The model also belongs to its room. Device placement, layout, and materials change the paths, so setup needs a clean baseline and a short labeled lesson. Presence and motion must be taught and tested in each deployment.
 
 The complete hero path crosses radio collection, teaching, training, live inference, armed mode, the phone page, event storage, room questions, and proof. Keeping one frozen contract across those pieces was as important as any individual model.
 
@@ -81,7 +83,7 @@ The complete hero path crosses radio collection, teaching, training, live infere
 
 We built a private local loop that learns radio patterns, keeps sensing after the camera is disconnected, reports presence and movement, separates learned person and object patterns, and refuses to guess when required links are blind. The radio X-ray connects each decision to changed links rather than presenting a label with no explanation.
 
-We also built the no-movement alert, deliberate check-in, caregiver phone page, dead-zone advisor, on-board narrator, and a fact-based end-of-demo recap. The primary story now gives each feature a clear place instead of trying to show everything at once.
+We also built the no-movement alert, deliberate check-in, caregiver phone page, dead-zone advisor, on-board narrator, and a fact-based end-of-demo recap. For the “I'm okay” check, the person leans aside and waits for confirmation.
 
 Privacy and proof are part of the architecture. The camera is temporary, images are not saved, learned work runs on the UNO Q, and every incomplete measurement stays unpublished rather than becoming a demo estimate.
 
