@@ -22,3 +22,6 @@
 .wifi-line:is([data-status="no-signal"],[data-status="no-data"],[data-status="no-baseline"]) b { color:var(--text-2); }
 .wifi-line [data-testid="wifi-value"] { color:var(--text); min-width:136px; text-align:right; }
 .judge > .wifi-line + .signal { margin-top:0; border-top:0; padding-top:0; }
+
+.dead-zone[data-fixed="true"][data-step="found"] { border-left-color:var(--object); }
+.dead-zone[data-fixed="true"][data-step="found"] .dead-zone-text { color:var(--text); }
