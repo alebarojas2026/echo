@@ -1,6 +1,10 @@
 import { mockHistory } from './records'
 
+export const recentQuestion = 'what happened in the last five minutes'
 export interface AskResponse {
+  steps?: { tool: string; ms: number | null; rows: number | null }[]
+  cites?: number[]
+  chain_ok?: boolean
   answer: string
   rows: Record<string, unknown>[]
   tool: string | null
@@ -26,6 +30,12 @@ export function makeMockAskClient(now: () => number | null): AskClient { return 
       if (signal.aborted) abort()
       else signal.addEventListener('abort', abort, { once: true })
     })
+    if (question.trim().toLowerCase() === recentQuestion) {
+      const end = now()
+      if (end === null) throw new Error('Waiting for a board reading.')
+      const rows = [{t:end-120000,text:'Someone arrived.',cites:[1]}, {t:end-30000,text:'They left the spot.',cites:[2]}]
+      return {answer:'Someone arrived. They left the spot.',rows,tool:'story',ms:null,steps:[{tool:'Mock records',ms:null,rows:rows.length}],cites:[1,2],span:{from_t:end-300000,to_t:end}}
+    }
     const index = examples.findIndex(example => example.toLowerCase() === question.trim().toLowerCase())
     if (index < 0) return { answer: 'I can answer: presence, stillness, and changes to the Wi-Fi link. Try one of the examples.', rows: [], tool: null, ms: null }
     const tool = ['presence', 'still_spans', 'link_history'][index]

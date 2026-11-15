@@ -21,8 +21,6 @@
 
   <!-- The hard edge -->
   <rect x="40" y="120" width="1840" height="900" rx="10" fill="none" stroke="#F2F4F6" stroke-width="3"/>
-  <rect x="600" y="98" width="720" height="44" fill="#101216"/>
-  <text x="960" y="130" font-size="26" font-weight="700" fill="#F2F4F6" text-anchor="middle" letter-spacing="2">NO INTERNET · NO CAMERA · NO MICROPHONE</text>
 
   <!-- The board (its outline first, so the lines can end on the parts inside it) -->
   <rect x="620" y="440" width="680" height="512" rx="8" fill="#14171C" stroke="#F2F4F6" stroke-width="2"/>

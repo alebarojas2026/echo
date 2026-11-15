@@ -90,7 +90,7 @@ class ArchitectureDocTest(unittest.TestCase):
         self.assertIn("](architecture.svg)", self.text)
         self.assertIn('viewBox="0 0 1920 1080"', self.picture)
         self.assertIn('role="img"', self.picture)
-        for phrase in ("NO INTERNET · NO CAMERA · NO MICROPHONE", "The one sensing line",
+        for phrase in ("The one sensing line",
                        "Seals every record", "What an attacker would have to break",
                        "Hanken Grotesk"):
             self.assertIn(phrase, self.picture)
