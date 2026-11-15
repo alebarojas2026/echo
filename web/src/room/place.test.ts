@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { deskFit, modelPoint, parseDesks, placementGuide, rowAcross, type HallDesks } from './desks'
 import { NODES, STRIP_M, applyLayout, deskEdge } from './frame'
 import { DESK_LAYOUT, GATE_LAYOUT } from './layouts.fixture'
-import { PICK_SLACK_M, PLACED_KEY, PLACE_ASK, chosenWords, deskStrip, deskTopY, kitEnds, pickDesk, pickShot, savedWords, scenePoint, sideAt, standWords, takePlacedWords } from './place'
+import { PICK_SLACK_M, PLACED_KEY, askWords, chosenWords, deskStrip, deskTopY, flipWords, kitEnds, pickDesk, pickShot, savedWords, scenePoint, sideAt, standWords, takePlacedWords } from './place'
 
 // A small hall in the file's own form: three rows of two blocks around one centre, rising a step every row, and
 // the middle row's east block missing so one desk has no row behind it there. Not a real room's numbers.
@@ -90,7 +90,20 @@ describe('placing the kit by clicking a desk', () => {
   it('says where the kit stands in one sentence, from the layout’s own names', () => {
     const spot = { desk: desk(1, 0), along: 0.5, gap: 'behind' as const }
     const places = placementGuide(HALL, spot, Object.values(NODES), [STRIP_M![0], deskEdge() ?? STRIP_M![1]])
-    expect(PLACE_ASK).toBe('Click the desk your board is on.')
+    // Before a click the desk is named by the devices on it (the kit spans two rows), and the far end by its row.
+    expect(askWords()).toEqual({
+      ask: 'Click the desk the board and Pi A are on.',
+      help: 'Pi B is on the row behind it. Press G if Pi B is on the row in front.',
+    })
+    // The devices the question names are the ones the guide then puts on the clicked desk.
+    const onDesk = places.filter((p) => p.on === 'our desk').map((p) => NODES[p.id].name)
+    for (const name of onDesk) expect(askWords().ask.toLowerCase()).toContain(name.toLowerCase())
+    for (const p of places.filter((q) => q.on !== 'our desk')) expect(askWords().ask).not.toContain(NODES[p.id].name)
+    expect(askWords([{ id: 'unoq', name: 'Board', roles: [], xyz: [0, 0, 0] }])).toEqual({ ask: 'Click the desk the board is on.', help: '' })
+    // With a desk clicked the line names the key for the other side, and says nothing when that side has no row.
+    expect(flipWords(places, 'behind', true)).toBe('Press G if Pi B is on the row in front.')
+    expect(flipWords(places, 'front', true)).toBe('Press G if Pi B is on the row behind.')
+    expect(flipWords(places, 'front', false)).toBe('')
     expect(standWords(places, 'behind')).toBe('Board and Pi A on this desk, Pi B on the row behind.')
     expect(chosenWords(places, 'behind', false)).toBe('Board and Pi A on this desk, Pi B on the row behind. Press Enter to save, or click another desk.')
     expect(chosenWords(places, 'front', true)).toBe('No row behind this desk. Board and Pi A on this desk, Pi B on the row in front. Press Enter to save, or click another desk.')

@@ -1,11 +1,12 @@
 const {test,expect}=require('@playwright/test')
 const fs=require('node:fs'),path=require('node:path')
 const layout=require('./fixtures/gate-layout.json')
+// The rail's panels on the one spot: asked for with ?judge=rail, since the hall-first page does not draw them.
 for(const [width,height] of [[1920,1080],[1440,900]])test(`full proof and cards fit at ${width}`,async({page})=>{
  await page.route('**/nodes.json',r=>r.fulfill({json:layout}))
  await page.route('**/proof.json',r=>r.fulfill({json:{presence:{correct:19,total:20,always_empty_correct:10},zone:{correct:19,total:20},person_vs_object:{correct:18,total:20},train_s:31,ms_per_decision:{p50:24},watts:{radio_only:6},bytes_out:0,images_stored:0,models_on_board:3}}))
  await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'})
- await page.goto('/tests/arrival-harness.html?op=1');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000});await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
+ await page.goto('/tests/arrival-harness.html?op=1&judge=rail');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000});await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
  await page.evaluate(()=>window.arrival.update('still',{alert:{state:'check_on',zone:1,still_s:13,limit_s:10}}))
  await expect(page.locator('#hud footer dl > div:visible')).toHaveCount(9)
  const check=async()=>{

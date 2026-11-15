@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, CircleGeometry, DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector2, Vector3, type Box3 } from 'three'
 import { saveAll, tidyFit } from './align'
-import { clampAlong, deskFit, deskName, modelPoint, placementGuide, rowAcross, type DeskSpot, type HallDesk, type HallDesks, type Placement } from './desks'
+import { clampAlong, deskFit, deskName, modelPoint, placementGuide, rowAcross, type DeskSpot, type GuideNode, type HallDesk, type HallDesks, type Placement } from './desks'
 import type { Fly } from './fly'
 import { NODES, SIZE_M, STRIP_M, deskEdge, toScene } from './frame'
 import { PlacementGuide } from './guide'
@@ -22,8 +22,8 @@ import type { RoomView, Shot } from './view'
 export type Side = 'behind' | 'front'
 export const SIDE_WORDS: Record<Side, string> = { behind: 'the row behind', front: 'the row in front' }
 
-/** What the screen says before a desk is clicked. */
-export const PLACE_ASK = 'Click the desk your board is on.'
+/** The other side from this one. */
+const across = (side: Side): Side => (side === 'behind' ? 'front' : 'behind')
 
 /** A click this near a desk (metres, on the desk top's level) still takes it: a finger is not a pointer. */
 export const PICK_SLACK_M = 0.35
@@ -115,6 +115,31 @@ export function standWords(places: readonly Placement[], side: Side, desk = 'thi
   const far = places.filter((p) => p.on !== 'our desk')
   const where = far.some((p) => p.on === 'facing desk') ? `on ${SIDE_WORDS[side]}` : 'on a table of its own across the gap'
   return `${names(near)} on ${desk}${far.length ? `, ${names(far.map((p) => p.id))} ${where}` : ''}.`
+}
+
+/** Names inside a sentence: "the board and Pi A". */
+const inSentence = (ids: readonly string[]) => names(ids).replace(/^Board\b/, 'the board')
+const isAre = (ids: readonly string[]) => (ids.length === 1 ? 'is' : 'are')
+
+/**
+ * What the screen says before a desk is clicked, in the layout's own names. The kit spans two rows, so the desk
+ * to click is named by the devices on it ("the board and Pi A"), and the line under it says where the far end is
+ * taken to be and which key says otherwise. The split is the guide's own: the board and the router beside it
+ * share a desk, a beacon that is no router is the far end.
+ */
+export function askWords(nodes: readonly GuideNode[] = Object.values(NODES)): { ask: string; help: string } {
+  const near = nodes.filter((n) => n.roles.includes('router') || !n.roles.includes('beacon')).map((n) => n.id)
+  const far = nodes.filter((n) => !near.includes(n.id)).map((n) => n.id)
+  const ask = `Click the desk ${inSentence(near)} ${isAre(near)} on.`
+  if (!far.length) return { ask, help: '' }
+  const who = names(far)
+  return { ask, help: `${who} ${isAre(far)} on ${SIDE_WORDS.behind} it. Press G if ${who} ${isAre(far)} on ${SIDE_WORDS.front}.` }
+}
+
+/** The line under the sentence with a desk clicked: the key for the other side, when that side has a row. */
+export function flipWords(places: readonly Placement[], side: Side, otherRow: boolean): string {
+  const far = places.filter((p) => p.on !== 'our desk').map((p) => p.id)
+  return otherRow && far.length ? `Press G if ${names(far)} ${isAre(far)} on ${SIDE_WORDS[across(side)]}.` : ''
 }
 
 /** What the screen says with a desk clicked. */
@@ -281,14 +306,21 @@ export function startPlacing({ view, scan, fly, hall, reseat, hallShotNow }: Pla
   panel.className = 'room-place'
   panel.dataset.testid = 'place'
   panel.innerHTML =
-    '<p class="room-place-say" role="status"></p><div class="room-place-keys">' +
+    '<p class="room-place-say" role="status"></p><p class="room-place-help"></p><div class="room-place-keys">' +
     '<button type="button" data-do="flip" disabled>Other side of the desk (G)</button>' +
     '<button type="button" data-do="save" disabled>Save (Enter)</button>' +
     '<button type="button" data-do="leave">Leave (Esc)</button></div>'
   document.body.append(panel)
   const say = panel.querySelector<HTMLElement>('.room-place-say')!
   const [flipButton, saveButton] = ['flip', 'save'].map((d) => panel.querySelector<HTMLButtonElement>(`[data-do="${d}"]`)!)
-  say.textContent = PLACE_ASK
+  const help = panel.querySelector<HTMLElement>('.room-place-help')!
+  const hint = (words: string) => {
+    help.textContent = words
+    help.hidden = !words
+  }
+  const asked = askWords()
+  say.textContent = asked.ask
+  hint(asked.help)
 
   // The desk under the pointer and the desk taken, drawn on the desk tops over everything.
   const paint = (color: number, opacity: number) => {
@@ -376,6 +408,7 @@ export function startPlacing({ view, scan, fly, hall, reseat, hallShotNow }: Pla
     draw(chosenMesh, chosen.desk)
     draw(hoverMesh, (hovered = null))
     say.textContent = chosenWords(places, side, at.swapped)
+    hint(flipWords(places, side, !!rowAcross(hall, { ...chosen, gap: across(side) })))
     flipButton.disabled = saveButton.disabled = false
     view.host.dataset.placing = JSON.stringify({ row: chosen.desk.row + 1, block: chosen.desk.wedge + 1, along: Math.round(chosen.along * 100) / 100, side })
   }
@@ -420,6 +453,7 @@ export function startPlacing({ view, scan, fly, hall, reseat, hallShotNow }: Pla
     saving = true
     saveButton.disabled = flipButton.disabled = true
     say.textContent = 'Saving…'
+    hint('')
     marks.take()
     const said = savedWords(chosen.desk, places, side)
     void saveAll(scan.fit, undefined, marks.moved()).then((result) => {

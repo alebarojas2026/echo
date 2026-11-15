@@ -5,7 +5,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { SIZE_M } from './frame'
 import { easeInOut } from './motion'
 import { PERSON, SQUARE } from './palette'
-import { roomShot, type RoomView, type Shot, type ShotFor } from './view'
+import { FOV_DEG, roomShot, type RoomView, type Shot, type ShotFor } from './view'
 
 // Two framings of the same scene: "hall", the whole scanned judging hall with the square small in it, and
 // "square", the room's normal framing. The camera flies between them calmly (ease in-out, about 3 s) and stays
@@ -57,6 +57,8 @@ export function mixShot(a: Shot, b: Shot, u: number): Shot {
     ...(a.azimDeg || b.azimDeg ? { azimDeg: (a.azimDeg ?? 0) + ((b.azimDeg ?? 0) - (a.azimDeg ?? 0)) * u } : {}),
     target: a.target.clone().lerp(b.target, u),
     radiusM: a.radiusM * (b.radiusM / a.radiusM) ** u,
+    // Only a shot with a lens of its own carries one.
+    ...(a.fovDeg || b.fovDeg ? { fovDeg: (a.fovDeg ?? FOV_DEG) + ((b.fovDeg ?? FOV_DEG) - (a.fovDeg ?? FOV_DEG)) * u } : {}),
   }
 }
 

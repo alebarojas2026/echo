@@ -63,7 +63,8 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await expect(page.locator('#room')).toHaveAttribute('data-replay', 'on')
     for (const text of await banner.locator('strong, span, button').all()) expect(parseFloat(await text.evaluate(el => getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(28)
     const box = await banner.boundingBox()
-    expect(box.x).toBeGreaterThanOrEqual(640)
+    // Beside the rail; on the one spot, where the hall is the whole screen, under the top band.
+    expect(box.x).toBeGreaterThanOrEqual(await page.evaluate(() => document.documentElement.dataset.judgeLayout === 'hall') ? 0 : 640)
     expect(box.x + box.width).toBeLessThanOrEqual(width)
     await expect(banner.getByTestId('replay-live')).toBeInViewport({ ratio: 1 })
 

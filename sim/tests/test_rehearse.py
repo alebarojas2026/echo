@@ -31,6 +31,9 @@ def test_every_beat_shows_up(results):
         # And a wave is not a check-in there: the only check-in is stepping out of the presence line and back
         # (brain/tests/test_steady_word.py, and the recording from the kit). The rehearsal still plays the wave.
         failed -= {"wave check-in"}
+        # And the object rule is off on the one spot (the layout's object_hold_s is an hour: on the kit a very
+        # still person at 9 to 10 dB was called a thing). With no object there is no advice to move the router.
+        failed -= {"advice to move the router"}
     assert failed <= KNOWN_FAILING, f"beats that did not show: {sorted(failed - KNOWN_FAILING)}"
 
 
@@ -71,7 +74,10 @@ def test_recap_reaches_the_screen_through_bus_and_brain():
     text = recaps.pop()
     names = [rehearse.LAYOUT.names[z] for z in rehearse.TOUR]   # visited in tour order
     assert all(name.lower() in text.lower() for name in names) and text.startswith("Someone ")   # "on the left"
-    assert "no-movement alert" in text and "dBm" in text
+    assert "no-movement alert" in text
+    # The gain in dBm is the advice's result, and the advice comes from an object in the line: none on the one
+    # spot, where the object rule is off.
+    assert ONE_SPOT or "dBm" in text
 
 
 HERO = ["found:", "lesson:", "unplug:", "still:", "armed,", "intrusion while armed", "tamper:", "disarmed"]   # in order

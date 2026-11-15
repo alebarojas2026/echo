@@ -12,13 +12,13 @@ import { Fly, HallMarks, PresentRun, comesDownAlone, cutaway, hallShot, pinnedFr
 import { Presence } from './ghost'
 import { HeardNodes } from './heard'
 import { Replay, rowAlert, rowPred, secondKind, type HistoryRow, type ReplayFrame } from './replay'
-import { NODES, SIZE_M, STRIP_M, deviceAcross, setSurface } from './frame'
+import { NODES, SIZE_M, STRIP_M, ZONES, deviceAcross, setSurface } from './frame'
 import { DEFAULT_CUT_M, loadScan, type Scan } from './scan'
 import { Mirror } from './mirror'
-import { offerPlacing } from './place'
+import { offerPlacing, scenePoint } from './place'
 import { RouterSpots } from './spots'
 import { Stage } from './stage'
-import { RoomView, inSituShot, viewOptions, reserveBottom } from './view'
+import { RoomView, inSituShot, judgeShot, viewOptions, reserveBottom } from './view'
 import { XrayLayer } from './xray'
 
 /** What the band across the room says while mock data plays. */
@@ -150,7 +150,15 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
         fly.setClose(inSituShot)
         // Placing the kit by clicking a desk (place.ts): offered once the hall's desks are known.
         const hallShotNow = () => hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M, s.fit.yaw_deg ?? 0)
-        void loadDesks().then((hall) => hall && offerPlacing({ view, scan: s, fly, hall, reseat, hallShotNow }, params.get('place') === '1'))
+        void loadDesks().then((hall) => {
+          // The one spot is seen from behind, looking to the front of the hall: the rows curve round a point at
+          // the front, and where that point is in the scene follows the alignment, so the view frames the spot
+          // at whichever desk the kit was last placed on. ?judge=rail keeps the panels' rail and the close view that goes with it.
+          if (hall && ZONES.length === 1 && params.get('judge') !== 'rail') fly.setClose(judgeShot(() => scenePoint(hall.centre_m, s.fit, s.box)))
+          if (hall) offerPlacing({ view, scan: s, fly, hall, reseat, hallShotNow }, params.get('place') === '1')
+          fly.setHall(hallShotNow())
+        })
+        return
       }
       fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M, s.fit.yaw_deg ?? 0))
     })

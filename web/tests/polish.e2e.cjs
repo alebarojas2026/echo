@@ -3,7 +3,7 @@ test('proof only shows measured tiles and hides an empty block', async ({ page }
   let proof = {}
   await page.route('**/proof.json', route => route.fulfill({ json: proof }))
   await page.clock.install()
-  await page.goto('/?mock=still')
+  await page.goto('/?mock=still&judge=rail') // the proof tiles are the rail's; the hall-first page does not draw them
   await page.clock.runFor(4000)
   const block = page.locator('#hud footer')
   await expect(block).toBeHidden()
