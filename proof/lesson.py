@@ -1,0 +1,132 @@
+"""Run one live lesson from a terminal and time it; commands and numbers only, never frames.
+
+    python -m proof.lesson lesson-01 w1            # on the laptop or the board, the brain running
+
+It sends what the screen will send (CONTRACTS.md section 5: label_mode person, record_start with
+purpose train, then train while the recording is still open), tells the person when to step left
+and right, and prints what the brain says back once a second:
+
+    12 s  camera: zone 1   radio: zone 1   learning: 6 of 10   fits: 1
+
+and, once each: how long after the start the first model was there, how long until the radio first
+gave the camera's answer, and the agreement REPORT_S after the start. Unplug the camera whenever
+you like: it keeps printing what the radio says. Ctrl-C stops the recording and ends it.
+"""
+import argparse
+import json
+import re
+from pathlib import Path
+
+TEACH_S = 20      # stepping left and right before the first fit
+STEP_S = 4        # seconds on each side
+REPORT_S = 30     # when the agreement is read off
+
+
+class Coach:
+    """Feed it every message from the brain's WebSocket; it sends the commands and says what it sees."""
+
+    def __init__(self, session, walker, send, say=print, teach_s=TEACH_S, step_s=STEP_S, report_s=REPORT_S):
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", session):
+            raise ValueError("session must be a unique simple id, at most 64 characters")
+        if not walker.strip():
+            raise ValueError("walker id is required; use a pseudonym")
+        self.session, self.walker, self.send_raw, self.say = session, walker, send, say
+        self.teach_s, self.step_s, self.report_s = teach_s, step_s, report_s
+        self.t0 = self.model_s = self.follows_s = self.report = None
+        self.said_s = self.side = 0
+        self.trained_sent = self.cam_off_said = False
+
+    def cmd(self, name, **args):
+        self.send_raw({"v": 2, "type": "cmd", "cmd": name, "args": args})
+
+    def start(self):
+        self.cmd("label_mode", mode="person")
+        self.cmd("record_start", session=self.session, purpose="train", walker=self.walker)
+
+    def stop(self):
+        self.cmd("record_stop")
+        self.cmd("label_mode", mode="off")
+        self.say(self.summary())
+
+    def on_message(self, msg):
+        if msg.get("type") == "event" and msg.get("kind") == "trained" and self.t0 is not None \
+                and self.model_s is None and self.trained_sent:
+            self.model_s = round((msg["t"] - self.t0) / 1000, 1)
+            self.say(f"first model {self.model_s} s after the start")
+        if msg.get("type") != "state":
+            return
+        if self.t0 is None:
+            self.t0 = msg["t"]
+        s = (msg["t"] - self.t0) / 1000
+        if s < self.teach_s and int(s // self.step_s) + 1 != self.side:
+            self.side = int(s // self.step_s) + 1
+            self.say(f"\nStep to your {'LEFT' if self.side % 2 else 'RIGHT'} and stand there.")
+        if s >= self.teach_s and not self.trained_sent:
+            self.trained_sent = True
+            self.cmd("train")
+            self.say("\ntrain sent. Keep stepping left and right; unplug the camera when you like.")
+        pred, teacher = msg.get("pred"), msg.get("teacher")
+        training = (msg.get("model") or {}).get("training") or {}
+        lesson = training.get("lesson")
+        if self.follows_s is None and pred and teacher and teacher["present"] and pred["present"] \
+                and pred["zone"] == teacher["zone"]:
+            self.follows_s = round(s, 1)
+            self.say(f"the radio first gave the camera's zone {self.follows_s} s after the start")
+        if self.report is None and s >= self.report_s:
+            self.report = (lesson["agree"], lesson["of"], lesson["fits"]) if lesson else ()
+            self.say(f"{self.report_s} s after the start: " + self.agreement())
+        if msg.get("cam") == "off" and self.trained_sent and not self.cam_off_said:
+            self.cam_off_said = True
+            self.say("\nthe camera is off. The radio carries on:")
+        if int(s) != self.said_s:
+            self.said_s = int(s)
+            self.say(f"{int(s):3d} s  camera: {_zone(teacher, msg.get('cam'))}   radio: {_zone(pred)}   "
+                     + (f"learning: {lesson['agree']} of {lesson['of']}   fits: {lesson['fits']}" if lesson else ""))
+
+    def agreement(self):
+        if self.report is None:
+            return "not reached"
+        if not self.report:
+            return "no lesson was running"
+        return f"the radio agreed with the camera on {self.report[0]} of the last {self.report[1]} decisions ({self.report[2]} fits)"
+
+    def summary(self):
+        unknown = "never"
+        return (f"\nfirst model: {self.model_s if self.model_s is not None else unknown} s after the start\n"
+                f"radio first right: {self.follows_s if self.follows_s is not None else unknown} s after the start\n"
+                f"at {self.report_s} s: {self.agreement()}")
+
+
+def _zone(block, cam="on"):
+    if cam != "on":
+        return "off     "
+    if not block:
+        return "--      "
+    return f"zone {block['zone']}  " if block["present"] else "nobody  "
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("session", help="a new session id")
+    parser.add_argument("walker", help="pseudonymous walker id")
+    parser.add_argument("--url", default="ws://192.168.77.2:8765/ws")
+    parser.add_argument("--teach-s", type=float, default=TEACH_S, help="seconds of stepping before the first fit")
+    args = parser.parse_args()
+    recorded = Path(__file__).resolve().parents[1] / "data/sessions" / (args.session + ".jsonl")
+    if recorded.exists():
+        parser.error("session already exists; use a new id")
+    from websockets.sync.client import connect
+    with connect(args.url) as ws:
+        coach = Coach(args.session, args.walker, lambda msg: ws.send(json.dumps(msg)), teach_s=args.teach_s)
+        coach.start()
+        try:
+            for raw in ws:
+                coach.on_message(json.loads(raw))
+        except KeyboardInterrupt:
+            pass
+        finally:
+            coach.stop()
+
+
+if __name__ == "__main__":
+    main()
