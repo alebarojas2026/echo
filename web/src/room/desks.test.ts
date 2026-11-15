@@ -241,3 +241,48 @@ describe('loading the desk list', () => {
     expect(calls).toBe(3) // and then gives up: the hall stays where its alignment puts it
   })
 })
+
+describe('the guide on the gate layout', () => {
+  // Three devices, one of them already across the spot: the file says how deep the gate is and how high each stands.
+  const gate = (bz = 0.75, by = -0.2) => [
+    { id: 'unoq', name: 'Board', xyz: [0.44, 0.8, 0.75] as [number, number, number], roles: ['receiver'] },
+    { id: 'pi5', name: 'Pi A', xyz: [0.36, 0.8, 0.75] as [number, number, number], roles: ['router', 'beacon', 'receiver'] },
+    { id: 'pi5b', name: 'Pi B', xyz: [0.4, by, bz] as [number, number, number], roles: ['beacon', 'receiver'] },
+  ]
+  // The fixture's rows are 0.9 m apart and its aisle 0.8 m wide: neither fits a 1 m gate and its table. The outer
+  // end of a row (wedge 1's east end) has nothing beyond it.
+  const guide = (gap: Gap, nodes = gate(), wedge = 1, along = 1) => placementGuide(HALL, { ...at(0, wedge, along), gap }, nodes, [0.8, 0.8])
+  const place = (list: ReturnType<typeof placementGuide>, id: string) => list.find((p) => p.id === id)!
+
+  it('at a row end stands Pi B on its own table, as far out and as high as the file has it', () => {
+    const b = place(guide('end'), 'pi5b')
+    expect(b.on).toBe('stand')
+    expect(b.xyz).toEqual([0.4, -0.2, 0.75])
+    expect(b.words).toBe('Pi B: on its own table, about 1 m straight out from the board')
+    // Measured numbers drop in: a shorter gate and a lower table are kept, not overruled.
+    const low = place(guide('end', gate(0.5, -0.05)), 'pi5b')
+    expect(low.xyz).toEqual([0.4, -0.05, 0.5])
+    expect(low.words).toBe('Pi B: on its own table, about 0.85 m straight out from the board')
+  })
+
+  it('between two rows puts Pi B on the desk across, never inside it, and says so', () => {
+    const b = place(guide('behind'), 'pi5b')
+    expect(b.on).toBe('facing desk')
+    expect(b.words).toBe('Pi B: on the desk across from you, opposite the board')
+    expect(b.xyz[1]).toBeGreaterThan(-0.2) // the row gap is narrower than the file's gate
+    expect(b.xyz[1]).toBeLessThan(0.8)
+    // The same at a row end whose aisle is too narrow for the table: the next block's desk takes it.
+    expect(place(guide('end', gate(), 0, 1), 'pi5b').on).toBe('facing desk')
+  })
+
+  it('keeps the board and Pi A on our desk at its edge, 8 cm apart, at their own heights', () => {
+    for (const gap of ['behind', 'front', 'end'] as const) {
+      const [board, a] = [place(guide(gap), 'unoq'), place(guide(gap), 'pi5')]
+      expect(board.on).toBe('our desk')
+      expect(board.xyz[1]).toBe(0.8) // on the edge the layout names, so the drawn desk does not move when saved
+      expect(a.xyz[1]).toBe(0.8)
+      expect(board.xyz[0] - a.xyz[0]).toBeCloseTo(0.08)
+      expect(board.xyz[2]).toBe(0.75)
+    }
+  })
+})
