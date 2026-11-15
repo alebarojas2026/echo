@@ -81,15 +81,20 @@ def measurements(proof):
     ]
     security = proof.get("security") or {}
     detection, alarms = security.get("detection") or {}, security.get("false_alarms") or {}
+    intrusion_title = "Armed intrusion detection" if detection.get("within_s") is None else f"Armed intrusion within {display(detection['within_s'])} s"
     for title, correct, total, ci in [("Entry detection within 2 s", "detected", "entries", "ci95"),
-                                     ("Armed intrusion within 2 s", "intrusions", "armed_entries", "intrusion_ci95")]:
+                                     (intrusion_title, "intrusions", "armed_entries", "intrusion_ci95")]:
         value, n = agreement({"correct":detection.get(correct),"total":detection.get(total)})
         bounds = detection.get(ci)
         if value != "__" and bounds: value += f"; 95% CI {100*bounds[0]:.1f}–{100*bounds[1]:.1f}%"
         extras.append((title,value,"Independent heldout entries; see proof/SECURITY.md",n.replace("decisions","entries")))
     for key, duration, title in [("presence_per_hour","duration_s","False presences per hour"),
-                                 ("intrusions_per_hour","armed_duration_s","False intrusions per hour")]:
-        extras.append((title,display(alarms.get(key)),"Captured events during observed empty time",display(alarms.get(duration)," s")))
+                                 ("intrusions_per_hour","armed_duration_s","False intrusions per hour"),
+                                 ("passed_by_per_hour","passed_by_duration_s","Passed-by events per armed hour")]:
+        method = "Captured events during observed armed time" if key == "passed_by_per_hour" else "Captured events during observed empty time"
+        value = display(alarms.get(key))
+        if key == "passed_by_per_hour" and value != "__": value = display(alarms.get("passed_by_events")) + " events; " + value + "/h"
+        extras.append((title,value,method,display(alarms.get(duration)," s")))
     for row in security.get("fewer_devices") or []:
         z, zn = agreement(row.get("zone") or {})
         p = row.get("presence") or {}

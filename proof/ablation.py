@@ -53,7 +53,7 @@ def compare(training, heldout, baseline, layout, allow_sim=False):
                     total += 1
                     correct += zone == window["label"]["zone"]
             pairs.append((session, capture))
-        detection = analyze(pairs)["detection"]
+        detection = analyze(pairs,layout)["detection"]
         row["zone"] = {"correct":correct if total else None,"total":total or None}
         row["presence"] = {key:detection[key] for key in row["presence"]}
     return result

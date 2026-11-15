@@ -54,19 +54,34 @@ def healthy(row):
     return row.get("health", {}).get("status") in {"ok", "degraded"} and row.get("pred") is not None
 
 
-def analyze(pairs):
+def hold_seconds(layout):
+    armed = layout.get("armed")
+    if armed is not None and not isinstance(armed,dict): raise ValueError("armed must be a configuration object")
+    value = (armed or {}).get("hold_s", 3)
+    if value is None: value = 3
+    if type(value) not in (int,float) or not math.isfinite(value) or value < 0:
+        raise ValueError("armed.hold_s must be a finite nonnegative number")
+    return value
+
+
+def analyze(pairs, layout=None):
+    hold = hold_seconds(layout or {})
+    deadline_ms = (hold+2)*1000
     ids = [session["meta"]["session"] for session,_ in pairs]
     if len(ids)!=len(set(ids)): raise ValueError("duplicate evaluation session")
     entries = detected = armed_entries = intrusions = presence_false = intrusion_false = 0
-    duration = armed_duration = 0
+    duration = armed_duration = passed_duration = passed_by = 0
     for session, capture in pairs:
         if session["meta"].get("purpose") != "heldout": raise ValueError("security evaluation needs heldout sessions")
         labels = sorted((m for m in session["messages"] if m.get("type") == "label"), key=lambda m:m["recv_t"])
         states = sorted((m.get("state", m) | {"recv_t":m["recv_t"]} for m in capture if m.get("state", m).get("type") == "state"), key=lambda m:m["recv_t"])
-        events = [m for m in capture if m.get("type") == "event"]
+        events = sorted((m for m in capture if m.get("type") == "event"),key=lambda m:m["recv_t"])
         truth = spans(labels, valid_label, 500)
+        occupied = [span for span in truth if span[2]["present"]]
         observed = spans(states, lambda s:"pred" in s and s.get("health",{}).get("status") in {"ok","degraded","blind"}, 1000)
         armed = spans(states, lambda s:s.get("armed") is True, 1000)
+        active_armed = overlap(observed,armed)
+        passed_duration += sum(b-a for a,b,_ in active_armed)/1000
         used = set()
         for before, after in zip(labels, labels[1:]):
             t = after["recv_t"]
@@ -76,9 +91,10 @@ def analyze(pairs):
             entries += 1
             detected += any(t <= s["recv_t"] <= t+2000 and healthy(s) and s["pred"].get("present")
                             and s["pred"].get("kind") == "person" for s in states)
-            if covered(armed, t, t+2000):
+            if (covered(occupied,t,t+hold*1000) and covered(truth,t,t+deadline_ms)
+                    and covered(observed,t,t+deadline_ms) and covered(armed,t,t+deadline_ms)):
                 armed_entries += 1
-                hits = [e for e in events if e.get("kind") == "intrusion" and e.get("id") not in used and t <= e["recv_t"] <= t+2000]
+                hits = [e for e in events if e.get("kind") == "intrusion" and e.get("id") not in used and t <= e["recv_t"] <= t+deadline_ms]
                 if hits:
                     if not hits[0].get("id"): raise ValueError("intrusion events need ids")
                     used.add(hits[0]["id"])
@@ -91,21 +107,25 @@ def analyze(pairs):
         seen = set()
         for event in events:
             kind, t = event.get("kind"), event["recv_t"]
-            if kind not in {"enter", "intrusion"}: continue
-            eligible = negative if kind == "enter" else armed_negative
+            if kind not in {"enter", "intrusion", "passed_by"}: continue
+            if kind == "intrusion" and event.get("id") in used: continue
+            eligible = active_armed if kind == "passed_by" else negative if kind == "enter" else armed_negative
             if not any(a <= t < b for a,b,_ in eligible): continue
             if not event.get("id"): raise ValueError("captured events need ids")
             if event["id"] in seen: continue
             seen.add(event["id"])
             presence_false += kind == "enter"
             intrusion_false += kind == "intrusion"
+            passed_by += kind == "passed_by"
     return {"detection":{"entries":entries or None,"detected":detected if entries else None,"ci95":interval(detected,entries),
                          "armed_entries":armed_entries or None,"intrusions":intrusions if armed_entries else None,
-                         "intrusion_ci95":interval(intrusions,armed_entries),"within_s":2},
+                         "intrusion_ci95":interval(intrusions,armed_entries),"within_s":hold+2,"hold_s":hold},
             "false_alarms":{"presence_events":presence_false if duration else None,"intrusions":intrusion_false if armed_duration else None,
                             "duration_s":duration or None,"armed_duration_s":armed_duration or None,
                             "presence_per_hour":presence_false*3600/duration if duration else None,
-                            "intrusions_per_hour":intrusion_false*3600/armed_duration if armed_duration else None}}
+                            "intrusions_per_hour":intrusion_false*3600/armed_duration if armed_duration else None,
+                            "passed_by_events":passed_by if passed_duration else None,"passed_by_duration_s":passed_duration or None,
+                            "passed_by_per_hour":passed_by*3600/passed_duration if passed_duration else None}}
 
 
 def publish(proof, report, pairs, commit, schema):
@@ -113,17 +133,24 @@ def publish(proof, report, pairs, commit, schema):
     for session, capture in pairs:
         if any(m.get("src") != "live" for m in session["messages"]): raise ValueError("synthetic/replay sessions cannot populate proof")
         if any(m.get("state",m).get("src") != "live" for m in capture): raise ValueError("synthetic capture cannot populate proof")
-    from jsonschema import Draft202012Validator
+    from contracts.check import VALIDATORS
     from copy import deepcopy
     out = prepare_update(proof, commit)
     existing = deepcopy(proof.get("security") or report)
     for key in ("detection","false_alarms","fewer_devices"):
+        if key == "false_alarms":
+            alarms = existing.setdefault(key,{})
+            for exposure, fields in [("duration_s",("presence_events","intrusions","duration_s","armed_duration_s","presence_per_hour","intrusions_per_hour")),
+                                     ("passed_by_duration_s",("passed_by_events","passed_by_duration_s","passed_by_per_hour"))]:
+                if report[key].get(exposure) is not None:
+                    alarms.update({field:report[key][field] for field in fields})
+            for field,value in report[key].items(): alarms.setdefault(field,value)
+            continue
         has_data = (report[key].get("entries") is not None if key=="detection" else
-                    report[key].get("duration_s") is not None if key=="false_alarms" else
                     any(row["zone"]["total"] is not None for row in report[key]))
         if has_data: existing[key] = report[key]
     out["security"] = existing
-    Draft202012Validator(schema).validate(out)
+    VALIDATORS["proof"].evolve(schema=schema).validate(out)
     return out
 
 
@@ -138,14 +165,15 @@ def main():
     args = parser.parse_args()
     if args.allow_sim and args.proof: parser.error("synthetic diagnostics cannot update proof")
     pairs = [(load_session(a), [json.loads(l) for l in Path(b).read_text().splitlines() if l.strip()]) for a,b in args.pair]
-    report = analyze(pairs)
+    layout = json.loads(args.nodes.read_text())
+    report = analyze(pairs,layout)
     report["fewer_devices"] = []
     if args.train:
         from proof.ablation import compare
         from proof.score import read_baseline
         if args.baseline is None: parser.error("--train requires --baseline for subset replay")
         report["fewer_devices"] = compare([load_session(p) for p in args.train], [s for s,_ in pairs],
-                                           read_baseline(args.baseline)[0], json.loads(args.nodes.read_text()), args.allow_sim)
+                                           read_baseline(args.baseline)[0], layout, args.allow_sim)
     if args.proof:
         from proof.provenance import require_board
         require_board()
