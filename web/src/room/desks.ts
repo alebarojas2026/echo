@@ -45,6 +45,9 @@ export interface DeskSpot {
   desk: HallDesk
   along: number
   gap?: Gap
+  /** The board and the router stand on the facing desk, and the other devices on ours. Which desk is "ours" is
+   *  only known on the day (the first night the board sat on the far table). */
+  boardAcross?: boolean
 }
 
 /** The height used for a desks file from before it carried one. */
@@ -230,20 +233,26 @@ export function placementGuide(h: HallDesks, spot: DeskSpot, nodes: readonly Gui
   }
   const onDesk = facing !== null && facing.gap > 0 && facing.gap <= FACING_WITHIN_M
 
-  const out: Placement[] = near.map((n, i) => {
-    const dx = spread(i, near.length, NEAR_APART_M)
-    return { id: n.id, xyz: [cm(sw / 2 + dx), cm(sh + IN_FROM_EDGE_M), cm(ourTop + ABOVE_TOP_M)], on: 'our desk', words: `${n.name}: on our desk, at the edge facing the spot, ${sideWords(dx)}` }
+  // One row along our desk's edge and one across the gap. The board's group takes one, the rest the other.
+  const ours = (n: GuideNode, dx: number): Placement => ({
+    id: n.id, xyz: [cm(sw / 2 + dx), cm(sh + IN_FROM_EDGE_M), cm(ourTop + ABOVE_TOP_M)], on: 'our desk',
+    words: `${n.name}: on our desk, at the edge facing the spot, ${sideWords(dx)}`,
   })
-  far.forEach((n, i) => {
-    const dx = spread(i, far.length, FAR_APART_M)
-    if (onDesk) {
-      const z = facing!.floor - floor_m + h.desk_height_m + ABOVE_TOP_M
-      out.push({ id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - facing!.gap - IN_FROM_EDGE_M), cm(z)], on: 'facing desk', words: `${n.name}: on the desk across the gap, at its near edge, ${sideWords(dx)}` })
-    } else {
-      out.push({ id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - STAND_ACROSS_M), STAND_HIGH_M], on: 'stand', words: `${n.name}: on a stand or chair back, ${STAND_ACROSS_M} m across the gap and ${STAND_HIGH_M} m high, ${sideWords(dx)}` })
-    }
-  })
-  return out
+  const across = (n: GuideNode, dx: number): Placement =>
+    onDesk
+      ? {
+          id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - facing!.gap - IN_FROM_EDGE_M), cm(facing!.floor - floor_m + h.desk_height_m + ABOVE_TOP_M)], on: 'facing desk',
+          words: `${n.name}: on the desk across the gap, at its near edge, ${sideWords(dx)}`,
+        }
+      : {
+          id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - STAND_ACROSS_M), STAND_HIGH_M], on: 'stand',
+          words: `${n.name}: on a stand or chair back, ${STAND_ACROSS_M} m across the gap and ${STAND_HIGH_M} m high, ${sideWords(dx)}`,
+        }
+  const [boardRow, otherRow] = spot.boardAcross ? [across, ours] : [ours, across]
+  return [
+    ...near.map((n, i) => boardRow(n, spread(i, near.length, NEAR_APART_M))),
+    ...far.map((n, i) => otherRow(n, spread(i, far.length, FAR_APART_M))),
+  ]
 }
 
 export type DeskStep = 'north' | 'south' | 'east' | 'west'
@@ -263,14 +272,14 @@ export function stepDesk(h: HallDesks, from: DeskSpot, dir: DeskStep): DeskSpot 
     const next = h.desks
       .filter((d) => d.row === from.desk.row && (mid(d) - mid(from.desk)) * sign > 0)
       .sort((a, b) => (mid(a) - mid(b)) * sign)[0]
-    return next ? { desk: next, along: 0.5, gap: from.gap } : null
+    return next ? { desk: next, along: 0.5, gap: from.gap, boardAcross: from.boardAcross } : null
   }
   const sign = dir === 'south' ? 1 : -1
   const row = [...new Set(h.desks.map((d) => d.row))].filter((r) => (r - from.desk.row) * sign > 0).sort((a, b) => (a - b) * sign)[0]
   if (row === undefined) return null
   const gap = (d: HallDesk) => Math.max(d.th0_deg - th, th - d.th1_deg, 0)
   const desk = h.desks.filter((d) => d.row === row).sort((a, b) => gap(a) - gap(b))[0]
-  return { desk, along: clampAlong(desk, (th - desk.th0_deg) / (desk.th1_deg - desk.th0_deg)), gap: from.gap }
+  return { desk, along: clampAlong(desk, (th - desk.th0_deg) / (desk.th1_deg - desk.th0_deg)), gap: from.gap, boardAcross: from.boardAcross }
 }
 
 /** How far along a desk the strip's middle may sit: half a strip in from either end. */
@@ -285,7 +294,7 @@ function clampAlong(desk: HallDesk, along: number, stripM = (STRIP_M ?? SIZE_M)[
 export function slideDesk(from: DeskSpot, metres: number): DeskSpot {
   const { desk } = from
   const length = (((desk.th1_deg - desk.th0_deg) * Math.PI) / 180) * desk.r_m
-  return { desk, along: clampAlong(desk, from.along + metres / length), gap: from.gap }
+  return { desk, along: clampAlong(desk, from.along + metres / length), gap: from.gap, boardAcross: from.boardAcross }
 }
 
 /** A point of the scene's floor (x, z) in the model's own metres, undoing the alignment `fit` (placeScan). */
