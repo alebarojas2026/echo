@@ -42,7 +42,8 @@ Ports:
 - web: http://192.168.77.2:8080. board/serve.py serves web/dist, /nodes.json and /proof.json, and answers POST /ask,
   GET /history and GET /report (section 10). Those three answer from the board's own records, need no internet and
   are reached on our own network only (the cable and the sensing hotspot).
-  GET /privacy is the live privacy meter (section 11).
+  GET /privacy is the live privacy meter (section 11). GET and POST /clock set the board's clock from the
+  operator's laptop (section 12; as proposed, not built yet).
   It also has /layout for the operator's align mode: GET gives {"room": {offset_m, yaw_deg, scale, cut_m} | null,
   "hall_beacons": [{node, xyz_m}]} (every hall beacon in nodes.json; xyz_m is [x, y, z] or null). POST takes the
   same shape with either key or both (a room is never null there), JSON only, and only from the board itself,
@@ -408,6 +409,7 @@ Hall paths: "movement on this path" when moving, "path busy" when busy, "not cal
 Board host: python -m bus | python -m radio.wifi_rssi | python -m radio.hci_scan --node unoq (root) |
             python -m teacher.camwatch | python -m brain.main | python board/serve.py |
             python -m board.privacy (CAP_NET_ADMIN only, to read its counter) |
+            python -m board.clock (root: it sets the clock and restarts the stack; as proposed, section 12) |
             llama-server (narrator/llm.service) | python -m narrator.narrate
 Board App Lab: the camera teacher app (teacher/applab/), set as the default app. Nothing else runs in App Lab.
 Pi A: python -m pi.radio_node --node pi5 (root) | the hotspot profile from pi/ap.sh
@@ -484,4 +486,28 @@ GET http://192.168.77.2:8080/report          // optional ?from_t=<epoch ms>&to_t
    // A network error or a 404 means the same as ok:false.
    // These are not proof.json's bytes_out and images_stored: those come from PROOF.md's own procedure
    //   (board/egress.sh over one measured run) and stay as measured.
+```
+
+## 12. Board clock (GET and POST /clock on the board's web server; as proposed in #632, not built yet)
+```jsonc
+// The closed network has no time source, so the board's clock is set from the operator's laptop.
+// Both are answered only from the board itself, the cable and the sensing hotspot (403 otherwise). Always JSON.
+// GET /clock: the board's time, and whether a step would be taken now.
+{"t": 1763149512200, "busy": null, "last": null}
+   // t: the board's epoch ms when it answered. The page's difference = its own clock - t (half the round trip is noise).
+   // busy: null, or why POST would be refused right now, in plain words.
+   // last: the last step the helper made since the board booted, or null:
+   //   {"t": epoch ms after the step, "stepped_ms": n, "took_s": n, "ok": true} or {..., "ok": false, "why": "..."}
+// POST /clock {"t": epoch ms}, the laptop's clock when it sends:
+{"ok": true, "diff_ms": 520000, "stepping": true}    // 202: more than 2 s off; the clock is stepped and the stack restarts
+{"ok": true, "diff_ms": 830, "stepping": false}      // 200: within 2 s; nothing happens
+{"ok": false, "diff_ms": 520000, "why": "armed: disarm first"}   // 409: refused; nothing happens
+{"ok": false, "why": "send {\"t\": epoch ms}"}       // 400 (bad body), 503 (the clock helper isn't running)
+   // diff_ms = t - the board's clock when the request arrived; positive means the board is behind.
+   // Refused while armed, while a recording is open (a lesson is one), while a fit is running, while a
+   //   baseline is being captured, while the brain isn't answering, and while a step is already under way.
+   // A step stops the bus, the readers, camwatch, the brain, the narrator and the privacy meter, sets
+   //   the clock, and starts the ones that were running, in that order. The web server and the model server keep
+   //   running. The screen's WebSocket drops for a few seconds and the page reconnects.
+   // Operator only: the control is in the operator drawer, never on the judge-facing screen.
 ```
