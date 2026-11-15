@@ -53,7 +53,8 @@ SENTENCES = {   # template narration, one short sentence per event kind
     "cam_on": "The camera is on.", "cam_stalled": "The camera has stalled.", "cam_off": "The camera is off.",
 }
 ARMED_SENTENCES = {"armed": "Armed: this space should be empty now.", "disarmed": "Disarmed.",
-                   "intrusion": "Someone is here while armed, in zone {zone}."}
+                   "intrusion": "Someone is here while armed, in zone {zone}.",
+                   "passed_by": "Someone passed by."}
 TAMPER_KINDS = ("tamper", "tamper_cleared")   # worded by the narrator's own template, with the device's name
 TAMPER_SILENT_S, TAMPER_CLEAR_S = 3.0, 2.0   # section 6, Tamper (issue #533), as in brain/alert.py
 NO_NODE = {"object_on": "Something new is sitting in the room.", "object_off": "The new object is gone."}
@@ -98,6 +99,7 @@ class Brain:
                        "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
         self.armed, self.intruded = False, False   # section 6, Armed: the space should be empty
+        self.appeared = None   # (decisions since, zone) while an appearance waits out armed.hold_s
         self.heard, self.tamper, self.node_back = {}, [], {}   # link -> its last reading; nodes silent while armed
         self.commands_done = 0   # how many of the path's own commands (path["commands"]) have run
         self.fits = 0    # fits of a scripted lesson so far (path["lesson"])
@@ -132,7 +134,7 @@ class Brain:
 
     def _arm(self, t: float, on: bool) -> None:
         if on != self.armed:
-            self.armed, self.intruded = on, False
+            self.armed, self.intruded, self.appeared = on, False, None
             self._event(t, "armed" if on else "disarmed")
             self._tamper(t)   # disarming clears every listed node; arming with one already silent raises it at once
 
@@ -166,16 +168,30 @@ class Brain:
                 self._event(t, "tamper_cleared", node=node)
 
     def _intrusion(self, t: float, pred) -> None:
-        """Section 6: while armed, one intrusion each time a person appears (person holds the majority
-        of the last 10 decisions, after it didn't). Never while blind or with no prediction."""
+        """Section 6, Armed (wording in issue #584): a person appears when person holds the majority
+        of the last 10 decisions, after it didn't. Still there armed.hold_s later (nodes.json, 3 s):
+        one intrusion. Gone first: a passed_by instead. Never while blind or with no prediction, and
+        that time doesn't count as time spent there."""
         person = sum(k == "person" for k, _, _ in self.recent) > len(self.recent) / 2
         if not self.armed or pred is None:
             return
+        hold = round(LAYOUT.hold_s * 10)   # in decisions, 10 a second, as the real brain counts it
         if person and not self.intruded:
             self.intruded = True
-            self._event(t, "intrusion", zone=self.anchor[1] or None)
+            if hold <= 0:
+                self._event(t, "intrusion", zone=self.anchor[1] or None)
+            else:
+                self.appeared = (0, self.anchor[1] or None)
         elif not person:
-            self.intruded = False
+            if self.appeared:
+                self._event(t, "passed_by", zone=self.appeared[1])
+            self.intruded, self.appeared = False, None
+        elif self.appeared:
+            waited = self.appeared[0] + 1
+            self.appeared = (waited, self.appeared[1])
+            if waited >= hold:
+                self._event(t, "intrusion", zone=self.anchor[1] or self.appeared[1])
+                self.appeared = None
 
     def _ms(self, t: float) -> int:
         return self.start_ms + round(t * 1000)
