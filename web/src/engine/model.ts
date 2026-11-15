@@ -213,6 +213,8 @@ const RADIO: Record<string, string> = { wifi: 'Wi-Fi', ble: 'Bluetooth' }
 export interface DeviceView {
   id: string
   name: string
+  /** The device that seals the record (it does not sign it). */
+  board: boolean
   /** What it does, in a few words. */
   does: string
   /** The lines it hears: who, over which radio, and how many readings a second (null: no reading). */
@@ -271,6 +273,7 @@ export function deviceViews(layout: Layout, state: EngineState | null, chain: Ch
     return {
       id: n.id,
       name: n.name,
+      board: isBoard,
       does: isBoard
         ? 'Senses, decides, seals the record'
         : n.roles.includes('router')

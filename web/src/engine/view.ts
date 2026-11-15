@@ -172,7 +172,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
       }
       say(d.heard, v.heard ? 'Heard now' : (v.quiet ?? 'not heard'))
       const w = v.witness
-      say(d.signed, !w ? 'Seals every record' : w.silent ? `Silent witness: ${w.quiet}. The chain goes on.` : w.seq === null ? 'No signature yet' : `Signed record #${count(w.seq)}${w.ago ? `, ${w.ago}` : ''}${w.ok ? '' : ' (signature did NOT check)'}`)
+      say(d.signed, v.board ? 'Seals every record' : !w ? (chain ? 'Not enrolled as a witness' : 'No word from the board on its signatures') : w.silent ? `Silent witness: ${w.quiet}. The chain goes on.` : w.seq === null ? 'No signature yet' : `Signed record #${count(w.seq)}${w.ago ? `, ${w.ago}` : ''}${w.ok ? '' : ' (signature did NOT check)'}`)
       d.tick.hidden = !w
       // A small tick each time a new signature arrives: lit, then back to rest. Once per signature, never a loop.
       if (w && signedSeq.get(v.id) !== w.seq) {

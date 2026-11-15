@@ -93,7 +93,8 @@ describe('the devices', () => {
   it('puts the board first and says what each does, hears and signed', () => {
     expect(boardId(MOCK_LAYOUT, chain().witnesses)).toBe('unoq')
     const [board, a, b] = deviceViews(MOCK_LAYOUT, { t: 100_000, links }, chain(), 100_000, new Map())
-    expect(board).toMatchObject({ name: 'Board', does: 'Senses, decides, seals the record', hz: 37, heard: true, witness: null })
+    expect(board).toMatchObject({ name: 'Board', board: true, does: 'Senses, decides, seals the record', hz: 37, heard: true, witness: null })
+    expect(a.board).toBe(false)
     expect(board.hears).toEqual([{ from: 'Pi A', radio: 'Wi-Fi', hz: 25 }, { from: 'Pi A', radio: 'Bluetooth', hz: 6 }, { from: 'Pi B', radio: 'Bluetooth', hz: 6 }])
     expect(a).toMatchObject({ name: 'Pi A', does: 'The Wi-Fi of the room, and a witness', hz: 6, heard: true })
     expect(a.witness).toEqual({ seq: 1185, ago: '2 s ago', ok: true, silent: false, quiet: null })
@@ -109,7 +110,9 @@ describe('the devices', () => {
     expect(b.witness).toMatchObject({ silent: true, quiet: 'has not signed for 12 s' })
     expect(a.heard).toBe(true)
     expect(board.hz).toBe(31) // its own two lines from Pi A still read
-    expect(deviceViews(MOCK_LAYOUT, null, null, 0, new Map()).map((d) => d.quiet)).toEqual(['not heard yet', 'not heard yet', 'not heard yet'])
+    const none = deviceViews(MOCK_LAYOUT, null, null, 0, new Map())
+    expect(none.map((d) => d.quiet)).toEqual(['not heard yet', 'not heard yet', 'not heard yet'])
+    expect(none.map((d) => [d.board, d.witness])).toEqual([[true, null], [false, null], [false, null]]) // with no board only the board's column is the board
   })
 })
 
