@@ -14,6 +14,9 @@ Before the model:
 - a question with a plain keyword ("armed", "router", "still", "Wi-Fi", ...) is picked by
   keywords. The model only sees the rest, and if it is down or slow they get the list.
 picked_by says which one picked: "llm" or "rules".
+"What happened?" (and "tell me the story", "who was here", "replay it") goes to the detective
+(agent/detective.py): a story in time order from the stored records, with its steps, the records
+it cites and whether the sealed chain verified. It never waits on the model.
 The time ("since 2", "in the last hour") and the zone ("on the left") are read from the
 question by Python, never guessed by the model. A question test (lab/ask_bench on the
 lab-ask-bench branch) checks all of this against a few thousand questions.
@@ -29,7 +32,7 @@ from pathlib import Path
 
 from store import DB, Store
 from .tools import TOOLS, current_spot
-from . import room_facts
+from . import detective, room_facts
 
 LLM_URL = "http://127.0.0.1:8091"
 TIMEOUT_S = 8.0
@@ -50,6 +53,14 @@ CANT = re.compile(
 # "Is that Robin?", "Where is Robin?": a capitalised name that isn't one of the zones.
 NAME = re.compile(r"\b(?:(?:[Ii]s|[Ww]as) (?:that|this|it)(?: guy| girl| person)?|[Ww]here is|[Ww]here's) ([A-Z][a-z]+)\b")
 CANT_ANSWER = "I only answer from this room's records, and they never say who someone is or how many people there were."
+
+# "What happened?": the detective tells the story from the records (agent/detective.py).
+STORY = re.compile(r"\bwhat(?:'s| has| had)?\b(?:\s+\w+){0,2}\s+happened\b|\bwhat (just )?went on\b|\btell me the story\b"
+                   r"|\bthe story\b|\breplay\b|\bwho (was|were|came|has been|had been) (here|there|in|by|around)\b"
+                   r"|\bwhat did (you|it|the (board|room|record)) (see|sense|notice|record|catch)\b|\bwhat was recorded\b", re.I)
+# "Who was here?" is a story question: the story says what happened and never who it was.
+WHO_HERE = re.compile(r"\bwho (was|were|came|has been|had been) (here|there|in|by|around)\b", re.I)
+NOT_WHO = "I can't tell who anyone is, only what happened. "
 
 RULES = [  # (tool, keywords): first match wins, so the order matters
     ("intrusions", r"intru|\barmed\b|\barm(ed)? mode|break.?ins?\b|broke in|trespass|after.?hours|sneak|security (alarm|mode|system)"),
@@ -244,6 +255,30 @@ def zone_said(question: str, zones: dict) -> int:
     return hits.pop() if len(hits) == 1 else 0
 
 
+def story_question(question: str) -> bool:
+    """True for "what happened?" and the like, which the detective answers."""
+    return bool(STORY.search(question))
+
+
+def devices(path) -> dict:
+    """{node id: its name in radio/nodes.json}, for the sentences that name a device ("Pi B")."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return {n["id"]: n["name"] for n in json.load(f)["nodes"] if n.get("name")}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
+def tell(question: str, store: Store, now_ms: int, zones: dict, nodes_path=None, writer=None) -> dict:
+    """The detective's reply (tool "story"): the story of the stretch the question asks about."""
+    from_t, to_t, minutes = detective.window(question, now_ms, minutes_said)
+    out = detective.investigate(store, from_t, to_t, zones, devices(nodes_path or NODES_JSON), writer)
+    if WHO_HERE.search(question):
+        out["answer"] = NOT_WHO + out["answer"]
+    out["rows"] = out["rows"] + [{"row": "asked", "minutes": minutes}]
+    return {**out, "tool": "story", "args": {"minutes": minutes, "zone": None, "link": None}}
+
+
 def by_rules(question: str, now_hm=None) -> dict:
     """The keyword pick: the tool from the keywords ("none" when nothing matches)."""
     now_hm = now_hm or time.localtime()[3:5]
@@ -266,15 +301,21 @@ USES_MINUTES = ("presence", "still_spans", "alerts", "intrusions", "link_history
 
 
 def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic,
-        nodes_path=None, privacy_reader=None) -> dict:
+        nodes_path=None, privacy_reader=None, writer=None) -> dict:
     """{"answer", "rows", "tool", "args", "picked_by": "llm"|"rules", "src", "ms"} for one question.
-    src is the newest record's src ("live", "sim" or "replay"; None when the store is empty)."""
+    src is the newest record's src ("live", "sim" or "replay"; None when the store is empty).
+    A "what happened" question gets the detective's story, with "steps", "cites" and "chain_ok" too;
+    writer, if given, is the on-board model that may smooth the story's wording."""
     start = timer()
     if zones is None or links is None:
         zones, links = layout(nodes_path or NODES_JSON)
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
     question = " ".join(str(question).split())[:MAX_QUESTION]
     read = fix_typos(question)   # the keywords and the time read this; the model gets the question as typed
+    if story_question(read) and not any(cant_answer(WHO_HERE.sub(" ", q), zones) for q in (question, read)):
+        out = tell(read, store, now_ms, zones, nodes_path, writer)
+        latest = store.latest()
+        return {**out, "picked_by": "rules", "src": latest and latest["src"], "ms": round((timer() - start) * 1000)}
     refused = cant_answer(question, zones) or cant_answer(read, zones)
     pick, picked_by = {"tool": "none"}, "rules"
     if not refused:
@@ -318,11 +359,20 @@ def main(argv=None) -> None:
     ap.add_argument("--db", default=str(DB))
     ap.add_argument("--llm", default=LLM_URL, help="llama-server base URL")
     ap.add_argument("--no-llm", action="store_true", help="pick the tool by keywords only")
+    ap.add_argument("--smooth", action="store_true", help="let the model smooth a story's wording (it waits on the model)")
     args = ap.parse_args(argv)
-    reply = ask(args.question, Store(args.db), None if args.no_llm else Picker(args.llm))
+    writer = None
+    if args.smooth and not args.no_llm:
+        from .report import Writer
+        writer = Writer(args.llm)
+    reply = ask(args.question, Store(args.db), None if args.no_llm else Picker(args.llm), writer=writer)
     print(reply["answer"])
     for row in reply["rows"]:
         print("  ", json.dumps(row))
+    for step in reply.get("steps", []):
+        print(f"   step {step['tool']}: {step['rows']} rows, {step['ms']} ms")
+    if "chain_ok" in reply:
+        print(f"   chain_ok {reply['chain_ok']}, cites {reply.get('cites', reply.get('cites_t'))}")
     print(f"tool {reply['tool']} {json.dumps(reply['args'])}, picked by {reply['picked_by']}, "
           f"records {reply['src']}, {reply['ms']} ms")
 
