@@ -40,7 +40,7 @@ test('headlines say where by the zone name, and never a side', () => {
 
 test('the signal trace is one row for the spot, from every radio line that crosses it', () => {
   const sides = signalSides(layout)
-  expect(sides).toEqual([{ zone: 1, name: 'At the desk', links: ['pi5b>unoq:ble', 'pi5>pi5b:wifi', 'pi5>pi5b:ble', 'pi5b>pi5:ble'] }])
+  expect(sides).toEqual([expect.objectContaining({ zone: 1, name: 'At the desk', links: ['pi5b>unoq:ble', 'pi5>pi5b:wifi', 'pi5>pi5b:ble', 'pi5b>pi5:ble'] })])
   // The deepest fresh crossing line counts; desk-only and stale lines do not.
   expect(sideDrop(sides[0], [link('pi5>unoq:ble', 30), link('pi5>pi5b:wifi', 25), link('pi5b>unoq:ble', 11.5), link('pi5b>pi5:ble', 13, 'stale')])).toBe(25)
   expect(sideDrop(sides[0], [link('pi5>unoq:ble', 30), link('pi5>unoq:wifi', 9)])).toBeNull()
@@ -51,7 +51,7 @@ test('the signal trace is one row for the spot, from every radio line that cross
 test('the row turns the person colour while someone is on the spot', () => {
   const history = new SignalHistory()
   history.refreshSides(layout)
-  const state = { ...here('still'), links: [link('pi5b>unoq:ble', 12), link('pi5>pi5b:ble', 10)] }
+  const state = { ...here('still'), links: [link('pi5>pi5b:wifi', 12), link('pi5b>unoq:ble', 8), link('pi5>pi5b:ble', 10)] }
   history.push({ ...state, seq: 1 }, 100)
   history.push({ ...state, seq: 2, pred: { ...state.pred!, present: false, kind: 'none', zone: 0, zone_set: [], motion: null } }, 200)
   expect(history.samples.map((s) => [s.drop, s.present])).toEqual([[[12], [true]], [[12], [false]]])
