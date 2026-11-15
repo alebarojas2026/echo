@@ -56,6 +56,14 @@ export function compass() {
   return ['South: the router', 'North is up']
 }
 
+// A zone named as a place ("At the desk", "By the door") is said as it is, in a sentence: "at the desk".
+// null for a zone with a plain name ("Chair"), which gets words around it, and for an unknown zone.
+const PLACE = /^(at|in|on|by|near|behind|under) \S/i
+export function placeName(z) {
+  const name = ZONES[z]
+  return name && PLACE.test(name) ? name.charAt(0).toLowerCase() + name.slice(1) : null
+}
+
 // Fetch /nodes.json from the board (or the dev server) and use its zones and device names. True if either was taken.
 export async function loadZones(fetchFn = globalThis.fetch) {
   try {

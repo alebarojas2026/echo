@@ -1,7 +1,7 @@
 // What the caregiver's phone shows for a brain state. No DOM in here, so it can be tested with node.
 // Message shapes come from CONTRACTS.md v2, section 5. Every number shown comes from the state.
 
-import { deviceName, ZONES } from '../zones.js'
+import { deviceName, placeName, ZONES } from '../zones.js'
 
 export { ZONES }
 export const STALE_MS = 1000 // section 6: NO DATA when the last state is older than 1 s
@@ -16,6 +16,16 @@ export function isEvent(msg) {
 
 function zoneName(z) {
   return ZONES[z] ? `the ${ZONES[z]} zone` : 'the room'
+}
+
+// "in the Chair zone", or "at the desk" for a zone named as a place.
+function zoneWhere(z) {
+  return placeName(z) ?? `in ${zoneName(z)}`
+}
+
+// The words of the title that take the person colour: the zone's name as the title says it.
+function zoneWord(z) {
+  return placeName(z) ?? ZONES[z] ?? null
 }
 
 // Armed mode (section 6) is the board's call, never the page's: the intrusion card comes only from the brain's
@@ -52,6 +62,7 @@ export function followState(events, state) {
 function passedWords(zone) {
   const name = ZONES[zone]
   if (!name) return 'Someone passed by.'
+  if (placeName(zone)) return `Someone passed by ${placeName(zone)}.`
   return /^(left|right)$/i.test(name) ? `Someone passed by on the ${name.toLowerCase()}.` : `Someone passed by in ${zoneName(zone)}.`
 }
 
@@ -77,8 +88,8 @@ export function card(state, ageMs, events = noEvents(), now = 0) {
   // The board raised an intrusion: it stays up until disarm or reset, through a blind sensor too.
   if (armed && events.intrusion) {
     const { zone, link } = events.intrusion
-    const title = zone != null ? `Someone is in ${zoneName(zone)}.` : link ? 'Someone is on a hall path.' : 'Someone is here.'
-    return { mode: 'intrusion', label: 'INTRUSION', title, detail: 'This space should be empty.', zone: ZONES[zone] ?? null, checkinT, ...lines }
+    const title = zone != null ? `Someone is ${zoneWhere(zone)}.` : link ? 'Someone is on a hall path.' : 'Someone is here.'
+    return { mode: 'intrusion', label: 'INTRUSION', title, detail: 'This space should be empty.', zone: zoneWord(zone), checkinT, ...lines }
   }
   if (state.health?.status === 'blind') {
     return { mode: 'blind', label: 'SENSOR BLIND', title: 'The radio cannot read the room right now.', detail: 'This does not mean the room is empty.', zone: null, checkinT, ...lines }
@@ -92,9 +103,9 @@ export function card(state, ageMs, events = noEvents(), now = 0) {
   }
   const alert = state.alert ?? {}
   if (alert.state === 'check_on') {
-    const where = ZONES[alert.zone] ? `in the ${ZONES[alert.zone]}` : 'in the room'
+    const where = placeName(alert.zone) ?? (ZONES[alert.zone] ? `in the ${ZONES[alert.zone]}` : 'in the room')
     const howLong = typeof alert.limit_s === 'number' ? ` for ${alert.limit_s} s` : ''
-    return { mode: 'alert', label: 'NO-MOVEMENT ALERT', title: `No movement ${where}${howLong}.`, detail: 'A wave or a tap on reset clears it.', zone: ZONES[alert.zone] ?? null, checkinT, ...lines }
+    return { mode: 'alert', label: 'NO-MOVEMENT ALERT', title: `No movement ${where}${howLong}.`, detail: 'A wave or a tap on reset clears it.', zone: zoneWord(alert.zone), checkinT, ...lines }
   }
   const pred = state.pred
   if (!pred) {
@@ -107,9 +118,9 @@ export function card(state, ageMs, events = noEvents(), now = 0) {
   return {
     mode: 'calm',
     label: 'ALL GOOD',
-    title: `Someone is in ${zoneName(pred.zone)}.`,
+    title: `Someone is ${zoneWhere(pred.zone)}.`,
     detail: counting ? `No movement for ${Math.floor(alert.still_s)} s.` : pred.motion === 'moving' ? 'Moving.' : 'Standing still.',
-    zone: ZONES[pred.zone] ?? null,
+    zone: zoneWord(pred.zone),
     checkinT,
     ...lines,
   }
