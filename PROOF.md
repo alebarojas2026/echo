@@ -252,3 +252,42 @@ failed attempts.
 [kit51-failure]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6894915077
 [kit51-baselines]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6894938312
 [kit51-placement]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6895027963
+
+## Later recheck: longer object hold and a repositioned kit
+
+The [13:40 UTC recheck report][kit51-recheck] and [13:48 UTC visual check][kit51-visual]
+describe further work on the same software build, `4be0eea`, with a different board-local
+configuration and physical placement. The operator changed `object_hold_s` from 3 to
+3600 in the board's presence settings and restarted the brain. The generated layout
+was reported to contain 3600; the Pis' settings were unchanged. This sets an hour-long
+hold condition rather than removing the object rule. No hour-long behavior was measured here.
+
+Before the next baseline, the board and Pi A were also moved. An intermediate baseline
+was discarded. At the placement used for the recheck, the presence-line baseline was
+-40 dBm and Pi B-to-board Bluetooth was -62 dBm. Both configuration and placement
+changed, so this run cannot isolate which change produced the improvement. The earlier
+failed attempts remain part of the evidence.
+
+| Check | Reported result | Method and scope | N | Date (UTC) | Board build / override |
+|---|---|---|---|---|---|
+| Still stand after the changes | No-movement alert 9.7 s after enter | Brain event-to-event time; the browser showed the no-movement alert. Across occupied parts of the run, the reported drop had median 14.1 dB and largest value 17.2 dB. | 1 rehearsed alert sequence | 2026-11-15 | 4be0eea; object_hold_s 3600 |
+| Step aside and return | Check-in and alert-off on return after 5.1 s out | The browser showed Check-in received. Its small narration still said the person had stepped away 2 s later; the visual contradiction is retained. | 1 gesture | 2026-11-15 | 4be0eea; object_hold_s 3600 |
+| Short empty interval | Nobody on all 214 sampled states during 30 s | Operator's state-log observation after a plain stand. It is not an empty-hour result or a zero long-term false-alarm claim. | 1 interval | 2026-11-15 | 4be0eea; object_hold_s 3600 |
+| Engine room checked by eye | Three devices heard, 2 of 2 witnesses signing, chain verified | Operator looked at the live browser page; this addresses the earlier missing visual check for this later build/run. | 1 visual check | 2026-11-15 | 4be0eea; object_hold_s 3600 |
+| Prove it on that page | Page identified changed copy record 7630; the real chain then verified | Subsequent /chain/verify: ok true, 3,600 records checked, first_bad_seq null, 151 ms. | 1 copy demonstration and subsequent verification | 2026-11-15 | 4be0eea; object_hold_s 3600 |
+| Privacy measurement | __ | The engine-room header still reported nft Netlink unavailable. The visual check supplies no measured zero for images or external bytes. | __ | __ | __ |
+
+The continued stand produced another alert 9.7 s after re-entry, as the person was
+leaving. No object or advice event was reported during this short person-only recheck;
+that does not establish person-versus-object discrimination. `flutter-133727` is the
+named recording. Its raw state capture and active configuration hash are not available
+in this workspace, so these remain attributed operator observations.
+
+The placement control was also checked by eye and saved the drawing without a brain
+restart. The same report explicitly leaves the page's What happened button, the alarm
+page hint and an armed/report check untested in that checklist. Do not turn the selected
+successful rechecks into a claim that every acceptance step passed. None of these results
+tests the simulated object-threshold proposal mentioned in the earlier discussion.
+
+[kit51-recheck]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6895181297
+[kit51-visual]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6895278408
