@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineConfig, type Plugin } from 'vite'
+import { cleanPositions, setHallBeaconPositions } from './src/room/hallfile'
 
 // `vite` and `vite preview` answer /nodes.json and /proof.json from the repo the way board/serve.py does on
 // the board, so the screen and its tests read the same files in development as on the kiosk.
@@ -80,6 +81,32 @@ export function cleanFit(body: unknown): Record<string, unknown> | null {
 
 // Under `vite` only: the screen asks here for the scan on every load (GET), so a new room.glb or room.json
 // shows on reload without a restart, and align mode's S saves room.json here (POST).
+// Under `vite` only: align mode's S saves the hall beacons it placed into radio/nodes.json (POST), changing only
+// each beacon's xyz_m. /nodes.json is read from the file on every request, so a reload shows them where they were put.
+function hallBeaconsApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
+  if (req.url?.split('?')[0] !== '/__hall-beacons' || req.method !== 'POST') return next()
+  let body = ''
+  req.on('data', (chunk: Buffer) => {
+    body += chunk
+    if (body.length > 8192) req.destroy()
+  })
+  req.on('end', () => {
+    let positions = null
+    try {
+      positions = cleanPositions(JSON.parse(body))
+    } catch {
+      // not JSON
+    }
+    res.setHeader('content-type', 'application/json')
+    if (!positions) {
+      res.statusCode = 400
+      return void res.end(JSON.stringify({ error: 'expected [{node, xyz_m}]' }))
+    }
+    writeFileSync(NODES, setHallBeaconPositions(readFileSync(NODES, 'utf8'), positions))
+    res.end(JSON.stringify({ saved: 'radio/nodes.json' }))
+  })
+}
+
 function roomScanApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
   if (req.url?.split('?')[0] !== '/__room-scan') return next()
   res.setHeader('content-type', 'application/json')
@@ -111,6 +138,7 @@ function boardFiles(): Plugin {
     name: 'board-files',
     configureServer: (server) => {
       server.middlewares.use(roomScanApi)
+      server.middlewares.use(hallBeaconsApi)
       server.middlewares.use(boardJson)
     },
     configurePreviewServer: (server) => void server.middlewares.use(boardJson),
