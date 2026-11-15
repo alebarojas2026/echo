@@ -140,8 +140,11 @@ def ask_check(base, timeout=20):
         raise ValueError(why or f"/ask answered {error.code}") from None
     if not isinstance(reply, dict) or not str(reply.get("answer") or "").strip():
         raise ValueError("/ask gave no answer")
-    if reply.get("picked_by") != "llm":
-        raise Warn(f"answered, picked by {reply.get('picked_by') or 'unknown'}: the on-board model did not pick the tool")
+    # The keywords pick first and the model only sees what they miss, so "picked by rules" is a pass:
+    # the question here has a plain keyword in it. Only an answer from no tool at all is worth a look.
+    if not reply.get("tool"):
+        raise Warn(f"answered with the list of what can be asked (picked by {reply.get('picked_by') or 'unknown'}): "
+                   "no tool was picked for the question")
 
 
 def main(argv=None):

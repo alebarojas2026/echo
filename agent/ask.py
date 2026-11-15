@@ -46,7 +46,7 @@ CANT = re.compile(
     r"|\bignore\b|\bpretend\b|\brepeat after\b|\bsystem prompt\b|\byou are now\b|\bjailbreak|\bforget (the|your|all)\b"
     r"|\bweather\b|\bjoke\b|\bpoem\b|\bhaiku\b|\bpassword\b|\bcapital of\b|\bstock\b|\bwhat time is it\b"
     r"|^\W*(please )?(arm|disarm|turn (on|off)|reset|delete|send|call|open|play|set|translate|write|say|tell me a)\b", re.I)
-# "Is that Ivan?", "Where is Ivan?": a capitalised name that isn't one of the zones.
+# "Is that Robin?", "Where is Robin?": a capitalised name that isn't one of the zones.
 NAME = re.compile(r"\b(?:(?:[Ii]s|[Ww]as) (?:that|this|it)(?: guy| girl| person)?|[Ww]here is|[Ww]here's) ([A-Z][a-z]+)\b")
 CANT_ANSWER = "I only answer from this room's records, and they never say who someone is or how many people there were."
 
@@ -90,8 +90,8 @@ SINCE = re.compile(r"\bsince\s+(noon|midday|" + HOURS + r")(?::(\d\d))?\s*(am|pm
 LEFT = re.compile(r"\b(left|lft)\b", re.I)
 RIGHT = re.compile(r"\b(on|in|at|to|the) (the )?(right|rigth)\b(?! now)|\b(right|rigth)[- ]?(side|zone|half|hand|end|one)\b", re.I)
 
-SHOTS = [  # example questions and picks, sent before the real question
-    ("anyone on the right in the last 5 minutes?", {"tool": "presence", "minutes": 5, "zone": 2, "link": "any"}),
+SHOTS = [  # example questions and picks, sent before the real question. Python reads the zone, so it is 0 in each.
+    ("anyone on the right in the last 5 minutes?", {"tool": "presence", "minutes": 5, "zone": 0, "link": "any"}),
     ("how long did they stay without moving?", {"tool": "still_spans", "minutes": 10, "zone": 0, "link": "any"}),
     ("who was that?", {"tool": "none", "minutes": 10, "zone": 0, "link": "any"}),
     ("did the wifi signal drop in the last hour?", {"tool": "link_history", "minutes": 60, "zone": 0, "link": "any"}),
@@ -285,7 +285,8 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
         pick = {**pick, "minutes": MINUTES[2] if said is None else said, "zone": zone_said(read, zones)}
     tool, args = checked(pick, zones, links)
     if tool is None:
-        out = {"answer": (CANT_ANSWER + " " if refused else "") + can_answer(), "rows": []}
+        # The list comes first, as section 10 says; a refusal adds why after it.
+        out = {"answer": can_answer() + (" " + CANT_ANSWER if refused else ""), "rows": []}
     else:
         out = TOOLS[tool](store, now_ms, zones, **args)
         if tool in USES_MINUTES:   # the minutes in the answer are in a row too

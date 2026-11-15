@@ -191,13 +191,15 @@ def test_records_are_asked_for_in_the_boards_own_time(board):
         demo_check.records_check(base, {"t": 5_000_000})
 
 
-def test_ask_needs_an_answer_and_says_who_picked_the_tool(board):
+def test_ask_needs_an_answer_from_a_tool_picked_by_the_keywords_or_the_model(board):
     server, base = board
-    server.ask = {"answer": "Nobody is here.", "picked_by": "llm"}
+    server.ask = {"answer": "Nobody is here.", "tool": "presence", "picked_by": "llm"}
     demo_check.ask_check(base)
     assert server.asked == [{"question": demo_check.QUESTION}]
-    server.ask = {"answer": "Nobody is here.", "picked_by": "rules"}
-    with pytest.raises(demo_check.Warn, match="picked by rules"):
+    server.ask = {"answer": "Nobody is here.", "tool": "presence", "picked_by": "rules"}
+    demo_check.ask_check(base)
+    server.ask = {"answer": "I can answer: ...", "tool": None, "picked_by": "rules"}
+    with pytest.raises(demo_check.Warn, match="no tool was picked"):
         demo_check.ask_check(base)
     server.ask = {"answer": " "}
     with pytest.raises(ValueError, match="no answer"):
