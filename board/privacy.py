@@ -3,6 +3,7 @@
     python -m board.privacy          # one line a person can read, from the running meter
     python -m board.privacy reset    # count bytes out from zero again (logged with the time)
     python -m board.privacy run      # the meter itself (the radio-sight-privacy unit)
+    sudo python3 -m board.privacy --explain   # bytes out by protocol and destination port
 
 Every second the meter writes /run/radio-sight-privacy/status.json; board/serve.py serves it as
 GET /privacy (contract issue #620):
@@ -12,16 +13,18 @@ ok is false whenever a number can't be read or the last reading is more than 3 s
 there are no numbers: never a zero in place of an unknown.
 
 images: image or video files present now (by name, and by their first bytes for files under
-1 GB) in
-- data/ in this checkout (sessions, the store, layout saves);
-- ~/ArduinoApps, where App Lab keeps its apps, the camera teacher included;
+1 GB) in every place the camera pipeline or our code could write a frame, and nowhere else:
+- data/ in this checkout: everything our own code writes (sessions, the store, layout saves);
+- the camera teacher's own App Lab folder, ~/ArduinoApps/<the app in TEACHER_APP> (or
+  TEACHER_APP itself when it's a path): App Lab gives that folder to the teacher's container.
+  Other apps and App Lab's examples are not the camera pipeline, so their icons don't count;
 - the folders holding TEACHER_HEARTBEAT, TEACHER_MODE_FILE and TEACHER_CALIB from .env (the
   folders mounted into the teacher's container);
-- every folder in PRIVACY_DIRS (separated by ":"), for anything else;
+- every folder in PRIVACY_DIRS (separated by ":"), if another one is ever mounted;
 - the files each running container (App Lab's) has added or changed, from Docker's API, by name.
-A folder that isn't there is listed as missing, not counted as checked. Installed library
-files (site-packages, dist-packages, node_modules), .git and __pycache__ are skipped:
-their icons are not stored pictures.
+A folder that isn't there is listed as missing, not counted as checked (so is the teacher's
+folder while TEACHER_APP isn't set). Installed library files (site-packages, dist-packages,
+node_modules), .git and __pycache__ are skipped: their icons are not stored pictures.
 
 bytes_out: the nftables counter in board/privacy.nft, on the postrouting hook, so it sees the
 board's own processes and App Lab's containers as their packets leave. It counts every packet
@@ -29,7 +32,9 @@ to an address outside 192.168.77.0/24 (the cable), 10.42.0.0/24 (the sensing hot
 loopback, link-local, multicast and broadcast. The unit loads the table as root just before
 it starts; reading the counter needs CAP_NET_ADMIN, the only privilege the unit has. The
 count survives a restart of the meter (the kernel keeps it); a reboot starts it over, and
-the meter says so in its journal.
+the meter says so in its journal. `--explain` reads board/privacy-ports.nft's per-port set
+(since the table was loaded, so it ignores a reset) and names what each port usually is, so a
+nonzero count says what sent it: deploy.sh stops the services that call out by themselves.
 
 Standard library only.
 """
@@ -126,7 +131,7 @@ def is_image_name(name: str) -> bool:
 def default_folders(env=None, home=None) -> list:
     env = os.environ if env is None else env
     home = Path(home) if home else Path.home()
-    folders = [REPO / "data", home / "ArduinoApps"]
+    folders = [REPO / "data", teacher_folder(env.get("TEACHER_APP"), home)]
     for var in ("TEACHER_HEARTBEAT", "TEACHER_MODE_FILE", "TEACHER_CALIB"):
         if env.get(var):
             folders.append(Path(env[var]).expanduser().parent)
@@ -137,6 +142,15 @@ def default_folders(env=None, home=None) -> list:
         if f not in out:
             out.append(f)
     return out
+
+
+def teacher_folder(app, home) -> Path:
+    """The camera teacher's App Lab folder from TEACHER_APP: a path, or an alias like user:<name>."""
+    if not app:
+        return Path(home) / "ArduinoApps" / "(TEACHER_APP is not set in .env)"
+    if "/" in app:
+        return Path(app).expanduser()
+    return Path(home) / "ArduinoApps" / app.split(":", 1)[-1]
 
 
 class FolderScan:
@@ -425,11 +439,75 @@ def reset(status_path=STATUS, wait_s=4.0, clock=time.time, sleep=time.sleep) -> 
     return 1
 
 
+# What a destination port usually is, for --explain. Anything else is printed as its number.
+PORT_NAMES = {("udp", 123): "time sync (NTP)", ("udp", 53): "name lookups (DNS)", ("tcp", 53): "name lookups (DNS)",
+              ("tcp", 853): "name lookups over TLS", ("tcp", 80): "web (HTTP): apt, a connectivity check",
+              ("tcp", 443): "web (HTTPS): updates, App Lab", ("udp", 443): "web (QUIC)",
+              ("udp", 67): "address request (DHCP)", ("udp", 68): "address request (DHCP)",
+              ("udp", 1900): "device discovery (SSDP)", ("udp", 5353): "device discovery (mDNS)"}
+
+
+def _port_rows(doc) -> list:
+    """[(proto, port, bytes, packets)] from `nft -j list set` output, biggest first."""
+    rows = []
+
+    def walk(v):
+        if isinstance(v, dict):
+            key = (v.get("val") or {}).get("concat") if isinstance(v.get("val"), dict) else None
+            ctr = v.get("counter")
+            if isinstance(key, list) and len(key) == 2 and isinstance(ctr, dict) and _count(ctr.get("bytes")):
+                rows.append((str(key[0]), key[1], ctr["bytes"], ctr.get("packets") or 0))
+                return
+            for x in v.values():
+                walk(x)
+        elif isinstance(v, list):
+            for x in v:
+                walk(x)
+    walk(doc)
+    return sorted(rows, key=lambda r: -r[2])
+
+
+def explain(run=subprocess.run, nft=None) -> int:
+    """Bytes out by where they went, from board/privacy-ports.nft (needs root, like nft itself)."""
+    nft = nft or NftCounter().nft
+    try:
+        r = run([nft, "-j", "list", "set", FAMILY, TABLE, "out_ports"], capture_output=True, text=True, timeout=5)
+        other = run([nft, "-j", "list", "counter", FAMILY, TABLE, "out_noport"], capture_output=True, text=True,
+                    timeout=5)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"can't ask nft: {e}", file=sys.stderr)
+        return 1
+    if r.returncode != 0:
+        print("can't read the per-port counts: run it with sudo, after the meter has started "
+              f"({(r.stderr or '').strip().splitlines()[:1]})", file=sys.stderr)
+        return 1
+    try:
+        rows = _port_rows(json.loads(r.stdout))
+    except ValueError:
+        print("nft's answer couldn't be read", file=sys.stderr)
+        return 1
+    try:
+        noport = NftCounter(nft, run=lambda *a, **k: other).read() if other.returncode == 0 else None
+    except Unreadable:
+        noport = None
+    print("bytes sent out by the board since it started counting (a reset doesn't clear these):")
+    if not rows and not noport:
+        print("  nothing")
+    for proto, port, n, packets in rows:
+        print(f"  {proto} {port:<5} {PORT_NAMES.get((proto, port), ''):<40} {n} bytes, {packets} packets")
+    if noport:
+        print(f"  {'no port (ICMP such as ping, and others)':<50} {noport} bytes")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="The privacy meter: images stored, bytes sent out")
     ap.add_argument("what", nargs="?", default="show", choices=("show", "reset", "run"))
     ap.add_argument("--status", default=str(STATUS), help="the meter's status file")
+    ap.add_argument("--explain", action="store_true", help="bytes out by protocol and destination port (sudo)")
     args = ap.parse_args(argv)
+    if args.explain:
+        return explain()
     if args.what == "run":
         status_path = Path(args.status)
         Meter(NftCounter(), FolderScan(default_folders()), ContainerScan(),

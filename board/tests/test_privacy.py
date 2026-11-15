@@ -8,9 +8,15 @@ import pytest
 
 from board import privacy, serve
 
-JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 60
-PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 60
-MP4 = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 60
+# The meter knows a file by its name or its first bytes, so the tests plant 64-byte stubs that only
+# start like these files: a few literal bytes, never a picture, and nothing here encodes one.
+STUB = {"jpeg": b"\xff\xd8\xff\xe0" + b"\x00" * 60, "png": b"\x89PNG\r\n\x1a\n" + b"\x00" * 60,
+        "mp4": b"\x00\x00\x00\x18ftypisom" + b"\x00" * 60}
+
+
+def plant(path, kind):
+    """Put a stub that starts like a `kind` file at path, in the test's temp folder."""
+    path.write_bytes(STUB[kind])
 
 
 class FakeCounter:
@@ -73,7 +79,7 @@ def test_no_images_in_clean_folders(folders):
 
 @pytest.mark.parametrize("name, data", [
     ("frame.jpg", b"not really"), ("CLIP.MP4", b""), ("x.webp", b""),
-    ("frame.bin", JPEG), ("dump", PNG), ("video.dat", MP4),
+    ("frame.bin", STUB["jpeg"]), ("dump", STUB["png"]), ("video.dat", STUB["mp4"]),
 ])
 def test_an_image_or_video_by_name_or_by_its_first_bytes_is_counted(folders, name, data):
     data_dir, apps = folders
@@ -85,8 +91,8 @@ def test_images_anywhere_below_are_counted_and_gone_ones_are_not(folders):
     data_dir, apps = folders
     deep = data_dir / "sessions" / "a" / "b"
     deep.mkdir(parents=True)
-    (deep / "one.png").write_bytes(PNG)
-    (apps / "two.jpeg").write_bytes(JPEG)
+    plant(deep / "one.png", "png")
+    plant(apps / "two.jpeg", "jpeg")
     scan = privacy.FolderScan(folders)
     assert scan.count() == 2
     (deep / "one.png").unlink()
@@ -97,7 +103,7 @@ def test_library_icons_are_not_stored_pictures(folders):
     data_dir, apps = folders
     lib = apps / "teacher" / ".cache" / "venv" / "lib" / "site-packages" / "pkg"
     lib.mkdir(parents=True)
-    (lib / "icon.png").write_bytes(PNG)
+    plant(lib / "icon.png", "png")
     assert privacy.FolderScan(folders).count() == 0
 
 
@@ -115,12 +121,80 @@ def test_a_folder_that_cant_be_read_is_unreadable_not_zero(folders, monkeypatch)
         privacy.FolderScan(folders).count()
 
 
-def test_default_folders_include_data_app_lab_and_the_teachers_mounts(tmp_path):
-    env = {"TEACHER_HEARTBEAT": "/srv/teacher/heartbeat.json", "TEACHER_MODE_FILE": "/srv/teacher/mode",
-           "PRIVACY_DIRS": "/opt/extra:"}
+def test_default_folders_are_where_the_camera_pipeline_or_our_code_could_write(tmp_path):
+    env = {"TEACHER_APP": "user:radio-sight-teacher", "TEACHER_HEARTBEAT": "/srv/teacher/heartbeat.json",
+           "TEACHER_MODE_FILE": "/srv/teacher/mode", "PRIVACY_DIRS": "/opt/extra:"}
     got = [p.as_posix() for p in privacy.default_folders(env, home=tmp_path)]
-    assert got[0].endswith("/data") and got[1] == (tmp_path / "ArduinoApps").as_posix()
+    assert got[0].endswith("/data") and got[1] == (tmp_path / "ArduinoApps" / "radio-sight-teacher").as_posix()
+    assert (tmp_path / "ArduinoApps").as_posix() not in got   # not every App Lab app: only the teacher's
     assert sum(p.endswith("/srv/teacher") for p in got) == 1 and got[-1].endswith("/opt/extra")
+
+
+@pytest.mark.parametrize("app, folder", [
+    ("user:radio-sight-teacher", "ArduinoApps/radio-sight-teacher"),
+    ("radio-sight-teacher", "ArduinoApps/radio-sight-teacher"),
+    (None, "ArduinoApps/(TEACHER_APP is not set in .env)"),
+])
+def test_the_teachers_folder_from_teacher_app(tmp_path, app, folder):
+    assert privacy.teacher_folder(app, tmp_path) == tmp_path / folder
+
+
+def test_an_app_icon_elsewhere_is_not_counted_and_a_planted_frame_is(tmp_path, monkeypatch):
+    home, repo = tmp_path / "home", tmp_path / "repo"
+    teacher = home / "ArduinoApps" / "radio-sight-teacher" / "python"
+    teacher.mkdir(parents=True)
+    (teacher / "calib.json").write_text("{}")
+    other = home / "ArduinoApps" / "blink-example" / "assets"
+    other.mkdir(parents=True)
+    plant(other / "icon.png", "png")                        # another app's icon: not the camera pipeline
+    (repo / "data" / "sessions").mkdir(parents=True)
+    monkeypatch.setattr(privacy, "REPO", repo)
+    scan = privacy.FolderScan(privacy.default_folders({"TEACHER_APP": "user:radio-sight-teacher"}, home=home))
+    assert scan.count() == 0 and scan.missing == []
+    plant(repo / "data" / "sessions" / "frame.jpg", "jpeg")  # a planted frame in a data folder
+    assert scan.count() == 1
+    plant(teacher / "grab.jpg", "jpeg")                     # and one in the teacher's own folder
+    assert scan.count() == 2
+
+
+def test_without_teacher_app_its_folder_is_shown_as_not_there(tmp_path):
+    scan = privacy.FolderScan(privacy.default_folders({}, home=tmp_path))
+    scan.count()
+    assert any("TEACHER_APP is not set" in m for m in scan.missing)
+
+
+PORTS = {"nftables": [{"metainfo": {}}, {"set": {"family": "inet", "name": "out_ports", "elem": [
+    {"elem": {"val": {"concat": ["udp", 53]}, "counter": {"packets": 4, "bytes": 300}}},
+    {"elem": {"val": {"concat": ["udp", 123]}, "counter": {"packets": 12, "bytes": 912}}},
+    {"elem": {"val": {"concat": ["tcp", 8443]}, "counter": {"packets": 1, "bytes": 60}}}]}}]}
+NOPORT = {"nftables": [{"counter": {"name": "out_noport", "packets": 5, "bytes": 420}}]}
+
+
+def test_explain_lists_each_port_biggest_first_with_what_it_usually_is(capsys):
+    def run(cmd, **kw):
+        doc = PORTS if cmd[3] == "set" else NOPORT
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(doc), "")
+    assert privacy.explain(run=run, nft="nft") == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[1].split()[:2] == ["udp", "123"] and "time sync (NTP)" in lines[1] and "912 bytes" in lines[1]
+    assert "name lookups (DNS)" in lines[2] and lines[3].split()[:2] == ["tcp", "8443"]
+    assert "ping" in lines[4] and "420 bytes" in lines[4]
+
+
+def test_explain_with_nothing_sent_says_nothing(capsys):
+    def run(cmd, **kw):
+        doc = {"nftables": [{"set": {"name": "out_ports"}}]} if cmd[3] == "set" else \
+            {"nftables": [{"counter": {"bytes": 0}}]}
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(doc), "")
+    assert privacy.explain(run=run, nft="nft") == 0
+    assert capsys.readouterr().out.splitlines()[1].strip() == "nothing"
+
+
+def test_explain_without_root_says_how(capsys):
+    def run(cmd, **kw):
+        return subprocess.CompletedProcess(cmd, 1, "", "Error: Operation not permitted")
+    assert privacy.explain(run=run, nft="nft") == 1
+    assert "sudo" in capsys.readouterr().err
 
 
 def test_container_files_are_counted_from_dockers_changes():
@@ -196,7 +270,7 @@ def test_on_a_new_boot_everything_the_kernel_counted_is_kept(meter):
 
 def test_a_stored_image_is_counted_live(meter, folders):
     m = meter(containers=FakeContainers(1))
-    (folders[0] / "leak.png").write_bytes(PNG)
+    plant(folders[0] / "leak.png", "png")
     assert m.tick()["images"] == 2
 
 

@@ -13,6 +13,8 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 # "+": only this line runs as root, to load the counter (a reload keeps the count). "-": if it
 # fails, the meter still starts and says why it can't count, instead of looping.
 ExecStartPre=-+/usr/sbin/nft -f @REPO@/board/privacy.nft
+# Per-port counts for --explain; on their own line so they can't stop the meter.
+ExecStartPre=-+/usr/sbin/nft -f @REPO@/board/privacy-ports.nft
 ExecStart=@PYTHON@ -m board.privacy run
 # Reading an nftables counter needs CAP_NET_ADMIN. It's the only privilege the meter gets.
 AmbientCapabilities=CAP_NET_ADMIN
