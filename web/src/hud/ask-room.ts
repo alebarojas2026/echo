@@ -58,9 +58,9 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
   const mode = (quick: boolean) => {
     dialog.dataset.quick = String(quick)
     dialog.querySelector('h2')!.textContent = quick ? 'What happened?' : 'Ask the room'
-    form.hidden = quick; dialog.querySelector<HTMLElement>('details')!.hidden = quick; other.hidden = !quick
+    form.hidden = quick; dialog.querySelector<HTMLDetailsElement>('details')!.hidden = quick; dialog.querySelector<HTMLDetailsElement>('details')!.open = !quick; other.hidden = !quick
   }
-  other.onclick = () => { mode(false); input.focus() }
+  other.onclick = () => { generation++; controller?.abort(); idle(); result.hidden = true; mode(false); input.value = ''; input.focus() }
   trigger.onclick = () => { mode(true); open(); other.focus(); input.value = recentQuestion; form.requestSubmit() }
   dialog.querySelector<HTMLButtonElement>('.ask-close')!.onclick = close
   dialog.addEventListener('cancel', event => { event.preventDefault(); close() })
