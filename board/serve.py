@@ -9,6 +9,10 @@ files are read on every request, so new measurements show up without a restart.
 Until proof/proof.json exists, /proof.json is the section 7 shape with every
 value null, which the screen shows as "__".
 
+index.html goes out with <meta name="radio-sight-board" content="live"> added after <head>:
+a page served by the board shows live data, and plays the simulated tour only when asked for
+it in the address (#642's web half).
+
 /layout is for the operator's align mode (#510): GET gives the saved room alignment and
 the hall beacons' positions, POST saves them (board/layout.py says what may be sent). They
 are for drawing only and live in data/layout.local.json; /nodes.json carries the saved hall
@@ -57,6 +61,8 @@ LAYOUT = REPO / "data" / "layout.local.json"
 MAX_ASK_BYTES = 2048
 SAVE_FROM = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "192.168.77.0/24", "10.42.0.0/24")]
 MAX_API_BODY = 8192
+# Added to index.html as it is served: the page knows it came from the board, so it shows live data.
+BOARD_META = '<meta name="radio-sight-board" content="live">'
 SPAN_MAX_MS = 30 * 60 * 1000    # /history answers at most 30 minutes per call (CONTRACTS.md section 10)
 
 
@@ -289,7 +295,25 @@ class Handler(SimpleHTTPRequestHandler):
         if not Path(self.directory).is_dir():
             return self._json({"error": "web/dist is not built yet"}, head,
                               HTTPStatus.SERVICE_UNAVAILABLE)
+        if path in ("/", "/index.html"):
+            return self._index(head)
         return super().do_HEAD() if head else super().do_GET()
+
+    def _index(self, head: bool):
+        """The screen, marked as served by the board: the page shows live data, never the mock tour."""
+        try:
+            page = (Path(self.directory) / "index.html").read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return super().do_HEAD() if head else super().do_GET()
+        at = page.lower().find("<head>")
+        at = at + len("<head>") if at >= 0 else 0
+        body = (page[:at] + BOARD_META + page[at:]).encode()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if not head:
+            self.wfile.write(body)
 
     def _nodes(self, head: bool):
         try:
@@ -373,6 +397,16 @@ def room_ask(db=None, llm=None):
     return lambda question: ask(question, store, picker)
 
 
+def agent_routes(db=None, llm=None) -> dict:
+    """GET /history and GET /report from agent/endpoints.py, or {} if agent/ or store/ is missing."""
+    try:
+        from agent import endpoints
+        return endpoints.routes(db, llm)
+    except ImportError as e:
+        print(f"serve: /history and /report are off ({e})", file=sys.stderr, flush=True)
+        return {}
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="Serve the screen, /nodes.json and /proof.json")
     ap.add_argument("--host", default="0.0.0.0")
@@ -381,12 +415,12 @@ def main(argv=None) -> None:
     ap.add_argument("--nodes", default=str(NODES))
     ap.add_argument("--proof", default=str(PROOF))
     ap.add_argument("--layout", default=str(LAYOUT), help="where align mode's saves are kept")
-    ap.add_argument("--store", default=None, help="the store's SQLite file, for /ask")
-    ap.add_argument("--llm", default=None, help="llama-server base URL, for /ask")
+    ap.add_argument("--store", default=None, help="the store's SQLite file, for /ask, /history and /report")
+    ap.add_argument("--llm", default=None, help="llama-server base URL, for /ask and /report")
     args = ap.parse_args(argv)
 
     server = make_server(args.host, args.port, args.dist, args.nodes, args.proof, args.layout,
-                         ask=room_ask(args.store, args.llm))
+                         ask=room_ask(args.store, args.llm), routes=agent_routes(args.store, args.llm))
     host, port = server.server_address[:2]
     print(f"serve: http://{host}:{port} from {args.dist}", file=sys.stderr, flush=True)
     try:
@@ -398,4 +432,7 @@ def main(argv=None) -> None:
 
 
 if __name__ == "__main__":
+    # The unit runs this file as a script. The mounted handlers raise board.serve.ApiError: make
+    # that this module, or a second copy of it would turn every 400 into a 500.
+    sys.modules.setdefault("board.serve", sys.modules[__name__])
     main()

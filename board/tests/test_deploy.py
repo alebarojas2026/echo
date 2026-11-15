@@ -11,7 +11,7 @@ from board.tests.shell import BASH
 REPO = Path(__file__).resolve().parents[2]
 BOARD_UNITS = {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan",
                "radio-sight-camwatch", "radio-sight-brain", "radio-sight-serve",
-               "radio-sight-llm", "radio-sight-narrate"}
+               "radio-sight-llm", "radio-sight-narrate", "radio-sight-store"}
 NEEDS_PI = {"radio-sight-wifi-rssi", "radio-sight-hci-scan"}
 
 
@@ -41,7 +41,7 @@ def repo(tmp_path):
     (r / "board").mkdir(parents=True)
     shutil.copy(REPO / "board" / "deploy.sh", r / "board" / "deploy.sh")
     shutil.copytree(REPO / "board" / "units", r / "board" / "units")
-    for path in ("board/serve.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
+    for path in ("board/serve.py", "store/__init__.py", "agent/endpoints.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
                  "teacher/camwatch.py", "brain/main.py", "advisor/advice.py", "narrator/narrate.py",
                  "pi/radio_node.py", "web/src/main.ts", "docs/notes.md"):
         write(r, path, "# v1\n")
@@ -97,6 +97,14 @@ def test_units_run_as_root_only_where_the_contract_says(repo):
                for u in BOARD_UNITS - {"radio-sight-llm"})
 
 
+def test_the_store_follows_the_brain_as_the_clone_owner(repo):
+    deploy(repo, "v1")
+    lines = (repo.parent / "units" / "radio-sight-store.service").read_text().splitlines()
+    assert "After=radio-sight-brain.service" in lines and "Restart=always" in lines
+    assert any(l.startswith("ExecStart=") and l.endswith(" -m store") for l in lines)
+    assert any(l.startswith("User=") and l != "User=root" for l in lines)
+
+
 def test_same_ref_restarts_nothing(repo):
     deploy(repo, "v1")
     restarted, out = deploy(repo, "v1")
@@ -109,6 +117,8 @@ def test_same_ref_restarts_nothing(repo):
     ("radio/nodes.json", {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan", "radio-sight-brain"}),
     ("advisor/advice.py", {"radio-sight-brain"}),
     ("board/serve.py", {"radio-sight-serve"}),
+    ("store/__init__.py", {"radio-sight-store", "radio-sight-serve"}),
+    ("agent/endpoints.py", {"radio-sight-serve"}),
     ("narrator/narrate.py", {"radio-sight-narrate"}),
     ("narrator/llm.service", {"radio-sight-llm", "radio-sight-narrate"}),
     ("teacher/camwatch.py", {"radio-sight-camwatch"}),

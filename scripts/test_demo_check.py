@@ -29,7 +29,15 @@ def test_reachable_board(tmp_path):
     nodes.write_bytes((CHECKER.parent.parent / "radio" / "nodes.json").read_bytes())
 
     async def state(socket):
-        await socket.send('{"v":2,"type":"state"}')
+        await socket.send('{"v":2,"type":"state","t":1763149512200}')
+
+    asked = []
+
+    def history(req):
+        asked.append(req.query)
+        return {"rows": [{"t": 1763149511000}] if rows else []}
+
+    rows = True
 
     async def silent(socket):
         await socket.wait_closed()
@@ -37,14 +45,22 @@ def test_reachable_board(tmp_path):
     async def check_servers(port):
         async with serve(state, "127.0.0.1", 0) as ws:
             assert await run_checker(port, ws.sockets[0].getsockname()[1]) == (
-                0, ["PASS web", "PASS nodes.json", "PASS proof.json", "PASS WebSocket"],
+                0, ["PASS web", "PASS nodes.json", "PASS proof.json", "PASS WebSocket", "PASS records", "PASS ask"],
             )
+            assert asked[-1] == {"from_t": "1763149452200", "to_t": "1763149512200"}   # the board's minute
+            nonlocal rows
+            rows = False
+            code, lines = await run_checker(port, ws.sockets[0].getsockname()[1])
+            assert code == 1 and lines[-2].startswith("FAIL records: no records") and lines[-1] == "PASS ask"
         async with serve(silent, "127.0.0.1", 0) as ws:
             code, lines = await run_checker(port, ws.sockets[0].getsockname()[1])
             assert code == 1
-            assert lines[-1] == "FAIL WebSocket: TimeoutError"
+            assert lines[-3] == "FAIL WebSocket: TimeoutError"
+            assert lines[-2].startswith("FAIL records: no board time")
 
-    with make_server("127.0.0.1", 0, dist=tmp_path, nodes=nodes, proof=tmp_path / "proof.json") as board:
+    with make_server("127.0.0.1", 0, dist=tmp_path, nodes=nodes, proof=tmp_path / "proof.json",
+                     ask=lambda question: {"answer": "Nobody is here."},
+                     routes={("GET", "/history"): history}) as board:
         thread = Thread(target=board.serve_forever)
         thread.start()
         try:
@@ -61,7 +77,7 @@ def test_unreachable_board():
         code, lines = asyncio.run(run_checker(port, port))
     assert code == 1
     assert [line.split(":", 1)[0] for line in lines] == [
-        "FAIL web", "FAIL nodes.json", "FAIL proof.json", "FAIL WebSocket",
+        "FAIL web", "FAIL nodes.json", "FAIL proof.json", "FAIL WebSocket", "FAIL records", "FAIL ask",
     ]
 
 
