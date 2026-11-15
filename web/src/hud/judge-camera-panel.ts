@@ -1,4 +1,5 @@
 import type { StateMsg } from '../room/contract'
+import { CameraSeen } from './handoff'
 
 export function cameraLine(state: StateMsg | null, radioSeconds: number | null = null) {
   if (!state) return ''
@@ -23,9 +24,10 @@ export function mountPanel(root: HTMLElement) {
   root.innerHTML = '<p data-testid="cam-status"></p>'
   const line = root.firstElementChild as HTMLElement
   const clock = new RadioOnlyClock()
+  const camera = new CameraSeen()
   return {
     update(state: StateMsg | null, stale: boolean) {
-      root.hidden = stale || !state
+      root.hidden = camera.absent(state) || stale || !state
       if (stale || !state) return
       const text = cameraLine(state, clock.update(state))
       if (line.textContent !== text) line.textContent = text

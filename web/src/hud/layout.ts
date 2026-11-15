@@ -5,6 +5,8 @@ export interface HudLayout {
   links: { id: string; tx: string; rx: string; kind: string; crosses_spot?: boolean }[]
   zones: { id: number; name: string; still_alert_s: number | null }[]
   router_spots: { id: string; xyz_m: number[] }[]
+  /** A layout whose one line decides by itself (the one-spot kit): no camera and no lesson are part of it. */
+  presence?: { line?: string } | null
 }
 export let hudLayout: HudLayout = file
 let pending: Promise<void> | undefined

@@ -8,7 +8,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`lean check-in instruc
  await page.evaluate(()=>window.arrival.update('still'))
  await expect(page.getByTestId('checkin-instruction')).toBeHidden();await shot('counting')
  await page.evaluate(()=>{const s=window.arrival.peek('still');window.arrival.update('still',{alert:{...s.alert,state:'check_on',still_s:12}})})
- await expect(page.getByTestId('checkin-instruction')).toHaveText("Lean aside to say you're okay.")
+ await expect(page.getByTestId('checkin-instruction')).toHaveText("Step aside and back to say you're okay.")
  await expect(page.getByTestId('checkin-instruction')).toBeVisible();await expect(page.getByTestId('checkin-instruction')).toHaveCSS('font-size','28px');await shot('alert')
  await page.evaluate(()=>window.arrival.update('checkin'))
  await expect(page.getByTestId('checkin-toast')).toHaveText('Check-in received');await expect(page.getByTestId('checkin-instruction')).toBeHidden();await shot('checkin')

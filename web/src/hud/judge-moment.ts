@@ -6,6 +6,7 @@ import { KIND_WORDS, type SecondKind } from './records'
 export { zoneName } from './layout'
 import { deadZone } from './dead-zone'
 import { spotMoment } from './spot-moment'
+import { shownAlert } from '../room/shown-alert'
 
 export function judgeMoment(state: StateMsg | null, stale: boolean, layout = hudLayout) {
   // A replayed second with nothing to show says so. It is never drawn as an empty room.
@@ -15,7 +16,7 @@ export function judgeMoment(state: StateMsg | null, stale: boolean, layout = hud
   if (state.armed && state.tamper?.length) return [tamperWords(state, false), state.health.status === 'blind' ? 'Sensor blind' : '']
   if (state.health.status === 'blind') return ['Sensor blind', `${blindSentence(state, layout)}\nAlerts are paused`]
   // A dead zone is the moment while the board advises a move and measures it. An alert or an armed space comes first.
-  const zone = state.alert?.state === 'check_on' || state.armed ? null : deadZone(state, false)
+  const zone = shownAlert(state, layout.presence?.line)?.state === 'check_on' || state.armed ? null : deadZone(state, false)
   const spot = spotMoment(state, layout)
   if (spot) return spot
   if (zone) return [zone.headline, zone.detail]

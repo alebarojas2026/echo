@@ -2,11 +2,12 @@ import { mountPrivacyLine } from './privacy'
 import { sourceWords } from './source-words'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
-import { changingText } from './changing-text'
+import { changingText, framesDrawn } from './changing-text'
 import './arrival.css'
 import { judgeMoment } from './judge-moment'
 import { blindSentence } from './health-words'
-import { zonePlace } from './layout'
+import { hudLayout, zonePlace } from './layout'
+import { boardNow } from './board-time'
 
 type ArrivalState = StateMsg & { armed?: boolean }
 
@@ -19,6 +20,8 @@ export const FOUND_HOLD_MS = 1200
 export const FOUND_FADE_MS = 1800
 /** Someone has to be there this long before "Found you.", so a person walking past does not flash it (#584). */
 export const FOUND_AFTER_MS = 1500
+/** One state that does not say "a person is here" inside this long does not start the count again. */
+export const FOUND_GAP_MS = 300
 /** "Someone passed by" stays this long. */
 export const PASSED_BY_MS = 5000
 
@@ -28,13 +31,40 @@ export function foundLine(cam: string): string {
   return cam === 'off' ? '0 cameras' : cam === 'on' ? 'Camera teaching' : cam === 'stalled' ? 'Camera stalled' : 'By radio.'
 }
 
+export type ArrivalStep = 'waiting' | 'found' | 'fading' | 'done'
+/** Where the card is, from how long the board has said a person is here (board time, ms; null = nobody).
+ *  Nothing else decides it: no timer and no drawn frame, so a page that was in a background tab, asleep or
+ *  reconnecting shows the right step on the next state it gets. */
+export function arrivalStep(presentMs: number | null): ArrivalStep {
+  if (presentMs === null || presentMs < FOUND_AFTER_MS) return 'waiting'
+  if (presentMs < FOUND_AFTER_MS + FOUND_HOLD_MS) return 'found'
+  return presentMs < FOUND_AFTER_MS + FOUND_HOLD_MS + FOUND_FADE_MS ? 'fading' : 'done'
+}
+
+/** Since when (board time) a person has been here without a break longer than FOUND_GAP_MS. */
+export class PresentSince {
+  private since: number | null = null
+  private last = 0
+  /** now: board time of this reading, or null when there is none. Returns ms present, or null. */
+  update(here: boolean, now: number | null): number | null {
+    if (now === null) this.since = null
+    else if (here) {
+      // A board clock that stepped back (a restart) starts the count again.
+      if (this.since === null || now < this.since) this.since = now
+      this.last = now
+    } else if (this.since !== null && (now - this.last > FOUND_GAP_MS || now < this.last)) this.since = null
+    return this.since === null || now === null ? null : now - this.since
+  }
+  clear() { this.since = null }
+}
+
 export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTMLElement) {
   const view = document.createElement('section')
   view.className = 'hud-arrival'
   view.setAttribute('aria-label', 'Arrival')
-  view.innerHTML = `<header><span>Radio Sight</span><span data-testid="arrival-source"></span></header>
+  view.innerHTML = `<header><span>Echo</span><span data-testid="arrival-source"></span></header>
     <div class="arrival-message" aria-live="polite"><h1 data-testid="arrival-title"></h1><p data-testid="arrival-detail"></p><p class="arrival-passed" data-testid="arrival-passed"></p></div>
-    <footer><span>Taught by a camera. Runs without one.</span><span data-testid="visitor-count">Visitor 0</span></footer>`
+    <footer><span data-testid="arrival-claim"></span><span data-testid="visitor-count">Visitor 0</span></footer>`
   const disposePrivacy = mountPrivacyLine(view)
   view.querySelector('.arrival-message')!.before(view.querySelector('.privacy-line')!)
   document.body.append(view)
@@ -43,6 +73,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   const passed = changingText(view.querySelector<HTMLElement>('.arrival-passed')!)
   const counter = view.querySelector('[data-testid="visitor-count"]')!
   const source = view.querySelector('[data-testid="arrival-source"]')!
+  const claim = view.querySelector('[data-testid="arrival-claim"]')!
   const arm = document.createElement('button')
   arm.type = 'button'
   arm.textContent = 'Arm space'
@@ -56,16 +87,16 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   let stale = true
   let complete = false
   let intrusion = false
-  let hold: ReturnType<typeof setTimeout> | undefined
+  let wake: ReturnType<typeof setTimeout> | undefined
   let fade: Animation[] | undefined
   let phase: ArrivalPhase | undefined
   let phaseCut = false
-  let presentSince: number | null = null
-  let presentTimer: ReturnType<typeof setTimeout> | undefined
+  const present = new PresentSince()
+  let here = false
   let passedBy = ''
   let passedTimer: ReturnType<typeof setTimeout> | undefined
   const seen = new Set<string>()
-  const cancelHold = () => { clearTimeout(hold); hold = undefined; fade?.forEach(animation => animation.cancel()); fade = undefined }
+  const cancelHold = () => { clearTimeout(wake); wake = undefined; fade?.forEach(animation => animation.cancel()); fade = undefined }
   // cut: an intrusion goes straight to the floor, so the room should jump there instead of flying (#552).
   const announce = (next: ArrivalPhase, cut = false) => {
     if (next === phase && cut === phaseCut) return
@@ -80,7 +111,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   const replaying = () => document.documentElement.dataset.hudReplay === 'on'
   const close = (cut = false) => {
     // The panels come in where the words went out, the way every text change on this screen does.
-    if (!view.hidden && !matchMedia('(prefers-reduced-motion: reduce)').matches) host.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, delay: 40, fill: 'backwards' })
+    if (!view.hidden && framesDrawn() && !matchMedia('(prefers-reduced-motion: reduce)').matches) host.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, delay: 40, fill: 'backwards' })
     view.hidden = true
     host.inert = false
     host.removeAttribute('aria-hidden')
@@ -98,9 +129,13 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     passed.set(state?.armed && !fault && !stale ? passedBy : '')
   }
   const render = () => {
-    const here = !stale && !!state?.pred?.present && state.pred.kind === 'person'
-    if (!here) { presentSince = null; clearTimeout(presentTimer); presentTimer = undefined }
-    else presentSince ??= performance.now()
+    here = !stale && !!state?.pred?.present && state.pred.kind === 'person'
+    // The board's clock: the last state's t, carried forward by this page's clock until the next one.
+    const presentMs = present.update(here, stale ? null : boardNow(feed?.current() ?? null))
+    clearTimeout(wake)
+    wake = undefined
+    // The one-spot kit has no camera at all; the camera lesson is the other layouts' story.
+    claim.textContent = hudLayout.zones.length === 1 ? 'No camera. No microphone.' : 'Taught by a camera. Runs without one.'
     arm.textContent = state?.armed ? 'Disarm space' : 'Arm space'
     arm.disabled = !feed || stale
     source.textContent = sourceWords(state)
@@ -122,21 +157,26 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
       return
     }
     if (complete) { close(); return }
-    const waited = presentSince === null ? 0 : performance.now() - presentSince
-    if (here && waited < FOUND_AFTER_MS && !hold) presentTimer ??= setTimeout(() => { presentTimer = undefined; render() }, FOUND_AFTER_MS - waited)
-    if (here && (waited >= FOUND_AFTER_MS || hold)) {
+    const step = arrivalStep(presentMs)
+    if (step === 'done') { complete = true; cancelHold(); close(); return }
+    if (presentMs !== null) {
+      // A wake-up for the next step, for a feed that has gone quiet. Every state message recomputes anyway.
+      const next = [FOUND_AFTER_MS, FOUND_AFTER_MS + FOUND_HOLD_MS, FOUND_AFTER_MS + FOUND_HOLD_MS + FOUND_FADE_MS].find(at => at > presentMs)!
+      wake = setTimeout(render, next - presentMs)
+    }
+    if (step === 'found' || step === 'fading') {
       // The words hold, then the card fades as the room flies from the hall down to the floor.
-      show('Found you.', foundLine(state.cam), false, fade ? 'found' : 'waiting')
-      if (!hold) hold = setTimeout(() => {
-        if (view.hidden) return
-        announce('found')
-        // Only the words fade. The rail behind them keeps the page colour, so nothing shows through half-way.
-        fade = [...view.children].filter(part => !part.classList.contains('privacy-line')).map(part => part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FOUND_FADE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }))
-        hold = setTimeout(() => { complete = true; cancelHold(); render() }, FOUND_FADE_MS)
-      }, FOUND_HOLD_MS)
+      show('Found you.', foundLine(state.cam), false, step === 'fading' ? 'found' : 'waiting')
+      if (step === 'found' || view.hidden) { fade?.forEach(animation => animation.cancel()); fade = undefined; return }
+      // Only the words fade. The rail behind them keeps the page colour, so nothing shows through half-way.
+      fade ??= [...view.children].filter(part => !part.classList.contains('privacy-line')).map(part => part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FOUND_FADE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }))
+      // The fade is as far along as the board's clock says, also after a while with no frames drawn.
+      const at = presentMs! - FOUND_AFTER_MS - FOUND_HOLD_MS
+      for (const animation of fade) if (Math.abs(Number(animation.currentTime ?? 0) - at) > 150) animation.currentTime = at
       return
     }
-    cancelHold()
+    fade?.forEach(animation => animation.cancel())
+    fade = undefined
     show(state.pred.kind === 'object' ? 'An object, not a person.' : 'Nobody is here.', 'Step up to the desk.')
   }
   skip.onclick = () => { complete = true; cancelHold(); render() }
@@ -169,12 +209,15 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
       clearTimeout(passedTimer)
       if (state) state = { ...state, armed: false }
     }
-    if (event.kind === 'reset') { complete = false; cancelHold() }
+    // Between judges: whoever stepped off a moment ago is not greeted again.
+    if (event.kind === 'reset') { complete = false; cancelHold(); if (!here) present.clear() }
     render()
   })
   const visibility = new MutationObserver(render)
   visibility.observe(operator, { attributes: true, attributeFilter: ['hidden'] })
   visibility.observe(document.documentElement, { attributes: true, attributeFilter: ['data-hud-replay'] })
+  // A tab brought back to the front, or a laptop that woke up: the card is worked out again at once.
+  document.addEventListener('visibilitychange', render)
   render()
-  return () => { disposePrivacy(); cancelHold(); clearTimeout(presentTimer); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
+  return () => { document.removeEventListener('visibilitychange', render); disposePrivacy(); cancelHold(); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
 }

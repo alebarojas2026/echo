@@ -1,4 +1,5 @@
 import type { StateMsg } from '../room/contract'
+import { hudLayout, type HudLayout } from './layout'
 
 type Timing = { started_t?: number; radio_only_t?: number | null }
 type Lesson = { started_t?: number; agree?: number; of?: number; fits?: number; fitting?: boolean }
@@ -32,4 +33,14 @@ export function handoff(state: StateMsg | null, stale: boolean) {
 /** The strip is on whenever there is a live reading; a replayed second has no camera of its own. */
 export function handoffShown(state: StateMsg | null, stale: boolean): boolean {
   return !!state && !stale && state.src !== 'replay'
+}
+
+/** On a layout with a presence line there is no camera in the product: nothing about one is shown until the board
+ *  has reported a camera (on or stalled) since this page loaded. */
+export class CameraSeen {
+  private seen = false
+  absent(state: StateMsg | null, layout: HudLayout = hudLayout): boolean {
+    if (state?.cam === 'on' || state?.cam === 'stalled') this.seen = true
+    return !!layout.presence?.line && !this.seen
+  }
 }
