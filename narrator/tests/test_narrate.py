@@ -91,7 +91,8 @@ def play(script, model_ms=6000, until_s=40):
     def sleep(seconds):
         clock.t += round(seconds * 1000)
 
-    nar = n.Narrator(llm, sent.append, clock=clock, sleep=sleep)
+    nar = n.Narrator(llm, sent.append, clock=clock, sleep=sleep,
+                     monotonic=lambda: (clock.t - NOW) / 1000)
     waiting = sorted(script, key=lambda e: e["t"])
     while clock.t <= NOW + until_s * 1000:
         while waiting and waiting[0]["t"] <= clock.t:   # events that arrived meanwhile, in order
@@ -103,6 +104,23 @@ def play(script, model_ms=6000, until_s=40):
 
 def at(seconds, kind, id, zone=4):
     return event(kind=kind, t=NOW + round(seconds * 1000), id=id, info={"zone": zone})
+
+
+@pytest.mark.parametrize("jump_ms", [-3000, 3_600_000])
+def test_model_duration_ignores_wall_clock_changes(jump_ms):
+    from contracts.check import errors
+    clock = Clock()
+    elapsed = iter([100.0, 100.125])
+
+    def llm(messages):
+        clock.t += jump_ms
+        return ENTER_2, "test-model"
+
+    nar, sent = make(llm, clock=clock, monotonic=lambda: next(elapsed))
+    msg = nar.narrate(event())
+    assert msg["gen_ms"] == 125
+    assert msg["t"] == NOW + jump_ms
+    assert errors(msg) == []
 
 
 def test_checkin_that_arrives_while_a_zone_change_waits_is_narrated():

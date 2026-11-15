@@ -373,12 +373,14 @@ class Narrator:
     """Picks which events to narrate and builds the narration messages.
 
     llm(messages) -> (text, model) and send(msg) are injected, so tests can
-    use fakes. clock() returns epoch ms.
+    use fakes. clock() returns epoch ms; monotonic() returns elapsed seconds.
     """
 
     def __init__(self, llm, send, clock=now_ms, timeout_s=LLM_TIMEOUT_S,
-                 gap_ms=GAP_MS, max_age_ms=MAX_AGE_MS, sleep=time.sleep):
+                 gap_ms=GAP_MS, max_age_ms=MAX_AGE_MS, sleep=time.sleep,
+                 monotonic=time.monotonic):
         self.llm, self.send, self.clock, self.sleep = llm, send, clock, sleep
+        self.monotonic = monotonic
         self.timeout_s, self.gap_ms, self.max_age_ms = timeout_s, gap_ms, max_age_ms
         self.warm = None          # called when a model call fails (a Warmer's kick), if set
         self.pending = None       # the most important event not yet narrated
@@ -451,9 +453,9 @@ class Narrator:
 
     def narrate(self, event: dict) -> dict:
         """Build, send and return the narration for one event."""
-        start = self.clock()
+        start = self.monotonic()
         text, source, model, why = self.sentence(event)
-        gen_ms = self.clock() - start
+        gen_ms = round((self.monotonic() - start) * 1000)
         msg = self.send_spaced(text=text, event_id=event.get("id"), event_kind=event["kind"],
                                gen_ms=gen_ms, source=source, model=model, src=event.get("src", "live"))
         log(f"{event.get('id')} {event['kind']} -> {source} {gen_ms} ms ({why}): {text}")
