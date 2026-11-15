@@ -206,6 +206,13 @@ export interface PlacementPreset {
 }
 export const PLACEMENT: PlacementPreset = { nearApartM: 0.08, farApartM: 0.7, inFromEdgeM: 0.08, aboveTopM: 0.05, facingWithinM: 1.2, standAcrossM: 1.0, standHighM: 1.0 }
 
+/** Which desk the far end goes on when it goes on one, by the side of our desk the spot is on. */
+const ACROSS_WORDS: Record<Gap, string> = {
+  behind: 'on the desk of the row behind',
+  front: 'on the desk of the row in front',
+  end: 'on the end of the next block\u2019s desk',
+}
+
 /** A device on a table of its own must clear the next desk by this much; nearer than that it goes on that desk. */
 const TABLE_ROOM_M = 0.1
 
@@ -247,9 +254,10 @@ export function placementGuide(h: HallDesks, spot: DeskSpot, nodes: readonly Gui
     // Only a desk that reaches this angle is across from us (a row can end before it).
     if (d && rad(outside(d, thDeg)) * d.r_m < 0.3) facing = { gap: Math.abs(d.r_m - spot.desk.r_m) - 2 * half, floor: d.floor_m }
   }
-  // A layout that already has a device across the spot (the gate) says itself how deep the gate is and how high
-  // each end stands (the two ends are each on the edge of their own table and need not be level). The guide keeps
-  // both, so measured numbers in the file drop straight in.
+  // A layout that already has a device across the spot (the gate) says itself how deep the gate is, and how high
+  // a far end on a table of its own stands. The guide keeps both, so measured numbers in the file drop straight
+  // in. A device on a desk takes that desk's height from the hall's model: the rows are tiered, so the far end on
+  // the row behind sits higher than the board.
   const acrossNow = nodes.filter((n) => n.xyz[1] < -0.01)
   const gate = acrossNow.length > 0
   const depth = gate ? cm(sh - Math.min(...acrossNow.map((n) => n.xyz[1]))) : STAND_ACROSS_M
@@ -262,7 +270,7 @@ export function placementGuide(h: HallDesks, spot: DeskSpot, nodes: readonly Gui
 
   // One row along our desk's edge and one across the gap. The board's group takes one, the rest the other.
   const ours = (n: GuideNode, dx: number): Placement => ({
-    id: n.id, xyz: [cm(sw / 2 + dx), cm(sh + inFromEdge), gate ? n.xyz[2] : cm(ourTop + ABOVE_TOP_M)], on: 'our desk',
+    id: n.id, xyz: [cm(sw / 2 + dx), cm(sh + inFromEdge), cm(ourTop + ABOVE_TOP_M)], on: 'our desk',
     words: `${n.name}: on our desk, at the edge facing the spot, ${sideWords(dx)}`,
   })
   const which = (dx: number, alone: boolean) => (alone ? '' : `, ${sideWords(dx)}`)
@@ -270,7 +278,7 @@ export function placementGuide(h: HallDesks, spot: DeskSpot, nodes: readonly Gui
     onDesk
       ? {
           id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - facing!.gap - inFromEdge), cm(facing!.floor - floor_m + h.desk_height_m + ABOVE_TOP_M)], on: 'facing desk',
-          words: gate ? `${n.name}: on the desk across from you, opposite the board${which(dx, alone)}` : `${n.name}: on the desk across the gap, at its near edge, ${sideWords(dx)}`,
+          words: gate ? `${n.name}: ${ACROSS_WORDS[spot.gap ?? 'behind']}, straight across from the board${which(dx, alone)}` : `${n.name}: on the desk across the gap, at its near edge, ${sideWords(dx)}`,
         }
       : gate
         ? {
