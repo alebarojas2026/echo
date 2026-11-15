@@ -120,6 +120,36 @@ Hall links (optional): up to two more beacons far outside the layout, as tripwir
   (optional). empty_quiet_db is that link's quiet level measured once with the hall empty (Hall activity, section 6).
 Armed (optional): "armed": {"hold_s": n} = how long a person must stay before an intrusion is raised (Armed, section 6).
   Missing means 3. Use 4 for a very busy aisle.
+Layout files: radio/layouts/<name>.json are whole layout files. python -m radio.use_layout <name> copies one over
+  radio/nodes.json; radio/nodes.json is always a copy of one of them. The text above is radio/layouts/desk.json.
+  The schemas list the union of the layout files (nodes, links, spots, the largest zone count), so a message of
+  any of them passes its schema; what belongs to one layout (the length of probs, near) is checked against the
+  layout in use (contracts/check.py; --layout <name> names another).
+The gate layout (radio/layouts/gate.json): one spot between Pi B and the desk. Frame: metres. Origin = the spot's
+  west corner on the side away from the desk; x east along the desk, y north towards the desk.
+  The spot is 0.8 x 0.6 m: 0 <= x <= 0.8, 0 <= y <= 0.6 (frame.strip_m). It is the only place a person stands.
+  frame.size_m (0.85 x 1.35) is the box the screen and the x-ray grid are laid out on, from the origin to the back
+  of the desk top. size_m + 0.4 m is a whole number of 0.125 m cells. A node may sit outside size_m and outside
+  the spot (Pi B is at y = -0.2); every reader accepts that.
+  Nodes (rough until measured): unoq (0.44, 0.8, 0.75) the board; pi5 (0.36, 0.8, 0.75) Pi A, the router;
+  pi5b (0.4, -0.2, 0.75) Pi B. The desk's edge is y = 0.8. No east, no west, no hall beacons.
+  Six links, in this order: pi5>unoq:wifi, pi5>unoq:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, pi5b>pi5:ble.
+  A link may carry "crosses_spot": true | false. true = a person on the spot stands in this line (here: the four
+  to or from Pi B). Missing means the layout does not say (the desk strip). The brain uses the marked lines for
+  the rules in section 6; the screen draws its signal trace from them, whatever radio they are.
+  Zones: a strip with no frame.zone_split_x_m and one zone is one spot: zone = that zone's id when 0 <= x <= strip
+  width and 0 <= y <= strip depth; anywhere else 0. zones: [{id, name, centre_m, still_alert_s}]; "side" is optional.
+  1 "At the desk", centre (0.4, 0.3), still_alert_s 10.
+  "presence" (optional): {"line": <link>, "second": <link>, ...} names the one line that decides whether somebody
+  is on the spot, its second opinion, and the numbers of its rules (Presence line, section 6). Both are lines of
+  the layout marked crosses_spot. The gate: line pi5>pi5b:wifi, second pi5b>unoq:ble.
+  The router does not move on the gate (Pi A is cabled to the board's hub): router is always S-home, and advice
+  never names a spot (to_spot null, section 5).
+  gate-3 (radio/layouts/gate-3.json) is the gate cut down to three links, for a kit that can't give all six; the
+  file lists them. Everything else is the gate's.
+  Gate 2 on these layouts: a Bluetooth link passes at 30% of its beacon's advertising events and never under 2/s
+  (the kit gives 2 to 6/s on a metre-long line). The presence line must arrive 20 times a second or more at the
+  brain: nothing between Pi B's reader, the bus and the brain may thin it.
 Code takes ids, positions, links, zones and spots from nodes.json, not from constants of its own.
 ```
 
@@ -135,6 +165,8 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
    // present is true when anyone is in view, and zone is the side of the split line the person's box centre is on.
    // clipped is true when the centre is within the dead band around the line, the box is cut by a side edge of the
    // frame, or more than one person is in view.
+   // With one zone (the gate) there is no split line and no dead band: zone is that zone whenever present is true,
+   // and clipped is true only when the box is cut by a side edge or more than one person is in view.
    // seq: one counter per sending socket (a producer), shared across all message types it sends.
    // clipped:true -> zone, foot_m and motion are null, whatever present is, and the window is dropped. mode = the current label_mode.
 {"v":2,"type":"cam","t":1763149512200,"seq":77,"src":"live","state":"on","fps":9.6}
@@ -155,7 +187,9 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
  "health":{"status":"ok","blind":[],"reason":null},                         // status ok|degraded|blind; reason rate|jump
  "pred":{"present":true,"kind":"person","zone":2,"zone_set":[2],"probs":[0.04,0.11,0.85],
          "motion":"still","still_s":4.2,"why":["east>unoq:ble","east>pi5b:ble"]},
-        // probs = [empty, z1, z2]: one entry for empty, then one per zone in nodes.json. kind = person | object | none.
+        // probs = [empty, z1, ...]: one entry for empty, then one per zone in nodes.json. kind = person | object | none.
+        // The desk has two zones: [empty, z1, z2]. With one zone (the gate): [empty, z1], zone is 1 when present
+        // and zone_set is [1].
         // pred is null before training, while health is blind, while recalibrating, and while the router is off S-home.
         // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
         // Not sure where: when somebody is there but the links read unlike anything in training (a feature more than
@@ -173,6 +207,9 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
  "advice":{"id":"a7","cause":"obstruction","near":"pi5","xy_m":[0.86,1.0],"link":"pi5>unoq:wifi","to_spot":"S-W30",
            "move_m":[-0.3,0.0],"dist_change_m":0.2,"text":"An obstruction next to the router is blocking its link to the receiver. Move the router 30 cm west.",
            "before_dbm":-71.2,"after_dbm":null,"why":["pi5>unoq:wifi","east>pi5:ble"]},   // or null
+        // to_spot is null on a layout with a presence line: the router stays where it is, so there is nothing to
+        // move. Then move_m is [0, 0], dist_change_m is 0, link is the presence line, and after_dbm is measured
+        // when the thing is taken away (Advice, section 6). Every field is there as before; none is new.
  "narration":{"text":"...","event_id":"e123","t":1763149513000,"source":"llm","gen_ms":6120},
  "teacher":{"present":true,"zone":1,"motion":"still"},                       // null when the camera is off
  "hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[14.0,9.5],"activity":0.62,"moving":true,"rate_hz":6.5,"stale":false,
@@ -284,6 +321,25 @@ Link health:
   never make health blind, never go into health.blind, never null pred and never pause the alert timers.
 Object (a training label): only in label_mode object. Every frame must have persons_in_frame == 0, and one or more
   links must drop >= 3 dB for >= 2 s with the std of their 0.5 s means < 0.8 dB.
+Presence line (only on a layout whose nodes.json has "presence"; every number is a key of that block, with the
+  default given here, and the kit's own numbers go in the file):
+- Drop = the line's baseline minus its median over the 1 s window. Somebody is there once the drop reaches on_db
+  (7 dB), and stays until it is under off_db (4 dB). The model still gives probs, but it does not decide present.
+- "second" can keep somebody there for second_hold_s (5 s) while the line has no readings, if its own drop is
+  off_db or more. It never brings anybody in.
+- Spread = the std of the line's readings over the last 2 s. The line arrives 25 times a second and sits within
+  1 dB when the spot is empty, so the spread tells a body (it wobbles) from a thing (it does not).
+- Moving and still: motion is "moving" when the spread is at or over the boundary, and "still" again once it is
+  under 0.8 x the boundary. The boundary is moving_spread_db (2 dB) until a lesson has given 20 or more windows of
+  each kind on this line; then it is the value that best splits that lesson's moving and still windows, kept
+  with the model. The Bluetooth lines have no say in it.
+- A thing left in the line: the 2 s median drop is object_db (3 dB) or more and under object_max_db (12 dB; null
+  in the file = no upper limit), and the spread is at most object_spread_db (1 dB: the empty level's own jitter),
+  for object_hold_s (3 s). Then pred is present false, zone 0, kind "object": no enter, no still timer and no
+  intrusion. It ends 1 s after either stops holding. A drop of a person's depth (object_max_db or more), or one
+  that wobbles, is a person however long they stand: a person on the spot is never an object and never a dead zone.
+- While the decision is "object" the line's empty level does not follow drift (Baseline), so the gain can be
+  measured against it when the thing is taken away.
 Check-in (a rule, not learned): on pi5>unoq:wifi, >= 4 alternating crossings of +/-1.5 dB around the 1 s rolling median
   within 2.5 s, with pred.zone unchanged and no other link's drop changing by > 3 dB. Gate 8 tunes the thresholds.
 Alert:
@@ -353,6 +409,14 @@ Advice:
 - The text is built from the result, never a fixed string.
 - before_dbm = median of pi5>unoq:wifi over the last 3 s: kept current while the advice shows, frozen at router_moved, never null.
 - after_dbm = median over 3 s, starting 2 s after router_moved.
+- On a layout with a presence line (the router is cabled and does not move) the advice is about that line and
+  names no spot: it shows while the decision is "object" (a thing left in the line, above), with link = the
+  presence line, to_spot null, move_m [0, 0], dist_change_m 0, and xy_m = the x-ray's object on that line, or the
+  middle of the line. The text says something is standing in the line and never says to move the router.
+  before_dbm = the line's median over the last 3 s, kept current while the thing is there. When the thing is taken
+  away (the decision is no longer "object" and the line's drop is under object_db), after_dbm = its median over
+  3 s, starting 2 s later, and advice_result {link, before_dbm, after_dbm} is sent: the gain is after_dbm -
+  before_dbm. The advice then stays 10 s and goes. If somebody steps on the spot instead, the advice goes at once.
 Router: take the tray off and put Pi A back on S-home BEFORE sending router_home. While the router is off S-home, pred is null. On router_home, every pi5 link must sit within 1 dB of base
   for 3 s (a pi5 link has pi5 as its tx or rx: links 1, 2, 5, 6, 8, 9 and 12; pi5b is a different node); otherwise the board runs an automatic 20 s baseline ("recalibrating").
 Narration:
