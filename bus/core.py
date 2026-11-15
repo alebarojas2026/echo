@@ -26,6 +26,12 @@ Losses are logged at most once per LOSS_LOG_S per producer, with the total since
 in a crowded hall a reader can lose every other advert, and a log line per gap would cost more
 than the messages themselves.
 
+The witness path (#866): a chain_sub from a socket means "send me the chain's news" for the next
+SUB_KEEP_S seconds. Every chain_head (the board's store) and chain_witness (a Pi's signature) is
+sent on, from the bus's own port, to every such socket but the one it came from, which is how a Pi
+behind the other Pi's hotspot hears the board at all. These three kinds go no further: not to the
+brain, not into a recording, and not into the seq counts (their seq is the chain's own).
+
 A producer is one sending socket (address and port). Each process should send
 from a single socket for its whole life, or its seq gaps can't be counted.
 """
@@ -50,6 +56,9 @@ LOSS_LOG_S = 5.0
 STALE_FRAC = 0.4
 OPEN_MARK = ".open"
 BASELINE_MARK = ".baseline"
+CHAIN_KINDS = ("chain_sub", "chain_head", "chain_witness")
+SUB_KEEP_S = 30
+MAX_SUBS = 16
 RESUME_WITHIN_S = 600
 
 log = logging.getLogger("bus")
@@ -207,7 +216,9 @@ class Recorder:
 
 
 class Bus:
-    def __init__(self, sessions=SESSIONS_DIR, send=None, clock=now_ms):
+    def __init__(self, sessions=SESSIONS_DIR, send=None, clock=now_ms, reply=None):
+        self.reply = reply or (lambda data, addr: None)   # sends from the listening socket
+        self.chain_subs: dict = {}                        # (host, port) -> recv_t of its last chain_sub
         self.recorder = Recorder(sessions)
         resumed = self.recorder.resume(time.time())  # file times are wall-clock
         if resumed:
@@ -245,6 +256,10 @@ class Bus:
             self.command(msg, recv_t)
             return msg
 
+        if msg["type"] in CHAIN_KINDS:
+            self.chain(msg, tuple(addr[:2]), recv_t)
+            return msg
+
         producer = self.producers.get(key)
         if producer is None:
             producer = self.producers[key] = Producer(msg["type"], msg.get("src"))
@@ -269,6 +284,22 @@ class Bus:
             log.warning("forward failed: %s", e)
         self.recorder.write(msg)
         return msg
+
+    def chain(self, msg: dict, addr: tuple, recv_t: int) -> None:
+        """The witness path: remember who asked, and pass heads and signatures on to them."""
+        for sub in [s for s, seen in self.chain_subs.items() if recv_t - seen > SUB_KEEP_S * 1000]:
+            del self.chain_subs[sub]
+        if msg["type"] == "chain_sub":
+            if addr in self.chain_subs or len(self.chain_subs) < MAX_SUBS:
+                self.chain_subs[addr] = recv_t
+            return
+        data = encode(msg)
+        for sub in self.chain_subs:
+            if sub != addr:
+                try:
+                    self.reply(data, sub)
+                except OSError as e:
+                    log.warning("%s not passed on to %s:%s: %s", msg["type"], sub[0], sub[1], e)
 
     def command(self, msg: dict, recv_t: int) -> None:
         cmd = msg.get("cmd")
@@ -420,7 +451,7 @@ def main(argv=None) -> None:
     logging.basicConfig(level=logging.INFO, format="bus: %(message)s", stream=sys.stderr)
     forward = parse_addr(args.forward)
     rx, tx, send = open_sockets(args.host, args.port, forward)
-    bus = Bus(sessions=args.sessions, send=send)
+    bus = Bus(sessions=args.sessions, send=send, reply=rx.sendto)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     log.info("listening on %s:%d, forwarding to %s:%d", args.host, rx.getsockname()[1], *forward)
     try:

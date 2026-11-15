@@ -353,3 +353,79 @@ def test_a_baseline_cmd_is_marked_with_its_time_for_the_clock_check(bus, tmp_pat
     bus.handle(cmd("baseline"), B)
     assert json.loads((tmp_path / ".baseline").read_text())["asked_t"] > first
     assert bus.sent == []   # still not forwarded
+
+
+# --- the witness path (#866): chain_sub, chain_head, chain_witness ---
+
+def chain(type_, **body):
+    return json.dumps({"v": 2, "type": type_, **body}).encode()
+
+
+@pytest.fixture
+def chain_bus(bus):
+    bus.replies = []
+    bus.reply = lambda data, addr: bus.replies.append((json.loads(data), addr))
+    return bus
+
+
+def test_a_head_goes_to_every_socket_that_asked_and_a_signature_comes_back(chain_bus):
+    store, pi_a, pi_b = ("127.0.0.1", 40010), A, B
+    for who in (store, pi_a, pi_b):
+        chain_bus.handle(chain("chain_sub"), who)
+    chain_bus.handle(chain("chain_head", seq=4012, hash="a" * 64, t=5), store)
+    assert [addr for _, addr in chain_bus.replies] == [pi_a, pi_b]          # not back to the sender
+    assert chain_bus.replies[0][0]["seq"] == 4012 and "recv_t" in chain_bus.replies[0][0]
+    chain_bus.replies.clear()
+    chain_bus.handle(chain("chain_witness", node="pi5", seq=4012, hash="a" * 64, t=5, sig="00" * 64), pi_a)
+    assert [(m["type"], addr) for m, addr in chain_bus.replies] == [("chain_witness", store), ("chain_witness", pi_b)]
+
+
+def test_chain_messages_stay_out_of_the_brain_the_recording_and_the_seq_counts(chain_bus, tmp_path):
+    chain_bus.handle(cmd("record_start", session="s1", purpose="demo"), A)
+    chain_bus.sent.clear()
+    chain_bus.handle(chain("chain_sub", node="pi5"), A)
+    for seq in (10, 500, 3):
+        chain_bus.handle(chain("chain_head", seq=seq, hash="a" * 64, t=5), B)
+    assert chain_bus.sent == [] and chain_bus.producers == {} and chain_bus.lost() == 0
+    assert len((tmp_path / "s1.jsonl").read_text().splitlines()) == 1       # the meta line only
+    assert len(chain_bus.replies) == 3
+
+
+def test_a_socket_that_stopped_asking_is_forgotten_and_one_that_fails_does_not_stop_the_rest(chain_bus):
+    from bus.core import SUB_KEEP_S
+    t = [1000]
+    chain_bus.clock = lambda: t[0]
+    chain_bus.handle(chain("chain_sub"), A)
+    t[0] += SUB_KEEP_S * 1000 - 1
+    chain_bus.handle(chain("chain_sub"), B)
+    t[0] += 2
+    chain_bus.handle(chain("chain_head", seq=1, hash="a" * 64, t=5), ("127.0.0.1", 40010))
+    assert [addr for _, addr in chain_bus.replies] == [B] and A not in chain_bus.chain_subs
+
+    def unreachable(data, addr):
+        raise OSError("Network is unreachable")
+    chain_bus.reply = unreachable
+    assert chain_bus.handle(chain("chain_head", seq=2, hash="a" * 64, t=5), ("127.0.0.1", 40010)) is not None
+
+
+def test_over_real_sockets_the_answer_comes_from_the_bus_port(tmp_path):
+    rx, tx, send = open_sockets("127.0.0.1", 0, ("127.0.0.1", 9))
+    b = Bus(sessions=tmp_path, send=send, reply=rx.sendto)
+    stop = threading.Event()
+    thread = threading.Thread(target=serve, args=(b, rx, stop), daemon=True)
+    thread.start()
+    port = rx.getsockname()[1]
+    pi, store = (socket.socket(socket.AF_INET, socket.SOCK_DGRAM) for _ in range(2))
+    try:
+        pi.settimeout(5)
+        pi.sendto(chain("chain_sub", node="pi5"), ("127.0.0.1", port))
+        time.sleep(0.4)
+        store.sendto(chain("chain_head", seq=7, hash="a" * 64, t=5), ("127.0.0.1", port))
+        data, addr = pi.recvfrom(4096)
+        assert json.loads(data)["seq"] == 7 and addr == ("127.0.0.1", port)
+    finally:
+        stop.set()
+        thread.join(5)
+        for s in (pi, store, rx, tx):
+            s.close()
+        b.close()
