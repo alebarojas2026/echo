@@ -1,7 +1,7 @@
 """The sim on a layout with one zone and three devices (layouts/spot.json, the gate layout)."""
 import json
 
-from sim import fake, lesson
+from sim import fake, lesson, state
 from sim.tests.conftest import LAYOUTS, load, pin
 
 
@@ -48,3 +48,22 @@ def test_the_lesson_on_one_spot_has_no_sides_and_no_dead_band(monkeypatch):
     assert all(e["foot_m"] is None for e in labels)                                  # the desk view has no foot point
     doc = json.loads((LAYOUTS / "spot.json").read_text(encoding="utf-8"))
     assert "zone_split_x_m" not in doc["frame"] and len(doc["zones"]) == 1
+
+
+def test_on_the_gate_the_fake_brain_never_says_move_the_router(monkeypatch):
+    lay = pin(monkeypatch, "spot")
+    assert lay.presence_line == "pi5>pi5b:wifi"
+    for name in ("tray_t1", "router_move", "demo"):
+        msgs = list(state.run(fake.load_path(name)))
+        states = [m for m in msgs if m["type"] == "state"]
+        assert states and all(m["advice"] is None for m in states), name
+        assert not any(m["type"] == "event" and m["kind"] == "advice" for m in msgs), name
+
+
+def test_the_presence_line_drops_as_far_as_it_did_on_the_kit(monkeypatch):
+    lay = pin(monkeypatch, "spot")
+    events = list(fake.simulate({"name": "stand", "duration_s": 6, "person": [{"t": 0, "x": 0.4, "y": 0.3}]}, seed=1, noise_db=0.0))
+    level = lambda link: sorted(e["dbm"] for e in events if e["type"] == "rssi" and e["link"] == link)[0]   # noqa: E731
+    empty = {fake.link_id(tx, rx, kind): round(fake.baseline(tx, rx, kind)) for tx, rx, kind in lay.links}
+    assert 15 <= empty["pi5>pi5b:wifi"] - level("pi5>pi5b:wifi") <= 21
+    assert 6 <= empty["pi5b>unoq:ble"] - level("pi5b>unoq:ble") <= 9

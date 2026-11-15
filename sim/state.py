@@ -304,7 +304,10 @@ class Brain:
             if self.moved_at is not None or not close or not dropping:   # back home, nothing in the way, or the link has recovered
                 self.advice, self.advice_off = None, False
             self.moved_at = None
-        if self.advice is None and close and dropping and spot == "S-home" and not self.advice_off:
+        # On a layout with a presence line (the gate) the router is cabled to the hub and can't be moved:
+        # there is no "move the router" advice there. The thing still shows in objects.
+        if (self.advice is None and close and dropping and spot == "S-home" and not self.advice_off
+                and not LAYOUT.presence_line):
             o = close[0]
             # the spot whose new link the object blocks least; west wins a tie
             spots = [s for s in fake.ROUTER_SPOTS if s != "S-home"]   # every spot in the layout but home

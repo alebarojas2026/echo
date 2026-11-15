@@ -36,6 +36,7 @@ PATHS_DIR = Path(__file__).parent / "paths"
 
 REF_DBM = {"wifi": -40.0, "ble": -55.0}  # empty-room level at 1 m
 PERSON_DROP_DB = 8.0   # peak drop when a person stands on the link line
+PRESENCE_DROP_DB = 18.0   # ... on the line the layout says decides presence (measured on the kit: 15 to 21 dB)
 PERSON_WIDTH_M = LAYOUT.width_m   # how fast the drop fades with distance from the line (sim/layout.py)
 PERSON_BODY_M = LAYOUT.body_m     # the full drop within this distance of the line
 MOVING_SPEED = 0.25    # m/s over 1 s, contract section 6
@@ -246,6 +247,8 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
                     dbm += j["db"] + j.get("wobble_db", 0.0) * math.sin(2 * math.pi * 0.4 * (t - j.get("t_on", 0.0)))
             if pos:
                 d = person_drop(pos, nodes[tx], nodes[rx])
+                if link == LAYOUT.presence_line:
+                    d *= PRESENCE_DROP_DB / PERSON_DROP_DB
                 if moving:  # a moving body makes the drop flutter
                     d *= max(0.0, 1.0 + rng.gauss(0.0, 0.25))
                 dbm -= d

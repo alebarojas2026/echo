@@ -281,6 +281,7 @@ def spot_script():
     commands = [(teach, "label_mode", {"mode": "person"}),
                 (teach, "record_start", {"session": LESSON, "purpose": "train", "walker": "judge"}),
                 (train, "train", {}), (stop, "record_stop", {}), (stop, "label_mode", {"mode": "off"}),
+                (still_from, "reset_alert", {}),   # the still beat starts from zero, whatever the lesson's standing did
                 (arm, "arm", {"on": True}), (finish - 3, "arm", {"on": False})]
 
     def pred(s, **want):

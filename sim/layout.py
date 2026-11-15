@@ -23,6 +23,9 @@ class Layout:
         self.split_x_m = frame.get("zone_split_x_m")
         # section 6, Armed: how long an appearance must last to be an intrusion (3 s when the file has none)
         self.hold_s = float((nodes.get("armed") or {}).get("hold_s", 3.0))
+        # "presence" in the file: the one line that decides whether somebody is there (the gate: the Wi-Fi line
+        # from Pi A to Pi B, which fell 15 to 21 dB with a person on the kit). The fake feed drops it that far.
+        self.presence_line = (nodes.get("presence") or {}).get("line")
         self.nodes = {n["id"]: tuple(n["xyz_m"][:2]) for n in nodes["nodes"]}
         self.links = [(l["tx"], l["rx"], l["kind"]) for l in nodes["links"]]
         self.router_spots = {s["id"]: tuple(s["xyz_m"][:2]) for s in nodes.get("router_spots") or []}
