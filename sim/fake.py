@@ -217,6 +217,7 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
     # "teacher": "desk" = the webcam on the desk (teacher/DESK.md): no foot point, and no usable
     # label within dead_band_m of the line between left and right.
     desk, split = path.get("teacher") == "desk", LAYOUT.split_x_m if LAYOUT.strip_m else SIZE / 2
+    band = 0.0 if split is None else path.get("dead_band_m", 0.0)   # one spot has no line between sides
     for i in range(int(path["duration_s"] * rate)):
         t = round(i / rate, 3)
         while h < len(hall) and hall[h]["t"] <= t:   # hall readings come at their own uneven moments
@@ -263,7 +264,7 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
             # clipped: the camera sees the person but not their feet, so no zone, foot point or motion
             inside = bool(pos) and zone_of(*pos) != 0   # section 4: present only with a foot point inside the area
             clipped = inside and (any(active(c, t) for c in path.get("clipped") or [])
-                                  or (desk and abs(pos[0] - split) < path.get("dead_band_m", 0.0)))
+                                  or (desk and band > 0 and abs(pos[0] - split) < band))
             yield {"type": "label", "t": t, "frame": i // label_every,
                    "mode": path.get("label_mode", "person"),
                    "persons_in_frame": int(pos is not None) + len(others), "present": inside,

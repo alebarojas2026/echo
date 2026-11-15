@@ -4,6 +4,7 @@
     python -m sim.rehearse --desk   # the same for the 3-minute desk visit
     python -m sim.rehearse --lesson # the live lesson: teach left and right, then unplug the camera
     python -m sim.rehearse --aisle  # a crowded aisle: people walk past, a judge stands still
+    python -m sim.rehearse --spot   # the hero path on a layout with one zone (a file with one zone plays this for --desk too)
 
 The fake feed goes into the real bus code (bus.core.Bus), which stamps recv_t and forwards to
 the real brain (brain.core.Brain); the brain's state and events are what the screen would get.
@@ -136,7 +137,7 @@ def desk_script():
     step_in, teach, train, cam_off, stop, still_from, leave, arm, back = 5, 10, 30, 38, 40, 48, 64, 68, 72
     gone, unplug, plug, finish = 82, 85, 93, 101
     # the beacon that is unplugged: the first node in the layout that only sends (no link ends at it)
-    beacon = next(tx for tx, _, _ in LAYOUT.links if all(rx != tx for _, rx, _ in LAYOUT.links))
+    beacon = LAYOUT.prop_node()
     at = lambda zone, t: {"t": t, "x": Z[zone][0], "y": Z[zone][1]}   # noqa: E731
     person, t, side = [{"t": 0, "x": None}, {"t": step_in, **WEST_EDGE(left)}, at(left, 6)], 6, left
     while t + 4 <= still_from - 1:      # 3 s on a side, 1 s to cross, until the still beat
@@ -246,6 +247,79 @@ def aisle_script():
     return path, commands, beats
 
 
+def spot_script():
+    """The hero path on a layout with one zone (the gate: one spot between Pi B and the desk), in one visit:
+    found (the judge steps onto the spot), lesson (the camera labels them standing there and stepping off
+    and on; train while the recording is open), unplug (the camera is pulled and the radio still knows they
+    are there), still (they stand until the no-movement alert), then armed: they leave, the space is armed,
+    somebody walks straight through (passed by), somebody steps on and stays (intrusion), and with nobody
+    there a device is unplugged for 8 s (tamper, cleared when it is back). Disarmed at the end.
+    Nothing here names a side: there is one zone and the beats are about somebody being there or not."""
+    spot = min(LAYOUT.zones)
+    assert len(LAYOUT.zones) == 1 and LAYOUT.zones[spot], "the one-spot rehearsal needs a layout with one zone that has a still_alert_s"
+    (x, y), limit = Z[spot], LAYOUT.zones[spot]
+    step_in, teach, off, on, train, cam_off, stop = 5, 10, 18, 23, 30, 38, 40
+    still_from = 42
+    leave = still_from + limit + 6
+    arm, through, back, gone = leave + 4, leave + 8, leave + 16, leave + 26
+    unplug, plug, finish = gone + 3, gone + 11, gone + 19
+    prop = LAYOUT.prop_node()
+    here = lambda t, dx=0.0: {"t": t, "x": round(x + dx, 3), "y": y}          # noqa: E731
+    away = lambda t: {"t": t, **WEST_EDGE(spot)}                               # noqa: E731
+    out = lambda t: {"t": t, "x": None}                                        # noqa: E731
+    person = [out(0), away(step_in), here(step_in + 1)]
+    person += [here(t, 0.1 if i % 2 else -0.1) for i, t in enumerate(range(step_in + 2, off, 2))]   # shifting about on the spot
+    person += [here(off), away(off + 1), out(off + 1.1), out(on - 1.1), away(on - 1), here(on)]    # off the spot and back
+    person += [here(t, 0.1 if i % 2 else -0.1) for i, t in enumerate(range(on + 2, still_from - 1, 2))]
+    person += [here(still_from), here(leave), away(leave + 1), out(leave + 1.1)]
+    person += [out(through - 0.1), away(through), {"t": through + 1.5, **EAST_EDGE(spot)}, out(through + 1.6)]   # straight through
+    person += [out(back - 0.1), away(back), here(back + 1), here(gone - 1), away(gone), out(gone + 0.1)]
+    path = {"name": "spot", "duration_s": finish, "person": person, "teacher": "desk",
+            "outages": [{"node": prop, "t_on": unplug, "t_off": plug}],
+            "camera": [{"t": 0, "state": "on"}, {"t": cam_off, "state": "off"}],
+            "router": [{"t": 0, "spot": "S-home"}]}
+    commands = [(teach, "label_mode", {"mode": "person"}),
+                (teach, "record_start", {"session": LESSON, "purpose": "train", "walker": "judge"}),
+                (train, "train", {}), (stop, "record_stop", {}), (stop, "label_mode", {"mode": "off"}),
+                (arm, "arm", {"on": True}), (finish - 3, "arm", {"on": False})]
+
+    def pred(s, **want):
+        return s["pred"] is not None and all(s["pred"][k] == v for k, v in want.items())
+
+    def event(kind):
+        return lambda e: e["kind"] == kind
+
+    name = LAYOUT.names[spot]
+    beats = [
+        ("nobody before the judge", 0, step_in, "state", lambda s: pred(s, present=False)),
+        (f"found: the judge steps up ({name})", step_in, teach, "state",
+         lambda s: pred(s, present=True, kind="person", zone=spot, zone_set=[spot]) and len(s["pred"]["probs"]) == 2),
+        ("lesson: the camera labels the judge", teach, train, "state",
+         lambda s: s["cam"] == "on" and s["teacher"] is not None and s["teacher"]["present"]),
+        ("lesson: a model within 5 s of train", train, train + 5, "event", event("trained")),
+        ("lesson: the model uses the lesson", train, cam_off, "state",
+         lambda s: s["model"]["trained"] and LESSON in s["model"]["train_sessions"]),
+        ("unplug: radio only, somebody is here", stop, still_from, "state",
+         lambda s: s["cam"] == "off" and s["teacher"] is None and pred(s, present=True, kind="person", zone=spot)),
+        ("still: standing still", still_from + 2, leave, "state", lambda s: pred(s, present=True, zone=spot, motion="still")),
+        ("still: no-movement alert", still_from, leave, "event", event("alert_on")),
+        ("walks out: nobody is here", leave + 1, arm, "state", lambda s: pred(s, present=False)),
+        ("armed, nobody here", arm, through, "state", lambda s: s.get("armed") is True and pred(s, present=False)),
+        ("passed by: a walk straight through", through, back, "event", event("passed_by")),
+        ("intrusion: somebody who stays", back, gone, "event",
+         lambda e: e["kind"] == "intrusion" and e["info"] == {"zone": spot}),
+        ("tamper: a device unplugged while armed", unplug, unplug + 4, "event",
+         lambda e: e["kind"] == "tamper" and e["info"] == {"node": prop}),
+        ("tamper: on the screen, and never 'somebody'", unplug + 3, plug, "state",
+         lambda s: s.get("tamper") == [prop] and not pred(s, present=True)),
+        ("tamper: cleared when the device is back", plug, plug + 4, "event",
+         lambda e: e["kind"] == "tamper_cleared" and e["info"] == {"node": prop}),
+        ("disarmed", finish - 4, finish, "event", event("disarmed")),
+    ]
+    beats.append(("no intrusion from the walk through", through, back - 0.2, "no event", event("intrusion")))
+    return path, commands, beats
+
+
 def lesson_script():
     """The live lesson (sim/lesson.py): the commands the screen sends and the beats to look for.
     The model starts from nothing: only a baseline and an empty recording exist before it."""
@@ -300,7 +374,8 @@ def follows_unplugged(stack, t0, settle_s: float = 1.5, share: float = 0.8) -> t
             if start + settle_s <= (s["t"] - t0) / 1000 < end and s["cam"] == "off":
                 total += 1
                 right += bool(s["pred"] and s["pred"]["present"] and s["pred"]["zone"] == zone)
-    return (f"teach, then unplug: the radio follows left and right ({right} of {total} decisions)",
+    what = "knows somebody is there" if len(LAYOUT.zones) == 1 else "follows left and right"
+    return (f"teach, then unplug: the radio {what} ({right} of {total} decisions)",
             total > 0 and right >= share * total, None)
 
 
@@ -410,9 +485,18 @@ def main(argv=None) -> int:
     ap.add_argument("--desk", action="store_true", help="the hero path at the desk instead: found, lesson, unplug, still, arm + intrusion")
     ap.add_argument("--lesson", action="store_true", help="the live lesson: teach left and right, then unplug")
     ap.add_argument("--aisle", action="store_true", help="a crowded aisle: people walk past, a judge stands still")
+    ap.add_argument("--spot", action="store_true", help="the hero path on a layout with one zone: found, lesson, unplug, still, arm, passed by, intrusion, tamper")
     args = ap.parse_args(argv)
-    results = (rehearse(lesson=True) if args.lesson else rehearse(desk_script()) if args.desk
-               else rehearse(aisle_script()) if args.aisle else rehearse())
+    one = len(LAYOUT.zones) == 1
+    if args.spot and not one:
+        print("--spot needs a layout with one zone in radio/nodes.json (python -m radio.use_layout gate)")
+        return 2
+    if one and not args.lesson:
+        # One zone has no tour, no sides and no aisle strip: every one of those is the one-spot hero path.
+        results = rehearse(spot_script())
+    else:
+        results = (rehearse(lesson=True) if args.lesson else rehearse(desk_script()) if args.desk
+                   else rehearse(aisle_script()) if args.aisle else rehearse())
     for name, passed, shown in results:
         took = "" if shown is None else f"  {shown} seen" if isinstance(shown, int) else f"  shown after {shown:.1f} s"
         print(f"{'PASS' if passed else 'FAIL'}  {name}{took}")
