@@ -1,0 +1,19 @@
+[Unit]
+Description=Radio Sight clock helper (sets the board's clock from the operator's laptop, then restarts the stack)
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# Root: setting the clock and stopping and starting the other units both need it. It acts only on
+# /run/radio-sight-clock/request.json, which board/serve.py writes after its checks (board/clock.py).
+User=root
+WorkingDirectory=@REPO@
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=@PYTHON@ -m board.clock helper --user @USER@
+RuntimeDirectory=radio-sight-clock
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

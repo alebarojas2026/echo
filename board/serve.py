@@ -36,6 +36,9 @@ GET /privacy is the privacy meter's latest reading (board/privacy.py, contract i
 {"ok": true, "images", "bytes_out", "since_t", "t"}, or {"ok": false, "why"} when the meter isn't
 running or its reading is more than 3 s old. Never zeros in place of an unknown.
 
+GET /clock and POST /clock {"t": epoch ms} let the operator's laptop set the board's clock
+(board/clock.py, contract issue #632). Both answer only on the same networks.
+
 Standard library only.
 """
 import argparse
@@ -54,7 +57,7 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:  # the unit runs this file as a script: board.layout must still import
     sys.path.insert(0, str(REPO))
 
-from board import layout, privacy  # noqa: E402
+from board import clock, layout, privacy  # noqa: E402
 
 DIST = REPO / "web" / "dist"
 NODES = REPO / "radio" / "nodes.json"
@@ -63,6 +66,7 @@ LAYOUT = REPO / "data" / "layout.local.json"
 # Who may save a layout: the board itself, the Ethernet link to the Pi (the laptop on the hotspot
 # arrives from 192.168.77.1, Pi A forwards it) and the sensing hotspot (CONTRACTS.md section 2).
 MAX_ASK_BYTES = 2048
+MAX_CLOCK_BYTES = 256
 SAVE_FROM = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "192.168.77.0/24", "10.42.0.0/24")]
 MAX_API_BODY = 8192
 # Added to index.html as it is served: the page knows it came from the board, so it shows live data.
@@ -164,7 +168,7 @@ class Handler(SimpleHTTPRequestHandler):
         path = self.path.split("?", 1)[0].split("#", 1)[0]
         if ("POST", path) in self.server.routes:
             return self._api("POST", path, head=False)
-        if path not in ("/layout", "/ask"):
+        if path not in ("/layout", "/ask", "/clock"):
             if ("GET", path) in self.server.routes:
                 return self._json({"error": "use GET"}, False, HTTPStatus.METHOD_NOT_ALLOWED)
             return self._json({"error": "not found"}, False, HTTPStatus.NOT_FOUND)
@@ -173,6 +177,8 @@ class Handler(SimpleHTTPRequestHandler):
                               HTTPStatus.FORBIDDEN)
         if path == "/ask":
             return self._ask()
+        if path == "/clock":
+            return self._clock_post()
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
             return self._json({"error": "send JSON (Content-Type: application/json)"}, False,
                               HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
@@ -279,6 +285,16 @@ class Handler(SimpleHTTPRequestHandler):
             except OSError:
                 pass
 
+    def _clock_post(self):
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            size = -1
+        if not 0 < size <= MAX_CLOCK_BYTES:
+            return self._json({"ok": False, "why": 'send {"t": epoch ms}'}, False, HTTPStatus.BAD_REQUEST)
+        status, doc = self.server.clock.post(self._read(size))
+        self._json(doc, False, status)
+
     def _nodes_doc(self):
         return json.loads(self.server.nodes_path.read_bytes())
 
@@ -292,6 +308,12 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(privacy.status(self.server.privacy_path), head)
         if ("GET", path) in self.server.routes:
             return self._api("GET", path, head)
+        if path == "/clock":
+            if not self._ours():
+                return self._json({"ok": False, "why": "answered only on the board's own networks"}, head,
+                                  HTTPStatus.FORBIDDEN)
+            status, doc = self.server.clock.get()
+            return self._json(doc, head, status)
         if path == "/layout":
             try:
                 return self._json(self.server.layout.view(self._nodes_doc()), head)
@@ -378,9 +400,10 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def make_server(host="0.0.0.0", port=8080, dist=DIST, nodes=NODES, proof=PROOF, layout_path=LAYOUT, ask=None,
-                routes=None, privacy_path=privacy.STATUS):
+                routes=None, privacy_path=privacy.STATUS, clock_api=None):
     """ask: a function question -> reply dict for POST /ask, or None to answer 503.
-    routes: {(method, path): handler} for the mounted JSON endpoints (see the top of this file)."""
+    routes: {(method, path): handler} for the mounted JSON endpoints (see the top of this file).
+    clock_api: answers /clock (board/clock.py's ClockAPI by default)."""
     handler = functools.partial(Handler, directory=str(dist))
     server = ThreadingHTTPServer((host, port), handler)
     server.nodes_path = Path(nodes)
@@ -389,6 +412,7 @@ def make_server(host="0.0.0.0", port=8080, dist=DIST, nodes=NODES, proof=PROOF, 
     server.layout = layout.Store(layout_path)
     server.ask, server.ask_lock = ask, threading.Lock()
     server.routes = dict(routes or {})
+    server.clock = clock_api or clock.ClockAPI()
     return server
 
 

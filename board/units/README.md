@@ -41,6 +41,7 @@ Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sud
 | radio-sight-narrate | `python -m narrator.narrate` | `@USER@` | |
 | radio-sight-store | `python -m store`: the brain's events and a summary each second, into data/sessions/store.db (what /ask, /history and /report read) | `@USER@` | |
 | radio-sight-privacy | `python -m board.privacy run` | `@USER@`, with CAP_NET_ADMIN only | |
+| radio-sight-clock | `python -m board.clock helper`: sets the clock when the operator asks (POST /clock), then restarts the stack in order | root | |
 | radio-sight-radio-node (Pi only) | `python -m pi.radio_node` | root | no: it advertises and scans without the Ethernet link, and forwards once it's up |
 
 A unit whose program doesn't exist yet still installs and keeps restarting until it does; `journalctl -u <unit>` shows why. If an older `llm.service` from the narrator README is installed, deploy removes it, so two model servers don't fight over port 8091.

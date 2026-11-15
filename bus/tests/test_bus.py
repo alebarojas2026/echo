@@ -341,3 +341,13 @@ def test_a_link_that_never_sent_is_never_called_quiet(caplog, tmp_path):
     b = Bus(sessions=tmp_path, clock=lambda: 1000)
     b.watch_links(10**9)
     assert not [r for r in caplog.records if "quiet" in r.getMessage()]
+
+
+def test_a_baseline_cmd_is_marked_with_its_time_for_the_clock_check(bus, tmp_path):
+    assert not (tmp_path / ".baseline").exists()
+    bus.handle(cmd("baseline", keep_model=True), B)
+    first = json.loads((tmp_path / ".baseline").read_text())["asked_t"]
+    bus.handle(cmd("label_mode", mode="off"), B)
+    bus.handle(cmd("baseline"), B)
+    assert json.loads((tmp_path / ".baseline").read_text())["asked_t"] > first
+    assert bus.sent == []   # still not forwarded
