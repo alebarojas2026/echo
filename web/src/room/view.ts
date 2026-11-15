@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
+import { Box3, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { NODES, SIZE_M, ZONES, alertWordAt, nodeLabelSide, toScene } from './frame'
 import { BG } from './palette'
 
@@ -149,6 +149,7 @@ export function fitCamera(camera: PerspectiveCamera, width: number, height: numb
 export class RoomView {
   readonly renderer: WebGLRenderer
   readonly scene = new Scene()
+  readonly figures = new Scene()
   readonly camera = new PerspectiveCamera(FOV_DEG, 1, 0.1, 60)
   readonly labelLayer: HTMLElement
   readonly wideLayer: HTMLElement
@@ -259,6 +260,14 @@ export class RoomView {
     let busy = false
     for (const step of this.animators) busy = step(dt) || busy
     this.renderer.render(this.scene, this.camera)
+    if (this.figures.children.some(figure => figure.visible)) {
+      // The person stays in front of room strokes, with its own depth buffer for solid shading and fades.
+      const autoClear = this.renderer.autoClear
+      this.renderer.autoClear = false
+      this.renderer.clearDepth()
+      this.renderer.render(this.figures, this.camera)
+      this.renderer.autoClear = autoClear
+    }
     if (this.labelsDirty) this.placeLabels()
     this.declutter()
     if (busy) this.requestRender()
@@ -276,21 +285,40 @@ export class RoomView {
     }
   }
 
-  /**
-   * Where two words overlap (on a laptop's smaller canvas the scene shrinks but words stay at least 28 px), the
-   * less important one steps back until there is room again. Nothing overlaps on the 1920 x 1080 screen, so
-   * there nothing ever steps back.
-   */
+  /** Current posed silhouettes projected to screen bounds, including room for a label's edge. */
+  private figureBoxes() {
+    const canvas = this.renderer.domElement.getBoundingClientRect()
+    const box = new Box3(), point = new Vector3()
+    return this.figures.children.filter(figure => figure.visible).flatMap(figure => {
+      box.setFromObject(figure, true)
+      if (box.isEmpty()) return []
+      let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity
+      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+        point.set(x, y, z).project(this.camera)
+        const px = canvas.left + (point.x + 1) * canvas.width / 2
+        const py = canvas.top + (1 - point.y) * canvas.height / 2
+        left = Math.min(left, px); right = Math.max(right, px)
+        top = Math.min(top, py); bottom = Math.max(bottom, py)
+      }
+      return [{ left: left - 8, top: top - 8, right: right + 8, bottom: bottom + 8 }]
+    })
+  }
+
+  /** Labels yield to the figure first, then to higher-priority labels. */
   private declutter() {
     const shown = this.labels.filter(({ el }) => !el.hidden && el.textContent)
     const boxes = shown.map(({ el }) => el.getBoundingClientRect())
     const ranks = shown.map(({ el }) => labelRank(el))
-    const yielding = new Set<HTMLElement>()
+    const figures = this.figureBoxes()
+    const blocked = new Set(shown.filter((_, i) => figures.some(figure => intersects(boxes[i], figure))).map(({ el }) => el))
+    const yielding = new Set(blocked)
     for (let i = 0; i < shown.length; i++) {
+      if (blocked.has(shown[i].el)) continue
       for (let j = i + 1; j < shown.length; j++) {
+        if (blocked.has(shown[j].el)) continue
         const a = boxes[i]
         const b = boxes[j]
-        if (ranks[i] === ranks[j] || a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top) continue
+        if (ranks[i] === ranks[j] || !intersects(a, b)) continue
         yielding.add(ranks[i] < ranks[j] ? shown[i].el : shown[j].el)
       }
     }
@@ -311,4 +339,9 @@ const RANKS: [string, number][] = [
 
 function labelRank(el: HTMLElement): number {
   return Math.max(0, ...RANKS.filter(([cls]) => el.classList.contains(cls)).map(([, rank]) => rank))
+}
+
+type ScreenBox = { left: number; top: number; right: number; bottom: number }
+function intersects(a: ScreenBox, b: ScreenBox) {
+  return a.right > b.left && b.right > a.left && a.bottom > b.top && b.bottom > a.top
 }

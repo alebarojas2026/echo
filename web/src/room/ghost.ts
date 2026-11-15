@@ -138,7 +138,7 @@ export class Presence {
       this.view.requestRender()
     })
     this.figure.object.visible = false
-    view.scene.add(this.figure.object)
+    view.figures.add(this.figure.object)
     this.label = view.addLabel('', new Vector3(), 'room-label--ghost')
     this.label.style.opacity = '0'
     this.labelWords = document.createElement('span')
