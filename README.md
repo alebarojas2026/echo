@@ -1,8 +1,8 @@
-# Radio Sight
+# Echo
 
 **A witness that never watches. It knows when someone is in a space, keeps a record nobody can edit, and tells you what happened. No camera, no microphone, nothing sent to the internet.**
 
-Some places need a record of who was there and when, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. Radio Sight does it with the Wi-Fi signal alone.
+Some places need a record of who was there and when, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. Echo does it with the Wi-Fi signal alone.
 
 - **It senses a person by radio.** Two small computers sit a metre apart. A body between them weakens the Wi-Fi signal, and from that one line the board knows someone arrived, whether they are standing still or moving, whether they walked through or stayed, and when they left. Armed, it raises an alert; it notices when one of its own devices is unplugged.
 - **It seals what it sensed.** Every record is chained to the one before it, so a changed record breaks every seal after it and the board can name the record.
