@@ -38,14 +38,13 @@ def git(*args, cwd=REPO, check=True):
     return subprocess.run(["git", *args], cwd=cwd, check=check, capture_output=True, text=True)
 
 
-def build_tree(name, prs, round_):
+def build_tree(name, prs, round_, base):
     """A worktree of origin/main plus PRs, with lab/soak overlaid, as a tarball. Returns its record."""
     dest = TREES / round_ / name
     if dest.exists():
         git("worktree", "remove", "--force", str(dest), check=False)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    git("fetch", "-q", "origin", "main", *[f"pull/{n}/head:farm-pr{n}" for n in prs], check=False)
-    git("worktree", "add", "-q", "--detach", str(dest), "origin/main")
+    git("worktree", "add", "-q", "--detach", str(dest), base)
     merged, skipped = [], []
     for n in prs:
         r = git("merge", "-q", "--no-edit", "--no-ff", f"farm-pr{n}", cwd=dest, check=False)
@@ -65,14 +64,15 @@ def build_tree(name, prs, round_):
                 tar.add(p, arcname=str(rel).replace("\\", "/"))
     (TREES / round_ / f"{name}.tar.gz").write_bytes(buf.getvalue())
     head = git("rev-parse", "HEAD", cwd=dest).stdout.strip()
-    main = git("rev-parse", "origin/main").stdout.strip()
-    return {"tree": name, "main": main, "head": head, "merged": merged, "skipped": skipped,
+    return {"tree": name, "main": base, "head": head, "merged": merged, "skipped": skipped,
             "bytes": len(buf.getvalue())}
 
 
 def cmd_trees(a):
     prs = [int(x) for x in a.prs.split(",") if x]
-    out = [build_tree("main", [], a.round), build_tree("heroes", prs, a.round)]
+    git("fetch", "-q", "--force", "origin", "main", *[f"+pull/{n}/head:farm-pr{n}" for n in prs], check=False)
+    base = git("rev-parse", "origin/main").stdout.strip()   # both trees on the same main
+    out = [build_tree("main", [], a.round, base), build_tree("heroes", prs, a.round, base)]
     (TREES / a.round / "trees.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
 
