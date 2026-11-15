@@ -332,3 +332,16 @@ def test_no_intrusion_while_blind_or_disarmed():
     brain.recent.extend([("person", 3, False)] * 10)
     brain._intrusion(5.0, None)                                                     # pred null: blind or not trained
     assert not any(e["kind"] == "intrusion" for e in brain.events)
+
+
+def test_a_link_pi_b_hears_degrades_health_but_never_blinds_it(monkeypatch):
+    monkeypatch.setitem(fake.NODES, "pi5b", (0.5, 0.6))
+    monkeypatch.setattr(fake, "LINKS", fake.LINKS + [("west", "pi5b", "ble")])
+    path = {"name": "t", "duration_s": 12, "person": None, "outages": [{"link": "west>pi5b:ble", "t_on": 3, "t_off": 12}]}
+    brain = state.Brain(path)
+    brain.readings["west>pi5b:ble"] = state.deque()
+    states = [m for m in state.run(path, brain=brain) if m["type"] == "state"]
+    late = at(states, 10)
+    assert late["health"]["status"] == "degraded" and late["health"]["blind"] == []
+    assert next(l for l in late["links"] if l["id"] == "west>pi5b:ble")["status"] == "stale"
+    assert late["pred"] is not None                                   # predictions carry on

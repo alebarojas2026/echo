@@ -171,7 +171,8 @@ class Brain:
             out.append({"id": link, "dbm": dbm, "base_dbm": base,
                         "drop_db": round(base - dbm, 1) if baseline else None,
                         "rate_hz": round(rate, 1), "expected_hz": self.rate if baseline else None,
-                        "status": "blind" if link in self.blind else "stale" if link in self.stale_since else "ok",
+                        "status": ("blind" if link in self.blind and rx != "pi5b" else
+                                   "stale" if link in self.stale_since or link in self.blind else "ok"),
                         "why": 0.0})
         return out
 
@@ -224,7 +225,8 @@ class Brain:
         if self.advice is None and close and dropping and spot == "S-home" and not self.advice_off:
             o = close[0]
             # the spot whose new link the object blocks least; west wins a tie
-            to = min(("S-W30", "S-E30"), key=lambda s: round(object_drop(o, fake.ROUTER_SPOTS[s], home["unoq"]), 3))
+            spots = [s for s in fake.ROUTER_SPOTS if s != "S-home"]   # every spot in the layout but home
+            to = min(spots, key=lambda s: round(object_drop(o, fake.ROUTER_SPOTS[s], home["unoq"]), 3))
             dx, dy = (round(a - b, 2) for a, b in zip(fake.ROUTER_SPOTS[to], home["pi5"]))
             node = near(home, (o["x"], o["y"]))
             where = {None: "On the router's link, an obstruction", "pi5": "An obstruction next to the router"}.get(
@@ -254,6 +256,8 @@ class Brain:
         self.last_t = t
         baseline, trained = t >= BASELINE_AT_S, t >= TRAINED_AT_S
         pos = fake.position(path.get("person") or [], t)
+        if pos and fake.zone_of(*pos) == 0:
+            pos = None   # past the area's end: nobody in it (section 4)
         moving = fake.is_moving(path.get("person") or [], t)
         zone = fake.zone_of(*pos) if pos else 0
         spot = fake.latest(path.get("router"), t, "spot", "S-home")
@@ -269,7 +273,8 @@ class Brain:
         stale = [l["id"] for l in links if l["status"] != "ok"]
         if baseline:
             self._jumps(t, links, kind, spot == "S-home")
-        blind = sorted(self.blind | self.jumped) if baseline else []
+        # Section 6 (desk layout): the links Pi B hears can make health degraded, never blind.
+        blind = sorted(l for l in self.blind | self.jumped if not l.split(">")[1].startswith("pi5b:")) if baseline else []
         health = {"status": "blind" if blind else "degraded" if stale else "ok", "blind": blind,
                   "reason": "rate" if stale else "jump" if blind else None}
 
