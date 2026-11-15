@@ -61,7 +61,7 @@ SILENT_MS = 3_000        # a baseline restarts only for a link with no reading f
 # A layout with a presence line ("presence" in nodes.json). These are the defaults for the keys it may carry:
 # the kit's own numbers go in the file, not here.
 OBJECT_DB = 3.0          # object_db: a thing left in the line takes at least this off it ...
-OBJECT_MAX_DB = 12.0     # object_max_db: ... and less than this (a person took 15 to 21 dB on the kit); null = no limit
+OBJECT_MAX_DB = 10.0     # object_max_db: ... and less than this (a person took 13.5 to 24 dB on the kit); null = no limit
 OBJECT_SPREAD_DB = 1.0   # object_spread_db: ... with the line as steady as when the spot is empty (its 2 s spread)
 OBJECT_HOLD_S = 3.0      # object_hold_s: ... for this long
 MOVING_SPREAD_DB = 2.0   # moving_spread_db: a person is moving when the line's 2 s spread is this or more

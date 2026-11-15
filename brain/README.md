@@ -221,10 +221,10 @@ When `radio/nodes.json` has a `presence` block, the line it names decides whethe
 | `on_db`, `off_db` | 7, 4 | somebody is there once the line's 1 s median drop reaches `on_db`, until it is under `off_db` |
 | `second_hold_s` | 5 | how long `second` may hold presence while `line` has no readings |
 | `moving_spread_db` | 2.0 | the line's spread (std of its readings) over 2 s at which somebody is moving; still again under 0.8 x that. A lesson with 20 or more moving and 20 or more still windows sets its own boundary, kept with the model (`spread_split`) |
-| `object_db`, `object_max_db` | 3, 12 | a thing left in the line takes at least `object_db` off it and less than `object_max_db` (`null` = no upper limit) |
+| `object_db`, `object_max_db` | 3, 10 | a thing left in the line takes at least `object_db` off it and less than `object_max_db` (`null` = no upper limit) |
 | `object_spread_db`, `object_hold_s` | 1.0, 3 | ... with a 2 s spread no larger than the empty line's, for this long |
 
-A thing left in the line is `pred.kind: "object"` with `present: false`: no enter, no still timer, no intrusion. While it stands there `advice` is about that line with `to_spot: null` (the router is cabled and does not move); when it is taken away `after_dbm` and an `advice_result` event carry the measured gain. A drop of a person's depth, or one that wobbles, is a person however long they stand still.
+A thing left in the line is `pred.kind: "object"` with `present: false`: no enter, no still timer, no intrusion. While it stands there `advice` is about that line with `to_spot: null` (the router is cabled and does not move); when it is taken away `after_dbm` and an `advice_result` event carry the measured gain. A drop of a person's depth, or one that wobbles, is a person however long they stand still. The numbers for a thing in the line are not measured on the kit yet (the one try had the thing below the line): the rule is built and tested on made-up feeds only.
 
 `"classifier": false` on the presence line is ignored (and logged): that line is never switched off.
 
