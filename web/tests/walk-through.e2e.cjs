@@ -21,7 +21,16 @@ async function open(page, { reduced = false } = {}) {
   // The board's states, ten a second, and every value the figure's motion takes, as it takes it.
   await page.evaluate((chain) => {
     window.__say = { name: 'empty', over: { chain } }
-    setInterval(() => window.arrival.update(window.__say.name, window.__say.over), 100)
+    // With `count` set (a time), the board's still count runs from then, as the board counts from the arrival.
+    setInterval(() => {
+      const { name, over, count } = window.__say
+      window.arrival.update(name, count ? { ...over, alert: { state: 'counting', zone: 1, still_s: (Date.now() - count) / 1000, limit_s: 60 } } : over)
+    }, 100)
+    // Every headline and every line under it that the page itself shows, as it shows them (the walk-up card's
+    // are not these). Kept apart: a headline fades out for 100 ms while the line under it has already changed.
+    window.__heard = { headlines: new Set(), details: new Set() }
+    const text = (id) => document.querySelector(`[data-testid="${id}"]`)?.textContent ?? ''
+    setInterval(() => { window.__heard.headlines.add(text('judge-headline')); window.__heard.details.add(text('judge-detail')) }, 25)
     window.__moves = []
     const room = document.getElementById('room')
     new MutationObserver(() => {
@@ -33,6 +42,15 @@ async function open(page, { reduced = false } = {}) {
 }
 const say = (page, name, over = {}) => page.evaluate(({ name, over, chain }) => { window.__say = { name, over: { chain, ...over } } }, { name, over, chain })
 const event = (page, kind, info = {}) => page.evaluate(({ kind, info }) => window.arrival.event(kind, undefined, info), { kind, info })
+/** Somebody steps in now, and the board counts how long they stand from now. */
+const stand = (page) => page.evaluate((chain) => { window.__say = { name: 'still', over: { chain }, count: Date.now() } }, chain)
+/** Every headline and every line under it the page has shown since the last call. */
+const heard = (page) => page.evaluate(() => {
+  const all = { headlines: [...window.__heard.headlines].sort(), details: [...window.__heard.details].sort() }
+  window.__heard.headlines.clear()
+  window.__heard.details.clear()
+  return all
+})
 const moves = (page) => page.evaluate(() => window.__moves.splice(0).filter(Boolean))
 /** The words on the screen: the walk-up card's while it is up, the page's own otherwise. */
 const words = async (page) => {
@@ -156,7 +174,7 @@ test('the figure walks on, walks off and ends where the board says', async ({ pa
   expect(errors).toEqual([])
 })
 
-test('a slow crossing (enter, then exit 0.8 s later) is a walk through too: the words, and the figure goes on across', async ({ page }) => {
+test('a slow crossing (enter, then exit 0.8 s later) is a walk through too, and "Standing still" is never flashed', async ({ page }) => {
   const errors = await open(page)
   await firstArrival(page)
   await say(page, 'empty')
@@ -164,9 +182,12 @@ test('a slow crossing (enter, then exit 0.8 s later) is a walk through too: the 
   await expect(room(page)).toHaveAttribute('data-ghost', '')
   await page.waitForTimeout(1200)
   await moves(page)
-  await say(page, 'still')
-  await expect.poll(() => words(page)).toContain('Someone is here.')
+  await heard(page)
+  // The board: enter, the person in the line for 0.8 s, exit.
+  await stand(page)
+  await event(page, 'enter', { zone: 1 })
   await page.waitForTimeout(800)
+  await event(page, 'exit', { zone: 1 })
   await say(page, 'empty')
   const before = Date.now()
   await expect.poll(() => words(page)).toEqual(WALKED)
@@ -174,33 +195,80 @@ test('a slow crossing (enter, then exit 0.8 s later) is a walk through too: the 
   await expect.poll(() => words(page), { timeout: 6000, intervals: [100] }).toEqual(NOBODY)
   expect(Date.now() - before).toBeGreaterThan(2500)
   expect(Date.now() - before).toBeLessThan(5000) // about 3 s, with room for a slow machine
-  // It walked on, and then on across and off the far side: it did not go back the way it came.
+  // "Someone is here." was said while they were in the line, with nothing under it: never "Standing still",
+  // never a count. Then the walk through, and back to nobody.
+  const all = await heard(page)
+  expect([...all.headlines, ...all.details].filter((words) => /Standing still|Moving|for \d+ s/.test(words))).toEqual([])
+  expect(all).toEqual({ headlines: [NOBODY[0], 'Someone is here.', WALKED[0]].sort(), details: ['', NOBODY[1], WALKED[1]].sort() })
+  // The figure did not wait: it walked on at once, and then on across and off the far side.
   expect(await moves(page)).toEqual(['on', 'through'])
   await expect(room(page)).toHaveAttribute('data-ghost', '')
   expect(errors).toEqual([])
 })
 
-test('a stand of 10 s reads "Someone is here." throughout, and leaving after it is a leaving', async ({ page }) => {
+test('a blip in the state with no event from the board shows no walked-through words', async ({ page }) => {
+  const errors = await open(page)
+  await firstArrival(page)
+  await say(page, 'empty')
+  await expect.poll(() => words(page)).toEqual(NOBODY)
+  await page.waitForTimeout(1200)
+  await heard(page)
+  // A presence of 0.8 s that the board never announced: no enter, no exit, no passed_by in the record.
+  await stand(page)
+  await page.waitForTimeout(800)
+  await say(page, 'empty')
+  await page.waitForTimeout(4000)
+  // The presence is said while it lasts, as any presence is; no walk through is said that the record lacks.
+  expect(await heard(page)).toEqual({ headlines: [NOBODY[0], 'Someone is here.'].sort(), details: ['', NOBODY[1]].sort() })
+  // An exit long after its enter is a visit that ended, not a walk through.
+  await event(page, 'enter', { zone: 1 })
+  await stand(page)
+  await page.waitForTimeout(2600)
+  await event(page, 'exit', { zone: 1 })
+  await say(page, 'empty')
+  await expect.poll(() => words(page)).toEqual(NOBODY)
+  await page.waitForTimeout(1500)
+  expect((await heard(page)).headlines).not.toContain(WALKED[0])
+  expect(errors).toEqual([])
+})
+
+test('a stand of 10 s reads "Someone is here." from the arrival to the end, with the line under it from 1.5 s', async ({ page }) => {
   const errors = await open(page)
   await firstArrival(page)
   await say(page, 'empty')
   await expect.poll(() => words(page)).toEqual(NOBODY)
   await page.waitForTimeout(1200)
   await moves(page)
-  await say(page, 'still')
-  await expect.poll(() => words(page)).toContain('Someone is here.')
-  const heard = new Set()
-  for (let i = 0; i < 20; i++) {
-    await page.waitForTimeout(500)
-    heard.add((await words(page))[0])
-  }
-  expect([...heard]).toEqual(['Someone is here.'])
+  await heard(page)
+  const arrived = Date.now()
+  await stand(page)
+  await event(page, 'enter', { zone: 1 })
+  await expect.poll(async () => (await words(page))[0], { timeout: 4000, intervals: [50] }).toBe('Someone is here.')
+  expect(Date.now() - arrived).toBeLessThan(900) // at once: one state and the text's own fade, on a slow machine
+  expect((await words(page))[1]).toBe('') // nothing under it yet
+  await page.waitForTimeout(300) // the headline's own fade is over
+  const top = (await page.getByTestId('judge-headline').boundingBox()).y
+  await expect.poll(async () => (await words(page))[1], { timeout: 4000, intervals: [50] }).not.toBe('')
+  expect((await page.getByTestId('judge-headline').boundingBox()).y).toBe(top) // the headline did not move when the line came
+  const lined = Date.now() - arrived
+  expect(lined).toBeGreaterThan(1000) // the line waited
+  expect(lined).toBeLessThan(2100) // and came by 1.5 s
+  // The first count is the board's, from the arrival: never 0.
+  await page.waitForTimeout(100) // the recorder looks every 25 ms
+  const first = await heard(page)
+  expect(first.headlines).toEqual([NOBODY[0], 'Someone is here.'])
+  expect(first.details).toEqual(['', NOBODY[1], 'Standing still for 1 s'].sort())
+  await page.waitForTimeout(10000 - (Date.now() - arrived))
+  const rest = await heard(page)
+  expect(rest.headlines).toEqual(['Someone is here.'])
+  expect(rest.details.filter((words) => !/^Standing still for [1-9]\d* s$/.test(words))).toEqual([])
+  expect(rest.details).toContain('Standing still for 9 s')
+  // Leaving after a real stand is a leaving, never a walk through.
+  await event(page, 'exit', { zone: 1 })
   await say(page, 'empty')
   await expect.poll(() => words(page)).toEqual(NOBODY)
-  for (let i = 0; i < 6; i++) {
-    await page.waitForTimeout(500)
-    expect(await words(page)).toEqual(NOBODY) // never "walked through" after a real stand
-  }
+  await page.waitForTimeout(3000)
+  expect((await heard(page)).headlines).not.toContain(WALKED[0])
   expect(await moves(page)).toEqual(['on', 'off'])
   expect(errors).toEqual([])
 })

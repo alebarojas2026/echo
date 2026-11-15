@@ -140,7 +140,6 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   }
   const render = () => {
     here = !stale && !!state?.pred?.present && state.pred.kind === 'person'
-    walked.seen(!state || stale || state.armed || state.health.status === 'blind' || !state.pred ? null : here)
     // The board's clock: the last state's t, carried forward by this page's clock until the next one.
     const presentMs = present.update(here, stale ? null : boardNow(feed?.current() ?? null))
     clearTimeout(wake)

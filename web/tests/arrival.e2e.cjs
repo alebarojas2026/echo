@@ -190,15 +190,16 @@ test('reduced motion still hands over, and the operator can skip the card', asyn
 test('a 1 s presence is not greeted, a 2 s presence is', async ({ page }) => {
   await overHall(page)
   const title = page.getByTestId('arrival-title')
-  await page.evaluate(() => window.arrival.update('still'))
+  // The board records the visit: an enter event, and its exit a second later.
+  await page.evaluate(() => { window.arrival.update('still'); window.arrival.event('enter', undefined, { zone: 1 }) })
   for (let i = 0; i < 10; i++) {
     await page.clock.runFor(100)
     await expect(title).toHaveText('Nobody is here.')
     await expect(title).toHaveCSS('opacity', '1') // no flicker either
   }
-  await page.evaluate(() => window.arrival.update('empty'))
+  await page.evaluate(() => { window.arrival.update('empty'); window.arrival.event('exit', undefined, { zone: 1 }) })
   await page.clock.runFor(2000)
-  // On the one spot a visit this short is a walk through: said for 3 s, then the card is back to nobody.
+  // On the one spot an enter and its exit this close are a walk through: said for 3 s, then the card is back to nobody.
   if (layout.zones.length === 1) {
     await expect(title).toHaveText('Someone walked through.')
     await page.clock.runFor(1500)

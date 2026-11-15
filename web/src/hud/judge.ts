@@ -13,7 +13,7 @@ import { routerWords } from './router-words'
 import './judge.css'
 import { mountAskRoom } from './ask-room'
 import { updateProofVisibility } from './proof-visibility'
-import { mountArrival } from './arrival'
+import { mountArrival, PresentSince } from './arrival'
 import { changingText } from './changing-text'
 import { ReadingHold } from './readable-updates'
 import type { StateMsg } from '../room/contract'
@@ -22,7 +22,8 @@ import { fetchProof } from '../room/hud-host'
 import type { Proof } from './state'
 import { presenceTile } from './proof-visibility'
 import { judgeMoment } from './judge-moment'
-import { hallFirst, hallMoment, walkedThrough } from './judge-hall'
+import { earlyMoment, hallFirst, hallMoment, walkedThrough, type Moment } from './judge-hall'
+import { SHORT_VISIT_MS } from '../room/motion'
 import { mountReplay } from './replay'
 import { recordsClient } from './records'
 import { holdAdvice } from './dead-zone'
@@ -122,6 +123,10 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   let lastState: StateMsg | null = null
   let lastStale = true
   const walked = walkedThrough(live, () => { if (!disposed) render(lastState, lastStale) })
+  // How long a person has been here by the board's clock, and a wake-up for the moment the line under the
+  // headline is due (judge-hall.ts, earlyMoment).
+  const present = new PresentSince()
+  let dueWake: ReturnType<typeof setTimeout> | undefined
   const render = (state: StateMsg | null, stale: boolean) => {
     lastState = state
     lastStale = stale
@@ -132,10 +137,20 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     const hall = hallFirst() && !rail
     document.documentElement.dataset.judgeLayout = hall ? 'hall' : 'rail'
     const [railHeadline, railDetail] = judgeMoment(state, stale)
-    const known = !!state && !stale && !state.armed && state.health.status !== 'blind' && !!state.pred && !(state as { replay?: unknown }).replay
-    walked.seen(known ? state!.pred!.present && state!.pred!.kind === 'person' : null)
-    const { headline, detail, tone } = hall ? hallMoment(state, stale, undefined, walked.active()) : { headline: railHeadline, detail: railDetail, tone: '' }
+    const known = !!state && !stale && state.health.status !== 'blind' && !!state.pred && !(state as { replay?: unknown }).replay
+    const here = known && state!.pred!.present && state!.pred!.kind === 'person'
+    const presentMs = present.update(here, known ? boardNow(feed?.current() ?? null) ?? state!.t : null)
+    let moment: Moment = hall ? hallMoment(state, stale, undefined, walked.active()) : { headline: railHeadline, detail: railDetail, tone: '' }
+    clearTimeout(dueWake)
+    const early = hall && known ? earlyMoment(moment, presentMs) : null
+    if (early) {
+      moment = early
+      // The line is due when the presence has lasted long enough, also on a feed that has gone quiet.
+      dueWake = setTimeout(() => { if (!disposed) render(lastState, lastStale) }, Math.max(20, SHORT_VISIT_MS - presentMs! + 20))
+    }
+    const { headline, detail, tone } = moment
     field('judge-headline').parentElement!.dataset.tone = tone
+    field('judge-headline').parentElement!.dataset.early = early ? '1' : ''
     // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
     // A count in the headline ("No movement for 13 s") ticks once a second: only its figures change, so it changes at once too.
     const shape = headline.replace(/\d+/g, '0')
@@ -177,7 +192,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { delete document.documentElement.dataset.judgeLayout; walked.dispose(); operatorVisibility.disconnect(); delete document.documentElement.dataset.hudOperator; offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); narratorText.dispose(); clearInterval(narrationTimer); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { delete document.documentElement.dataset.judgeLayout; walked.dispose(); clearTimeout(dueWake); operatorVisibility.disconnect(); delete document.documentElement.dataset.hudOperator; offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); narratorText.dispose(); clearInterval(narrationTimer); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 import './judge-hall.css'

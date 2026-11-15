@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest'
 import desk from '../../tests/fixtures/desk-layout.json'
 import gate from '../../tests/fixtures/gate-layout.json'
 import type { StateMsg } from '../room/contract'
-import { CHECKIN_WORDS, WALKED, WALKED_MS, hallFirst, hallMoment, walkedThrough } from './judge-hall'
+import { CHECKIN_WORDS, NOBODY, WALKED, WALKED_MS, earlyMoment, hallFirst, hallMoment, walkedThrough } from './judge-hall'
 import type { HudLayout } from './layout'
 import { alignMockState, mockState } from './mock-layout'
 
@@ -108,49 +108,73 @@ test('the walk-through lasts about 3 s from the passed_by event, on the one spot
   }
 })
 
-test('an arrival and a leaving within 1.5 s is a walk through too; a longer visit and a dropped reading are not', () => {
+test('an enter event and its exit within 1.5 s is a walk through too; only the board\'s events start it', () => {
   vi.useFakeTimers()
   try {
-    const feed = { onEvent: () => () => {} }
-    let clock = 0
+    let fire: (event: { kind: string; t?: number }) => void = () => {}
+    const feed = { onEvent(fn: (event: { kind: string; t?: number }) => void) { fire = fn; return () => {} } }
     let changes = 0
-    const walked = walkedThrough(feed, () => { changes++ }, () => clock, () => true)
-    const at = (ms: number, here: boolean | null) => { clock = ms; walked.seen(here) }
-    // A slow crossing: the board says enter, then exit 0.8 s later.
-    at(0, false); at(1000, true); at(1400, true)
-    expect(walked.active()).toBe(false) // while they are in the line it is "Someone is here."
-    at(1800, false)
+    const walked = walkedThrough(feed, () => { changes++ }, () => 0, () => true)
+    // A slow crossing: the board records enter, then exit 0.8 s later, by its own clock.
+    fire({ kind: 'enter', t: 100_000 })
+    expect(walked.active()).toBe(false)
+    fire({ kind: 'exit', t: 100_800 })
+    expect([walked.active(), changes]).toEqual([true, 1])
+    fire({ kind: 'reset' })
+    expect([walked.active(), changes]).toEqual([false, 2])
+    // A stand of ten seconds, and one of just over the limit: a visit, never a walk through.
+    fire({ kind: 'enter', t: 200_000 }); fire({ kind: 'exit', t: 210_000 })
+    fire({ kind: 'enter', t: 300_000 }); fire({ kind: 'exit', t: 301_501 })
+    expect(walked.active()).toBe(false)
+    // Exactly at the limit it still is one.
+    fire({ kind: 'enter', t: 400_000 }); fire({ kind: 'exit', t: 401_500 })
     expect(walked.active()).toBe(true)
-    at(1900, false)
-    clock = 1800 + 2999
-    expect(walked.active()).toBe(true)
-    clock = 1800 + 3001
+    fire({ kind: 'reset' })
+    // An exit with no enter before it, a second exit, a clock that ran backwards, an event with no time: nothing.
+    fire({ kind: 'exit', t: 500_000 })
+    fire({ kind: 'enter', t: 600_000 }); fire({ kind: 'exit', t: 600_500 }); fire({ kind: 'reset' }); fire({ kind: 'exit', t: 600_900 })
+    fire({ kind: 'enter', t: 700_000 }); fire({ kind: 'exit', t: 699_000 })
+    fire({ kind: 'enter' }); fire({ kind: 'exit' })
+    // A reset between the two is a new start.
+    fire({ kind: 'enter', t: 800_000 }); fire({ kind: 'reset' }); fire({ kind: 'exit', t: 800_400 })
     expect(walked.active()).toBe(false)
-    vi.advanceTimersByTime(3100)
-    expect(changes).toBe(1) // told when the words are due to go
-    // A stand of ten seconds, then leaving: never a walk through.
-    at(10_000, true); for (let t = 10_100; t <= 20_000; t += 100) at(t, true)
-    at(20_100, false)
-    expect(walked.active()).toBe(false)
-    // A visit of just over the limit is a visit.
-    at(30_000, true); at(31_600, false)
-    expect(walked.active()).toBe(false)
-    // One dropped reading at the start of a stand: they had not left, and nothing is said about a walk.
-    at(40_000, true); at(40_500, false)
-    expect(walked.active()).toBe(true)
-    at(40_700, true)
-    expect(walked.active()).toBe(false)
-    at(45_000, false) // the stand then lasted five seconds
-    expect(walked.active()).toBe(false)
-    // Nothing to go by (no data, blind, armed, a replay) starts the count again: no walk is made up from it.
-    at(50_000, true); at(50_300, null); at(50_600, false)
-    expect(walked.active()).toBe(false)
+    // There is no way to start it from a state: the tracker takes events and nothing else.
+    expect(Object.keys(walked).sort()).toEqual(['active', 'dispose'])
     // Another layout: never.
-    const other = walkedThrough(feed, () => {}, () => clock, () => false)
-    clock = 60_000; other.seen(true); clock = 60_500; other.seen(false)
+    const other = walkedThrough(feed, () => {}, () => 0, () => false)
+    fire({ kind: 'enter', t: 900_000 }); fire({ kind: 'exit', t: 900_500 })
     expect(other.active()).toBe(false)
     walked.dispose()
   } finally {
     vi.useRealTimers()
   }
+})
+
+test('"Someone is here." is said at once; the line under it waits 1.5 s, and "for 0 s" is never said', () => {
+  const still = (still_s: number) => hallMoment(here('still', { alert: { state: 'counting', zone: 1, still_s, limit_s: 10 } }), false, layout)
+  const someone = still(0.4)
+  expect(someone).toEqual({ headline: 'Someone is here.', detail: 'Standing still', tone: '' }) // no "for 0 s"
+  expect(still(0.99).detail).toBe('Standing still')
+  expect(still(1).detail).toBe('Standing still for 1 s') // the board's count, from the true arrival
+  expect(still(2.7).detail).toBe('Standing still for 2 s')
+  // Inside the window: the headline as it is, nothing under it.
+  expect(earlyMoment(someone, 0)).toEqual({ headline: 'Someone is here.', detail: '', tone: '' })
+  expect(earlyMoment(still(1.2), 1499)).toEqual({ headline: 'Someone is here.', detail: '', tone: '' })
+  const moving = hallMoment(here('moving', { alert: quiet }), false, layout)
+  expect(earlyMoment(moving, 700)).toEqual({ headline: 'Someone is here.', detail: '', tone: '' })
+  // At 1.5 s the line is said, and from then on.
+  expect(earlyMoment(still(1.5), 1500)).toBeNull()
+  expect(earlyMoment(someone, 9000)).toBeNull()
+  // Nothing else changes: an armed space, an alert, a check-in, nobody, a walk through, no clock to go by.
+  const armed = hallMoment(here('still', { armed: true, alert: quiet }), false, layout)
+  expect(earlyMoment(armed, 200)).toBeNull()
+  const alert = hallMoment(here('still', { alert: { state: 'check_on', zone: 1, still_s: 13.4, limit_s: 10 } }), false, layout)
+  expect(earlyMoment(alert, 200)).toBeNull()
+  const state = here('moving', { alert: quiet })
+  const checkin = hallMoment({ ...state, checkin: { t: state.t - 1000, link: 'pi5>pi5b:wifi' } }, false, layout)
+  expect(earlyMoment(checkin, 200)).toBeNull()
+  expect(earlyMoment(NOBODY, null)).toBeNull()
+  expect(earlyMoment(NOBODY, 200)).toBeNull()
+  expect(earlyMoment(WALKED, 200)).toBeNull()
+  expect(earlyMoment(someone, null)).toBeNull()
 })
