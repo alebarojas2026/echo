@@ -30,6 +30,42 @@ def test_one_summary_a_second():
     assert [r["t"] for r in s.seconds()] == [T0, T0 + 1000]
 
 
+def test_clock_backwards_keeps_new_rows_and_replaces_collisions(tmp_path, caplog):
+    path = tmp_path / "clock.db"
+    s = Store(path)
+    for second in (*range(100, 111), *range(50, 56)):
+        s.add(state(second * 1000))
+    assert len(s.seconds()) == 17
+    assert s.latest()["t"] == 55_000
+    assert len(caplog.records) == 1
+    s.add(state(100_000, armed=True))
+    assert s.latest()["armed"] == 1
+    assert len(s.seconds()) == 17
+    s.close()
+    s = Store(path)
+    assert s.latest()["t"] == 100_000
+
+
+def test_history_limits_rows_in_sql():
+    s = Store(":memory:")
+    for second in range(3600):
+        s.add(state(second * 1000))
+    count = []
+    s.db.create_function("count_returned", 1, lambda t: count.append(t) or t)
+    s.db.execute("alter table seconds rename to source_seconds")
+    s.db.execute("create view seconds as select count_returned(t) as observed, * from source_seconds")
+    assert len(s.history(100_000, 110_000)["rows"]) == 11
+    assert len(count) == 11
+
+
+def test_advice_ignores_rows_outside_requested_minutes():
+    from agent.tools import explain_advice
+    s = Store(":memory:")
+    s.add(state(T0, advice={"text": "Old advice"}))
+    assert explain_advice(s, T0 + 120_000, {}, minutes=1)["rows"] == []
+    assert explain_advice(s, T0 - 1000, {}, minutes=1)["rows"] == []
+
+
 def test_summary_keeps_what_the_agent_needs():
     s = Store(":memory:")
     s.add(state(T0, armed=True))

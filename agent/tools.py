@@ -136,9 +136,9 @@ def link_history(store, now_ms, zones, minutes=10, link=None, **_):
     return {"answer": f"In {_last(minutes)}: {text}", "rows": rows}
 
 
-def explain_advice(store, now_ms, zones, **_):
+def explain_advice(store, now_ms, zones, minutes=10, **_):
     """the last router advice and what the move changed"""
-    told = [r for r in store.seconds() if r["advice"]]
+    told = [r for r in store.seconds(now_ms - minutes * 60_000, now_ms) if r["advice"]]
     if not told:
         return {"answer": "No router advice has been given.", "rows": []}
     advice = told[-1]["advice"]

@@ -8,6 +8,7 @@ It holds what the brain already sends to the screen (CONTRACTS.md section 5): no
 readings, no camera labels, no images.
 """
 import json
+import logging
 import sqlite3
 import threading
 from pathlib import Path
@@ -22,7 +23,7 @@ create table if not exists events(
     info text not null, unique(id, t));
 create index if not exists events_t on events(t);
 create table if not exists seconds(
-    t integer primary key, src text,
+    t int primary key, src text,
     present integer, kind text, zone integer, motion text, still_s real,
     health text, blind text not null, alert text, alert_zone integer, armed integer not null,
     cam text, router text, links text not null, advice text, model text,
@@ -69,6 +70,16 @@ class Store:
         for column in ADDED:
             if column not in have:
                 self.db.execute(f"alter table seconds add column {column} text")
+        # INTEGER PRIMARY KEY aliases rowid; INT keeps insertion order separate from time.
+        columns = list(self.db.execute("pragma table_info(seconds)"))
+        if any(c["name"] == "t" and c["type"].upper() == "INTEGER" for c in columns):
+            with self.db:
+                create = SCHEMA.split("create table if not exists seconds", 1)[1]
+                self.db.execute("create table seconds_new" + create)
+                names = ", ".join(c["name"] for c in columns)
+                self.db.execute(f"insert into seconds_new({names}) select {names} from seconds order by t")
+                self.db.execute("drop table seconds")
+                self.db.execute("alter table seconds_new rename to seconds")
         self.lock, self._saved = threading.Lock(), 0
 
     def add(self, msg: dict) -> bool:
@@ -85,8 +96,13 @@ class Store:
             if msg.get("type") != "state":
                 return False
             row = summary(msg)
+            newest = self.db.execute("select t from seconds order by rowid desc limit 1").fetchone()
+            if newest and newest["t"] == row["t"]:
+                return False
+            if newest and row["t"] < newest["t"] - 5000:
+                logging.getLogger(__name__).warning("Board clock moved backwards: %s -> %s", newest["t"], row["t"])
             cur = self.db.execute(
-                f"insert or ignore into seconds({', '.join(row)}) values ({', '.join('?' * len(row))})",
+                f"insert or replace into seconds({', '.join(row)}) values ({', '.join('?' * len(row))})",
                 tuple(row.values()))
             if cur.rowcount != 1:
                 return False
@@ -109,10 +125,14 @@ class Store:
             rows = self.db.execute(q + " order by t, n", args).fetchall()
         return [{**dict(r), "info": json.loads(r["info"])} for r in rows]
 
-    def seconds(self, since_ms: int = 0) -> list:
+    def seconds(self, since_ms: int = 0, until_ms=None) -> list:
         """Saved seconds at or after since_ms, oldest first, with the JSON columns decoded."""
         with self.lock:
-            rows = self.db.execute("select * from seconds where t >= ? order by t", (since_ms,)).fetchall()
+            query, args = "select * from seconds where t >= ?", [since_ms]
+            if until_ms is not None:
+                query += " and t <= ?"
+                args.append(until_ms)
+            rows = self.db.execute(query + " order by t", args).fetchall()
         out = []
         for r in rows:
             d = dict(r)
@@ -132,9 +152,7 @@ class Store:
         if to_t - from_t > MAX_HISTORY_MS:
             raise ValueError("at most 30 minutes of history per call; ask for a shorter stretch")
         rows = []
-        for r in self.seconds(from_t):
-            if r["t"] > to_t:
-                break
+        for r in self.seconds(from_t, to_t):
             known = r["present"] is not None
             rows.append({"t": r["t"], "present": bool(r["present"]) if known else None,
                          "zone": r["zone"] if known else None, "zone_set": r["zone_set"] if r["present"] else [],
@@ -145,8 +163,8 @@ class Store:
     def latest(self):
         """The newest saved second, or None when the store is empty."""
         with self.lock:
-            r = self.db.execute("select max(t) from seconds").fetchone()[0]
-        return None if r is None else self.seconds(r)[-1]
+            r = self.db.execute("select t from seconds order by rowid desc limit 1").fetchone()
+        return None if r is None else self.seconds(r["t"], r["t"])[0]
 
     def close(self) -> None:
         self.db.close()
