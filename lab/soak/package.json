@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Browser probe for the soak test",
+  "devDependencies": { "playwright": "1.65.1" }
+}
