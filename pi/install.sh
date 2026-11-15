@@ -10,6 +10,11 @@
 # any failure) and starts it. Later code updates: pull, then
 # `sudo systemctl restart radio-sight-radio-node`, or run this again.
 #
+# It also installs radio-sight-witness (pi/units/, #866): its own small process that signs the
+# board's chain head with this Pi's own key. It is optional: until `python3 -m pi.witness --init`
+# has made a key it says "not enrolled" and ends, and nothing here waits on it or checks it.
+# To take it off again: sudo systemctl disable --now radio-sight-witness
+#
 # Pi B has no cable and no hotspot of its own. --node pi5b also:
 #   - writes RADIO_NODE, WIFI_LINK and BUS_HOST into the repo's .env when they're missing;
 #   - turns off this Pi's own hotspot (deadzone-ap), if it has one;
@@ -173,6 +178,27 @@ if [ -n "$ROLE_SET$ADV_SET" ]; then
     $SYSTEMCTL_BIN restart radio-sight-radio-node.service
     echo "install: restarted radio-sight-radio-node with the new .env"
 fi
+
+# The witness, after the readers and apart from them: a failure here is said and nothing more.
+install_witness() {
+    local src="$REPO_DIR/pi/units/radio-sight-witness.service" unit_dir=${UNIT_DIR:-/etc/systemd/system}
+    local sudo=${SUDO-sudo} user tmp
+    [ "$(id -u)" -ne 0 ] || sudo=""
+    [ -f "$src" ] || return 0
+    user=$(stat -c %U "$REPO_DIR" 2>/dev/null || stat -f %Su "$REPO_DIR")
+    tmp=$(mktemp)
+    sed -e "s|@REPO@|$REPO_DIR|g" -e "s|@USER@|$user|g" -e "s|@PYTHON@|$VENV/bin/python|g" "$src" > "$tmp"
+    if ! cmp -s "$tmp" "$unit_dir/radio-sight-witness.service"; then
+        $sudo cp "$tmp" "$unit_dir/radio-sight-witness.service"
+        $sudo chmod 644 "$unit_dir/radio-sight-witness.service"
+        $sudo $SYSTEMCTL_BIN daemon-reload
+    fi
+    rm -f "$tmp"
+    $sudo $SYSTEMCTL_BIN enable --quiet radio-sight-witness.service
+    $sudo $SYSTEMCTL_BIN restart radio-sight-witness.service
+    echo "install: the witness is installed (radio-sight-witness); it signs once this Pi has a key: python3 -m pi.witness --init"
+}
+install_witness || echo "install: the witness was not installed; the radio node is unaffected" >&2
 
 [ "$NODE" = pi5b ] || exit 0
 

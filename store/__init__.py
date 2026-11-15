@@ -92,16 +92,10 @@ class Store:
         have = {r["name"] for r in self.db.execute("pragma table_info(seconds)")}
         for column in ADDED:
             if column not in have:
-                self.db.execute(f"alter table seconds add column {column} text")
+                self._add_column("seconds", column, "text")
         for table in ("events", "seconds"):   # a file from before the record was sealed
             if "seq" not in {r["name"] for r in self.db.execute(f"pragma table_info({table})")}:
-                try:
-                    self.db.execute(f"alter table {table} add column seq integer")
-                except sqlite3.OperationalError:
-                    # The store and the web server open the same older file at the same moment after a
-                    # deploy: the other one added the column first.
-                    if "seq" not in {r["name"] for r in self.db.execute(f"pragma table_info({table})")}:
-                        raise
+                self._add_column(table, "seq", "integer")
         # INTEGER PRIMARY KEY aliases rowid; INT keeps insertion order separate from time.
         columns = list(self.db.execute("pragma table_info(seconds)"))
         if any(c["name"] == "t" and c["type"].upper() == "INTEGER" for c in columns):
@@ -114,6 +108,15 @@ class Store:
                 self.db.execute("alter table seconds_new rename to seconds")
         self.lock, self._saved = threading.Lock(), 0
         self._unsealed = None   # (when counted, the count): the old rows are counted at most once a minute
+
+    def _add_column(self, table: str, column: str, kind: str) -> None:
+        """Add a column to an older file. The store and the web server open the same file as they
+        start, so the other one may have added it a moment ago: that is not an error."""
+        try:
+            self.db.execute(f"alter table {table} add column {column} {kind}")
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e):
+                raise
 
     def add(self, msg: dict) -> bool:
         """Save a brain message. True if a row was written: every event, and the first state
