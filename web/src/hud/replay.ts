@@ -20,7 +20,7 @@ export function recordedState(base: StateMsg | null, second: Second): ReplayStat
   const seen = kind === 'record' && !!row?.present && zone > 0
   const limit = hudLayout.zones.find((z) => z.id === zone)?.still_alert_s ?? null
   return {
-    v: 2, type: 'state', seq: base?.seq ?? 0, cam: base?.cam ?? 'off', router: 'S-home', links: base?.links ?? [], model: base?.model ?? null, board: null,
+    v: 2, type: 'state', seq: base?.seq ?? 0, cam: base?.cam ?? 'off', router: 'S-home', links: [], model: base?.model ?? null, board: null,
     t: second.t, src: 'replay', replay: { t: second.t, kind },
     health: { status: row?.health ?? 'ok', blind: [], reason: null },
     pred: kind !== 'record' ? null : {
