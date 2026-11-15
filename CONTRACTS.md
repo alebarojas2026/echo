@@ -319,6 +319,20 @@ Link health:
   hotspot, which can lose packets for reasons that have nothing to do with the radio path. Each of them is still
   judged stale or blind by the rules above and shows it in state.links, and health.status is then degraded; but they
   never make health blind, never go into health.blind, never null pred and never pause the alert timers.
+Baseline, the empty level follows slow drift: on a layout that marks crossing lines, the baseline of each crossing
+  line follows slow drift. While pred.present is false, its base_dbm moves towards the line's median over the last
+  1 s window with a time constant of 30 s (brain/settings.py drift_follow_s; 0 = the fixed baseline). It stops the
+  moment the crossing lines' median drops, averaged, reach 2 dB (or 1 x their quiet level), or the presence line's
+  own drop reaches 2 dB, and stays stopped while pred.present is true: a person standing still is never absorbed,
+  however long. If pred.present has been false all through a dip of 30 s, following starts again (the room
+  changed, not a person), except while the decision is "object". The other links keep the captured baseline. The
+  followed level is kept in baselines.jsonl ({"t", "base"}, at most one line every 10 s and only after a 0.5 dB
+  move) so a recording is read against the level in force when it was made. baseline.json keeps the captured
+  values: after a restart take a new baseline.
+Presence on a layout that marks crossing lines and has no presence line: the model's features also hold each
+  crossing line's median drop over the window and the average of them. Arriving is the model's decision alone.
+  Leaving has a hold: once pred.present is true, it stays true while the crossing lines' median drops, averaged,
+  are 3 dB or more (or 1.5 x their quiet level; stay_x_quiet).
 Object (a training label): only in label_mode object. Every frame must have persons_in_frame == 0, and one or more
   links must drop >= 3 dB for >= 2 s with the std of their 0.5 s means < 0.8 dB.
 Presence line (only on a layout whose nodes.json has "presence"; every number is a key of that block, with the
@@ -342,7 +356,17 @@ Presence line (only on a layout whose nodes.json has "presence"; every number is
   measured against it when the thing is taken away.
 Check-in (a rule, not learned): on pi5>unoq:wifi, >= 4 alternating crossings of +/-1.5 dB around the 1 s rolling median
   within 2.5 s, with pred.zone unchanged and no other link's drop changing by > 3 dB. Gate 8 tunes the thresholds.
+Check-in on a layout that marks crossing lines (a rule, not learned; the wave above stays for the others): "lean
+  aside". While the still timer is counting or the alert is on, the crossing lines' median drops, averaged, come
+  back up towards the empty level by 4 dB (or 2.5 x their quiet level; lean_x_quiet) and by at least half of what
+  the person standing there took off them, stay up for 0.3 to 2.5 s, and drop again. That is one checkin event
+  ({zone, link: the first crossing line}) and it clears the alert. Up for longer than 2.5 s is the person leaving:
+  an alert that was on ends (alert_off), with no checkin. On screen and in the narrator: "Lean aside to say
+  you're okay".
 Alert:
+- On a layout that marks crossing lines the still timer resets on moving only after 30 moving decisions in a row
+  (3 s; spot_moving_run), not 5. The alert means "somebody has been here for N seconds with no clear burst of
+  movement"; the screen claims no more.
 - still_s counts while kind == person, motion == still and the zone is unchanged, judged on smoothed decisions:
   it resets only after 5 moving decisions in a row (0.5 s), or when another zone or kind holds the majority of the last 10 decisions.
 - check_on when still_s >= zones[zone].still_alert_s. null never alerts, and objects never alert.
