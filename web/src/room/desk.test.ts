@@ -1,14 +1,16 @@
 import { PerspectiveCamera, Vector3 } from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { laneShifts } from './beams'
+import { laneShifts, overFloor } from './beams'
 import { demoScene } from './demo'
+import { objectTagAt } from './ghost'
 import { buildState, mockState } from './mock'
 import { FIGURE_HEIGHT_M } from './figure'
-import { LINK_IDS, NODES, alertWordAt, applyLayout, nodeLabelSide, toScene, type Vec3 } from './frame'
+import { LINK_IDS, NODES, SIZE_M, alertWordAt, applyLayout, nodeLabelSide, toScene, type Vec3 } from './frame'
 import { DESK_LAYOUT } from './layouts.fixture'
 import { clearBox, ghostBox } from './scan'
 import { DESK_TOP_M, standBase } from './stage'
 import { FOV_DEG, deskAnchors, fitCamera, inSituShot, roomShot } from './view'
+import { xrayGeometry } from './xray'
 
 // The whole room on the desk layout of the contract PR (#415): this file applies it once; every other test file
 // keeps the built-in square.
@@ -123,10 +125,41 @@ describe('the room drawn on the desk layout', () => {
     expect([y2, z2, side2]).toEqual([-0.06, 0, 'south'])
   })
 
-  it('stands the desk devices on the desk and the aisle beacons on arms from its edge', () => {
+  it('stands the desk devices on the desk and the aisle beacons on the floor', () => {
     expect(standBase(NODES.pi5.xyz)).toEqual([0.8, 1.1, DESK_TOP_M])
     expect(standBase(NODES.unoq.xyz)).toEqual([1.1, 0.6, DESK_TOP_M])
-    expect(standBase(NODES.east.xyz)).toEqual([1.6, 0.6, 1.0])
+    expect(standBase(NODES.east.xyz)).toEqual([1.6, 0.25, 0])
+  })
+
+  it('draws the six links that cross the strip in full and the six between desk devices faint, from the layout alone', () => {
+    const onFloor = LINK_IDS.filter((id) => {
+      const [tx, rx] = id.split(':')[0].split('>')
+      return overFloor(NODES[tx].xyz, NODES[rx].xyz)
+    })
+    expect(onFloor.sort()).toEqual(['east>pi5:ble', 'east>pi5b:ble', 'east>unoq:ble', 'west>pi5:ble', 'west>pi5b:ble', 'west>unoq:ble'])
+  })
+
+  it('lays the X-ray on the strip\'s floor and on the desk top, one image across both, nothing past the desk', () => {
+    // The mocks' 16 x 12 grid at 0.125 m from (-0.2, -0.2): 2 m by 1.5 m.
+    const g = xrayGeometry([-0.2, -0.2], [2, 1.5])
+    const pos = g.getAttribute('position')
+    const uv = g.getAttribute('uv')
+    const heights = new Set<number>()
+    let northmost = -Infinity
+    for (let i = 0; i < pos.count; i++) {
+      heights.add(Number(pos.getY(i).toFixed(3)))
+      const north = SIZE_M[1] / 2 - pos.getZ(i) // back to contract y
+      northmost = Math.max(northmost, north)
+      // the image's v runs with contract y across both parts
+      expect(uv.getY(i)).toBeCloseTo((north + 0.2) / 1.5)
+    }
+    expect([...heights].sort()).toEqual([0.002, Number((DESK_TOP_M + 0.002).toFixed(3))])
+    expect(northmost).toBeCloseTo(1.1)
+  })
+
+  it('puts the tray\'s tag on the desk top with it, not on the floor under the desk', () => {
+    expect(objectTagAt([0.86, 1.0])[2]).toBeCloseTo(DESK_TOP_M + 0.08)
+    expect(objectTagAt([0.8, 0.3])[2]).toBeCloseTo(0.08) // an object in the strip stays on the floor
   })
 })
 
