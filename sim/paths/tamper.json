@@ -1,0 +1,8 @@
+{
+  "name": "tamper",
+  "about": "Tamper while armed: nobody is here. The path arms at 3 s. The east beacon is unplugged from 10 s to 20 s: a tamper alert 3 s later (and sensor blind), cleared 2 s after it is back. Disarmed at 36 s.",
+  "duration_s": 40,
+  "person": [{"t": 0, "x": null}],
+  "commands": [{"t": 3, "cmd": "arm", "args": {"on": true}}, {"t": 36, "cmd": "arm", "args": {"on": false}}],
+  "outages": [{"node": "east", "t_on": 10, "t_off": 20}]
+}

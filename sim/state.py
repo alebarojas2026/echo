@@ -52,7 +52,9 @@ SENTENCES = {   # template narration, one short sentence per event kind
     "cam_on": "The camera is on.", "cam_stalled": "The camera has stalled.", "cam_off": "The camera is off.",
 }
 ARMED_SENTENCES = {"armed": "Armed: this space should be empty now.", "disarmed": "Disarmed.",
-                   "intrusion": "Someone is here while armed, in zone {zone}."}
+                   "intrusion": "Someone is here while armed, in zone {zone}.",
+                   "tamper": "A device went silent while armed.", "tamper_cleared": "The silent device is back."}
+TAMPER_SILENT_S, TAMPER_CLEAR_S = 3.0, 2.0   # section 6, Tamper (issue #533), as in brain/alert.py
 NO_NODE = {"object_on": "Something new is sitting in the room.", "object_off": "The new object is gone."}
 
 
@@ -95,12 +97,15 @@ class Brain:
                        "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
         self.armed, self.intruded = False, False   # section 6, Armed: the space should be empty
+        self.heard, self.tamper, self.node_back = {}, [], {}   # link -> its last reading; nodes silent while armed
+        self.commands_done = 0   # how many of the path's own commands (path["commands"]) have run
         self.fits = 0    # fits of a scripted lesson so far (path["lesson"])
         self.demo = []   # every event since the last reset, for the recap
 
     def see(self, event: dict) -> None:
         if event["type"] == "rssi":
             self.readings[event["link"]].append((event["t"], event["dbm"]))
+            self.heard[event["link"]] = event["t"]
 
     def command(self, msg: dict) -> None:
         """A screen -> brain cmd. reset_alert and reset change things; the rest are accepted."""
@@ -128,6 +133,36 @@ class Brain:
         if on != self.armed:
             self.armed, self.intruded = on, False
             self._event(t, "armed" if on else "disarmed")
+            self._tamper(t)   # disarming clears every listed node; arming with one already silent raises it at once
+
+    def _tamper(self, t: float) -> None:
+        """Section 6, Tamper (issue #533), the rule in brain/alert.py: while armed, a node none of
+        whose links has had a reading for 3 s raises `tamper` once and is listed in state.tamper,
+        until all its links have had readings for 2 s without such a gap, or until disarm. Links
+        to another listed node don't count on the way back. It never looks at health or pred."""
+        if not self.armed:
+            for node in self.tamper:
+                self._event(t, "tamper_cleared", node=node)
+            self.tamper, self.node_back = [], {}
+            return
+        links_of = {}
+        for tx, rx, kind in fake.LINKS:
+            for node in (tx, rx):
+                links_of.setdefault(node, []).append(fake.link_id(tx, rx, kind))
+        quiet = lambda link: t - self.heard.get(link, 0.0) >= TAMPER_SILENT_S   # noqa: E731
+        for node, links in links_of.items():
+            if node not in self.tamper and all(quiet(k) for k in links):
+                self.tamper.append(node)
+                self.node_back.pop(node, None)
+                self._event(t, "tamper", node=node)
+        for node in list(self.tamper):
+            others = [k for k in links_of[node] if not any(k in links_of[n] for n in self.tamper if n != node)]
+            if any(quiet(k) for k in others or links_of[node]):
+                self.node_back.pop(node, None)
+            elif t - self.node_back.setdefault(node, t) >= TAMPER_CLEAR_S:
+                self.tamper.remove(node)
+                self.node_back.pop(node, None)
+                self._event(t, "tamper_cleared", node=node)
 
     def _intrusion(self, t: float, pred) -> None:
         """Section 6: while armed, one intrusion each time a person appears (person holds the majority
@@ -257,6 +292,10 @@ class Brain:
         path = self.path
         dt = 0.0 if self.last_t is None else t - self.last_t
         self.last_t = t
+        todo = sorted(path.get("commands") or [], key=lambda c: c["t"])   # a path can press the screen's buttons itself
+        while self.commands_done < len(todo) and todo[self.commands_done]["t"] <= t:
+            self.commands_done += 1
+            self.command({"cmd": todo[self.commands_done - 1]["cmd"], "args": todo[self.commands_done - 1].get("args")})
         baseline, trained = t >= BASELINE_AT_S, t >= TRAINED_AT_S
         pos = fake.position(path.get("person") or [], t)
         if pos and fake.zone_of(*pos) == 0:
@@ -345,6 +384,7 @@ class Brain:
                 "n_links": len(links) - len(blind)} if baseline else None
 
         self._intrusion(t, pred)
+        self._tamper(t)
         self._diff(t, {"present": bool(pos), "zone": zone, "alert": alert["state"], "cam": cam, "spot": spot,
                        "blind": set(blind), "objects": {tuple(o["xy_m"]): o["near"] for o in objects},
                        "baseline": baseline, "trained": trained}, pred is not None)
@@ -357,7 +397,8 @@ class Brain:
                           "ms_per_decision": None, "windows": 0, "train_sessions": [],
                           "training": self._lesson(t, cam)},
                 "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None},
-                **({"armed": True} if self.armed else {})}   # section 5: missing means false
+                **({"armed": True} if self.armed else {}),   # section 5: missing means false
+                **({"tamper": list(self.tamper)} if self.tamper else {})}   # only while a node is listed
 
     def _lesson(self, t: float, cam: str):
         """model.training for a path with a scripted lesson (sim/lesson.py): null outside the lesson;
