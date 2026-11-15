@@ -24,6 +24,10 @@ def test_every_beat_is_checked_in_runbook_order(results):
 
 def test_every_beat_shows_up(results):
     failed = {name for name, passed, _ in results if not passed}
+    if ONE_SPOT:
+        # With a presence line only a thing in that line is an object (CONTRACTS.md section 6): a tray on the
+        # desk's own line beside the router raises none. The one-spot rehearsal plays the thing left in the line.
+        failed -= {"tray near the router"}
     assert failed <= KNOWN_FAILING, f"beats that did not show: {sorted(failed - KNOWN_FAILING)}"
 
 
