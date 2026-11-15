@@ -88,6 +88,8 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
   const op = tagged(el('aside', 'eng-op'), 'engine-op')
   op.hidden = !new URLSearchParams(location.search).has('op')
 
+  host.dataset.op = op.hidden ? 'no' : 'yes'
+
   host.append(top, head, record, askBox, foot, op)
 
   // ---- what the board last said
@@ -257,11 +259,10 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
   function drawOp(state: EngineState | null, all: DeviceView[], now: number) {
     if (op.hidden) return
     const lines = [
-      watchLine(state, privacy, source.kind === 'mock').join(' · '),
+      [...watchLine(state, privacy, source.kind === 'mock'), ...timings(state, ask)].join(' · '),
       ...headlines(chain, layout, now).map((h) => `${h.label}: ${h.value} · ${h.note}`),
       ...all.map((v) => `${v.name}: ${v.heard ? 'heard now' : (v.quiet ?? 'not heard')} · ${v.hz === null ? (v.hears.length ? '__ readings a second' : 'hears no line') : `${v.hz} readings a second`}${v.hears.length ? ` (${hearsLines(v.hears).join('; ')})` : ''}`),
-      timings(state, ask).join(' · '),
-    ].filter(Boolean)
+    ]
     if (op.dataset.key === lines.join('\n')) return
     op.dataset.key = lines.join('\n')
     op.replaceChildren(...lines.map((l) => el('p', '', l)))
@@ -325,6 +326,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
   const onKey = (e: KeyboardEvent) => {
     if (e.key.toLowerCase() !== 'o' || e.ctrlKey || e.metaKey || e.altKey) return
     op.hidden = !op.hidden
+    host.dataset.op = op.hidden ? 'no' : 'yes'
     delete op.dataset.key
     draw()
   }

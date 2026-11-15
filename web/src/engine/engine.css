@@ -367,19 +367,26 @@ body {
   white-space: nowrap;
 }
 
-/* ---- the operator's lines (O key or ?op=1): small on purpose, and never on the judge's picture */
+/* ---- the operator's lines (O key or ?op=1): small on purpose, never on the judge's picture. They take the
+   space under the picture (the answer steps aside while they show) and cover no row. */
 .eng-op {
   position: absolute;
-  bottom: 11rem;
   left: 4rem;
-  max-width: 64rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--edge);
-  border-radius: 0.375rem;
-  background: var(--floor);
+  right: 4rem;
+  bottom: 11rem;
   color: var(--text-2);
-  font-size: max(1.125rem, 16px);
+  font-size: max(1.125rem, 14px);
   line-height: 1.4;
+}
+
+.eng-op p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eng[data-op='yes'] .eng-ask {
+  visibility: hidden;
 }
 
 /* ---- motion: opacity and transform only, each once, nothing in a loop */
