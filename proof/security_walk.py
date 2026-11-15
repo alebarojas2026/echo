@@ -35,8 +35,11 @@ def run(session, walker, mode, layout, send, prompt=print, sleep=time.sleep, clo
         else:
             for _ in range(repeats):
                 for zone in layout["zones"]:
-                    text = (f"Walk straight through {zone['name']} and leave without stopping; stay inside less than {hold_seconds(layout):g} s."
-                            if mode == "passes" else f"Enter the sensing area and stand at the marked centre of {zone['name']} (zone {zone['id']}).")
+                    frame = layout.get("frame") or {}   # one spot (one zone, a strip with no split): there is no zone to name
+                    one = len(layout["zones"]) == 1 and "strip_m" in frame and frame.get("zone_split_x_m") is None
+                    text = (f"Walk straight through {'the spot' if one else zone['name']} and leave without stopping; stay inside less than {hold_seconds(layout):g} s."
+                            if mode == "passes" else "Step onto the marked spot and stand there." if one
+                            else f"Enter the sensing area and stand at the marked centre of {zone['name']} (zone {zone['id']}).")
                     wait(text,entry_s)
                     wait("Leave the sensing area completely; stay outside.",10)
     finally:

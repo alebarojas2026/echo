@@ -32,6 +32,18 @@ STEP_S = 4        # seconds on each side
 REPORT_S = 40     # when the agreement is read off (10 s after train, as before)
 
 
+KEEP_GOING = {False: "Keep stepping left and right", True: "Keep stepping on and off the spot"}
+
+
+def one_spot():
+    """True when the layout has one zone: there is no left and right to step between."""
+    try:
+        from proof import layout
+        return len(layout.load()["zones"]) == 1
+    except (OSError, ValueError, KeyError):
+        return False
+
+
 class Coach:
     """Feed it every message from the brain's WebSocket; it sends the commands and says what it sees."""
 

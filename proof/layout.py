@@ -25,6 +25,11 @@ def is_strip(doc):
     return "strip_m" in doc["frame"]
 
 
+def is_spot(doc):
+    """One zone, and a strip with no split: the strip is the one spot a person stands on."""
+    return is_strip(doc) and len(doc["zones"]) == 1 and doc["frame"].get("zone_split_x_m") is None
+
+
 def zones(doc):
     """{zone id: (x, y, name)}: each zone's centre and name."""
     out = {}
@@ -43,6 +48,8 @@ def zone_at(doc, x, y):
         width, depth = doc["frame"]["strip_m"]
         if not (0 <= x <= width and 0 <= y < depth):
             return 0
+        if is_spot(doc):
+            return int(doc["zones"][0]["id"])
         split = float(doc["frame"]["zone_split_x_m"])
         return 1 + (x >= split)
     width, depth = doc["frame"]["size_m"]
@@ -63,7 +70,13 @@ def link_midpoints(doc):
 
 
 def link_zones(doc):
-    """{link id: zone} for the links whose midpoint lies in a zone (the threshold baseline)."""
+    """{link id: zone} for the links whose midpoint lies in a zone (the threshold baseline).
+
+    On one spot, a file that marks its links with crosses_spot decides it instead: the marked links
+    are the spot's, whatever their midpoints.
+    """
+    if is_spot(doc) and any("crosses_spot" in link for link in doc["links"]):
+        return {link["id"]: int(doc["zones"][0]["id"]) for link in doc["links"] if link.get("crosses_spot")}
     out = {}
     for link, (x, y) in link_midpoints(doc).items():
         zone = zone_at(doc, x, y)
