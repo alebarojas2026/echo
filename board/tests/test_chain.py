@@ -291,6 +291,7 @@ def test_the_check_says_checking_then_verified_then_names_an_edited_record(tmp_p
     k = keeper(tmp_path, clock, seconds=30)
     first = k.status()
     assert (first["verified"], first["last_verify_t"], first["first_bad_seq"]) == ("checking", None, None)
+    assert (first["last_verify_checked"], first["last_verify_ms"]) == (None, None)       # nothing was checked yet
     assert "verified" not in k.head_message() and check.errors(first, "chain") == []
     assert k.verify_now()["checked"] == 30
     assert (k.status()["verified"], k.status()["last_verify_t"]) == (True, clock.ms) and k.head_message()["verified"] is True
@@ -321,7 +322,9 @@ def test_get_chain_says_what_the_log_holds(tmp_path, clock):
                       "last_verify_t": clock.ms, "first_bad_seq": None,
                       "witnesses": [{"node": n, "last_seq": None, "last_t": None, "sig_ok": False, "silent": False}
                                     for n in ("pi5", "pi5b")],
-                      "first_seq": 1, "anchor": None, "unsealed": 0}
+                      "first_seq": 1, "anchor": None, "unsealed": 0,
+                      "last_verify_checked": 4, "last_verify_ms": status["last_verify_ms"]}
+    assert status["last_verify_ms"] >= 0 and check.errors(status, "chain") == []
     sent = k.publish()
     assert k.status()["head"] == {"seq": 4, "hash": head["hash"], "t": sent["t"]}      # what a witness can sign
     k.store.add(state(T0 + 9000))
@@ -488,7 +491,7 @@ def test_prove_with_no_record_yet_says_so(tmp_path, clock):
 def test_the_chain_endpoints_answer_only_on_the_boards_own_networks(web, monkeypatch):
     url, _, _ = web
     monkeypatch.setattr(serve, "SAVE_FROM", [])                    # as if the caller were anywhere else
-    for method, path in (("GET", "/chain"), ("GET", "/chain/verify"), ("POST", "/chain/prove")):
+    for method, path in (("GET", "/chain"), ("GET", "/chain/verify"), ("GET", "/chain/tail"), ("POST", "/chain/prove")):
         status, doc = call(url + path, method, b"{}" if method == "POST" else None)
         assert status == 403 and "own networks" in doc["error"]
 
@@ -501,7 +504,33 @@ def test_the_web_server_mounts_the_chain_and_starts_its_loops(tmp_path, monkeypa
         return chain.Keeper(store, tmp_path / "none.json", log=lambda text: None), threading.Event()
     monkeypatch.setattr(chain, "start", start)
     routes = serve.chain_routes(tmp_path / "store.db", "keys.json", ("127.0.0.1", 5999), 0)
-    assert sorted(routes) == [("GET", "/chain"), ("GET", "/chain/verify"), ("POST", "/chain/prove")]
+    assert sorted(routes) == [("GET", "/chain"), ("GET", "/chain/tail"), ("GET", "/chain/verify"), ("POST", "/chain/prove")]
     assert (started["keys"], started["bus"], started["listen"]) == ("keys.json", ("127.0.0.1", 5999), None)
     serve.chain_routes(tmp_path / "store.db")
     assert (started["bus"], started["listen"]) == (chain.BUS, chain.LISTEN)
+
+
+def test_the_tail_is_the_last_records_and_says_what_each_signature_vouches_for(web):
+    url, k, _ = web
+    k.on_witness(witness(k, "pi5"))                       # signs record 40: stored as record 41
+    clock_s = k.mono()
+    k.mono = lambda: clock_s + 20
+    k.tick()                                              # 20 s on with no signature: both are stored as silent
+    status, doc = call(f"{url}/chain/tail?n=5")
+    assert status == 200 and check.errors(doc, "chain_tail") == []
+    rows = doc["records"]
+    assert [(r["seq"], r["kind"]) for r in rows] == [(39, "second"), (40, "second"), (41, "witness"), (42, "witness_silent"), (43, "witness_silent")]
+    assert (rows[2]["node"], rows[2]["for_seq"]) == ("pi5", 40) and rows[2]["prev"] == rows[1]["hash"]
+    assert rows[4]["node"] == "pi5b" and "for_seq" not in rows[4] and "node" not in rows[0]
+    assert set(rows[0]) == {"seq", "t", "kind", "hash", "prev"}          # never the body
+    assert len(call(f"{url}/chain/tail")[1]["records"]) == 40            # 40 unless n says otherwise
+    assert len(call(f"{url}/chain/tail?n=100000")[1]["records"]) == 43   # capped (at 200), and no more than there is
+    assert k.store.tail(500)[0]["seq"] == 1
+    for bad in ("n=0", "n=abc", "n=-3"):
+        assert call(f"{url}/chain/tail?{bad}")[0] == 400
+
+
+def test_the_tail_is_capped_at_200_and_empty_with_no_record(tmp_path, clock):
+    k = keeper(tmp_path, clock, seconds=230)
+    assert [r["seq"] for r in k.store.tail(5000)] == list(range(31, 231))
+    assert Store(tmp_path / "empty.db").tail() == []

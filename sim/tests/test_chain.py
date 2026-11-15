@@ -115,3 +115,18 @@ def test_the_store_keeps_a_simulated_path_with_a_chain_like_any_other(tmp_path):
     s = Store(tmp_path / "store.db")
     assert fill_from_sim(s, "witnesses", end_ms=T0) > 30
     assert s.verify()["ok"] and "chain" not in s.records(limit=1)[0]["body"]
+
+
+def test_the_fake_board_answers_the_tail_and_says_what_its_check_walked(capsys):
+    c = chain.of(fake.load_path("witness_silent"), T0)
+    tail = c.tail(36, 8)
+    assert check.errors(tail, "chain_tail") == [] and len(tail["records"]) == 8
+    assert [r["seq"] for r in tail["records"]] == list(range(len(c.rows) - 7, len(c.rows) + 1))
+    back = next(r for r in c.tail(36, 200)["records"] if r["kind"] == "witness_back")
+    signed = [r for r in c.tail(36, 200)["records"] if r["kind"] == "witness" and r["seq"] == back["seq"] - 1][0]
+    assert back["node"] == signed["node"] == "pi5b" and "for_seq" not in back
+    assert next(r for r in c.records() if r["seq"] == signed["for_seq"])["kind"] in ("second", "witness_back", "witness")
+    status = c.status(36)
+    assert status["last_verify_checked"] == len(c.rows) and status["last_verify_ms"] == 0 and check.errors(status, "chain") == []
+    chain.main(["witnesses", "--at", "12", "--tail", "5"])
+    assert check.errors(json.loads(capsys.readouterr().out), "chain_tail") == []

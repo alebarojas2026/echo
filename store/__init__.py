@@ -51,6 +51,7 @@ JSON_COLUMNS = ("blind", "links", "advice", "model", "zone_set", "tamper")
 VERIFY_DEFAULT = 3600      # records checked by verify() when no start is named
 VERIFY_MAX = 100_000       # most records checked in one call
 PROVE_DEFAULT, PROVE_MAX = 600, 3600
+TAIL_MAX = 200             # most links tail() gives
 ROW = "seq, t, kind, body, prev, hash"
 
 
@@ -282,6 +283,25 @@ class Store:
         out = timed(lambda: verify_rows(copy, before))
         return {"ok": out["ok"], "altered_seq": copy[at][0], "first_bad_seq": out["first_bad_seq"], "ms": out["ms"],
                 "checked": len(copy), "kind": copy[at][2], "t": copy[at][1]}
+
+    def tail(self, n: int = 40) -> list:
+        """The last n links, oldest first, without their bodies: {"seq", "t", "kind", "hash", "prev"}, and
+        for a witness's records also "node", and "for_seq" (the record a signature vouches for) on a
+        witness record. Cheap enough to ask for every second (GET /chain/tail)."""
+        with self.lock:
+            rows = self.db.execute(
+                "select seq, t, kind, hash, prev, case when kind like 'witness%' then body end as body "
+                "from chain order by seq desc limit ?", (max(1, min(int(n), TAIL_MAX)),)).fetchall()
+        out = []
+        for r in reversed(rows):
+            row = {k: r[k] for k in ("seq", "t", "kind", "hash", "prev")}
+            if r["body"]:
+                body = json.loads(r["body"])
+                row["node"] = body.get("node")
+                if r["kind"] == "witness":
+                    row["for_seq"] = body.get("seq")
+            out.append(row)
+        return out
 
     def records(self, from_seq=None, to_seq=None, kinds=None, since_ms=None, until_ms=None, limit: int = 1000,
                 newest: bool = False) -> list:

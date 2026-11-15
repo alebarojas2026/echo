@@ -44,7 +44,7 @@ Ports:
   <meta name="radio-sight-board" content="live"> added), /nodes.json and /proof.json, and answers POST /ask,
   GET /history and GET /report (section 10). Those three answer from the board's own records, need no internet and
   are reached on our own network only (the cable and the sensing hotspot).
-  GET /chain, GET /chain/verify and POST /chain/prove are the sealed record (section 13).
+  GET /chain, GET /chain/verify, GET /chain/tail and POST /chain/prove are the sealed record (section 13).
   GET /privacy is the live privacy meter (section 11). GET and POST /clock set the board's clock from the
   operator's laptop (section 12; as proposed, not built yet).
   It also has /layout for the operator's align mode: GET gives {"room": {offset_m, yaw_deg, scale, cut_m} | null,
@@ -663,7 +663,17 @@ GET http://192.168.77.2:8080/chain
    // witnesses: one entry for each enrolled witness, [] with none enrolled. last_seq and last_t (the board's clock
    //   when it checked the signature) are of its last good signature, null before the first. sig_ok: its newest
    //   signature checked out. silent: no good signature for 15 s.
-   // first_seq, anchor ({"seq", "hash"} or null) and unsealed are optional.
+   // first_seq, anchor ({"seq", "hash"} or null) and unsealed are optional. So are last_verify_checked (how many
+   //   records the last 30 s check walked) and last_verify_ms (how long it took on the board), both null before
+   //   the first check.
+
+GET http://192.168.77.2:8080/chain/tail?n=40
+200 {"records": [{"seq": 4120, "t": 1763149510000, "kind": "second", "hash": "<64 hex>", "prev": "<64 hex>"},
+                 {"seq": 4121, "t": 1763149510400, "kind": "witness", "hash": "<64 hex>", "prev": "<64 hex>",
+                  "node": "pi5", "for_seq": 4120}]}
+   // The last n records (40 unless n says otherwise, at most 200), oldest first, without their bodies: cheap
+   //   enough to ask for every second. node is there on a witness's records (witness, witness_bad,
+   //   witness_silent, witness_back); for_seq, the record the signature vouches for, on a witness record only.
 
 GET http://192.168.77.2:8080/chain/verify?from=<seq>&to=<seq>
 200 {"ok": true, "checked": 3600, "first_bad_seq": null, "ms": 41, "from": 528, "to": 4127}
