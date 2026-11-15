@@ -121,6 +121,11 @@ Hall links (optional): up to two more beacons far outside the layout, as tripwir
 Armed (optional): "armed": {"hold_s": n} = how long a person must stay before an intrusion is raised (Armed, section 6).
   Missing means 3. Use 4 for a very busy aisle.
 Code takes ids, positions, links, zones and spots from nodes.json, not from constants of its own.
+The positions above are the last ones measured and written into nodes.json, and they will change: after the first
+  tests on the real kit the devices are being moved (the beacons and Pi B to the far side of where the person stands;
+  the 5 GHz Wi-Fi link from Pi A to Pi B is the best sensor). This section is rewritten when the new spots are
+  measured. Until then, and after, code must never assume the geometry in this example: not which link crosses the
+  strip, not which node is nearest, not which side a beacon is on. Only what nodes.json says.
 ```
 
 ## 4. Inputs to the bus
