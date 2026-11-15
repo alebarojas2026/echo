@@ -1,7 +1,12 @@
 """The fake feed's layout comes from radio/nodes.json."""
+import pytest
+
 from sim import fake, layout, state
 
+square = pytest.mark.skipif(layout.LAYOUT.strip_m is not None, reason="radio/nodes.json is the desk strip")
 
+
+@square
 def test_mains_nodes_json_is_the_square_the_sim_always_used():
     assert fake.NODES == {"unoq": (1.0, 2.0), "pi5": (1.0, 0.0), "east": (2.0, 1.0), "west": (0.0, 1.0)}
     assert fake.LINKS[0] == ("pi5", "unoq", "wifi") and len(fake.LINKS) == 6
@@ -27,6 +32,7 @@ def test_the_desk_strip():
     assert (desk.tour(), desk.still_zone(), desk.calm_zone()) == ([1, 2], 2, 1)
 
 
+@square
 def test_rehearsal_parts_on_the_square():
     lay = layout.LAYOUT
     assert lay.centres == {1: (0.5, 1.5), 2: (1.5, 1.5), 3: (0.5, 0.5), 4: (1.5, 0.5)} and lay.tray == (1.0, 0.2)

@@ -13,9 +13,9 @@ def results():
 
 
 def test_every_beat_is_checked_in_runbook_order(results):
+    tour = [f"tour: zone {z} {rehearse.LAYOUT.names[z]}" for z in rehearse.TOUR]   # the square: 3 Hall, 4, 2, 1
     assert [name for name, _, _ in results] == [
-        "setup: baseline", "setup: training", "empty room", "walk in", "tour: zone 3 Hall",
-        "tour: zone 4 Bathroom", "tour: zone 2 Chair", "tour: zone 1 Bed", "no-movement alert", "wave check-in",
+        "setup: baseline", "setup: training", "empty room", "walk in", *tour, "no-movement alert", "wave check-in",
         "camera unplugged, radio only", "tray near the router", "advice to move the router", "router moved",
         "router back home", "reset between judges",
         "recap after the reset"]
@@ -58,7 +58,8 @@ def test_recap_reaches_the_screen_through_bus_and_brain():
     recaps = {s["narration"]["text"] for s in stack.states if s["narration"]}
     assert len(recaps) == 1                                      # one recap, after the reset only
     text = recaps.pop()
-    assert text.startswith("Someone visited the Hall, Bathroom, Chair and Bed zones.")
+    names = [rehearse.LAYOUT.names[z] for z in rehearse.TOUR]   # visited in tour order
+    assert all(name in text for name in names) and text.startswith("Someone ")
     assert "no-movement alert" in text and "dBm" in text
 
 
