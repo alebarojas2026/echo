@@ -61,7 +61,7 @@ def nodes_json(url):
 
 def test_nothing_saved_yet(url):
     assert call(url) == (200, {"room": None, "hall_beacons": [{"node": "h", "xyz_m": None},
-                                                               {"node": "j", "xyz_m": None}]})
+                                                               {"node": "j", "xyz_m": None}], "nodes": []})
 
 
 def test_a_good_save_is_returned_and_drawn(url, site):
@@ -69,7 +69,7 @@ def test_a_good_save_is_returned_and_drawn(url, site):
     status, view = call(url, {"room": ROOM, "hall_beacons": [{"node": "h", "xyz_m": [3.8, 14.1, 2.0]}]})
     assert status == 200
     assert view == {"room": ROOM, "hall_beacons": [{"node": "h", "xyz_m": [3.8, 14.1, 2.0]},
-                                                   {"node": "j", "xyz_m": None}]}
+                                                   {"node": "j", "xyz_m": None}], "nodes": []}
     assert call(url) == (200, view)
     served = nodes_json(url)
     assert served["hall"]["beacons"][0]["xyz_m"] == [3.8, 14.1, 2.0]
@@ -154,7 +154,7 @@ def test_save_networks_are_the_contracts():
 def test_a_broken_store_file_reads_as_nothing_saved(site):
     site["layout_path"].parent.mkdir(parents=True)
     site["layout_path"].write_text("{")
-    assert layout.Store(site["layout_path"]).load() == {"room": None, "hall": {}}
+    assert layout.Store(site["layout_path"]).load() == {"room": None, "hall": {}, "nodes": {}}
 
 
 # floor_m (#547): the square on a tier of the hall. The screen sends it only when it isn't 0.
