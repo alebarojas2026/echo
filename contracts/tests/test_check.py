@@ -56,6 +56,12 @@ INVALID = [
     "7 of 5",                       # more agreeing decisions than decisions
     "'fitting' is a required property",   # a lesson says whether a fit is running
     "$.model.training",             # a lesson without the fit block around it
+    "'node' is a required property",   # a tamper names its node
+    "$.info.node",                  # no such node
+    "$.info.node",                  # a hall beacon is a node only for tamper
+    "$.tamper[1]",                  # no such node
+    "$.tamper",                     # tamper is a list of nodes
+    "$.tamper",                     # a node is listed once
     "bad JSON",
 ]
 

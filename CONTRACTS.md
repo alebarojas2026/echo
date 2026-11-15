@@ -39,8 +39,9 @@ Ports:
   - the App Lab camera teacher sends to msgpack-rpc-router:5600 (App Lab's host alias; gate 3 confirms it).
 - bus -> brain: UDP 127.0.0.1:5601.
 - brain: WebSocket ws://192.168.77.2:8765/ws (bound to 127.0.0.1 and 192.168.77.2 only).
-- web: http://192.168.77.2:8080. board/serve.py serves web/dist, /nodes.json and /proof.json, and answers POST /ask
-  (section 10).
+- web: http://192.168.77.2:8080. board/serve.py serves web/dist, /nodes.json and /proof.json, and answers POST /ask,
+  GET /history and GET /report (section 10). Those three answer from the board's own records, need no internet and
+  are reached on our own network only (the cable and the sensing hotspot).
 - llm: http://127.0.0.1:8091 (llama-server).
 ```
 
@@ -164,12 +165,15 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
         // the model carries on.
         // train_s and ms_per_decision are null when nothing was measured (the fake brain), even when trained is true.
  "armed":false,                                                             // true after arm {on:true}; missing means false
+ "tamper":["east"],                                                         // optional: the nodes silent while armed (Tamper,
+                                                                            // section 6); missing or [] when there is none
  "board":{"cpu_temp_c":57.0,"cpu_mhz":2016,"cpu_pct":61}}
 {"v":2,"type":"event","t":1763149512200,"seq":120,"src":"live","id":"e123","kind":"enter","info":{"zone":2}}
    // kinds: enter, exit, zone_change, checkin, object_on, object_off, advice, advice_result, router_moved, router_home,
    // recalibrating, cam_off, cam_on, cam_stalled, alert_on, alert_off, blind_on, blind_off, trained, baseline_done, drift,
    // reset (after the reset cmd), recording (info: {on, session}) after record_start/record_stop,
-   // armed, disarmed, intrusion (info: {zone} or {link} for a hall link).
+   // armed, disarmed, intrusion (info: {zone} or {link} for a hall link),
+   // tamper, tamper_cleared (info: {node}, e.g. {"node":"east"}; a hall beacon is h or j).
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
 ```
 Before readings, a baseline or training exists, the brain still sends state at about 10/s with these values:
@@ -253,6 +257,21 @@ Armed (after hours: the space should be empty):
 - While armed, an intrusion event is sent once each time a person appears: pred.present is true with kind person for
   the majority of the last 10 decisions, after it was not. It names the zone. Objects never raise it.
 - While health is blind or pred is null, no intrusion is raised and the screen says so (never "all clear").
+Tamper (a rule, not learned; while armed only):
+- A node is silent when every link it sends or receives on has had no reading for 3 s. This is its own test on the
+  readings, not the blind rule: it does not wait for a link to be judged stale or blind, it counts Pi B's links
+  (which never make health blind) like any other, and it goes on while health is blind and pred is null. A silenced
+  node usually blinds the sensor as well, so the tamper is what is still reported then.
+- While armed, a node that goes silent raises the event tamper once and is listed in state.tamper. Arming while a
+  node is already silent raises it at once.
+- It clears when all of that node's links have been fresh (the last reading at most 1 s old) for 2 s: the event
+  tamper_cleared is sent and the node leaves state.tamper. Its links to another node that is itself still listed
+  are left out of this, as long as one link remains, so two devices can come back one at a time.
+  Disarming (arm {on:false} or reset) clears every listed node the same way.
+- Not armed: no tamper events and no state.tamper (the screen still shows the device as not heard).
+- The optional hall beacons count as nodes here (h, j), each once it has been heard since arming. This is the one
+  place a hall node appears outside state.hall.
+- The screen never says "all clear" while state.tamper is not empty.
 Hall activity (a rule, not learned; per hall link, from that link's readings only):
 - spread_db = the std of the link's 0.5 s means over the last 3 s.
 - stale when fewer than 4 of those six 0.5 s bins hold a reading (the readings stopped, or are too few to judge);
@@ -344,14 +363,14 @@ Screen: a laptop's browser on the sensing hotspot (section 2). Nothing is starte
 Every folder that's run as a module has an __init__.py.
 ```
 
-## 10. Ask the room (POST /ask on the board's web server)
+## 10. Ask the room, its history and its report (the board's web server)
 ```jsonc
 POST http://192.168.77.2:8080/ask      {"question":"was anyone here in the last 10 minutes?"}
    // The body is at most 2048 bytes. The first 200 characters of the question are used.
 200 {"answer":"Yes. Someone was here for 43 s of the last 10 minutes, most recently in Right from 18:21:49 to 18:22:09.",
      "rows":[{"row":"summary","seconds_with_someone":43},{"zone":2,"name":"Right","from":"18:21:49","to":"18:22:09","seconds":21}],
      "tool":"presence","args":{"minutes":10,"zone":null,"link":null},
-     "picked_by":"llm","src":"sim","ms":5210}
+     "picked_by":"llm","src":"sim","ms":5210,"span":{"from_t":1763149309000,"to_t":1763149329000}}
    // tool = presence | still_spans | alerts | intrusions | link_history | explain_advice | model_card, or null when the
    //   question fits none of them; then answer starts "I can answer: " and lists what can be asked, rows is [] and args is {}.
    // args = what the tool was run with: minutes (1-1440, 10 when the question names none), zone (a zone id in
@@ -361,6 +380,34 @@ POST http://192.168.77.2:8080/ask      {"question":"was anyone here in the last 
    //   The model only picks the tool and its args. It never writes the answer.
    // src = the src of the newest stored record (live | sim | replay), or null when nothing is stored.
    // ms = the whole time for the answer on the board.
+   // span = optional: the stretch of time the answer is about (epoch ms), so the screen can offer a replay of it
+   //   from /history. Missing when the answer is not about a stretch of time.
 400 {"error":"..."} for a body that isn't {"question": non-empty string}; 503 when the agent isn't installed; 500 when it fails.
    // One question is answered at a time: llama-server has one slot, shared with the narrator.
+
+GET http://192.168.77.2:8080/history?from_t=<epoch ms>&to_t=<epoch ms>
+200 {"from_t":1763149300000,"to_t":1763149303000,"step_s":1,
+     "rows":[{"t":1763149300000,"present":true,"zone":2,"zone_set":[2],"motion":"still","armed":true,"alert":false,
+              "health":"ok","tamper":[]},
+             {"t":1763149302000,"present":null,"zone":null,"zone_set":[],"motion":null,"armed":true,"alert":false,
+              "health":"blind","tamper":["east"]}]}
+   // rows = what the store saved, one row for each second it saved, oldest first. A second with no saved row is
+   //   simply missing: nothing is filled in or smoothed.
+   // present:null = the brain did not know (blind, no model). It is never turned into false; zone and motion are then
+   //   null and zone_set is []. present:false -> zone 0, zone_set [], motion null, as in pred.
+   // alert = the no-movement alert was on (alert.state check_on). tamper = state.tamper in that second, [] when none.
+   // At most 30 minutes per call: a longer stretch gets 400 {"error":"..."} with a plain message.
+
+GET http://192.168.77.2:8080/report          // optional ?from_t=<epoch ms>&to_t=<epoch ms>; default = the last armed stretch
+200 {"armed_from_t":1763149300000,"armed_to_t":null,
+     "intrusions":[{"t":1763149312000,"zone":2},{"t":1763149340000,"link":"h>unoq:ble"}],
+     "present_s":43,"passed_by":null,"tamper":[{"t":1763149350000,"node":"east"}],"blind_s":6,
+     "text":"Armed at 18:21:40 and still armed. Intrusion alerts: 2. Someone was here for 43 s. ...",
+     "rows":61,"ms":38}
+   // armed_to_t is null while the space is still armed. An intrusion names a zone, or the hall link it was seen on
+   //   (the same id as in the intrusion event). tamper lists each tamper event in the stretch.
+   // passed_by is null unless the brain has a passed-by rule (it has none today).
+   // text = a short report in plain words. Every number in text equals a number in the other fields; the server
+   //   checks this and uses a fixed template when it does not hold.
+   // rows = how many stored records the report was built from. ms = the whole time for it on the board.
 ```

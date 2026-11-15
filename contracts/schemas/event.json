@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/event.json",
-  "$comment": "Section 5. info carries what the narrator needs: zone, link, node, before_dbm, after_dbm; recording has on, session. An intrusion names a zone, or the hall link it was seen on.",
+  "$comment": "Section 5. info carries what the narrator needs: zone, link, node, before_dbm, after_dbm; recording has on, session. An intrusion names a zone, or the hall link it was seen on. tamper and tamper_cleared name the node (a hall beacon is h or j).",
   "$ref": "common.json#/$defs/envelope",
   "properties": {
     "type": {"const": "event"},
@@ -9,13 +9,18 @@
     "kind": {"$ref": "common.json#/$defs/event_kind"},
     "info": {
       "type": "object",
-      "properties": {"zone": {"$ref": "common.json#/$defs/zone"}, "link": {"anyOf": [{"$ref": "common.json#/$defs/link"}, {"$ref": "common.json#/$defs/hall_link"}]}, "node": {"$ref": "common.json#/$defs/node"},
+      "properties": {"zone": {"$ref": "common.json#/$defs/zone"}, "link": {"anyOf": [{"$ref": "common.json#/$defs/link"}, {"$ref": "common.json#/$defs/hall_link"}]}, "node": {"$ref": "common.json#/$defs/any_node"},
                      "before_dbm": {"type": "number"}, "after_dbm": {"type": "number"}, "on": {"type": "boolean"}, "session": {"type": "string"}},
       "additionalProperties": false
     }
   },
   "required": ["id", "kind", "info"],
-  "if": {"properties": {"kind": {"const": "intrusion"}}, "required": ["kind"]},
-  "then": {"properties": {"info": {"oneOf": [{"required": ["zone"], "properties": {"zone": {"minimum": 1}}}, {"required": ["link"]}]}}},
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "intrusion"}}, "required": ["kind"]},
+     "then": {"properties": {"info": {"oneOf": [{"required": ["zone"], "properties": {"zone": {"minimum": 1}}}, {"required": ["link"]}]}}}},
+    {"if": {"properties": {"kind": {"enum": ["tamper", "tamper_cleared"]}}, "required": ["kind"]},
+     "then": {"properties": {"info": {"required": ["node"]}}},
+     "else": {"properties": {"info": {"properties": {"node": {"$ref": "common.json#/$defs/node"}}}}}}
+  ],
   "unevaluatedProperties": false
 }
