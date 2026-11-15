@@ -1,6 +1,6 @@
 # Radio Sight Demo Runbook
 
-Use this checklist for the live building-safety demo. It follows `CONTRACTS.md` v2. The desk round is the primary path; the finalist extension comes second. A result missing from `PROOF.md` stays `__`.
+Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras. This checklist follows `CONTRACTS.md` v2. The desk round is the primary path; the finalist extension comes second. A result missing from `PROOF.md` stays `__`.
 
 ## At the desk
 
@@ -95,7 +95,7 @@ If a step fails, fix it and repeat the baseline or lesson. Do not carry failed c
 
 ## Three-minute desk round
 
-Use these exact beat names and keep them in this order.
+Use these exact beat names and keep them in this order. The words to say with each are in [pitch.md](pitch.md).
 
 1. **Found you:** Start with the camera disconnected. Ask the judge to step up to the desk, into the sensing strip. Show a fresh `person` prediction and say, “Found you. Camera disconnected.” Do not substitute a numeric camera claim while proof remains pending.
 2. **Teach the room:** Connect the camera, start the fresh judge lesson, and display `Lesson time: __ s`. Show labels, not an image. Wait for successful training before continuing.

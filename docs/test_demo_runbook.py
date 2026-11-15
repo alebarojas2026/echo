@@ -1,6 +1,8 @@
 import unittest
 from pathlib import Path
 
+from beats import BEATS, CORE
+
 
 RUNBOOK = Path(__file__).with_name("demo-runbook.md")
 
@@ -55,16 +57,7 @@ class DemoRunbookTest(unittest.TestCase):
         self.assertIn("required classifier link is unhealthy", self.lower)
 
     def test_primary_beats_are_in_order(self):
-        beats = (
-            "**found you:**",
-            "**teach the room:**",
-            "**camera unplug:**",
-            "**still follows:**",
-            "**arm the space:**",
-            "**intrusion alert:**",
-            "**ask the room:**",
-            "**proof:**",
-        )
+        beats = [f"**{beat.lower()}:**" for beat in BEATS]
         positions = [self.lower.index(beat) for beat in beats]
         self.assertEqual(positions, sorted(positions))
 
@@ -107,9 +100,9 @@ class DemoRunbookTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.lower)
 
-    def test_finalist_advice_waits_for_the_live_wifi_drop(self):
-        finalist = self.lower.split("## five-minute finalist round", 1)[1].split(
-            "## if asked", 1
+    def test_dead_zone_beat_waits_for_the_live_wifi_drop(self):
+        desk = self.lower.split("## three-minute desk round", 1)[1].split(
+            "## camera-unplug proof", 1
         )[0]
         self.assertIn("pi5>pi5b:wifi", finalist)
         self.assertIn("configured drop threshold", finalist)

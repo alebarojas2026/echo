@@ -1,12 +1,14 @@
 # Radio Sight: Spoken Pitch
 
-Radio Sight brings safety and after-hours security to buildings using the Wi-Fi already there. The desk round below is the primary story. Keep the laptop interface and hardware visible, and do not say a proof value that is still `__`.
+Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras. The desk round below is the primary story. Keep the laptop interface and hardware visible, and do not say a proof value that is still `__`.
+
+The beats below have the same names, in the same order, in [demo-runbook.md](demo-runbook.md), [devpost-draft.md](devpost-draft.md) and [video-shots.md](video-shots.md).
 
 ## Three-minute desk round
 
 ### Found you
 
-_Start with the setup camera disconnected. Ask the judge to step into the sensing area._
+_Start with the setup camera disconnected and the hall view behind the words. Ask the judge to step up to the desk._
 
 > Walk between two devices and the signal gives you away. Radio Sight found someone in this spot without identifying you. That decision was made on the Arduino UNO Q.
 
@@ -20,31 +22,43 @@ _Connect the setup camera and start a fresh lesson on the judge._
 
 _Unplug the camera in one continuous shot and keep the cable visible._
 
-> The lesson is complete, and the camera is now unplugged. Its teacher status is off. From this point on, live sensing uses only the radio links around the room.
+> The camera is unplugged, and it stays unplugged. Taught by a camera. Runs without one.
 
 ### Still follows
 
-_Ask the judge to move, then stand still._
+_Ask the judge to step left, step right, then stand still._
 
 > Most Wi-Fi sensing only sees movement. Ours sees you standing still. Wi-Fi across this gap is our main sensor. Bluetooth gives a second opinion. The same Wi-Fi link shows a dead zone.
 
 ### Arm the space
 
-_Ask the judge to step out. Arm the room only when the armed-mode feature gate passes._
+_Ask the judge to step out. Arm the space._
 
-> Armed means this room should now be empty. Radio Sight keeps its learned room model on the board and watches for a new sustained person pattern.
+> Step out. Armed means this space should now be empty.
 
 ### Intrusion alert
 
-_Ask the judge to re-enter. Show the phone page only after it displays the live intrusion event._
+_Ask the judge to step back in and stay put. Wait for the sustained-person rule, then show the live phone alert._
 
 > Step in and stay here. Once the board confirms the sustained presence, the phone shows the intrusion alert. It reports someone in this spot without identifying them.
 
 ### Ask the room
 
-_Use the prepared room question only when the local event-record feature gate passes._
+_Type or pick the prepared question._
 
-> Now we can ask what just happened. The answer comes from the room's own timestamped records: it was armed, a person entered, and the intrusion alert fired. No cloud history is required.
+> Ask it what happened. The board works out which records the question is about, and fills the answer from those records.
+
+### Replay
+
+_Press Replay next to the answer. Leave the replay banner visible._
+
+> Press Replay. This is what the room recorded: no video, only what the radio decided, once a second.
+
+### Incident report
+
+_Disarm. Wait for the report card._
+
+> Disarm, and the board writes the incident report: when it was armed, each alert, and how long someone was here.
 
 ### Proof
 

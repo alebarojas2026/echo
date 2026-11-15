@@ -2,6 +2,8 @@ import re
 import unittest
 from pathlib import Path
 
+from beats import BEATS
+
 
 DRAFT = Path(__file__).with_name("devpost-draft.md")
 PROOF = DRAFT.parents[1] / "PROOF.md"
@@ -41,7 +43,7 @@ class DevpostDraftTest(unittest.TestCase):
     def test_building_story_and_audiences_lead(self):
         for phrase in (
             "safety and after-hours security",
-            "using the wi-fi already there",
+            "using the wi-fi that's already there",
             "patient rooms",
             "bathrooms",
             "study rooms",
@@ -121,8 +123,8 @@ class DevpostDraftTest(unittest.TestCase):
             self.assertIn(phrase, self.text)
 
     def test_unfinished_features_and_hardware_are_accurate(self):
-        self.assertIn("armed-mode event logic is in `main`", self.lower)
-        self.assertIn("live phone display and room-question path", self.lower)
+        self.assertIn("none of this has run on the real hardware end to end so far", self.lower)
+        self.assertIn("shown only when it passed preflight on the day", self.lower)
         self.assertIn("no unfinished beat will be staged as live", self.lower)
         self.assertIn("stand in for access points and radios", self.lower)
 
@@ -134,19 +136,18 @@ class DevpostDraftTest(unittest.TestCase):
     def test_story_beats_match_pitch_and_runbook(self):
         pitch = PITCH.read_text(encoding="utf-8").lower()
         runbook = RUNBOOK.read_text(encoding="utf-8").lower()
-        for beat in (
-            "found you",
-            "teach the room",
-            "camera unplug",
-            "still follows",
-            "arm the space",
-            "intrusion alert",
-            "ask the room",
-            "proof",
-        ):
-            self.assertIn(beat, self.lower)
-            self.assertIn(beat, pitch)
-            self.assertIn(beat, runbook)
+        for beat in BEATS:
+            self.assertIn(f"- **{beat.lower()}:**", self.lower)
+            self.assertIn(beat.lower(), pitch)
+            self.assertIn(beat.lower(), runbook)
+        order = [self.lower.index(f"- **{beat.lower()}:**") for beat in BEATS]
+        self.assertEqual(order, sorted(order))
+
+    def test_the_four_new_moments_are_in_plain_words(self):
+        for phrase in ("a replay with no video", "you can't unplug it without it noticing",
+                       "a live signal you can test", "an incident report written on the board",
+                       "never as an empty room", "every number is checked against the board's records"):
+            self.assertIn(phrase, self.lower)
 
 
 if __name__ == "__main__":

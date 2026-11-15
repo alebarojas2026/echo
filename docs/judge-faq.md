@@ -112,6 +112,22 @@ The live signal response is measured, but that is not a held-out accuracy result
 
 It prompts a check when someone remains present and still; it does not diagnose why. The check-in is to lean aside, and a blind required link pauses the timer.
 
+## What if someone unplugs it or blocks it?
+
+While the space is armed, a device that goes silent raises a tamper alert that names the device, and the screen never says all clear while one is listed. A blocked or failed radio link makes the sensor say it is blind, which is not the same as empty. Neither case is hidden as a quiet room.
+
+## What does the replay show, and is anything recorded?
+
+The board keeps what the radio decided, once a second: present or not, which side, moving or still, and any alert. The replay plays those records back, and a second with no record shows as no record, never as an empty room. No image, sound or identity is recorded, and the records stay on the board.
+
+## What about people walking past?
+
+A person who only walks through is shown as “Someone passed by” and raises no intrusion alert. A person who steps in and stays through the sustained-person wait raises one; the measured rate remains `__` until that proof row is complete. The long hall links only report movement on a path, never who or how many.
+
+## How do you know it isn't scripted?
+
+Wave your hand in the sensing area and the live signal line moves with you. Step in, step out, or stand on the other side, and the screen follows what you do, not a timeline. Unplugging the camera or a beacon in front of you changes the screen the same way.
+
 ## What can Radio Sight not do yet?
 
 It cannot identify people, count a crowd, or reconstruct camera-like detail. Accuracy across new rooms, multiple people, unfamiliar objects, and interference still needs measured validation.

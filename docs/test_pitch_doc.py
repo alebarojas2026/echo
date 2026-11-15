@@ -2,6 +2,8 @@ import re
 import unittest
 from pathlib import Path
 
+from beats import BEATS, CORE
+
 
 PITCH = Path(__file__).with_name("pitch.md")
 PROOF = PITCH.parents[1] / "PROOF.md"
@@ -38,29 +40,12 @@ class PitchDocTest(unittest.TestCase):
         self.assertLessEqual(len(re.findall(r"\b[\w'-]+\b", spoken)), 170)
 
     def test_required_demo_beats_are_present(self):
-        for phrase in (
-            "found you",
-            "teach the room",
-            "camera unplug",
-            "still follows",
-            "arm the space",
-            "intrusion alert",
-            "ask the room",
-            "proof",
-        ):
-            self.assertIn(f"### {phrase}", self.lower)
+        for phrase in BEATS:
+            self.assertIn(f"### {phrase.lower()}", self.lower)
+        self.assertEqual(len(re.findall(r"^### ", self.text, re.M)), len(BEATS))
 
     def test_demo_beats_are_in_run_order(self):
-        beats = (
-            "### found you",
-            "### teach the room",
-            "### camera unplug",
-            "### still follows",
-            "### arm the space",
-            "### intrusion alert",
-            "### ask the room",
-            "### proof",
-        )
+        beats = [f"### {beat.lower()}\n" for beat in BEATS]
         positions = [self.lower.index(beat) for beat in beats]
         self.assertEqual(positions, sorted(positions))
 
