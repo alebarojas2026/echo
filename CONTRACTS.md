@@ -281,11 +281,14 @@ Baseline: 20 s of capture with health ok, persons_in_frame == 0 from the camera,
   {"t": epoch ms of that baseline_done}. The automatic baseline after router_home ("recalibrating") keeps the place:
   the model, the recordings and place.json stay as they were. proof/ scores only sessions whose meta recv_t is at or
   after place.json's t.
-  While a plain `baseline {}` (a new place) runs, no link is stale by rate; the capture sets expected_hz again.
-  A link with no reading for 1 s restarts the capture, as it does for the automatic baseline.
-  For baseline {keep_model: true}, only a link silent for 3 s, or health blind, restarts the capture. A stale link
-  does not: the capture also runs while health is degraded, and links are still judged against the old expected_hz
-  until it ends. (The same layout set down at a new desk, in a hall full of phones, must be able to finish.)
+  A link with no reading for 3 s restarts the capture, for every kind of baseline. (The same 3 s of silence that
+  tamper uses. 1 s was written for 20 readings a second; the real links give 2 to 13.)
+  While a baseline asked for by the `baseline` cmd runs (with or without keep_model), no link is stale by rate; the
+  capture sets expected_hz again. Judged against the old rates, a link that is slower at this desk would be stale at
+  once and then blind, and the capture that measures the new rate could never finish. The automatic baseline after
+  router_home keeps judging rates: nothing about the place changed.
+  baseline {keep_model: true} alone also runs while health is degraded: beyond that silence, only health blind
+  restarts it. (The same layout set down at a new desk, in a hall full of phones, must be able to finish.)
   A baseline asked for by the `baseline` cmd (with or without keep_model) that still cannot start 120 s after the cmd
   is given up: nothing changes and pred returns. The old baseline, the model and the recordings stay. There is no
   event for it; the brain logs why it never started. A capture that is running at 120 s goes on, and is given up if
