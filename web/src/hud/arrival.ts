@@ -107,7 +107,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     if (!state.pred || state.router !== 'S-home') {
       cancelHold()
       const [heading, line] = judgeMoment(state, false)
-      show(heading, state.armed ? 'Armed, but not watching right now.' : line)
+      show(heading, state.armed ? 'Armed. Monitoring is paused.' : line)
       return
     }
     if (state.armed) {

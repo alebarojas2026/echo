@@ -1,3 +1,4 @@
+import { hudLayout, type HudLayout } from './layout'
 import type { Advice, StateMsg } from '../room/contract'
 import { HOME_SPOT, LINK_IDS, NODES, STRIP_M, parseLinkId, routerId } from '../room/frame'
 
@@ -13,8 +14,10 @@ export const dbm = (value: number | null | undefined) =>
   value == null || !Number.isFinite(value) ? '__' : `${value < 0 ? '−' : ''}${Math.abs(value).toFixed(1)} dBm`
 
 /** The router's Wi-Fi link to the receiver, from the layout: the link advice is about. */
-export function wifiLinkId(advice?: Advice | null): string | null {
+export function wifiLinkId(advice?: Advice | null, layout: HudLayout = hudLayout): string | null {
   if (advice?.link) return advice.link
+  const crossing = layout.zones.length === 1 && layout.links.find(link => link.kind === 'wifi' && link.crosses_spot)
+  if (crossing) return crossing.id
   const router = routerId()
   const wifi = LINK_IDS.filter((id) => parseLinkId(id)?.kind === 'wifi')
   return wifi.find((id) => parseLinkId(id)?.tx === router) ?? wifi[0] ?? null
@@ -47,12 +50,12 @@ export function wifiLine(state: StateMsg | null, stale: boolean): WifiLine {
 
 /** "30 cm left": how far and which way, from advice.move_m. On the desk the sides are named as seen on the screen
  *  (x runs east along the desk, so west is left); on the square they are compass points. */
-export function moveWords(advice: Pick<Advice, 'move_m'>, desk = !!STRIP_M): string {
+export function moveWords(advice: Pick<Advice, 'move_m'>, desk = !!STRIP_M, layout: HudLayout = hudLayout): string {
   const [dx, dy] = advice.move_m ?? [0, 0]
   const cm = Math.round(Math.hypot(dx, dy) * 100)
   if (!Number.isFinite(cm) || cm === 0) return ''
   const alongX = Math.abs(dx) >= Math.abs(dy)
-  const way = alongX ? (desk ? (dx < 0 ? 'left' : 'right') : dx < 0 ? 'west' : 'east') : dy < 0 ? 'south' : 'north'
+  const way = alongX ? (desk && layout.zones.length > 1 ? (dx < 0 ? 'left' : 'right') : dx < 0 ? 'west' : 'east') : dy < 0 ? 'south' : 'north'
   return `${cm} cm ${way}`
 }
 
