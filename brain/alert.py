@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import statistics
+import time
 from collections import deque
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -40,6 +41,7 @@ OTHER_BIN_MS = 500      # ... comparing 0.5 s means
 SMOOTH_DECISIONS = 10   # zone and kind are the majority of this many decisions (1 s)
 SMOOTH_MAJORITY = 6     # ... and a value needs this many of them to take over
 MOVING_RUN = 5          # "moving" decisions in a row (0.5 s) before the still timer resets
+LED_RETRY_S = 30.0      # after a failed LED call, leave the grid alone this long
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 
 
@@ -61,18 +63,27 @@ class BridgeLed:
     """The LED grid on the microcontroller, called over the Bridge (mcu/ sketch).
 
     A failed call is logged once and otherwise ignored: the lights must never
-    stop the brain. Not yet tried on the board.
+    stop the brain. A call can take its whole 1 s timeout to fail, and it runs on
+    the live loop, so after a failure the grid is left alone for LED_RETRY_S: a
+    dead Bridge then costs one late state message every half minute, not one on
+    every zone change. Not yet tried on the board.
     """
 
-    def __init__(self):
-        from arduino.app_utils import Bridge   # the app-bricks wheel; only on the board
-        self._call = Bridge.call
+    def __init__(self, call=None, clock=time.monotonic):
+        if call is None:
+            from arduino.app_utils import Bridge   # the app-bricks wheel; only on the board
+            call = Bridge.call
+        self._call, self._clock = call, clock
         self._warned = False
+        self._quiet_until = float("-inf")
 
     def _send(self, name, *args):
+        if self._clock() < self._quiet_until:
+            return
         try:
             self._call(name, *args, timeout=1)
         except Exception as e:
+            self._quiet_until = self._clock() + LED_RETRY_S
             if not self._warned:
                 self._warned = True
                 logging.getLogger("brain").warning("LED grid call %s failed: %s", name, e)
