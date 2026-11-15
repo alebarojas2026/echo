@@ -1,3 +1,5 @@
+import { boardNow } from './board-time'
+import { boardAskClient, makeMockAskClient } from './ask-client'
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import { routerWords } from './router-words'
@@ -66,14 +68,18 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     if (event.key === 'Escape') operator.hidden = true
   }
   document.addEventListener('keydown', key)
-  const disposeAsk = mountAskRoom(root.querySelector('header')!, undefined, replay ? span => void replay.start(span) : undefined)
+  const now = () => boardNow(live?.current() ?? null)
+  const ask = live?.source === 'ws' ? boardAskClient : makeMockAskClient(now)
+  const disposeAsk = mountAskRoom(root.querySelector('header')!, ask, replay ? span => void replay.start(span) : undefined)
   const disposeArrival = mountArrival(root, live, operator)
+  let offReplayClock: (() => void) | undefined
   if (replay) {
     const last = document.createElement('button')
     last.type = 'button'
     last.dataset.testid = 'replay-last'
     last.textContent = 'Replay the last 2 minutes'
-    last.onclick = () => { operator.hidden = true; void replay.start({ from_t: Date.now() - 120_000, to_t: Date.now() }) }
+    offReplayClock = live?.subscribe(() => { last.disabled = now() === null })
+    last.onclick = () => { const end = now(); if (end === null) return; operator.hidden = true; void replay.start({ from_t: end - 120_000, to_t: end }) }
     operator.querySelector('.operator-controls')!.before(last)
   }
   let disposed = false
@@ -119,7 +125,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
