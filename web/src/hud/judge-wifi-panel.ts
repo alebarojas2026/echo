@@ -1,5 +1,6 @@
 import type { StateMsg } from '../room/contract'
-import { wifiLine } from './dead-zone'
+import { wifiLine, wifiLinkId } from './dead-zone'
+import { hudLayout } from './layout'
 import './dead-zone.css'
 
 // The calm Wi-Fi line (#612): the router's link to the board in a word and one number, always on the main screen.
@@ -22,7 +23,9 @@ export function mountPanel(root: HTMLElement) {
     update(state: StateMsg | null, stale: boolean) {
       place()
       // A replayed second holds no link readings (the records keep none), so the line steps out with the trace.
-      line.hidden = !!(state as { replay?: unknown } | null)?.replay
+      // Where the presence line is this same link, the signal row under it already gives its number: said once,
+      // and a person standing in the line is never called a weak link.
+      line.hidden = !!(state as { replay?: unknown } | null)?.replay || (!!hudLayout.presence?.line && hudLayout.presence.line === wifiLinkId(state?.advice))
       if (line.hidden) return
       const wifi = wifiLine(state, stale)
       line.setAttribute('aria-label', `Wi-Fi link, ${wifi.ends}`)

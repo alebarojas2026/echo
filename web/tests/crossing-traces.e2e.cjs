@@ -10,9 +10,11 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`every crossing trace,
  }
  const strip=page.getByTestId('signal-strip'),row=strip.getByTestId('signal-row')
  await expect(row).toHaveAttribute('data-links',layout.links.map(l=>l.id).join(','));await expect(row).toHaveAttribute('data-primary',primary)
- await expect(strip.getByTestId('signal-value')).toHaveText('−16.0 dB');await expect(page.getByTestId('wifi-value')).toHaveText('−16.0 dB')
+ await expect(strip.getByTestId('signal-value')).toHaveText('−16.0 dB')
+ // The presence line's number is said once, in its own row: the Wi-Fi line above it steps out and a person is never a weak link.
+ await expect(page.getByTestId('wifi-line')).toBeHidden()
  expect(await page.evaluate(()=>[...new Set(window.strokeWidths)])).toEqual(expect.arrayContaining([4,1.5]))
  if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-crossing.png`)})}
  await page.evaluate(primary=>{const s=window.arrival.peek('still');window.arrival.update('still',{seq:50,t:13000,links:s.links.filter(l=>l.id!==primary)})},primary)
- await expect(strip.getByTestId('signal-value')).toHaveText('no signal');await expect(page.getByTestId('wifi-word')).toHaveText('no signal')
+ await expect(strip.getByTestId('signal-value')).toHaveText('no signal');await expect(page.getByTestId('wifi-line')).toBeHidden()
 })

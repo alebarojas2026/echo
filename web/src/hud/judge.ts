@@ -38,7 +38,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   feed = replay?.feed ?? feed
   root.classList.add('judge')
   root.innerHTML = `
-    <header><span>Radio Sight</span><span data-testid="source-badge"></span></header>
+    <header><span>Echo</span><span data-testid="source-badge"></span></header>
     <div class="judge-privacy"></div>
     <section class="judge-moment" aria-live="polite"><h1 data-testid="judge-headline"></h1><p data-testid="judge-detail"></p></section>
     <div class="judge-extra"></div>

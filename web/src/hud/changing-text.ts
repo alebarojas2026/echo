@@ -1,3 +1,7 @@
+/** False while the page draws no frames (a background tab, a covered or minimised window). Animations stand still
+ *  then, so nothing that must be true on the screen may wait for one to finish. */
+export const framesDrawn = () => document.visibilityState === 'visible'
+
 export function changingText(element: HTMLElement) {
   let requested = ''
   let generation = 0
@@ -9,7 +13,7 @@ export function changingText(element: HTMLElement) {
       requested = value
       const current = ++generation
       cancel()
-      if (instant || !element.textContent || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (instant || !framesDrawn() || !element.textContent || matchMedia('(prefers-reduced-motion: reduce)').matches) {
         element.textContent = value
         return
       }

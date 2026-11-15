@@ -1,3 +1,4 @@
+import { shownAlert } from './shown-alert'
 import './room.css'
 import { amberDb, Beams } from './beams'
 import type { Feed } from './feed'
@@ -297,13 +298,15 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     host.dataset.checkin = waving ? '1' : ''
     beams.setWave(waving ? wave.link : null)
     presence.wave = waving
-    alertMarks.update(state.alert)
+    // One decision for the alert everywhere on the screen (shown-alert.ts): never on a spot the board calls empty.
+    const alert = shownAlert(state)
+    alertMarks.update(alert)
     // The advice's words sit just south of the square, where the X-ray caption goes: one at a time.
     // In situ the aisle in front of the strip is the next row's desk: the X-ray's caption has no floor to sit on.
     xray.update(state.xray, state.health?.status === 'blind', spots.tagShown || situ !== null || deviceAcross())
     presence.update(state.pred, state.objects ?? [], state.xray)
     // Zone names follow the zones the figure shows (held), so one wrong decision never flashes a name.
-    stage.markZones(presence.shownZones(), state.alert?.state === 'check_on' ? state.alert.zone : null)
+    stage.markZones(presence.shownZones(), alert?.state === 'check_on' ? alert.zone : null)
   })
   return { view, stage }
 }
