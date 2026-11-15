@@ -164,7 +164,7 @@ def privacy_rows(proof, evidence):
     return rows
 
 
-def render(document, proof, line_report=None, evidence=()):
+def render(document, proof, line_report=None, evidence=(), replayed=None):
     primary, extras = measurements(proof)
     privacy = privacy_rows(proof,evidence)
     date, commit = proof.get("measured_at"), proof.get("commit")
@@ -208,6 +208,9 @@ def render(document, proof, line_report=None, evidence=()):
     if line_report:
         from proof.line_stats import table
         block.extend(table(line_report))
+    if replayed:
+        from proof.replayed import table as replay_table
+        block.extend(replay_table(replayed))
     block.extend(["", END])
     return "\n".join(lines).rstrip() + "\n\n" + "\n".join(block) + "\n"
 
@@ -219,13 +222,15 @@ def main():
     parser.add_argument("--document", type=Path, default=root / "PROOF.md")
     parser.add_argument("--output", type=Path, help="explicit output path; omit to preview on stdout")
     parser.add_argument("--lines", type=Path, help="measured per-line companion report")
+    parser.add_argument("--replay", type=Path, help="companion report of recordings replayed through the brain (proof.replayed)")
     args = parser.parse_args()
     log = args.proof.with_suffix(".manual.jsonl")
     evidence = [json.loads(line) for line in log.read_text().splitlines() if line.strip()] if log.exists() else []
     from proof.provenance import empty_proof
-    proof = empty_proof() if args.lines and not args.proof.exists() else json.loads(args.proof.read_text(encoding="utf-8"))
+    proof = empty_proof() if (args.lines or args.replay) and not args.proof.exists() else json.loads(args.proof.read_text(encoding="utf-8"))
     lines = json.loads(args.lines.read_text()) if args.lines else None
-    output = render(args.document.read_text(encoding="utf-8"), proof, lines, evidence)
+    replayed = json.loads(args.replay.read_text(encoding="utf-8")) if args.replay else None
+    output = render(args.document.read_text(encoding="utf-8"), proof, lines, evidence, replayed)
     if args.output:
         args.output.write_text(output, encoding="utf-8")
     else:

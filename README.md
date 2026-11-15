@@ -4,7 +4,7 @@
 
 Some places need a record of who was there and when, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. Echo does it with the Wi-Fi signal alone.
 
-- **It senses a person by radio.** Two small computers sit a metre apart. A body between them weakens the Wi-Fi signal, and from that one line the board knows someone arrived, whether they are standing still or moving, whether they walked through or stayed, and when they left. Armed, it raises an alert; it notices when one of its own devices is unplugged.
+- **It senses a person by radio.** Two small computers sit a metre apart. A body between them weakens the Wi-Fi signal, and from that one line the board knows someone arrived, how long they stayed, whether they are standing still or moving, and when they left. Armed, it raises an alert; it notices when one of its own devices is unplugged.
 - **It seals what it sensed.** Every record is chained to the one before it, so a changed record breaks every seal after it and the board can name the record.
 - **Two more machines vouch for it.** Each Raspberry Pi signs the board's latest record every five seconds with its own key.
 - **It tells you what happened.** Ask it, and a program on the board answers in plain words from the sealed record, showing its steps.
@@ -17,7 +17,7 @@ Built at MadHacks 2026 for the Qualcomm / N+1 Institute track. In this demo our 
 
 ## How it works (short)
 1. Pi A is a Wi-Fi hotspot. Pi B, a metre away, measures how strong that signal is 25 times a second and sends the readings to the board.
-2. The board compares each second with the level of the empty space. A drop that holds is a person; how steady it is says still or moving; how long it lasts says walked through or stayed.
+2. The board compares each second with the level of the empty space. A drop that holds is a person; how steady it is says still or moving; how long it lasts says how long they stayed.
 3. Every second, and every event, is written to a record on the board. Each record carries the hash of the one before it.
 4. Every five seconds each Pi signs the record's latest hash with its own Ed25519 key, and the board checks and stores the signature.
 5. The screen shows the space and the person as a figure, and answers "what happened?" from the record. A second screen, the engine room, shows the devices, the record and the signatures live.

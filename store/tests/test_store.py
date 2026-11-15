@@ -116,12 +116,19 @@ def test_other_messages_are_ignored(msg):
     assert Store(":memory:").add(msg) is False
 
 
-def test_old_rows_are_dropped():
-    s = Store(":memory:", keep_h=1)
+def test_old_rows_are_dropped_by_count_never_by_the_clock():
+    s = Store(":memory:", keep_records=1)
     s.add(state(T0)), s.add(event(T0, "enter"))
     s.add(state(T0 + 2 * 3_600_000))
-    s.prune(T0 + 2 * 3_600_000)
+    with s.db:
+        s.prune()
     assert [r["t"] for r in s.seconds()] == [T0 + 2 * 3_600_000] and s.events() == []
+    roomy = Store(":memory:", keep_h=1)                      # an hour's worth of records: these three stay,
+    roomy.add(state(T0)), roomy.add(event(T0, "enter"))      # however far apart the clock says they are
+    roomy.add(state(T0 + 2 * 3_600_000))
+    with roomy.db:
+        roomy.prune(T0 + 2 * 3_600_000)
+    assert len(roomy.seconds()) == 2 and len(roomy.events()) == 1
 
 
 def test_a_file_store_is_read_by_a_second_connection(tmp_path):

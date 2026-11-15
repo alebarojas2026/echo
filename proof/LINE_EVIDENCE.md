@@ -42,7 +42,10 @@ Nothing here copies the hand-calculated numbers from the issue into measured pro
    name and `layout_sha256` to every interval file. Hash the actual active layout used on
    the board (including local placement overrides), and declare a group only while the
    physical placement stays unchanged. The tool then pools those windows to obtain a common
-   empty reference. Different commits/layout hashes, duplicate files and overlapping capture
+   empty reference. When the board's layout
+   file was not kept, give `layout_note` instead of `layout_sha256`: the placement in the operator's
+   own words (20 characters or more), the same on every file of the group; it is printed under the table.
+   Different commits/layout hashes, duplicate files and overlapping capture
    times are refused. Every source hash remains in the table; unlabelled time between files
    is never exposure. The wire-format proof.json is unchanged.
 

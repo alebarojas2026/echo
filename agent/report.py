@@ -7,7 +7,8 @@ Every field is a query on the store (CONTRACTS.md section 10, GET /report). `tex
 plain words. The on-board model may write it from the fields, but its text is only used when
 every number in it is one of the report's own numbers, it uses none of the words the screen must
 never say, and it arrives within 8 s. Otherwise the fixed template is used. Nothing here knows
-or says who anyone was.
+or says who anyone was. That wait is for this command only: GET /report (agent/endpoints.py) answers
+from the template at once and gives the model half a second at most.
 """
 import argparse
 import json
