@@ -19,6 +19,12 @@ export const FOUND_AFTER_MS = 1500
 /** "Someone passed by" stays this long. */
 export const PASSED_BY_MS = 5000
 
+/** Under "Found you.": "0 cameras" only when the camera is known to be unplugged (#651). When the camera watcher
+ *  has gone quiet the board says unknown, and the card says only what is true either way: "By radio." */
+export function foundLine(cam: string): string {
+  return cam === 'off' ? '0 cameras' : cam === 'on' ? 'Camera teaching' : cam === 'stalled' ? 'Camera stalled' : 'By radio.'
+}
+
 export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTMLElement) {
   const view = document.createElement('section')
   view.className = 'hud-arrival'
@@ -115,7 +121,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     if (here && waited < FOUND_AFTER_MS && !hold) presentTimer ??= setTimeout(() => { presentTimer = undefined; render() }, FOUND_AFTER_MS - waited)
     if (here && (waited >= FOUND_AFTER_MS || hold)) {
       // The words hold, then the card fades as the room flies from the hall down to the floor.
-      show('Found you.', state.cam === 'off' ? '0 cameras' : state.cam === 'on' ? 'Camera teaching' : 'Camera stalled', false, fade ? 'found' : 'waiting')
+      show('Found you.', foundLine(state.cam), false, fade ? 'found' : 'waiting')
       if (!hold) hold = setTimeout(() => {
         if (view.hidden) return
         announce('found')

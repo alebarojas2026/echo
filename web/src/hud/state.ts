@@ -6,7 +6,7 @@ export type ScreenState = {
   t: number
   seq: number
   src: FeedSource
-  cam: 'on' | 'off' | 'stalled'
+  cam: 'on' | 'off' | 'stalled' | 'unknown'
   router: string
   health: { status: 'ok' | 'degraded' | 'blind' }
   pred: {
@@ -37,7 +37,7 @@ export type Proof = {
 }
 
 const sourceLabels = { live: 'LIVE', sim: 'FAKE', replay: 'REPLAY' }
-const cameraLabels = { on: 'CAMERA ON', off: 'CAMERA OFF', stalled: 'CAMERA STALLED' }
+const cameraLabels = { on: 'CAMERA ON', off: 'CAMERA OFF', stalled: 'CAMERA STALLED', unknown: 'CAMERA UNKNOWN' }
 const alertLabels = { none: '', counting: 'Monitoring stillness', check_on: 'No-movement alert' }
 
 function agreement(score: Score | null | undefined) {
