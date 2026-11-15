@@ -81,6 +81,7 @@
           {"if": {"properties": {"busy": {"const": true}}, "required": ["busy"]}, "then": {"properties": {"moving": {"const": false}}}}
         ]}},
     "armed": {"$comment": "Optional (section 6, Armed): true after arm {on: true}; missing means false.", "type": "boolean"},
+    "locked": {"$comment": "Optional (section 6, Operator key): the board has an operator key; missing means false.", "type": "boolean"},
     "tamper": {"$comment": "Optional (section 6, Tamper): the nodes silent while armed; missing means [].", "type": "array",
                "items": {"$ref": "common.json#/$defs/any_node"}, "uniqueItems": true},
     "model": {

@@ -51,6 +51,13 @@ Ports:
   192.168.77.0/24 or 10.42.0.0/24; it answers like GET. It is saved on the board (data/layout.local.json) and is
   for drawing only: /nodes.json carries the saved hall xyz_m, and nothing else changes.
 - llm: http://127.0.0.1:8091 (llama-server).
+Operator key (when the board has one; see section 6):
+- The operator opens the page as http://192.168.77.2:8080/?src=ws#key=<the key> . The part after # never leaves the
+  browser, so it is in no request and no server log. The page keeps it in memory for that tab only (not in
+  localStorage) and removes it from the address bar. A page opened without it shows everything and sends nothing:
+  no operator drawer, and the Arm button reads "Locked". The phone's pages send no cmd but the crowd game's truth.
+- POST /layout and POST /clock take the same key in the header X-Operator-Key (403 without it when the board has
+  a key).
 ```
 
 ## 3. Nodes, links, frame and zones (radio/nodes.json, served as /nodes.json)
@@ -202,6 +209,8 @@ The positions above are the last ones measured and written into nodes.json, and 
         // the model carries on.
         // train_s and ms_per_decision are null when nothing was measured (the fake brain), even when trained is true.
  "armed":false,                                                             // true after arm {on:true}; missing means false
+ "locked":true,                                                             // optional: the board has an operator key, so a page
+                                                                            // needs it to send commands; missing means false
  "tamper":["east"],                                                         // optional: the nodes silent while armed (Tamper,
                                                                             // section 6); missing or [] when there is none
  "board":{"cpu_temp_c":57.0,"cpu_mhz":2016,"cpu_pct":61}}
@@ -226,6 +235,11 @@ Before readings, a baseline or training exists, the brain still sends state at a
 ```jsonc
 {"v":2,"type":"cmd","cmd":"train|baseline|reset_alert|reset|record_start|record_stop|label_mode|router_moved|router_home|relearn|truth|arm","args":{}}
    // record_start {session, purpose, walker}; label_mode {mode: person|object|off}; router_moved {spot}; truth {zone} (crowd game).
+   // Operator key. When the board has OPERATOR_KEY in its .env (typed there once by a person; never in the repo,
+   // never served by any endpoint, never logged), every cmd except truth must carry "key": "<the key>":
+   //   {"v":2,"type":"cmd","cmd":"arm","args":{"on":false},"key":"<the key>"}
+   // A cmd with a missing or wrong key is ignored: nothing changes and no event is sent (the brain logs one line,
+   // without the key). The comparison is constant-time. With no OPERATOR_KEY on the board every cmd is accepted.
    // reset = between judges: clears the alert, still timer, check-in, advice and narration.
    // train while a train recording is open also fits from that recording as far as it has got, and starts a lesson
    // (see model.training).
@@ -304,6 +318,13 @@ Armed (after hours: the space should be empty):
   The 3 s is armed.hold_s in nodes.json (default 3; 4 for a very busy aisle).
 - While health is blind or pred is null, no intrusion and no passed_by is raised and the screen says so (never
   "all clear"). An appearance that is still waiting then is judged once pred is back.
+Operator key (optional; set by OPERATOR_KEY in the board's .env):
+- With a key on the board, only a page opened with it can arm, disarm, reset, take a baseline, train, relearn,
+  record or move the router. truth is the one cmd that needs no key (the crowd game's phones send it).
+- A cmd without the right key changes nothing and sends no event. state.locked tells every page the board has one.
+- What it stops: a device that joined our network sending commands. What it does not do: it is not encryption.
+  The key crosses our own WPA2 network in clear text, and a spoofed beacon or a fake reading sent to the bus
+  (UDP 5600) is not covered. Say so when asked.
 Tamper (a rule, not learned; while armed only):
 - A node is silent when every link it sends or receives on has had no reading for 3 s. This is its own test on the
   readings, not the blind rule: it does not wait for a link to be judged stale or blind, it counts Pi B's links

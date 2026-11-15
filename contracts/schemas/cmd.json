@@ -6,7 +6,8 @@
   "properties": {
     "type": {"const": "cmd"},
     "cmd": {"enum": ["train", "baseline", "reset_alert", "reset", "record_start", "record_stop", "label_mode", "router_moved", "router_home", "relearn", "truth", "arm"]},
-    "args": {"type": "object"}
+    "args": {"type": "object"},
+    "key": {"$comment": "Section 5: the operator key, when the board has one. Never logged.", "type": "string", "minLength": 1}
   },
   "required": ["v", "type", "cmd", "args"],
   "unevaluatedProperties": false,

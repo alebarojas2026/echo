@@ -67,6 +67,9 @@ INVALID = [
     "$.hall[0].moving",             # a busy path never says moving
     "$.hall[0].busy",               # a stale path is not busy
     "$.hall[0].busy",               # busy is true or false
+    "$.key",                       # an empty key is no key
+    "$.args",                      # the key sits beside args, never in them
+    "$.locked",                    # locked is true or false
     "bad JSON",
 ]
 
