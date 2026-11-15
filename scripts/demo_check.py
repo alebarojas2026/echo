@@ -78,6 +78,9 @@ def health_check(state):
         return
     quiet = [link.get("id") for link in state.get("links") or [] if link.get("status") != "ok"]
     named = ", ".join(str(link) for link in (health.get("blind") or quiet)) or "no link named"
+    if status == "degraded":
+        # A slow link reads stale now and then on the real kit; the board still predicts. Blind is the stop.
+        raise Warn(f"health is degraded ({named}): the board still predicts; check that device if it stays")
     raise ValueError(f"health is {status or 'missing'} ({named}): check that device's power and its place, then wait 3 s")
 
 

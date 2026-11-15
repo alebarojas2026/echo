@@ -106,7 +106,7 @@ def test_health_names_the_links_that_are_not_ok():
     first = LAYOUT["links"][0]["id"]
     stale = good_state(health={"status": "degraded", "blind": [], "reason": None})
     stale["links"][0]["status"] = "stale"
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(demo_check.Warn) as error:      # degraded is a warning: the board still predicts
         demo_check.health_check(stale)
     assert f"health is degraded ({first})" in str(error.value)
     with pytest.raises(ValueError, match="no state to read"):
