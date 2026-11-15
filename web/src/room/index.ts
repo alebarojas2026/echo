@@ -16,7 +16,7 @@ import { DEFAULT_CUT_M, loadScan, type Scan } from './scan'
 import { Mirror } from './mirror'
 import { RouterSpots } from './spots'
 import { Stage } from './stage'
-import { RoomView, inSituShot, viewOptions } from './view'
+import { RoomView, inSituShot, viewOptions, reserveBottom } from './view'
 import { XrayLayer } from './xray'
 
 /** What the band across the room says while mock data plays. */
@@ -26,6 +26,10 @@ export interface Room {
   view: RoomView
   stage: Stage
 }
+
+/** The height the replay's bar takes above the legend's row, with a little air: three rows of 28 px words and its
+ *  padding come to about 175 px. */
+const REPLAY_BAR_PX = 184
 
 /** What the room says when the browser gives it no 3D context. The text column runs on the feed alone. */
 export const NO_3D_WORDS = ['3D view unavailable', 'The radio keeps working.'] as const
@@ -164,6 +168,8 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     presence.clear()
     host.classList.remove('room--norecord')
     host.dataset.replay = ''
+    reserveBottom(0)
+    fly.refit()
     say('', '')
     window.dispatchEvent(new CustomEvent('room:replay-end', { detail: { reason } }))
     view.requestRender()
@@ -182,6 +188,9 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   window.addEventListener('room:replay', (e) => {
     const detail = (e as CustomEvent<{ rows?: HistoryRow[]; speed?: number }>).detail ?? {}
     replayBase = performance.now()
+    // The replay's bar (web/src/hud/replay.css) lies over the bottom of the room: the close view lifts clear of it.
+    reserveBottom(REPLAY_BAR_PX)
+    fly.refit()
     presence.clear(replayBase) // the figure starts fresh, in place, with the first recorded second
     replay.play(detail.rows ?? [], detail.speed)
     view.requestRender()

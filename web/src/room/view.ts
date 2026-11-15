@@ -139,6 +139,17 @@ const DESK_ELEV_DEG = 58
 const EDGE_PX = 24
 /** Below the layout: the legend's row in the canvas's bottom corner. */
 const BOTTOM_PX = 72
+/** More room kept free above the legend's row, for a bar the panels lay over the room's bottom (reserveBottom). */
+let bottomExtraPx = 0
+
+/**
+ * Keeps `px` more of the canvas's bottom clear of the close view (0 gives it back). The replay's bar lies over
+ * the bottom of the room while a replay plays; without this it covers the floor the person stands on and the
+ * spot's name. The fly glides to the new framing (Fly.refit).
+ */
+export function reserveBottom(px: number) {
+  bottomExtraPx = Math.max(0, px)
+}
 const NAME_PX = 28 // room-label--node, and the no-movement word
 const LINE_PX = 31
 const CHAR_EM = 0.56 // Hanken Grotesk's average letter width at 600
@@ -227,13 +238,14 @@ export function fitShot(anchors: readonly Anchor[], width: number, height: numbe
     })
     const xs = px.map((q): AxisItem => [q.x, q.a.left, q.a.right])
     const ys = px.map((q): AxisItem => [q.y, q.a.down, q.a.up])
-    const s = Math.min(fitAxis(xs, width - 2 * EDGE_PX), fitAxis(ys, height - EDGE_PX - BOTTOM_PX))
+    const bottom = BOTTOM_PX + bottomExtraPx
+    const s = Math.min(fitAxis(xs, width - 2 * EDGE_PX), fitAxis(ys, height - EDGE_PX - bottom))
     // Zoomed by s about the canvas middle, the content's middle moves to the free band's middle (the band sits a
     // little above the canvas's middle, clear of the legend's row): how far that is in today's pixels.
     const [x0, x1] = reach(xs, s)
     const [y0, y1] = reach(ys, s)
     const dx = (x0 + x1) / 2 / s
-    const dy = ((y0 + y1) / 2 - (BOTTOM_PX - EDGE_PX) / 2) / s
+    const dy = ((y0 + y1) / 2 - (bottom - EDGE_PX) / 2) / s
     const perPx = (2 * cam.position.distanceTo(shot.target) * Math.tan((cam.fov * Math.PI) / 360)) / height
     right.setFromMatrixColumn(cam.matrixWorld, 0)
     up.setFromMatrixColumn(cam.matrixWorld, 1)

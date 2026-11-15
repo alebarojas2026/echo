@@ -10,7 +10,7 @@ import { DESK_LAYOUT } from './layouts.fixture'
 import { clearBox, ghostBox } from './scan'
 import { DESK_TOP_M, standBase, standOn } from './stage'
 import { adviceShown, spotWords } from './spots'
-import { FOV_DEG, deskAnchors, fitCamera, inSituShot, roomShot } from './view'
+import { FOV_DEG, deskAnchors, fitCamera, inSituShot, reserveBottom, roomShot } from './view'
 import { xrayGeometry } from './xray'
 
 // The whole room on the desk layout of the contract PR (#415): this file applies it once; every other test file
@@ -210,6 +210,21 @@ describe('the desk inside the hall model', () => {
         expect(y - a.up).toBeGreaterThan(23)
         expect(y + a.down).toBeLessThan(h - 71)
       }
+    }
+  })
+
+  it('lifts the close view clear of a bar laid over the room, and gives the room back after', () => {
+    const lowest = (w: number, h: number) => {
+      const c = new PerspectiveCamera(FOV_DEG, 1, 0.1, 60)
+      fitCamera(c, w, h, inSituShot(w, h))
+      return Math.max(...deskAnchors(1.7, w).map((a) => ((1 - a.at.clone().project(c).y) / 2) * h + a.down))
+    }
+    for (const [w, h] of [[1280, 1080], [800, 900]]) {
+      const before = lowest(w, h)
+      reserveBottom(184) // the replay's bar
+      expect(lowest(w, h)).toBeLessThan(h - 71 - 184) // the floor, the person and the words stay above the bar
+      reserveBottom(0)
+      expect(lowest(w, h)).toBeCloseTo(before)
     }
   })
 })
