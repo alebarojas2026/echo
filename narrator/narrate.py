@@ -511,6 +511,22 @@ class Narrator:
         return isinstance(t, (int, float)) and isinstance(now, (int, float)) and now - t <= self.max_age_ms
 
     def due(self, now: int) -> dict | None:
+        """The event to narrate now, if any: the pending one when it may be said, else, on one spot, a
+        sentence that puts the line right when it has come to say the opposite of the state and nothing
+        that could correct it is waiting (the arrival was pushed out by a check-in that then went stale:
+        stepping aside and back, the check-in itself, does exactly that)."""
+        event = self._pending_due(now)
+        if event is None and self.pending is None and spot() and self.said_here is not None:
+            here = self._here_now(now)
+            if here is not None and here != self.said_here and (
+                    self.last_start_ms is None or now - self.last_start_ms >= self.gap_ms):
+                self.last_start_ms = now
+                state = self.state or {}
+                return {"type": "event", "kind": "enter" if here else "exit", "t": now, "id": f"line{now}",
+                        "src": state.get("src", "live"), "info": {"zone": next(iter(ZONES))}}
+        return event
+
+    def _pending_due(self, now: int) -> dict | None:
         """The pending event if it may be narrated now. Drops it once it is too old."""
         event = self.pending
         if event is None:
