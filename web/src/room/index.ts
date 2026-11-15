@@ -141,7 +141,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   }
   const replay = new Replay(showRecorded, (reason) => {
     // Back to live: the figure starts fresh where live puts it, and the next state redraws the rest.
-    presence.update(null, [], null)
+    presence.clear()
     host.classList.remove('room--norecord')
     host.dataset.replay = ''
     say('', '')
@@ -162,7 +162,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   window.addEventListener('room:replay', (e) => {
     const detail = (e as CustomEvent<{ rows?: HistoryRow[]; speed?: number }>).detail ?? {}
     replayBase = performance.now()
-    presence.update(null, [], null, replayBase) // the figure starts fresh, in place, with the first recorded second
+    presence.clear(replayBase) // the figure starts fresh, in place, with the first recorded second
     replay.play(detail.rows ?? [], detail.speed)
     view.requestRender()
   })
