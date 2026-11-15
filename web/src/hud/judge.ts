@@ -1,5 +1,6 @@
 import { boardNow } from './board-time'
 import { boardAskClient, makeMockAskClient } from './ask-client'
+import { mountPrivacyLine } from './privacy'
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import { routerWords } from './router-words'
@@ -31,6 +32,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   root.classList.add('judge')
   root.innerHTML = `
     <header><span>Radio Sight</span><span data-testid="source-badge"></span></header>
+    <div class="judge-privacy"></div>
     <section class="judge-moment" aria-live="polite"><h1 data-testid="judge-headline"></h1><p data-testid="judge-detail"></p></section>
     <div class="judge-extra"></div>
     ${Object.keys(extraPanels).some(path => path.includes("camera")) ? "" : '<p data-testid="cam-status"></p>'}
@@ -74,6 +76,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const now = () => boardNow(live?.current() ?? null)
   const ask = live?.source === 'ws' ? boardAskClient : makeMockAskClient(now)
   const disposeAsk = mountAskRoom(root.querySelector('header')!, ask, replay ? span => void replay.start(span) : undefined)
+  const disposePrivacy = mountPrivacyLine(root.querySelector('.judge-privacy')!)
   const disposeArrival = mountArrival(root, live, operator)
   let offReplayClock: (() => void) | undefined
   if (replay) {
@@ -131,7 +134,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposePrivacy(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 

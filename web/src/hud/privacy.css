@@ -1,0 +1,4 @@
+.privacy-line { flex-shrink:0; color:var(--text-2); font:500 28px/1.3 var(--sans); font-variant-numeric:tabular-nums; }
+.privacy-line p { margin:0; font:inherit; }
+.privacy-line [data-tone="fault"] { color:var(--fault); }
+.hud-arrival > .privacy-line { margin-bottom:24px; }
