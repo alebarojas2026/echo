@@ -214,6 +214,7 @@ class Brain:
         self._event_n = 0
         self._load_baseline()
         self._load_model()
+        self._load_armed()
 
     def now(self) -> int:
         return self._clock() if self._clock else self.feed_t
@@ -300,8 +301,11 @@ class Brain:
         baseline {keep_model: true} = the same layout set down again (another desk, a knocked
         beacon): only the baseline is new. The model was taught on drops from a baseline, so
         it carries over, and the recordings keep the baseline they were made on."""
+        new_place = args.get("keep_model") is not True
+        if self.capture and self.capture["by_hand"] and self.capture["new_place"] == new_place:
+            return   # a double tap, or two operator pages: the capture already running carries on (#649)
         self._cmd_label_mode({"mode": "off"})
-        self._start_capture(new_place=args.get("keep_model") is not True, by_hand=True)
+        self._start_capture(new_place=new_place, by_hand=True)
 
     def _cmd_train(self, args):
         if self.training or not self.base:
@@ -362,7 +366,34 @@ class Brain:
         """arm {on: true|false}: "this space should be empty now"."""
         on = args.get("on")
         if isinstance(on, bool) and self.armed.arm(on):
+            self._save_armed(on)
             self.emit("armed" if on else "disarmed", {})
+
+    def _save_armed(self, on: bool) -> None:
+        """data/sessions/armed.json, so a crash or a redeploy doesn't quietly disarm the space.
+        Written through a temporary file; a failed write is logged and never stops the arm."""
+        if not self.sessions_dir:
+            return
+        try:
+            self.sessions_dir.mkdir(parents=True, exist_ok=True)
+            tmp = self.sessions_dir / "armed.json.tmp"
+            tmp.write_text(json.dumps({"on": on, "t": self.now()}) + "\n", encoding="utf-8")
+            os.replace(tmp, self.sessions_dir / "armed.json")
+        except OSError as e:
+            logging.getLogger("brain").warning("could not save armed.json: %s", e)
+
+    def _load_armed(self) -> None:
+        """Arm again after a restart, and say so with a second armed event: the store, the narrator
+        and the report see the restart. A missing, cut-off or unreadable file means not armed."""
+        if not self.sessions_dir:
+            return
+        try:
+            doc = json.loads((self.sessions_dir / "armed.json").read_text(encoding="utf-8"))
+            on = doc["on"] is True
+        except (OSError, ValueError, KeyError, TypeError):
+            return
+        if on and self.armed.arm(True):
+            self.emit("armed", {})
 
     def _cmd_reset_alert(self, args):
         self.watch.reset_alert()

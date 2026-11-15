@@ -44,10 +44,11 @@ COUNTED = ("intrusion", "passed_by", "alert_on", "alert_off", "enter", "exit", "
 def replay(brain: Brain, messages: Iterable[dict], armed: bool = False) -> dict:
     """Feed messages (with recv_t, oldest first) to a brain that has a baseline and a model.
     Returns the counts. The brain is used as it is: arm it, or not, with `armed`."""
+    # Armed mode is kept on disk now, so a brain on a work folder used before may come up armed:
+    # set it both ways, every run.
+    brain.on_cmd({"v": 2, "type": "cmd", "cmd": "arm", "args": {"on": bool(armed)}})
     brain.pop_events()
     before = dict(brain.watch.resets)
-    if armed:
-        brain.on_cmd({"v": 2, "type": "cmd", "cmd": "arm", "args": {"on": True}})
     events: List[dict] = []
     first = last = next_state = None
     decisions = present = hidden = 0
