@@ -29,6 +29,7 @@ from pathlib import Path
 
 from store import DB, Store
 from .tools import TOOLS, current_spot
+from . import room_facts
 
 LLM_URL = "http://127.0.0.1:8091"
 TIMEOUT_S = 8.0
@@ -167,11 +168,15 @@ def cant_answer(question: str, zones: dict) -> bool:
     if CANT.search(question):
         return True
     names = {n.lower() for n in zones.values()}
+    names.update(("wi", "wifi", "bluetooth"))  # Wi-Fi is a link, not a person's name.
     return any(m.group(1).lower() not in names for m in NAME.finditer(question))
 
 
 def keyword_tool(question: str):
     """The first tool whose keywords match, or None."""
+    specific = room_facts.intent(question)
+    if specific:
+        return specific[1]
     return next((tool for tool, pattern in RULES if pattern.search(question)), None)
 
 
@@ -260,7 +265,8 @@ def checked(pick, zones: dict, links: list) -> tuple:
 USES_MINUTES = ("presence", "still_spans", "alerts", "intrusions", "link_history")
 
 
-def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic, nodes_path=None) -> dict:
+def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic,
+        nodes_path=None, privacy_reader=None) -> dict:
     """{"answer", "rows", "tool", "args", "picked_by": "llm"|"rules", "src", "ms"} for one question.
     src is the newest record's src ("live", "sim" or "replay"; None when the store is empty)."""
     start = timer()
@@ -288,12 +294,18 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
         # The list comes first, as section 10 says; a refusal adds why after it.
         out = {"answer": can_answer() + (" " + CANT_ANSWER if refused else ""), "rows": []}
     else:
-        current = len(zones) == 1 and tool in ("presence", "still_spans") and re.search(
+        specific = room_facts.intent(read)
+        current = not specific and len(zones) == 1 and tool in ("presence", "still_spans") and re.search(
             r"right now|currently|at the moment|what.*happening|^(is|are)\b", read, re.I)
         current = current and not re.search(r"\b(last|past|since|today|yesterday)\b", read, re.I)
-        out = (current_spot(store, now_ms, zones, nodes_path) if current
-               else TOOLS[tool](store, now_ms, zones, nodes_path=nodes_path, **args))
-        if tool in USES_MINUTES:   # the minutes in the answer are in a row too
+        if specific:
+            out = room_facts.answer(specific[0], store, now_ms, args["minutes"], nodes_path or room_facts.NODES,
+                                    privacy_reader, one_spot=len(zones) == 1)
+        elif current:
+            out = current_spot(store, now_ms, zones, nodes_path)
+        else:
+            out = TOOLS[tool](store, now_ms, zones, nodes_path=nodes_path, **args)
+        if tool in USES_MINUTES or specific:   # the minutes in the answer are in a row too
             out = {**out, "rows": out["rows"] + [{"row": "asked", "minutes": args["minutes"]}]}
     latest = store.latest()
     return {**out, "tool": tool, "args": args, "picked_by": picked_by, "src": latest and latest["src"],

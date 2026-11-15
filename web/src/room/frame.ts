@@ -3,8 +3,9 @@
 // Scene frame (three.js): y up, the layout's rectangle centred on the origin, north towards -z.
 //
 // Every layout reads the same way: the 2 x 2 m square (four zones in quarters), the desk (a strip in front of a
-// desk, split into two zones at zone_split_x_m), and the gate (a strip that is one spot: one zone, no split, with
-// a device across it from the desk). The file decides which; the built-in values below are the square, used only
+// desk, split into two zones at zone_split_x_m), the gate (a strip that is one spot: one zone, no split, with a
+// device across it from the desk), and the fan (a strip with several zones side by side and several devices
+// across it). The file decides which; the built-in values below are the square, used only
 // when /nodes.json can't be read.
 
 export type Vec3 = [number, number, number]
@@ -14,8 +15,24 @@ export type NodeId = string
 export let SIZE_M: [number, number] = [2.0, 2.0]
 /** The strip a person stands in, [east, north] from the origin, or null on the square (the whole square). */
 export let STRIP_M: [number, number] | null = null
-/** Where the strip's two zones meet (x, metres), or null on the square and on a strip that is one spot. */
+/** Where the strip's two zones meet (x, metres) when it has exactly two; null on the square and on a strip with
+ *  one zone or more than two (ZONE_EDGES_X_M has every boundary). */
 export let ZONE_SPLIT_X_M: number | null = null
+/**
+ * A strip's zones lie side by side along it. Their boundaries from west to east, the strip's two ends included
+ * (one more number than there are zones); empty on the square. Contract section 3: one zone is the whole strip;
+ * zones meet halfway between neighbouring zones' centre_m; with exactly two, frame.zone_split_x_m wins when the
+ * file gives it.
+ */
+export const ZONE_EDGES_X_M: number[] = []
+/** The strip's zone ids from west to east, matching ZONE_EDGES_X_M. */
+const STRIP_ZONE_IDS: number[] = []
+
+/** Whether zone names are written on the floor. Not on a strip with more than two zones: there the names would
+ *  land among the devices on the far desk, so the zone the person is in is tinted and the panel says which. */
+export function zonesNamed(): boolean {
+  return !(STRIP_M && ZONES.length > 2)
+}
 /** frame.desk_edge_y_m, when the file gives it: where our desk begins (deskEdge). */
 let DESK_EDGE_Y_M: number | null = null
 /** links[].crosses_spot, for the links whose entry says: whether the link's path crosses where a person stands. */
@@ -121,13 +138,15 @@ export function floorSize(): [number, number] {
 
 /**
  * Zone id from a contract floor point, 0 when it is outside every zone.
- * Strip: 1 + (x >= split) inside the strip, or its one zone when it has no split. Square: 1 + (x >= half) +
- * 2 * (y < half).
+ * Strip: the zone whose stretch of the strip holds x (ZONE_EDGES_X_M; a boundary belongs to the zone east of
+ * it). Square: 1 + (x >= half) + 2 * (y < half).
  */
 export function zoneAt(x: number, y: number): number {
   if (STRIP_M) {
     if (x < 0 || x > STRIP_M[0] || y < 0 || y > STRIP_M[1]) return 0
-    return ZONE_SPLIT_X_M === null ? (ZONES[0]?.id ?? 0) : 1 + (x >= ZONE_SPLIT_X_M ? 1 : 0)
+    let i = 0
+    while (i < STRIP_ZONE_IDS.length - 1 && x >= ZONE_EDGES_X_M[i + 1]) i++
+    return STRIP_ZONE_IDS[i] ?? 0
   }
   return 1 + (x >= SIZE_M[0] / 2 ? 1 : 0) + 2 * (y < SIZE_M[1] / 2 ? 1 : 0)
 }
@@ -136,9 +155,8 @@ export function zoneAt(x: number, y: number): number {
 export function zoneRect(zone: number): [number, number, number, number] | null {
   if (!ZONES.some((z) => z.id === zone)) return null
   if (STRIP_M) {
-    const [w, h] = STRIP_M
-    if (ZONE_SPLIT_X_M === null) return [0, 0, w, h] // one spot: the whole strip
-    return zone === 1 ? [0, 0, ZONE_SPLIT_X_M, h] : [ZONE_SPLIT_X_M, 0, w, h]
+    const i = STRIP_ZONE_IDS.indexOf(zone)
+    return i < 0 ? null : [ZONE_EDGES_X_M[i], 0, ZONE_EDGES_X_M[i + 1], STRIP_M[1]]
   }
   const [w, h] = SIZE_M
   const east = zone === 2 || zone === 4
@@ -211,17 +229,76 @@ export function nodeLabelSide(id: NodeId): LabelSide {
  *  room beside the strip. */
 export function alertWordAt(zone: number): [Vec3, 'west' | 'east' | 'south'] {
   const [x0, y0, x1, y1] = zoneRect(zone) ?? [0, 0, 0, 0]
-  // One spot seen from the south-west: under its near corner, clear of the person and of the device across.
-  if (STRIP_M && deviceAcross()) return [[x0 - 0.04, y0 - 0.04, 0], 'south']
+  // Seen from the south-west with a device across the spot: under the zone's near corner, clear of the person and
+  // of the device across. With more than two zones every zone but the first has the far desk under that corner,
+  // so the word goes under the strip's own near corner whichever zone it is about (the zone itself is tinted).
+  if (STRIP_M && deviceAcross()) return [[(zonesNamed() ? x0 : 0) - 0.04, y0 - 0.04, 0], 'south']
   if (STRIP_M) return [[(x0 + x1) / 2, -0.06, 0], 'south']
   const { east, north } = zoneSide(zone)
   return [[east ? floorSize()[0] + 0.08 : -0.08, north ? y1 - 0.2 : y0 + 0.2, 0], east ? 'east' : 'west']
 }
 
-/** Where a node sits now. The router follows state.router to its spot. */
+/** Half a device's cube: how far its middle is above what it sits on. */
+const SEAT_M = 0.04
+/** How far above a device's own height the room looks for furniture it must be sitting on. */
+const SEAT_REACH_M = 0.4
+/** Around its middle a device rests on things this far out, so one on a desk's very edge still sits on the desk. */
+const SEAT_FOOT_M = 0.05
+
+type Surface = (x: number, y: number, top: number) => number | null
+let surface: Surface | null = null
+const seats = new Map<string, Vec3>()
+
+/**
+ * The room model's surfaces, when there is a model (the hall): `under(x, y, top)` is the height of its highest
+ * surface at or below `top` under a contract point, or null. With it, a device is never drawn inside furniture
+ * (seated). Null takes it away again. Call it again after the model is moved.
+ */
+export function setSurface(under: Surface | null) {
+  surface = under
+  seats.clear()
+}
+
+/**
+ * Where a device at `p` is drawn. Where the file has it, unless the room's model has furniture there whose top is
+ * above the device's underside: then it sits on that top. The file's heights are measured from one floor, and the
+ * hall's rows are tiered, so the far end of the gate on the desk of the row behind is really a step higher than
+ * the board; drawn at the file's height it would be inside that desk.
+ */
+export function seated(p: Vec3): Vec3 {
+  if (!surface) return p
+  const key = p.map((v) => Math.round(v * 100)).join(',')
+  const known = seats.get(key)
+  if (known) return known
+  let top: number | null = null
+  for (const [dx, dy] of [[0, 0], [SEAT_FOOT_M, 0], [-SEAT_FOOT_M, 0], [0, SEAT_FOOT_M], [0, -SEAT_FOOT_M]]) {
+    const h = surface(p[0] + dx, p[1] + dy, p[2] + SEAT_REACH_M)
+    if (h !== null && (top === null || h > top)) top = h
+  }
+  const at: Vec3 = top !== null && top > p[2] - SEAT_M ? [p[0], p[1], Math.round((top + SEAT_M) * 1000) / 1000] : p
+  seats.set(key, at)
+  return at
+}
+
+/** Where a node sits now. The router follows state.router to its spot. In a room model, on its furniture (seated). */
 export function nodePosition(id: NodeId, router: string | null | undefined): Vec3 {
-  if (id === routerId() && router && ROUTER_SPOTS[router]) return ROUTER_SPOTS[router]
-  return NODES[id]?.xyz ?? [0, 0, 0]
+  if (id === routerId() && router && ROUTER_SPOTS[router]) return seated(ROUTER_SPOTS[router])
+  return seated(NODES[id]?.xyz ?? [0, 0, 0])
+}
+
+/** How far from the router the tray goes, toward the receiver. */
+const TRAY_FROM_ROUTER_M = 0.12
+
+/**
+ * The tray's place for a router and the receiver its Wi-Fi link runs to: on the line between them (the link it
+ * blocks), 12 cm from the router, or halfway when they are closer than 24 cm. At the router's height, like the
+ * file's own tray spot. Always between two devices, so always on the desk they stand on.
+ */
+export function trayBeside(router: Vec3, receiver: Vec3): Vec3 {
+  const d = Math.hypot(receiver[0] - router[0], receiver[1] - router[1])
+  const u = d > 0 ? Math.min(TRAY_FROM_ROUTER_M, d / 2) / d : 0
+  const r = (v: number) => Math.round(v * 1000) / 1000
+  return [r(router[0] + (receiver[0] - router[0]) * u), r(router[1] + (receiver[1] - router[1]) * u), router[2]]
 }
 
 type Json = Record<string, unknown>
@@ -237,6 +314,26 @@ function isPair(v: unknown, lo: number, hi: number): v is [number, number] {
 /** Every value in place: the exported bindings are read live by the rest of the room. */
 function replace<T>(target: T[], items: T[]) {
   target.splice(0, target.length, ...items)
+}
+
+/**
+ * A strip's zones from west to east and where they meet, or null when the file doesn't say enough. One zone: the
+ * whole strip. Two with a split: they meet at the split (the lower id to the west unless the centres say
+ * otherwise); a split outside the strip is a wrong file. Otherwise every zone needs a centre_m inside the strip,
+ * no two at the same x, and neighbours meet halfway between their centres.
+ */
+function stripZones(zones: readonly ZoneInfo[], width: number, split: number | null): { ids: number[]; edges: number[] } | null {
+  if (!zones.length) return null
+  if (zones.length === 1) return { ids: [zones[0].id], edges: [0, width] }
+  const centred = zones.every((z) => z.centre && z.centre[0] > 0 && z.centre[0] < width)
+  const byX = centred ? [...zones].sort((a, b) => a.centre![0] - b.centre![0]) : [...zones].sort((a, b) => a.id - b.id)
+  if (centred && byX.some((z, i) => i > 0 && z.centre![0] - byX[i - 1].centre![0] < 1e-6)) return null
+  if (zones.length === 2 && split !== null) {
+    return split > 0 && split < width ? { ids: byX.map((z) => z.id), edges: [0, split, width] } : null
+  }
+  if (!centred) return null
+  const meets = byX.slice(1).map((z, i) => (byX[i].centre![0] + z.centre![0]) / 2)
+  return { ids: byX.map((z) => z.id), edges: [0, ...meets, width] }
 }
 
 /**
@@ -282,10 +379,10 @@ export function applyLayout(json: unknown): boolean {
     const c = z.centre_m
     zones.push({ id: z.id, name: z.name.trim(), centre: isPair(c, -10, 10) ? c : null })
   }
-  // A strip is one spot (one zone, no split) or two zones that meet at the split; the square has four.
-  const oneSpot = !!strip && zones.length === 1
-  if (strip && !oneSpot && (zones.length !== 2 || split === null || split <= 0 || split >= strip[0])) return false
+  // The square has four zones. A strip has any number, side by side along it (ZONE_EDGES_X_M).
   if (!strip && zones.length !== 4) return false
+  const along = strip ? stripZones(zones, strip[0], split) : null
+  if (strip && !along) return false
 
   const spots = (Array.isArray(j.router_spots) ? (j.router_spots as Json[]) : []).filter(
     (r): r is { id: string; xyz_m: Vec3 } => typeof r?.id === 'string' && isVec3(r.xyz_m),
@@ -299,7 +396,9 @@ export function applyLayout(json: unknown): boolean {
 
   SIZE_M = [size[0], size[1]]
   STRIP_M = strip ? [strip[0], strip[1]] : null
-  ZONE_SPLIT_X_M = strip && !oneSpot ? split : null
+  replace(ZONE_EDGES_X_M, along?.edges ?? [])
+  replace(STRIP_ZONE_IDS, along?.ids ?? [])
+  ZONE_SPLIT_X_M = along && along.ids.length === 2 ? along.edges[1] : null
   DESK_EDGE_Y_M = edge
   for (const k of Object.keys(LINK_CROSSES)) delete LINK_CROSSES[k]
   Object.assign(LINK_CROSSES, crosses)
@@ -322,7 +421,10 @@ export function applyLayout(json: unknown): boolean {
     if (d.some((v) => Math.abs(v) > 1e-6)) {
       const moved = (p: Vec3): Vec3 => [p[0] + d[0], p[1] + d[1], p[2] + d[2]]
       for (const k of Object.keys(ROUTER_SPOTS)) ROUTER_SPOTS[k] = moved(ROUTER_SPOTS[k])
-      replace(TRAY_SPOTS, TRAY_SPOTS.map(moved))
+      // The tray has its own place, on the line it is there to block: carried along it could hang off the desk.
+      const rx = links.map((id) => /^([a-z0-9]+)>([a-z0-9]+):wifi$/.exec(id)).find((m) => m?.[1] === router.id)?.[2]
+      const receiver = nodes.find((n) => n.id === rx)
+      replace(TRAY_SPOTS, receiver ? [trayBeside(router.xyz, receiver.xyz)] : TRAY_SPOTS.map(moved))
     }
   }
   replace(HALL_BEACONS, hall)

@@ -1,14 +1,14 @@
-.judge.shell-hud { width:640px; height:100vh; overflow:hidden; }
+.judge.shell-hud { width:640px; height:100vh; overflow:auto; }
 .judge.shell-hud footer { flex-shrink:0; }
 .judge.shell-hud .judge-moment { min-height:184px; }
 .judge.shell-hud .judge-extra:empty { display:none; }
-.judge.shell-hud .judge-narrator { max-height:68px; overflow:hidden; }
+.judge.shell-hud .judge-narrator { flex-shrink:0; overflow-wrap:break-word; }
 .judge.shell-hud footer dl { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 24px; }
 /* A short window (a 1366 x 768 laptop): the type keeps its size and the spacing gives way. Never a scale:
    scaled to two thirds, 28 px text was 18.7 px, under the floor for anything a judge reads. */
-@media(min-width:1101px) and (max-height:800px) {
-  .judge.shell-hud { padding:20px 48px; gap:16px; }
-  .judge.shell-hud .judge-moment { min-height:136px; }
+@media(min-width:1101px) and (max-height:1000px) {
+  .judge.shell-hud { padding:16px 48px; gap:12px; }
+  .judge.shell-hud .judge-moment { min-height:0; flex-shrink:0; }
   .judge.shell-hud h1 { font-size:56px; }
   .judge.shell-hud .judge-extra { gap:12px; }
   .judge.shell-hud > .signal { padding-top:16px; gap:8px; }

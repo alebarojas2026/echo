@@ -10,7 +10,7 @@ test('configured names survive degraded links and raw ids stay in attributes', a
     state.links = layout.links.map(link => ({ ...link, status: 'stale', rate_hz: 1 }))
     state.pred.why = layout.links.map(link => link.id)
     document.body.replaceChildren(Object.assign(document.createElement('main'), { id: 'hud' }))
-    mountHud(document.querySelector('#hud'), { source: 'ws', subscribe(fn) { fn({state,stale:false}); return () => {} }, send() {}, onEvent() { return () => {} } })
+    mountHud(document.querySelector('#hud'), { source: 'ws', current() { return { state, receivedAt: performance.now(), stale: false, connected: true, source: 'ws' } }, subscribe(fn) { fn({state,stale:false}); return () => {} }, send() {}, onEvent() { return () => {} } })
   }, layout)
   await expect(page.getByTestId('judge-headline')).not.toHaveText('Sensor blind')
   await expect(page.getByTestId('why-links')).toHaveAttribute('data-links', layout.links.map(link => link.id).join(','))

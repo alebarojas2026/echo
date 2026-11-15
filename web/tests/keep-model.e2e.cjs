@@ -28,6 +28,8 @@ test('baseline keeps the model only when requested; forgetting requires confirma
   await page.goto('/?mock=still')
   await expect(keep).toBeHidden()
   await page.keyboard.press('o')
+  // The recording controls sit folded under the presenter's own buttons.
+  await page.getByText('Advanced recording controls').click()
   await expect(keep).toBeVisible()
   await expect(forget).toBeVisible()
 })

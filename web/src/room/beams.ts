@@ -181,6 +181,12 @@ export class Beams {
     this.placeAt(nodePosition(routerId(), HOME_SPOT))
   }
 
+  /** The devices stand somewhere else now (a room model put them on its furniture): lay every line again. */
+  refresh() {
+    this.pi5.set(nodePosition(routerId(), this.router))
+    this.placeAt(this.pi5.now())
+  }
+
   setWave(link: string | null) {
     if (link === this.waveLink) return
     this.waveLink = link

@@ -72,11 +72,20 @@ describe('layout from nodes.json', () => {
     const west = frame.nodePosition('pi5', 'S-W30')
     expect(west[0]).toBeCloseTo(0.46)
     expect(west[1]).toBeCloseTo(0.68)
-    expect(frame.TRAY_SPOTS[0][0]).toBeCloseTo(0.82)
-    expect(frame.TRAY_SPOTS[0][2]).toBeCloseTo(0.8)
+    // The tray takes its own place: 12 cm from the router toward the board (at 1.1, 0.6), on the link it blocks.
+    expect(frame.TRAY_SPOTS[0]).toEqual(frame.trayBeside([0.76, 0.68, 0.8], [1.1, 0.6, 1.0]))
+    expect(frame.TRAY_SPOTS[0][0]).toBeCloseTo(0.877)
+    expect(frame.TRAY_SPOTS[0][1]).toBeCloseTo(0.653)
+    expect(frame.TRAY_SPOTS[0][2]).toBe(0.8)
     // and a file where they agree is left exactly as it is
     expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)
     expect(frame.nodePosition('pi5', 'S-W30')).toEqual([0.5, 1.1, 1])
+  })
+
+  it('puts the tray between the router and the board: 12 cm along, or halfway when they stand side by side', () => {
+    expect(frame.trayBeside([0, 0, 1], [1, 0, 1])).toEqual([0.12, 0, 1])
+    expect(frame.trayBeside([0.76, 0.68, 0.8], [0.84, 0.68, 0.8])).toEqual([0.8, 0.68, 0.8]) // 8 cm apart on one hub
+    expect(frame.trayBeside([0.5, 0.5, 1], [0.5, 0.5, 1])).toEqual([0.5, 0.5, 1])
   })
 
   it('follows a 1.5 m square and gate-7 router spots without a rebuild', () => {
@@ -129,8 +138,23 @@ describe('when /nodes.json cannot be read', () => {
     expect(frame.LINK_IDS).toEqual(real.links.map((l) => l.id))
   })
 
-  it('falls back to the layout the page was built with, not the old square: offline, not found, or malformed', async () => {
-    for (const fetch of [() => Promise.reject(new Error('offline')), reply(404, null), reply(200, { v: 2, nodes: 'none' })]) {
+  it('refuses a file that is served but not understood, and draws nothing from the layout the page was built with', async () => {
+    const notJson = () => Promise.resolve({ ok: true, json: () => Promise.reject(new SyntaxError('Unexpected token')) })
+    const fiveZones = { ...DESK_LAYOUT, zones: [1, 2, 3, 4, 5].map((id) => ({ id, name: `Zone ${id}` })) }
+    for (const fetch of [reply(200, { v: 2, nodes: 'none' }), reply(200, { ...DESK_LAYOUT, v: 3 }), reply(200, fiveZones), notJson]) {
+      expect(other()).toBe(true)
+      vi.stubGlobal('fetch', fetch)
+      expect(await loadLayout('/nodes.json', 50, DESK_LAYOUT)).toBe('refused')
+      // Nothing was applied: not the file, and not the built layout's five devices either.
+      expect(frame.STRIP_M).toEqual([1.2, 0.6])
+      expect(frame.NODES.pi5b.name).toBe('Elsewhere')
+    }
+  })
+
+  it('falls back to the layout the page was built with, not the old square: offline, not found, or too slow', async () => {
+    const slow = (_url: string, init: { signal: AbortSignal }) =>
+      new Promise((_ok, fail) => init.signal.addEventListener('abort', () => fail(new DOMException('aborted', 'AbortError'))))
+    for (const fetch of [() => Promise.reject(new Error('offline')), reply(404, null), slow]) {
       expect(other()).toBe(true)
       vi.stubGlobal('fetch', fetch)
       expect(await loadLayout('/nodes.json', 50, DESK_LAYOUT)).toBe('contract')
@@ -140,7 +164,12 @@ describe('when /nodes.json cannot be read', () => {
   })
 
   it('carries radio/nodes.json in the build as that fallback', async () => {
-    expect(__BUILD_LAYOUT__).toEqual(nodesJson)
+    // The file's links, zones and frame; device places saved on this machine (nodes.local.json) may differ.
+    const built = __BUILD_LAYOUT__ as typeof nodesJson
+    expect(built.links).toEqual(nodesJson.links)
+    expect(built.zones).toEqual(nodesJson.zones)
+    expect(built.frame).toEqual(nodesJson.frame)
+    expect(built.nodes.map((n) => n.id)).toEqual(nodesJson.nodes.map((n) => n.id))
     vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')))
     expect(other()).toBe(true)
     expect(await loadLayout()).toBe('contract')

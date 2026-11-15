@@ -1,6 +1,6 @@
 const layoutFixture = require('./layout-fixture.cjs')
 const { test, expect } = require('@playwright/test')
-test('camera agreement and the eight-second unplug state', async ({ page }) => {
+test('camera agreement and the persistent radio-only counter', async ({ page }) => {
   await page.clock.install()
   await page.goto('/src/hud/index.html')
   await page.evaluate(async () => {
@@ -16,7 +16,8 @@ test('camera agreement and the eight-second unplug state', async ({ page }) => {
   await expect(page.getByTestId('cam-status')).not.toContainText('zone ')
   await expect(page.getByTestId('cam-status')).toHaveCSS('color', 'rgb(230, 232, 235)')
   await page.evaluate(() => { window.state.cam = 'off'; window.panel.update(window.state, false) })
-  await expect(page.getByTestId('camera-unplug')).toBeVisible()
-  await page.clock.fastForward(8001)
-  await expect(page.getByTestId('camera-unplug')).toBeHidden()
+  await expect(page.getByTestId('cam-status')).toHaveText('Radio only · 0:00')
+  await page.evaluate(() => { window.state.t += 9000; window.panel.update(window.state, false) })
+  await expect(page.getByTestId('cam-status')).toHaveText('Radio only · 0:09')
+  await expect(page.getByTestId('camera-unplug')).toHaveCount(0)
 })

@@ -6,7 +6,7 @@ import { zoneName } from './judge-moment'
 export function stillness(state: StateMsg | null, stale: boolean) {
   if (!state || stale || state.health.status === 'blind') return { text: '', tone: '', progress: 0, detail: '' }
   const alert = state.alert
-  if (alert?.state === 'check_on') return { text: `No movement ${zonePlace(alert.zone)} for ${alert.limit_s ?? '__'} s`, tone: 'fault', progress: 1, detail: alert.still_s == null ? '__' : `Still for ${Math.floor(alert.still_s)} s` }
+  if (alert?.state === 'check_on') return { text: `No movement ${zonePlace(alert.zone)} · ${alert.still_s == null ? '__' : Math.floor(alert.still_s)} s`, tone: 'fault', progress: 1, detail: '' }
   const age = state.checkin ? state.t - state.checkin.t : Infinity
   if (age >= 0 && age <= 6000) return { text: 'Wave seen', tone: 'action', progress: 0, detail: 'Check-in received' }
   if (alert?.state !== 'counting') return { text: '', tone: '', progress: 0, detail: '' }

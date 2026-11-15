@@ -7,7 +7,16 @@
     "nodes": {"$comment": "Section 3: device is the kind of hardware, for the screen's model. Optional.", "type": "array", "items": {
       "type": "object", "properties": {"device": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,23}$"}}}},
     "links": {"$comment": "Section 3: classifier false keeps a thin link out of the model and out of health blind. Missing means true.", "type": "array", "items": {
-      "type": "object", "properties": {"classifier": {"type": "boolean"}}}},
+      "type": "object", "properties": {"classifier": {"type": "boolean"},
+                                       "crosses_spot": {"$comment": "true = a person on the spot stands in this line. Missing: the layout does not say.", "type": "boolean"}}}},
+    "presence": {"$comment": "Section 6, Presence line: the one line that decides whether somebody is on the spot, and the numbers of its rules. Every number is optional and has the default in section 6.", "type": "object",
+                 "properties": {"line": {"$ref": "common.json#/$defs/link"}, "second": {"$ref": "common.json#/$defs/link"},
+                                "on_db": {"type": "number", "exclusiveMinimum": 0}, "off_db": {"type": "number", "exclusiveMinimum": 0},
+                                "second_hold_s": {"type": "number", "minimum": 0},
+                                "object_db": {"type": "number", "exclusiveMinimum": 0}, "object_max_db": {"type": ["number", "null"], "exclusiveMinimum": 0},
+                                "object_spread_db": {"type": "number", "exclusiveMinimum": 0}, "object_hold_s": {"type": "number", "minimum": 0},
+                                "moving_spread_db": {"type": "number", "exclusiveMinimum": 0}},
+                 "required": ["line"], "additionalProperties": false},
     "armed": {"$comment": "Armed, section 6. hold_s missing means 3.", "type": "object",
               "properties": {"hold_s": {"type": "number", "exclusiveMinimum": 0, "maximum": 30}},
               "additionalProperties": false},
