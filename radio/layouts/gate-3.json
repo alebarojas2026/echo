@@ -44,6 +44,8 @@
       {"node": "pi5b", "id": "B", "data_hex": "FFFF525342"}
     ]
   },
-  "presence": {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble", "on_db": 7, "off_db": 4, "second_hold_s": 5},
+  "presence": {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble", "on_db": 7, "off_db": 4, "second_hold_s": 5,
+               "object_db": 3, "object_max_db": 12, "object_spread_db": 1.0, "object_hold_s": 3, "moving_spread_db": 2.0},
+  "presence_note": "The numbers of the presence line's rules (CONTRACTS.md section 6). on_db and off_db are set from the kit: a person took 15 to 21 dB off the line and the empty line never dipped 1 dB. A thing left in the line is a steady drop of object_db or more and under object_max_db (well under the weakest person seen), with a 2 s spread of at most object_spread_db, for object_hold_s. moving_spread_db is where the 2 s spread of somebody on the spot reads as moving; a lesson with moving and still labels sets its own. object_spread_db and moving_spread_db are the brain's defaults until the spreads are measured on the kit: write the measured values here.",
   "armed": {"hold_s": 3}
 }
