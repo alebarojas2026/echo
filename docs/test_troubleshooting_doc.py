@@ -75,7 +75,7 @@ class TroubleshootingDocTest(unittest.TestCase):
             "return the pi to `s-home` before sending `router_home`",
             "automatic baseline",
             "label mode is `off`",
-            "keep the square clear",
+            "keep the sensing strip and desk clear",
             "redo the camera calibration",
             "keep the value as `__`",
         ):
@@ -91,6 +91,24 @@ class TroubleshootingDocTest(unittest.TestCase):
         )
         positions = [recovery.index(step) for step in steps]
         self.assertEqual(positions, sorted(positions))
+
+    def test_desk_layout_failures_have_recovery_paths(self):
+        for heading in (
+            "## Pi B's links are all stale",
+            "## One strip link is weak",
+            "## The model is gone after a baseline",
+        ):
+            self.assertIn(heading, self.text)
+
+        for phrase in (
+            "python -m pi.check",
+            "health says `degraded`",
+            "cardboard arm",
+            "baseline {keep_model: true}",
+            "camera unplugged",
+            "plain `baseline {}` means a new place",
+        ):
+            self.assertIn(phrase, self.lower)
 
     def test_no_movement_recovery_explains_smoothed_decisions(self):
         for phrase in (

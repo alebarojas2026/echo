@@ -104,6 +104,19 @@ class DemoRunbookTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.lower)
 
+    def test_desk_layout_and_same_layout_recovery_are_explicit(self):
+        for phrase in (
+            "power pi b",
+            "three `25 cm` boxes",
+            "two cardboard arms",
+            "string knotted at `0`, `0.5`, `0.8`, `1.1`, and `1.6 m`",
+            "step up to the desk",
+            "baseline {keep_model: true}",
+            "camera unplugged",
+            "keeps the trained model",
+        ):
+            self.assertIn(phrase, self.lower)
+
 
 if __name__ == "__main__":
     unittest.main()
