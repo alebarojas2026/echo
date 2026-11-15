@@ -195,3 +195,19 @@ def test_the_step_aside_seen_on_the_kit_is_a_check_in():
     assert (next(t for t, e in events if e["kind"] == "checkin") - start) / 1000 <= 1.0
     last = rows[-1][1]
     assert last["checkin"]["link"] == LINE and last["alert"]["state"] == "counting" and 3.5 <= last["alert"]["still_s"] <= 5.0
+
+
+def test_on_the_one_spot_a_wave_on_another_link_is_not_a_check_in():
+    """Seen on the kit: during a stand with no alert up, the 8 cm line from Pi A to the board wobbled and
+    raised a check-in. On a presence-line layout the only check-in is stepping out of the line and back."""
+    desk_line = "pi5>unoq:wifi"
+    for with_line in (True, False):
+        watch = Brain(nodes=GATE).watch
+        if not with_line:
+            watch.line = None
+        watch._person = True
+        watch.checkin_rule.push = lambda *a: True          # the old wave rule says "a wave"
+        watch.on_rssi({"recv_t": 1000, "link": desk_line, "dbm": -40.0})
+        raised = [kind for kind, _ in watch._events if kind == "checkin"]
+        assert raised == ([] if with_line else ["checkin"]), with_line
+        assert (watch.checkin is None) == with_line
