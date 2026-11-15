@@ -609,15 +609,35 @@ class Brain:
         doc = {"t": now, "session": session,
                "links": {link: {"base_dbm": self.base[link], "expected_hz": self.expected_hz[link]}
                          for link in self.base}}
-        self.sessions_dir.mkdir(parents=True, exist_ok=True)
-        (self.sessions_dir / "baseline.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
-        # Every baseline is also kept in baselines.jsonl, so a recording can be read against
-        # the baseline it was made on, also after a restart.
-        with open(self.sessions_dir / "baselines.jsonl", "a", encoding="utf-8") as f:
-            f.write(json.dumps({"t": now, "base": self.base}) + "\n")
-        # place.json: when this place began (the last baseline asked for by hand). proof/ and a
-        # restart use recordings from then on only. An automatic baseline leaves it alone.
-        (self.sessions_dir / "place.json").write_text(json.dumps({"t": self.place_t}) + "\n", encoding="utf-8")
+        # A full disk must not lose baseline_done, leave recalibrating set, or cut baseline.json
+        # short (a restart would then find no baseline and drop the model): each file goes through
+        # a temporary file and os.replace, and a failed write is logged, never raised (#588).
+        try:
+            self.sessions_dir.mkdir(parents=True, exist_ok=True)
+            self._replace("baseline.json", json.dumps(doc, indent=1) + "\n")
+            # place.json: when this place began (the last baseline asked for by hand). proof/ and a
+            # restart use recordings from then on only. An automatic baseline leaves it alone.
+            self._replace("place.json", json.dumps({"t": self.place_t}) + "\n")
+            # Every baseline is also kept in baselines.jsonl, so a recording can be read against
+            # the baseline it was made on, also after a restart.
+            with open(self.sessions_dir / "baselines.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps({"t": now, "base": self.base}) + "\n")
+        except OSError as e:
+            logging.getLogger("brain").warning(
+                "could not save the baseline (%s): it is in use now but a restart won't have it", e)
+
+    def _replace(self, name: str, text: str) -> None:
+        """Write a file in data/sessions whole or not at all."""
+        tmp = self.sessions_dir / (name + ".tmp")
+        try:
+            tmp.write_text(text, encoding="utf-8")
+            os.replace(tmp, self.sessions_dir / name)
+        finally:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
 
     def _baselines(self) -> List[dict]:
         """Every baseline taken so far, oldest first: [{"t", "base"}] (baselines.jsonl, or just
