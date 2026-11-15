@@ -194,6 +194,9 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     const line = page.getByTestId('arrival-passed')
     await page.evaluate(() => window.arrival.update('empty', { armed: true }))
     await page.clock.runFor(1000)
+    // The headline's own text-in runs on the real clock: let it finish before its place is read.
+    const settled = () => page.evaluate(() => Promise.all(document.getAnimations().filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => null))))
+    await settled()
     const top = (await title.boundingBox()).y
     // Someone appears while armed: the card waits for the board to say which it was.
     await page.evaluate(() => window.arrival.update('still', { armed: true }))
@@ -207,6 +210,7 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await expect(line).toHaveText(/^Someone passed by (on the (left|right)|in the bathroom)$/)
     await expect(line).toHaveCSS('color', 'rgb(154, 163, 173)')
     await expect(line).toHaveCSS('font-size', '28px')
+    await settled()
     expect((await title.boundingBox()).y).toBe(top) // nothing moved to make room for it
     await capture(page, `${width}-passed-by`)
     await page.clock.runFor(4500)
