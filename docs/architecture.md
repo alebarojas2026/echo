@@ -1,124 +1,119 @@
-# Radio Sight Architecture
+# Echo: how it is built
 
-Radio Sight keeps sensing decisions, training, and explanation on the Arduino UNO Q. The board and Pi A sit together on the desk; Pi B sits across one sensing spot at desk height. Wi-Fi from Pi A to Pi B is the main sensor and dead-zone link. Bluetooth from Pi B to the board gives a second opinion. Both Pis run no model. A laptop browser shows the local interface.
+Echo is a witness that never watches. Three small computers on two desks sense one spot with a Wi-Fi signal, keep a record nobody can edit, and answer "What happened?" from that record. There is no camera and no microphone on the kit, and nothing goes to the internet while it runs.
+
+## The whole system
+
+![Echo's three devices, the one sensing line, the sealed record and the two signatures](architecture.svg)
+
+The same picture as a diagram GitHub draws:
 
 ```mermaid
 flowchart LR
-    subgraph PI["Pi A — beside the UNO Q"]
-        PI_RADIO["Pi A radio node<br/>Bluetooth readings and Ethernet route"]
-        HOTSPOT["Private hotspot<br/>sensing and light browser traffic"]
-    end
-
-    PIB["Pi B — across the sensing spot<br/>Wi-Fi RSSI reader and Bluetooth radio"]
-
-    SCREEN["Laptop browser<br/>local demo screen"]
-
-    subgraph UNO["Arduino UNO Q — Dragonwing CPU"]
-        WIFI["Wi-Fi RSSI reader"]
-        BLE["Bluetooth HCI reader"]
-        TEACHER["Camera teacher<br/>setup labels only"]
-        CAMWATCH["Camera watcher<br/>on / off / stalled"]
-        BUS["Message bus<br/>UDP 0.0.0.0:5600"]
-
-        subgraph BRAIN["Brain"]
-            FEATURES["Windowing and features"]
-            HEALTH["Link health"]
-            MODEL["Presence / object / motion model<br/>one spot from the deployed layout"]
-            XRAY["Radio X-ray"]
-            CHECKIN["Check-in rule<br/>lean aside"]
-            ALERT["No-movement alert"]
-            ADVISOR["Router advisor"]
-            TAMPER["Tamper rule<br/>silent device while armed"]
+    subgraph EDGE["NO INTERNET · NO CAMERA · NO MICROPHONE"]
+        direction LR
+        PIA["<b>Pi A</b><br/>makes the Wi-Fi signal<br/>Raspberry Pi 5 · 5 GHz hotspot"]
+        PIB["<b>Pi B</b><br/>measures that signal<br/>Raspberry Pi 5 · 25 readings a second"]
+        subgraph BOARD["The board: everything runs here · Arduino UNO Q, Qualcomm Dragonwing QRB2210"]
+            direction TB
+            DECIDE["<b>Decides</b><br/>someone there, still or moving,<br/>alerts, a device unplugged"]
+            SEAL["<b>Seals every record</b><br/>each record carries the fingerprint<br/>of the one before · SHA-256"]
+            ASK["<b>Answers 'What happened?'</b><br/>in plain words, from the<br/>sealed records only"]
         end
-
-        NARRATOR["Narrator"]
-        STORE["store/ — local summaries and events"]
-        AGENT["agent/ — Ask the room"]
-        REPLAY["Recorded replay"]
-        REPORT["Incident report"]
-        LLAMA["llama-server<br/>http://127.0.0.1:8091"]
-        SERVE["Web server<br/>http://192.168.77.2:8080"]
-        BRIDGE["Host Bridge<br/>arduino package"]
-        LED["UNO Q microcontroller<br/>LED grid"]
+        SCREENS["<b>Screens</b><br/>browsers on the kit's own Wi-Fi:<br/>the judge's page with the 3D hall,<br/>the engine room, the alarm page"]
+        BREAK["<b>What an attacker would have to break</b><br/>every seal after the changed record, and two<br/>signing keys that never leave two other machines"]
     end
 
-    PI_RADIO -->|"Bluetooth rssi over Ethernet<br/>192.168.77.2:5600"| BUS
-    HOTSPOT -->|"Wi-Fi across the gap<br/>main presence and dead-zone sensor"| PIB
-    PIB -->|"rssi via Pi A hotspot and Ethernet<br/>192.168.77.2:5600"| BUS
-    PIB -.->|"Bluetooth second opinion"| BLE
-    HOTSPOT -->|"laptop connection"| SCREEN
-    WIFI -->|"rssi<br/>127.0.0.1:5600"| BUS
-    BLE -->|"rssi<br/>127.0.0.1:5600"| BUS
-    TEACHER -->|"label<br/>msgpack-rpc-router:5600"| BUS
-    CAMWATCH -->|"cam<br/>127.0.0.1:5600"| BUS
+    PIA ==>|"THE ONE SENSING LINE<br/>a person standing here weakens it"| PIB
+    PIB -->|"readings, 25 a second"| DECIDE
+    DECIDE -->|"one record a second"| SEAL
+    SEAL --> ASK
+    PIA -.->|"signature every 5 s"| SEAL
+    PIB -.->|"signature every 5 s"| SEAL
+    PIA ---|"one Ethernet cable"| BOARD
+    ASK --> SCREENS
 
-    BUS -->|"forwarded UDP<br/>127.0.0.1:5601"| FEATURES
-    FEATURES --> HEALTH
-    HEALTH --> MODEL
-    MODEL --> XRAY
-    MODEL --> CHECKIN
-    MODEL --> ALERT
-    HEALTH --> TAMPER
-    XRAY --> ADVISOR
-
-    MODEL -->|"state and event<br/>ws://192.168.77.2:8765/ws"| SCREEN
-    XRAY -->|"state"| SCREEN
-    HEALTH -->|"state"| SCREEN
-    CHECKIN -->|"state and event"| SCREEN
-    ALERT -->|"state and event"| SCREEN
-    TAMPER -->|"named device event"| SCREEN
-    ADVISOR -->|"state and event"| SCREEN
-    SERVE -->|"page and proof via Pi route<br/>and Ethernet cable"| SCREEN
-    SCREEN -->|"cmd over the same WebSocket"| MODEL
-
-    MODEL -->|"events"| NARRATOR
-    MODEL -->|"state and events over local WebSocket"| STORE
-    STORE -->|"saved rows"| AGENT
-    STORE --> REPLAY
-    STORE --> REPORT
-    AGENT -->|"POST /ask"| SERVE
-    REPLAY -->|"GET /history"| SERVE
-    REPORT -->|"GET /report"| SERVE
-    NARRATOR -->|"prompt"| LLAMA
-    LLAMA -->|"generated sentence"| NARRATOR
-    NARRATOR -->|"narration<br/>127.0.0.1:5600"| BUS
-    MODEL -->|"zone and alert state"| BRIDGE
-    BRIDGE -->|"Arduino Router Bridge"| LED
-
-    %% Shared tokens from web/src/room/palette.ts: BG, FLOOR, EDGE, TEXT, LINK.
-    classDef source fill:#1A1D21,stroke:#858E99,color:#E6E8EB;
-    classDef core fill:#1A1D21,stroke:#353B43,color:#E6E8EB;
-    classDef output fill:#111316,stroke:#858E99,color:#E6E8EB;
-    class PI_RADIO,PIB,HOTSPOT,WIFI,BLE,TEACHER,CAMWATCH source;
-    class BUS,FEATURES,HEALTH,MODEL,XRAY,CHECKIN,ALERT,ADVISOR,TAMPER,NARRATOR,LLAMA,STORE,AGENT core;
-    class SCREEN,SERVE,BRIDGE,LED,REPLAY,REPORT output;
+    classDef plain fill:#171A20,stroke:#3A404A,color:#F2F4F6;
+    classDef own fill:#171A20,stroke:#1FA5CF,stroke-width:3px,color:#F2F4F6;
+    classDef attack fill:#171A20,stroke:#E5484D,stroke-width:2px,color:#F2F4F6;
+    class PIA,PIB,DECIDE,ASK,SCREENS plain;
+    class SEAL own;
+    class BREAK attack;
+    style EDGE fill:#101216,stroke:#F2F4F6,stroke-width:3px,color:#F2F4F6;
+    style BOARD fill:#14171C,stroke:#F2F4F6,color:#F2F4F6;
+    linkStyle 0 stroke:#1FA5CF,stroke-width:6px;
+    linkStyle 4,5 stroke:#1FA5CF,stroke-width:2px;
 ```
 
-## Inputs and bus
+Blue is what is Echo's own idea: the sensing line, the seal and the signatures. Red is what an attacker would have to break. Everything else is ordinary wiring.
 
-The UNO Q's Wi-Fi and Bluetooth readers send `rssi` messages to the local bus at `127.0.0.1:5600`. Pi A sends readings over the direct Ethernet cable to `192.168.77.2:5600`; Pi B sends over the hotspot through Pi A to that same endpoint. The Wi-Fi path across the gap supplies the primary presence evidence, while the short desk Wi-Fi path cannot measure that spot. The App Lab camera teacher reaches the bus through `msgpack-rpc-router:5600`. Camera state and setup labels use the same contract-v2 envelope as the radio data.
+## The data path, in order
 
-The bus listens on `UDP 0.0.0.0:5600`, adds board receive time, records sequence gaps, and forwards the agreed input stream to the brain at `UDP 127.0.0.1:5601`. Window joins and proof timing use that board receive time so every producer shares one clock at the decision boundary.
+```mermaid
+flowchart LR
+    R["<b>1 Reading</b><br/>Pi B measures Pi A's<br/>Wi-Fi signal<br/>25 a second"]
+    D["<b>2 Decision</b><br/>the board compares it with<br/>the empty spot: nobody,<br/>somebody still, somebody moving"]
+    W["<b>3 Record</b><br/>the board writes what it<br/>decided, and every event<br/>1 a second"]
+    S["<b>4 Seal</b><br/>each record carries the<br/>SHA-256 hash of the one before<br/>64 hex characters"]
+    G["<b>5 Signature</b><br/>each Pi signs the newest hash<br/>with its own Ed25519 key<br/>every 5 s · 64 bytes"]
+    A["<b>6 Answer</b><br/>'What happened?' in plain words,<br/>with clock times and record numbers,<br/>from sealed records only"]
+    R --> D --> W --> S --> G --> A
 
-## Brain and advisor
+    classDef plain fill:#171A20,stroke:#3A404A,color:#F2F4F6;
+    classDef own fill:#171A20,stroke:#1FA5CF,stroke-width:3px,color:#F2F4F6;
+    class R,D,W,A plain;
+    class S,G own;
+    linkStyle 3 stroke:#1FA5CF,stroke-width:4px;
+```
 
-The brain builds signal windows, checks link health, and runs the trained presence, object, and motion model for the configured spot. It also produces the radio X-ray, applies the lean-aside check-in and no-movement alert rules, and contains the router advisor. The advisor reads persistent change on the same Wi-Fi link across the gap only with an object decision and nobody present. On this kit Pi A stays beside the cabled hub; the before-and-after gain comes from clearing the object or moving Pi B. The advisor does not bypass the brain or run on a Pi. Positions and sensing links come from the deployed `radio/nodes.json`.
+| Step | Where it runs | How often, how big |
+|---|---|---|
+| 1 Reading | Pi B | 25 readings a second of one 5 GHz line, sent to the board as small UDP messages |
+| 2 Decision | the board | follows every reading; the screens get the state about 10 times a second |
+| 3 Record | the board | one summary a second, plus one record for every event |
+| 4 Seal | the board | one SHA-256 hash for each record (64 hex characters), made from the record and the hash before it |
+| 5 Signature | Pi A and Pi B | every 5 s each Pi signs the newest hash; an Ed25519 signature is 64 bytes |
+| 6 Answer | the board | built when someone asks, from the sealed records in the stretch asked about |
 
-If a required classifier link is blind, the brain sends a blind health state and no prediction. The screen must not translate missing or unhealthy input into an empty room.
+## How each part works
 
-## Screen, narration, and LED grid
+Short enough to read aloud.
 
-The `store/` service keeps local state summaries and events on the UNO Q. `agent/` answers Ask the room questions and builds incident reports from those records; the web server also serves history for replay. Tamper reports a silent device while armed. Missing history stays unknown, and replay is always labelled as recorded rather than live.
+- **Pi A (a Raspberry Pi 5).** It is a Wi-Fi hotspot, like the access point a building already has. Its signal is the thing Echo senses with. Pi A stays beside the cabled hub that joins it to the board.
+- **Pi B (a second Raspberry Pi 5).** It sits about a metre from Pi A, at desk height, and measures how strong Pi A's signal is 25 times a second. It sends each reading to the board over that same hotspot.
+- **The sensing line.** A human body between the two Pis absorbs some of the 5 GHz signal, so the reading drops while someone stands there. It is one line and one spot.
+- **The board (an Arduino UNO Q, with the Qualcomm Dragonwing QRB2210).** Everything that thinks runs here: the message bus, the decision, the record, the web pages and the answers. The Pis run no model.
+- **The decision (the brain).** After a short baseline with the spot empty, the board compares every reading with that empty level. A drop that holds means somebody is there; how steady it is says still or moving. From that it raises the no-movement alert, raises an intrusion when the space is armed, and notices when one of its own devices is unplugged.
+- **The record (the store).** Once a second, and at every event, the board writes down what it decided in one file that stays on the board. It holds decisions, not radio readings.
+- **The seal (a hash chain, SHA-256).** Every record carries the fingerprint of the record before it. Change one record and every seal after it stops matching, and the board can name the record that was changed.
+- **The signatures (the witnesses, Ed25519).** Every 5 seconds the board says where the record stands, and each Pi signs that with its own key, which never leaves that Pi. The board checks each signature and stores it in the record. Unplug a Pi and the others carry on; the gap is in the record too.
+- **The answer (Ask).** "What happened?" is answered in plain words from the sealed records only: a timeline with clock times, the steps it took and the record numbers it used. It checks the seals over those records first, and it never says who anyone is.
+- **The small language model (Qwen2.5 0.5B, on the board).** It may smooth the wording of a sentence, and for an unusual question it may pick which look-up to run. Every fact, time and number comes from a record; if the model changes one, its text is thrown away.
+- **The screens.** They are web pages the board serves to browsers on the kit's own Wi-Fi: the judge's page with a 3D model of the hall, the engine room (the three devices, the record counting up, the signatures arriving and a prove-it check), and the alarm page on a phone.
+- **The one Ethernet cable.** It joins Pi A and the board. Pi A passes Pi B's readings and the screens' pages along it, so they do not depend on the board's own Wi-Fi.
 
-The brain publishes contract-v2 `state` and `event` messages on `ws://192.168.77.2:8765/ws`. The laptop joins the Pi hotspot and opens `http://192.168.77.2:8080/?src=ws`; the Pi routes the page, proof data, state, and commands over its direct Ethernet cable to the board. Only light browser traffic uses the hotspot during a demo or recording.
+## What it does not do
 
-Brain events also feed the on-board narrator. For generated explanations, `python -m narrator.narrate` calls the local `llama-server` at `http://127.0.0.1:8091`; the template path stays on the same board when generation is unavailable. The narrator returns a `narration` message to the local bus at `127.0.0.1:5600`, so both explanation paths rejoin the same ordered state path.
+> - It does not know **who** a person is.
+> - It does not know **where** in a room a person is. It senses one spot between two devices about a metre apart.
+> - It does not make a picture of anything, and it does not count people.
+> - It has **no camera and no microphone**, and it sends nothing to the internet while it runs.
+> - A person needs a few seconds on the line. A walk straight through is not reliably seen.
+> - It has not been tested through a wall.
+> - It is a prototype built in 24 hours and tested with one person on one night. What is measured is in [PROOF.md](../PROOF.md).
 
-For the physical display, the board host calls the `arduino` Bridge package with zone and alert state. The Arduino Router Bridge carries that small command to the UNO Q microcontroller, which draws it on the LED grid; the Pi is not in that path.
+## Where to look in the code
 
-## Privacy and deployment boundaries
+| Part | Folder | Runs on |
+|---|---|---|
+| Wi-Fi signal reader | `radio/wifi_rssi.py` | Pi B |
+| Message bus | `bus/` | the board |
+| The decision | `brain/` | the board |
+| The record and its seals | `store/` | the board |
+| Checking seals and signatures | `board/chain.py`, inside the web server `board/serve.py` | the board |
+| Signing | `pi/witness.py` | Pi A and Pi B |
+| Ask | `agent/` | the board |
+| Wording | `narrator/` | the board |
+| Screens | `web/` (the engine room is `web/src/engine/`) | a browser |
 
-- All trained models and learned decisions run on the UNO Q's Dragonwing CPU.
-- The camera teacher is for setup labels only and saves no image or video.
-- The Pi provides network and radio functions, routes the laptop browser to the board, and runs no model.
-- Runtime services bind only to the local addresses defined in `CONTRACTS.md`; the system uses its own network, not venue Wi-Fi or a cloud service.
+Addresses, ports and which message goes where: [network.md](network.md). Message formats: [CONTRACTS.md](../CONTRACTS.md), section 13 for the sealed record and its witnesses.
