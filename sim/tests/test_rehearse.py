@@ -68,6 +68,7 @@ def test_the_desk_visit_fits_its_script():
     assert failed == [], failed
     shown = {name: s for name, _, s in results}
     assert 45 + shown["no-movement alert"] <= 70          # the alert shows inside 0:45-1:10 of docs/desk-demo.md
+    assert shown["intrusion while armed"] <= 2.0          # armed, then the judge steps back in
 
 
 def test_desk_flag_runs_the_desk_visit(capsys, monkeypatch):
