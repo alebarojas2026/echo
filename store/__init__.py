@@ -52,6 +52,7 @@ VERIFY_DEFAULT = 3600      # records checked by verify() when no start is named
 VERIFY_MAX = 100_000       # most records checked in one call
 PROVE_DEFAULT, PROVE_MAX = 600, 3600
 TAIL_MAX = 200             # most links tail() gives
+UNSEALED_EVERY_S = 60.0
 ROW = "seq, t, kind, body, prev, hash"
 
 
@@ -94,7 +95,13 @@ class Store:
                 self.db.execute(f"alter table seconds add column {column} text")
         for table in ("events", "seconds"):   # a file from before the record was sealed
             if "seq" not in {r["name"] for r in self.db.execute(f"pragma table_info({table})")}:
-                self.db.execute(f"alter table {table} add column seq integer")
+                try:
+                    self.db.execute(f"alter table {table} add column seq integer")
+                except sqlite3.OperationalError:
+                    # The store and the web server open the same older file at the same moment after a
+                    # deploy: the other one added the column first.
+                    if "seq" not in {r["name"] for r in self.db.execute(f"pragma table_info({table})")}:
+                        raise
         # INTEGER PRIMARY KEY aliases rowid; INT keeps insertion order separate from time.
         columns = list(self.db.execute("pragma table_info(seconds)"))
         if any(c["name"] == "t" and c["type"].upper() == "INTEGER" for c in columns):
@@ -106,6 +113,7 @@ class Store:
                 self.db.execute("drop table seconds")
                 self.db.execute("alter table seconds_new rename to seconds")
         self.lock, self._saved = threading.Lock(), 0
+        self._unsealed = None   # (when counted, the count): the old rows are counted at most once a minute
 
     def add(self, msg: dict) -> bool:
         """Save a brain message. True if a row was written: every event, and the first state
@@ -209,8 +217,13 @@ class Store:
             n, first = self.db.execute("select count(*), min(seq) from chain").fetchone()
             since = self.db.execute("select t from chain where seq = ?", (first,)).fetchone() if first else None
             anchor = self._meta("anchor")
-            old = sum(self.db.execute(f"select count(*) from {table} where seq is null").fetchone()[0]
-                      for table in ("events", "seconds"))
+            if self._unsealed is None or time.monotonic() - self._unsealed[0] > UNSEALED_EVERY_S:
+                # Rows from before the record was sealed. No new one is ever added, and the count only
+                # falls as they are pruned, so it is not counted again on every call (the screen polls).
+                self._unsealed = (time.monotonic(), sum(
+                    self.db.execute(f"select count(*) from {table} where seq is null").fetchone()[0]
+                    for table in ("events", "seconds")))
+            old = self._unsealed[1]
         return {"head": {"seq": seq, "hash": digest}, "records": n, "since_t": since["t"] if since else None,
                 "first_seq": first, "anchor": anchor and {"seq": anchor["seq"], "hash": anchor["hash"]},
                 "unsealed": old}

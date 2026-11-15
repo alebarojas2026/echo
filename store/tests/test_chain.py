@@ -233,3 +233,40 @@ def test_an_hour_of_records_is_checked_well_inside_a_second(tmp_path):
     whole_call_ms = (time.perf_counter() - start) * 1000
     print(f"\nverify of 3600 records: {best['ms']} ms for the check, {whole_call_ms:.1f} ms with the read from the file")
     assert whole_call_ms < 1000
+
+
+def test_two_processes_opening_an_older_file_at_once_both_come_up(tmp_path):
+    """After a deploy the store and the web server start together on the same older file."""
+    path = tmp_path / "store.db"
+    db = sqlite3.connect(path)
+    db.executescript(OLD_SCHEMA)
+    db.commit()
+    db.close()
+
+    class Late(sqlite3.Connection):
+        """A connection that finds the column missing, then loses the race to add it."""
+        def execute(self, sql, *args):
+            if sql.startswith("alter table") and "add column seq" in sql:
+                other = real(path)
+                other.execute(sql)
+                other.commit()
+                other.close()
+            return super().execute(sql, *args)
+    real = sqlite3.connect
+    sqlite3.connect = lambda *a, **kw: real(*a, **{**kw, "factory": Late})
+    try:
+        s = Store(path)
+    finally:
+        sqlite3.connect = real
+    s.add(state(T0))
+    assert s.head()["seq"] == 1 and s.verify()["ok"]
+
+
+def test_the_old_rows_are_not_counted_again_on_every_call(tmp_path):
+    s = filled(Store(tmp_path / "store.db"), 3)
+    assert s.chain_info()["unsealed"] == 0
+    with s.db:
+        s.db.execute("update seconds set seq = null where t = ?", (T0,))
+    assert s.chain_info()["unsealed"] == 0                 # the count of a moment ago
+    s._unsealed = None
+    assert s.chain_info()["unsealed"] == 1
