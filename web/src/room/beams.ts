@@ -64,6 +64,21 @@ export function explains(link: LinkState | undefined, inWhy: boolean, bar = DROP
   return inWhy && (link?.drop_db ?? 0) >= bar
 }
 
+/**
+ * Whether a link is the layout's main sensing line: a Wi-Fi link the file marks as crossing the spot. Measured on
+ * the kit (#789), the Wi-Fi line across the gap falls 15 to 21 dB when someone steps in and is the one the brain
+ * decides by; the Bluetooth lines are the second opinion. It is drawn boldest. A file that marks nothing (the
+ * desk layout) has no main line.
+ */
+export function mainLine(id: string): boolean {
+  return LINK_CROSSES[id] === true && parseLinkId(id)?.kind === 'wifi'
+}
+
+/** How wide a link is drawn (px): its look's width, and 2 px more for the main line, at rest and lit alike. */
+export function lineWidth(look: BeamLook, main: boolean): number {
+  return look.width + (main ? 2 : 0)
+}
+
 export function beamLook(link: LinkState | undefined, why: boolean, blind: ReadonlySet<string>, onFloor = true): BeamLook {
   const status = !link ? 'missing' : blind.has(link.id) ? 'blind' : link.status
   const broken = status === 'blind' || status === 'missing'
@@ -242,7 +257,7 @@ export class Beams {
       const { mat, look } = b
       mat.opacity += (look.opacity - mat.opacity) * kData
       const wave = b.id === this.waveLink && !look.broken
-      const width = wave ? 7 : look.width
+      const width = wave ? 7 : lineWidth(look, mainLine(b.id))
       mat.linewidth += (width - mat.linewidth) * k
       b.amber += ((look.why ? 1 : 0) - b.amber) * k
       b.green += ((wave ? 1 : 0) - b.green) * k

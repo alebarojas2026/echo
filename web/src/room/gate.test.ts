@@ -1,11 +1,12 @@
 import { Box3, PerspectiveCamera, Vector3 } from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { beamLook, overFloor } from './beams'
+import { beamLook, lineWidth, mainLine, overFloor } from './beams'
 import * as frame from './frame'
 import { DESK_LAYOUT, GATE_LAYOUT } from './layouts.fixture'
 import { mockState, tourAt } from './mock'
 import { clearBox } from './scan'
-import { chairGeometry, onChair, standBase } from './stage'
+import { adviceArrow } from './spots'
+import { onTable, standBase, tableGeometry } from './stage'
 import { defaultSpot, deskFit, type HallDesks } from './desks'
 import { hallShot, mixShot } from './fly'
 import { xrayGeometry } from './xray'
@@ -64,6 +65,13 @@ describe('the gate layout', () => {
   it('stands at the end of the desk by default, where the stair aisle has room for a gate a metre deep', () => {
     const hall: HallDesks = { centre_m: [0, 0], desk_depth_m: 0.45, desk_height_m: 0.75, desks: [{ row: 0, wedge: 0, r_m: 5, th0_deg: -10, th1_deg: 10, floor_m: 0 }] }
     expect(defaultSpot(hall).gap).toBe('end')
+    // Of a row's ends, the one on the widest stair aisle: the far end's table has to clear the next block.
+    const block = (wedge: number, th0: number, th1: number) => ({ row: 0, wedge, r_m: 26, th0_deg: th0, th1_deg: th1, floor_m: 0 })
+    const rows: HallDesks = { ...hall, desks: [block(0, -30, -11), block(1, -8.4, 0), block(2, 2.7, 10), block(3, 12.4, 30)] }
+    const aisle = (a: number, b: number) => (((rows.desks[b].th0_deg - rows.desks[a].th1_deg) * Math.PI) / 180) * 26
+    expect(aisle(1, 2)).toBeGreaterThan(aisle(0, 1)) // 1.23 m against 1.18 m
+    expect(aisle(1, 2)).toBeGreaterThan(aisle(2, 3)) // and 1.09 m
+    expect(defaultSpot(rows)).toMatchObject({ desk: { wedge: 1 }, along: 1, gap: 'end' })
     // The hall is placed with its desk's edge under the layout's (y = 0.8), not under the spot's north edge.
     const fit = deskFit(hall, defaultSpot(hall), { min: [-9, 0, -9], max: [9, 3, 9] }, 12)
     const far = deskFit(hall, { ...defaultSpot(hall), gap: 'behind' }, { min: [-9, 0, -9], max: [9, 3, 9] }, 12)
@@ -125,16 +133,40 @@ describe('the gate layout', () => {
     expect(half.azimDeg).toBeCloseTo(sideOnDeg() / 2)
   })
 
-  it('stands Pi B on a chair with a box that raises it to desk height, and nothing else', () => {
+  it('stands Pi B on a table of its own at whatever height the file gives, lower or higher than the desk', () => {
     const b = frame.NODES.pi5b.xyz
-    expect(onChair(b, standBase(b))).toBe(true)
-    expect(onChair(frame.NODES.unoq.xyz, standBase(frame.NODES.unoq.xyz))).toBe(false)
-    expect(onChair(b, [b[0], b[1], 0.7])).toBe(false) // already on something at that height (the next row's desk)
-    const chair = chairGeometry(0.75)
-    chair.computeBoundingBox()
-    expect(chair.boundingBox!.min.y).toBeCloseTo(0)
-    expect(chair.boundingBox!.max.y).toBeCloseTo(0.85) // the chair's back
-    expect(chair.boundingBox!.max.x - chair.boundingBox!.min.x).toBeCloseTo(0.42)
+    expect(onTable(b, standBase(b))).toBe(true)
+    expect(onTable(frame.NODES.unoq.xyz, standBase(frame.NODES.unoq.xyz))).toBe(false) // on our desk
+    expect(onTable(b, [b[0], b[1], 0.7])).toBe(false) // already on something at that height (the next row's desk)
+    for (const up of [0.45, 0.75, 1.05]) {
+      expect(onTable([b[0], b[1], up], [b[0], b[1], 0])).toBe(true)
+      const table = tableGeometry(up)
+      table.computeBoundingBox()
+      const box = table.boundingBox!
+      expect(box.min.y).toBeCloseTo(0) // its legs stand on the ground
+      expect(box.max.y).toBeCloseTo(up - 0.04) // its top is just under the device, wherever that is
+      expect(box.min.z).toBeCloseTo(-0.05) // the device at the table's near edge, the table reaching away from the spot
+      expect(box.max.z).toBeCloseTo(0.25) // a small table: it clears the next block across a 1.2 m aisle
+    }
+  })
+
+  it('draws the Wi-Fi line across the gap boldest, at rest and when it explains the prediction', () => {
+    expect(frame.LINK_IDS.filter(mainLine)).toEqual(['pi5>pi5b:wifi'])
+    expect(mainLine('pi5>unoq:wifi')).toBe(false) // 8 cm along the desk: crosses nothing
+    expect(mainLine('pi5b>unoq:ble')).toBe(false) // crosses the spot, but Bluetooth: the second opinion
+    const none = new Set<string>()
+    const row = { id: 'pi5>pi5b:wifi', dbm: -60, base_dbm: -42, drop_db: 18, rate_hz: 25, expected_hz: 25, status: 'ok', why: 1 }
+    const rest = beamLook(row, false, none)
+    const lit = beamLook(row, true, none)
+    expect(lineWidth(rest, true)).toBeGreaterThan(lineWidth(rest, false))
+    expect(lineWidth(lit, true)).toBeGreaterThan(lineWidth(lit, false))
+    expect(lineWidth(lit, true)).toBeGreaterThan(lineWidth(rest, true))
+  })
+
+  it('never tells anyone to move the router: it is cabled to the hub on this layout', () => {
+    const advice = { to_spot: 'S-W30', move_m: [-0.3, 0], dist_change_m: 0, why: ['pi5>unoq:wifi'], before_dbm: -66, after_dbm: null }
+    expect(adviceArrow(advice as never, 'S-home')).toBeNull()
+    expect(adviceArrow(advice as never, 'S-W30')).toBeNull()
   })
 
   it('frames the spot, the three devices and the one name, all on the canvas', () => {
@@ -176,7 +208,10 @@ describe('the desk layout, after the gate', () => {
     expect(frame.nodeLabelSide('pi5')).toBe('above')
     expect(frame.alertWordAt(1)[0]).toEqual([0.4, -0.06, 0])
     const east = frame.NODES.east.xyz
-    expect(onChair(east, standBase(east))).toBe(false)
+    expect(onTable(east, standBase(east))).toBe(false)
+    expect(frame.LINK_IDS.some(mainLine)).toBe(false) // a file that marks no link has no main line
+    const advice = { to_spot: 'S-W30', move_m: [-0.3, 0], dist_change_m: 0, why: ['pi5>unoq:wifi'], before_dbm: -66, after_dbm: null }
+    expect(adviceArrow(advice as never, 'S-home')).toEqual({ from: 'S-home', to: 'S-W30', done: false }) // the desk's router still moves
     // Two zones on a strip still need their split; a single zone does not.
     expect(frame.applyLayout({ ...DESK_LAYOUT, frame: { ...DESK_LAYOUT.frame, zone_split_x_m: undefined } })).toBe(false)
     expect(frame.STRIP_M).toEqual([1.6, 0.6])

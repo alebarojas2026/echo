@@ -1,6 +1,6 @@
 import { Mesh, MeshBasicMaterial, RingGeometry, Shape, ShapeGeometry } from 'three'
 import type { Advice } from './contract'
-import { HOME_SPOT, ROUTER_SPOTS, SIZE_M, spotName, type Vec3 } from './frame'
+import { deviceAcross, HOME_SPOT, ROUTER_SPOTS, SIZE_M, spotName, type Vec3 } from './frame'
 import { ACTION, EDGE, TEXT } from './palette'
 import { standBase, v3 } from './stage'
 import { fade } from './motion'
@@ -15,8 +15,14 @@ function outward(y: number): number {
   return y > SIZE_M[1] / 2 ? 1 : -1
 }
 
-/** The arrow to draw for this advice and router spot: from S-home to the advised spot, or null. */
+/**
+ * The arrow to draw for this advice and router spot: from S-home to the advised spot, or null. Never on a layout
+ * with a device across the spot (the gate): there the router is cabled to the board's hub and can't be moved, so
+ * nothing on the room may tell anyone to move it. The dead zone is then something left standing in the line, and
+ * the cure is taking it away (#789).
+ */
 export function adviceArrow(advice: Advice | null, router: string): { from: string; to: string; done: boolean } | null {
+  if (deviceAcross()) return null
   if (!advice || !ROUTER_SPOTS[advice.to_spot] || advice.to_spot === HOME_SPOT) return null
   return { from: HOME_SPOT, to: advice.to_spot, done: router === advice.to_spot }
 }
