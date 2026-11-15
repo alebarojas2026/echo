@@ -13,8 +13,9 @@ let receivedAt = state ? performance.now() : null
 let stale = false
 const listeners = new Set(), events = new Set()
 const commands = []
-const current = () => ({ state, stale, source: 'mock', connected: true, receivedAt })
-const feed = { source: 'mock', current, subscribe(fn) { listeners.add(fn); fn(current()); return () => listeners.delete(fn) }, onEvent(fn) { events.add(fn); return () => events.delete(fn) }, send(cmd, args) { commands.push({ cmd, args }) } }
+const source = new URLSearchParams(location.search).get('ask') === 'board' ? 'ws' : 'mock'
+const current = () => ({ state, stale, source, connected: true, receivedAt })
+const feed = { source, current, subscribe(fn) { listeners.add(fn); fn(current()); return () => listeners.delete(fn) }, onEvent(fn) { events.add(fn); return () => events.delete(fn) }, send(cmd, args) { commands.push({ cmd, args }) } }
 mountRoom(document.querySelector('#room'), feed)
 const dispose = mountHud(document.querySelector('#hud'), feed)
 let seq = 0

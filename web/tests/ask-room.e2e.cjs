@@ -9,7 +9,8 @@ for (const [width, height] of [[1920,1080], [1440,900], [768,900], [320,700]]) {
     // The greeting takes 4.5 s now (1.5 s before "Found you.", then the hold and the fade); the rail is free after it.
     await page.clock.runFor(5000)
     await expect(page.locator('.hud-arrival')).toBeHidden()
-    await page.getByRole('button', { name: 'Ask the room', exact: true }).click()
+    await page.getByRole('button', { name: 'What happened?', exact: true }).click()
+    await page.getByRole('button', {name:'Ask another question',exact:true}).click()
     const input = page.getByLabel('Your question')
     await expect(input).toBeFocused()
     await page.getByRole('button', { name: 'Was anyone here in the last 10 minutes?', exact: true }).click()
@@ -33,7 +34,7 @@ for (const [width, height] of [[1920,1080], [1440,900], [768,900], [320,700]]) {
     await expect(page.getByTestId('ask-rows')).toBeHidden()
     await page.keyboard.press('Escape')
     await expect(page.locator('dialog.ask-room')).not.toBeVisible()
-    await expect(page.getByRole('button', { name: 'Ask the room', exact: true })).toBeFocused()
+    await expect(page.getByRole('button', { name: 'What happened?', exact: true })).toBeFocused()
     await page.keyboard.press('/')
     await expect(input).toBeFocused()
     await input.fill('A slash')
