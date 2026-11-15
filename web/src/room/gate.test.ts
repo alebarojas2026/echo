@@ -1,4 +1,4 @@
-import { PerspectiveCamera } from 'three'
+import { Box3, PerspectiveCamera, Vector3 } from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { beamLook, overFloor } from './beams'
 import * as frame from './frame'
@@ -7,7 +7,7 @@ import { mockState, tourAt } from './mock'
 import { clearBox } from './scan'
 import { chairGeometry, onChair, standBase } from './stage'
 import { defaultSpot, deskFit, type HallDesks } from './desks'
-import { mixShot } from './fly'
+import { hallShot, mixShot } from './fly'
 import { xrayGeometry } from './xray'
 import { deskAnchors, deskShot, fitCamera, inSituShot, sideOnDeg } from './view'
 
@@ -71,6 +71,29 @@ describe('the gate layout', () => {
     expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)
     expect(defaultSpot(hall).gap).toBeUndefined() // the desk layout stays behind its desk
     expect(frame.applyLayout(GATE_LAYOUT)).toBe(true)
+  })
+
+  it('shows the hall the right way up when the layout stands at a row end, and comes round to the desk', () => {
+    const bounds = new Box3(new Vector3(-12, 0, -20), new Vector3(18, 6, 10))
+    expect(hallShot(bounds, 12).azimDeg).toBeUndefined()
+    expect(hallShot(bounds, 12, -7.3).azimDeg).toBeUndefined() // a desk on the curve of its row: as it was
+    expect(hallShot(bounds, 12, 172.7).azimDeg).toBeUndefined() // in front of a desk: from the stage side, as it was
+    const hall = hallShot(bounds, 12, -104.9) // the end of the default desk
+    expect(hall.azimDeg).toBe(-104.9)
+    // The camera stands where the turned hall's own south is: seen from there, the hall's front is at the top.
+    const cam = new PerspectiveCamera(20, 1, 0.1, 500)
+    fitCamera(cam, 1280, 1080, hall)
+    const a = (-104.9 * Math.PI) / 180
+    const south = new Vector3(Math.sin(a), 0, Math.cos(a))
+    const flat = cam.position.clone().sub(hall.target).setY(0).normalize()
+    expect(flat.dot(south)).toBeCloseTo(1)
+    // The fly to the desk turns the short way, never past either end.
+    const close = inSituShot(1280, 1080)
+    for (const u of [0, 0.25, 0.5, 0.75, 1]) {
+      const az = mixShot(hall, close, u).azimDeg!
+      expect(az).toBeGreaterThanOrEqual(-104.9 - 1e-9)
+      expect(az).toBeLessThanOrEqual(sideOnDeg() + 1e-9)
+    }
   })
 
   it('draws the links that cross the spot in full and the two along the desk faint, by the file', () => {

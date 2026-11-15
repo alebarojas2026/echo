@@ -31,13 +31,21 @@ const HALL_ELEV_DEG = 40
 /** The hall's floor plan fills a little more than the view, so empty corners don't shrink it. */
 const HALL_FILL = 0.8
 
-/** The whole hall, north up: looks at the middle of its floor plan (up to the cut) and fits its half-diagonal. */
-export function hallShot(bounds: Box3, cutM: number): Shot {
+/**
+ * The whole hall: looks at the middle of its floor plan (up to the cut) and fits its half-diagonal. Seen from due
+ * south of the layout, north up, unless the hall lies on its side there: `yawDeg` is how far the hall's model is
+ * turned to stand the layout at its desk (room.json), and with the layout at a row's end the layout's north runs
+ * along the row, a quarter turn from the hall's. Then the camera goes round with the hall, so the hall is seen
+ * the right way up, its front at the top. A hall turned a little (a desk on the curve of its row) or right round
+ * (the layout in front of a desk, seen from the stage side) is left as it was.
+ */
+export function hallShot(bounds: Box3, cutM: number, yawDeg = 0): Shot {
   const top = Math.min(bounds.max.y, cutM)
   const target = new Vector3((bounds.min.x + bounds.max.x) / 2, Math.max(0, top / 4), (bounds.min.z + bounds.max.z) / 2)
   const half = Math.hypot(bounds.max.x - bounds.min.x, bounds.max.z - bounds.min.z) / 2
   const square = roomShot().radiusM
-  return { elevDeg: HALL_ELEV_DEG, target, radiusM: Math.max(square * 2, half * HALL_FILL) }
+  const onItsSide = Math.abs(yawDeg) > 45 && Math.abs(yawDeg) < 135
+  return { elevDeg: HALL_ELEV_DEG, ...(onItsSide ? { azimDeg: yawDeg } : {}), target, radiusM: Math.max(square * 2, half * HALL_FILL) }
 }
 
 /** The shot `u` (0..1) of the way from a to b: angle and target in a straight line, size by ratio so the zoom

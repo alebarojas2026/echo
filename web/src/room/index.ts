@@ -79,7 +79,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
         presence.setTrueSize(true)
         fly.setClose(inSituShot)
       }
-      fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M))
+      fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M, s.fit.yaw_deg ?? 0))
     })
     feed.onEvent((event) => event.kind === 'reset' && fly.reset())
     // The arrival screen (#552): while the HUD says "Nobody is here." the live hall shows under its words, dimmed
