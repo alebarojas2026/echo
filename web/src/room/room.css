@@ -295,6 +295,26 @@
   translate: -50% -50%;
   color: var(--action);
   font-weight: 600;
+  /* Like the devices' names: a link behind the words stops short of the letters. */
+  -webkit-text-stroke: 8px var(--bg);
+  paint-order: stroke fill;
+}
+
+/* On a desk: just above the spot's ring, two lines reading away from the router (spots.ts, spotWords). */
+.room-label--spot-west,
+.room-label--spot-east {
+  white-space: pre;
+  line-height: 1.15;
+}
+
+.room-label--spot-west {
+  translate: calc(-100% + 24px) calc(-100% - 22px);
+  text-align: right;
+}
+
+.room-label--spot-east {
+  translate: -24px calc(-100% - 22px);
+  text-align: left;
 }
 
 .room-legend {

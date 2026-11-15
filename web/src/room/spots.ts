@@ -1,6 +1,6 @@
 import { Mesh, MeshBasicMaterial, RingGeometry, Shape, ShapeGeometry } from 'three'
 import type { Advice } from './contract'
-import { HOME_SPOT, ROUTER_SPOTS, SIZE_M, spotName } from './frame'
+import { HOME_SPOT, ROUTER_SPOTS, SIZE_M, spotName, type Vec3 } from './frame'
 import { ACTION, EDGE, TEXT } from './palette'
 import { standBase, v3 } from './stage'
 import { fade } from './motion'
@@ -21,10 +21,32 @@ export function adviceArrow(advice: Advice | null, router: string): { from: stri
   return { from: HOME_SPOT, to: advice.to_spot, done: router === advice.to_spot }
 }
 
-/** Whether a spot's ring is drawn: the router's own spot always; the others only while advice runs between them,
- *  so spare marks never sit unexplained under the devices. */
-export function spotShown(id: string, router: string, arrow: ReturnType<typeof adviceArrow>): boolean {
-  return id === router || (!!arrow && (id === arrow.to || id === arrow.from))
+/**
+ * Where an advised spot's words go and which way they read. On a desk: just above the spot's ring, in two short
+ * lines that read away from the router's home, so "Move router here" never lies across the router or its name
+ * and stays on a laptop's narrower canvas. On the floor (the square): 26 cm outside the square's edge, centred,
+ * in one line, as before.
+ */
+export function spotWords(id: string): { at: Vec3; side: 'west' | 'east' | 'centre' } {
+  const [x, y] = ROUTER_SPOTS[id]
+  const top = standBase([x, y, 0])[2]
+  if (top <= 0) return { at: [x, y + 0.26 * outward(y), 0], side: 'centre' }
+  const homeX = ROUTER_SPOTS[HOME_SPOT]?.[0] ?? x
+  return { at: [x, y, top], side: x < homeX ? 'west' : 'east' }
+}
+
+/** Whether the arrow and its words still show. On a desk they go once the router stands on the advised spot: the
+ *  router and its name are there now, and the words would lie across them (the panels say the move was made). On
+ *  the floor they stay, dimmer, as before. */
+export function adviceShown(arrow: ReturnType<typeof adviceArrow>): boolean {
+  return !!arrow && !(arrow.done && spotWords(arrow.to).side !== 'centre')
+}
+
+/** Whether a spot's ring is drawn: only while advice runs between two spots, and then only those two. With no
+ *  advice a ring is a circle nobody can read (it sat under the router, or alone on the floor when the router
+ *  stands somewhere the room has no desk for). */
+export function spotShown(id: string, arrow: ReturnType<typeof adviceArrow>): boolean {
+  return !!arrow && (id === arrow.to || id === arrow.from)
 }
 
 /** A flat arrow along +x, `len` metres long, lying in the shape's XY plane. */
@@ -63,10 +85,11 @@ export class RouterSpots {
       mesh.rotation.x = -Math.PI / 2
       mesh.position.copy(v3([x, y, standBase([x, y, 0])[2] + 0.003])) // on the floor, or on the desk top
       view.scene.add(mesh)
-      mesh.visible = id === HOME_SPOT
+      mesh.visible = false
       this.rings.set(id, mat)
       this.meshes.set(id, mesh)
-      const tag = view.addLabel(spotName(id), v3([x, y + 0.26 * outward(y), standBase([x, y, 0])[2]]), 'room-label--spot')
+      const words = spotWords(id)
+      const tag = view.addLabel(spotName(id), v3(words.at), `room-label--spot${words.side === 'centre' ? '' : ` room-label--spot-${words.side}`}`)
       tag.hidden = true
       this.tags.set(id, tag)
     }
@@ -86,14 +109,16 @@ export class RouterSpots {
     const arrow = adviceArrow(advice, router)
     for (const [id, mat] of this.rings) {
       mat.color.setHex(id === router ? TEXT : EDGE)
-      this.meshes.get(id)!.visible = spotShown(id, router, arrow)
+      this.meshes.get(id)!.visible = spotShown(id, arrow)
     }
     this.view.host.dataset.adviceArrow = arrow ? arrow.to : ''
     for (const [id, tag] of this.tags) {
-      tag.hidden = !arrow || id !== arrow.to
-      if (!tag.hidden) tag.textContent = `${arrow!.done ? 'Router moved here' : 'Move router here'}, ${spotName(id)}`
+      tag.hidden = !adviceShown(arrow) || id !== arrow!.to
+      // On a desk the distance goes on its own line (room-label--spot-west / -east keep line breaks).
+      const lines = tag.classList.contains('room-label--spot-west') || tag.classList.contains('room-label--spot-east')
+      if (!tag.hidden) tag.textContent = `${arrow!.done ? 'Router moved here' : 'Move router here'},${lines ? '\n' : ' '}${spotName(id)}`
     }
-    this.growTo = arrow ? 1 : 0
+    this.growTo = adviceShown(arrow) ? 1 : 0
     if (arrow) {
       const key = `${arrow.from}>${arrow.to}`
       if (key !== this.arrowKey) {
