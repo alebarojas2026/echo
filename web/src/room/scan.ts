@@ -26,9 +26,21 @@ export function scanUrl(source: NonNullable<ScanSource>, quality: Quality): stri
   return quality === 'hi' ? (source.hi ?? source.lo) : (source.lo ?? source.hi)
 }
 
-/** Where the scan and its alignment are: the dev server's current answer, or what the build found. */
+/** Where the scan and its alignment are: the dev server's current answer, or what the build found with the
+ *  alignment saved on the board (GET /layout, #532) taking over from the build's room.json once there is one. */
 async function scanSource(): Promise<ScanSource> {
-  if (!import.meta.env.DEV) return __ROOM_SCAN__
+  if (!import.meta.env.DEV) {
+    const built = __ROOM_SCAN__
+    if (!built) return null
+    try {
+      const res = await fetch('/layout', { cache: 'no-store', signal: AbortSignal.timeout(2000) })
+      const room = res.ok ? ((await res.json()) as { room?: ScanFit | null }).room : null
+      if (room) return { ...built, fit: room }
+    } catch {
+      // not served by the board, or it has nothing saved: the build's alignment
+    }
+    return built
+  }
   try {
     const res = await fetch('/__room-scan', { cache: 'no-store' })
     if (res.ok) return (await res.json()) as ScanSource
