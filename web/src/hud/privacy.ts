@@ -1,4 +1,16 @@
 import './privacy.css'
+import { feedSource, servedByBoard } from '../room/feed'
+
+// The live privacy meter: the board's GET /privacy (CONTRACTS.md section 11), read once a second.
+// It is read only where the board's feed is (a page the board serves, a built page, ?src=ws), as the
+// records are; the dev server's mock feed gets a mock line with no numbers. ?privacy=board|mock picks one.
+export type PrivacyMode = 'board' | 'mock'
+export function privacyMode(params = new URLSearchParams(location.search), onBoard = servedByBoard(), built = import.meta.env.PROD): PrivacyMode {
+  const pick = params.get('privacy')
+  if (pick === 'board' || pick === 'mock') return pick
+  return feedSource(params, onBoard, built) === 'ws' ? 'board' : 'mock'
+}
+export const MOCK_LINE = 'privacy meter: mock, nothing measured'
 
 type Reading = { ok: true; images: number; bytes_out: number; since_t: number; t: number }
 const listeners = new Set<() => void>()
@@ -48,6 +60,13 @@ export function mountPrivacyLine(host: HTMLElement) {
   host.append(line)
   const values = line.querySelector<HTMLElement>('[data-testid="privacy-values"]')!
   const duration = line.querySelector<HTMLElement>('[data-testid="privacy-duration"]')!
+  if (privacyMode() === 'mock') {
+    values.textContent = MOCK_LINE
+    duration.textContent = ''
+    duration.style.visibility = 'hidden'
+    line.dataset.reason = 'mock mode: the board is not connected'
+    return () => line.remove()
+  }
   const paint = () => {
     const current = reading && performance.now() - changedAt < 3000 ? reading : null
     values.textContent = current ? `${current.images} images stored · ${current.bytes_out} bytes sent out` : 'privacy meter not running'

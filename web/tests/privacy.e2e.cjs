@@ -7,7 +7,7 @@ for (const [width, height] of [[1920,1080],[1440,900]]) test(`privacy stays hone
   let value = { ok: true, images: 0, bytes_out: 0, since_t: 1000, t: 61000 }
   let broken = false, calls = 0
   await page.route('**/privacy', route => { calls++; return broken ? route.fulfill({ status: 404 }) : route.fulfill({ json: value }) })
-  await page.goto('/tests/arrival-harness.html')
+  await page.goto('/tests/arrival-harness.html?privacy=board')   // the harness plays the mock feed; read the meter as the board's page does
   const arrival = page.locator('.hud-arrival'), main = page.locator('#hud')
   await expect(arrival.getByTestId('privacy-values')).toHaveText('0 images stored · 0 bytes sent out')
   await expect(arrival.getByTestId('privacy-duration')).toHaveText('Counting for 1 min 0 s')
@@ -53,4 +53,16 @@ for (const [width, height] of [[1920,1080],[1440,900]]) test(`privacy stays hone
   const stopped = calls
   await page.clock.runFor(3000)
   expect(calls).toBe(stopped)
+})
+
+test('the mock feed gets a mock privacy line and never asks for /privacy', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  let calls = 0
+  await page.route('**/privacy', route => { calls++; return route.fulfill({ json: { ok: true, images: 0, bytes_out: 0, since_t: 1000, t: 61000 } }) })
+  await page.goto('/tests/arrival-harness.html')
+  const arrival = page.locator('.hud-arrival')
+  await expect(arrival.getByTestId('privacy-values')).toHaveText('privacy meter: mock, nothing measured')
+  await expect(arrival.getByTestId('privacy-duration')).toBeHidden()
+  await page.waitForTimeout(1500)
+  expect(calls).toBe(0)
 })
