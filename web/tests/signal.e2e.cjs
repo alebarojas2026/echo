@@ -86,7 +86,7 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await capture(page, `${width}-step-in`)
 
     // After the greeting the same trace stays on the main screen as a compact strip.
-    await play(page, 20, () => ({ first: 7, present: true }))
+    await play(page, 40, () => ({ first: 7, present: true }))
     await expect(page.locator('.hud-arrival')).toBeHidden()
     await expect(strip).toBeVisible()
     const box = await strip.boundingBox()
