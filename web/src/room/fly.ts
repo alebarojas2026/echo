@@ -182,6 +182,20 @@ export class Fly {
     this.begin()
   }
 
+  /**
+   * Finishes whatever move is under way or queued, at once: the camera is put where it was heading. For a tab that
+   * was hidden (no frames ran, so a fly made no progress): when it is looked at again it shows where things are
+   * now, not the start of a fly that should have ended long ago. Nothing to do when nothing is queued.
+   */
+  settle() {
+    const last = this.legs.at(-1)
+    if (!last) return
+    this.cut(last.to)
+    this.from = this.shot
+    this.elapsed = 0
+    this.view.requestRender()
+  }
+
   /** H: to the other framing, from wherever the camera is now. */
   toggle() {
     if (!this.hall) return
@@ -263,6 +277,37 @@ export const HALL_CAPTION = ['Hall model built from a scan, not by the board.', 
  *  gone by the time the desk is what is on screen. */
 export function hallWordsAlpha(wide: number): number {
   return Math.min(1, Math.max(0, (wide - 0.5) / 0.5))
+}
+
+/** How long pred must have said a person is present, without a break, before the room comes down by itself. */
+export const SELF_ARRIVE_MS = 4000
+
+/** How long a person has been present without a break, on the board's own clock (the states' t), so a page whose
+ *  timers are slowed (a hidden tab) still counts right. A state that says nobody starts the count again. */
+export class PresentRun {
+  private since: number | null = null
+  private last = 0
+
+  /** Takes one state: whether it says a person is present, and its t. Returns the run so far, ms. */
+  update(person: boolean, t: number): number {
+    if (!person) this.since = null
+    else this.since ??= t
+    this.last = this.since === null ? 0 : Math.max(0, t - this.since)
+    return this.last
+  }
+
+  get ms(): number {
+    return this.last
+  }
+}
+
+/**
+ * The room's own way down from the hall, as a safety net: the walk-up card still says it is waiting, but the
+ * board has said a person is present for 4 s. The card is the panels' and decides the words; the room does not
+ * leave a person who is standing there looking at a dimmed, empty hall because the card did not yield.
+ */
+export function comesDownAlone(card: string | undefined, presentMs: number): boolean {
+  return card === 'waiting' && presentMs >= SELF_ARRIVE_MS
 }
 
 /** The marks that keep the square and the person readable from the hall framing. */

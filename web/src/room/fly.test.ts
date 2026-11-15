@@ -1,6 +1,6 @@
 import { Box3, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
-import { FIRST_LOOK_MS, FLY_MS, Fly, HALL_CAPTION, cutaway, hallShot, hallWordsAlpha, mixShot, pinnedFraming, wideness } from './fly'
+import { FIRST_LOOK_MS, FLY_MS, Fly, HALL_CAPTION, PresentRun, SELF_ARRIVE_MS, comesDownAlone, cutaway, hallShot, hallWordsAlpha, mixShot, pinnedFraming, wideness } from './fly'
 import { roomShot, type RoomView, type Shot } from './view'
 
 /** Just enough of RoomView for the fly: it records the shots and lets the test run frames. */
@@ -117,6 +117,51 @@ describe('room kept free at the bottom of the close view', () => {
     fly.refit()
     view.run(FLY_MS + 100)
     expect(fly.wide).toBe(1)
+  })
+})
+
+describe('the room coming down by itself', () => {
+  it('counts how long a person has been present on the board\u2019s clock, and starts again when a state says nobody', () => {
+    const run = new PresentRun()
+    expect(run.update(false, 1000)).toBe(0)
+    expect(run.update(true, 2000)).toBe(0)
+    expect(run.update(true, 3500)).toBe(1500)
+    expect(run.update(false, 3600)).toBe(0) // one state that says nobody
+    expect(run.update(true, 3700)).toBe(0)
+    expect(run.update(true, 7700)).toBe(4000)
+    expect(run.ms).toBe(4000)
+    expect(run.update(true, 7000)).toBe(3300) // a board clock stepped back never gives a negative run
+  })
+
+  it('comes down only when the card is still waiting and the person has been there 4 s', () => {
+    expect(SELF_ARRIVE_MS).toBe(4000)
+    expect(comesDownAlone('waiting', 4000)).toBe(true)
+    expect(comesDownAlone('waiting', 3999)).toBe(false)
+    expect(comesDownAlone('found', 9000)).toBe(false) // the card has yielded: it leads
+    expect(comesDownAlone('closed', 9000)).toBe(false)
+    expect(comesDownAlone(undefined, 9000)).toBe(false) // a page with no card flies down on load already
+  })
+
+  it('settles at once where it was heading when a hidden tab is looked at again', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    const hall = hallShot(HALL, 12)
+    fly.hold()
+    fly.setHall(hall)
+    view.run(500)
+    fly.arrive() // found while the tab is hidden: no frames run, so the fly makes no progress
+    expect(fly.wide).toBe(1)
+    fly.settle()
+    expect(fly.wide).toBe(0) // at the desk at once
+    expect(view.host.dataset.view).toBe('square')
+    const shots = view.shots.length
+    view.run(FLY_MS)
+    expect(view.shots.length).toBe(shots) // and no fly left to watch
+    fly.settle() // nothing queued: nothing happens
+    expect(fly.wide).toBe(0)
+    fly.hold()
+    fly.settle()
+    expect(fly.wide).toBe(1) // waiting again: it rests on the hall, and settling does not move it
   })
 })
 
