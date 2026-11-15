@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Arrival mocks</title><style>html,body{margin:0;min-height:100%;background:var(--bg,#111316)}.shell-hud{position:fixed;inset:0 auto 0 0;z-index:1}</style></head>
+<body><div id="room"></div><aside id="hud" class="shell-hud"></aside>
+<script type="module">
+import '../src/room/room.css'
+import { mountRoom } from '../src/room'
+import { mountHud } from '../src/hud'
+import { mockState } from '../src/room/mock'
+import { loadLayout } from '../src/room/layout'
+await loadLayout()
+let state = { ...mockState('empty', 0, 0), armed: false }
+let stale = false
+const listeners = new Set(), events = new Set()
+const commands = []
+const current = () => ({ state, stale, source: 'mock', connected: true, receivedAt: performance.now() })
+const feed = { source: 'mock', current, subscribe(fn) { listeners.add(fn); fn(current()); return () => listeners.delete(fn) }, onEvent(fn) { events.add(fn); return () => events.delete(fn) }, send(cmd, args) { commands.push({ cmd, args }) } }
+mountRoom(document.querySelector('#room'), feed)
+const dispose = mountHud(document.querySelector('#hud'), feed)
+let seq = 0
+window.arrival = {
+  commands, dispose,
+  update(name, overrides = {}, isStale = false) { state = { ...mockState(name, 0, 7000), armed: false, ...overrides }; stale = isStale; listeners.forEach(fn => fn(current())) },
+  event(kind, id = String(++seq)) { events.forEach(fn => fn({ v: 2, type: 'event', src: 'sim', seq, t: state.t, id, kind, info: {} })) },
+}
+const mock = new URLSearchParams(location.search).get('mock')
+if (mock === 'arrival') setTimeout(() => { window.arrival.event('enter'); window.arrival.update('still') }, 2000)
+if (mock === 'armed') { window.arrival.update('empty', { armed: true }); setTimeout(() => { window.arrival.update('still', { armed: true }); window.arrival.event('intrusion') }, 2000) }
+</script></body></html>

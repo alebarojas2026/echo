@@ -2,6 +2,8 @@ import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import './judge.css'
 import { mountAskRoom } from './ask-room'
+import { updateProofVisibility } from './proof-visibility'
+import { mountArrival } from './arrival'
 import { changingText } from './changing-text'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
@@ -41,6 +43,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     item.innerHTML = `<dt>${label}</dt><dd data-testid="${id}">__</dd>`
     metrics.append(item)
   }
+  updateProofVisibility(root)
   const panels = Object.values(extraPanels).map(module => {
     const container = document.createElement('section')
     root.querySelector('.judge-extra')!.append(container)
@@ -56,6 +59,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   document.addEventListener('keydown', key)
   const disposeAsk = mountAskRoom(root.querySelector('header')!)
+  const disposeArrival = mountArrival(root, feed, operator)
   let disposed = false
   let lastState: StateMsg | null = null
   let lastStale = true
@@ -93,10 +97,11 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     if (disposed) return
     const values = [score(proof?.zone), score(proof?.person_vs_object), number(proof?.train_s, ' s'), number(proof?.ms_per_decision?.p50, ' ms'), number(proof?.watts?.radio_only), number(proof?.bytes_out), number(proof?.images_stored), number(proof?.models_on_board)]
     Object.keys(proofLabels).forEach((id, index) => set(id, values[index]))
+    updateProofVisibility(root)
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposeAsk(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposeAsk(); disposeArrival(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
