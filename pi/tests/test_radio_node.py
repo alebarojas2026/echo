@@ -310,7 +310,8 @@ def test_windows_get_one_rate_per_status_line(monkeypatch):
     windows = {}
     run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=loops(20), clock=Clock(1.0), windows=windows,
         log=lambda line: None)
-    assert windows == {"east>pi5:ble": [0.5, 0.0], "west>pi5:ble": [0.0, 0.0]}
+    # one rate per status line for every link Pi A hears (pi5b>pi5:ble too in the desk layout)
+    assert windows == {link: ([0.5, 0.0] if link == "east>pi5:ble" else [0.0, 0.0]) for link in radio_node.PI_LINKS}
 
 
 def test_timed_run_prints_the_summary(monkeypatch, capsys):
@@ -319,6 +320,8 @@ def test_timed_run_prints_the_summary(monkeypatch, capsys):
     monkeypatch.setattr(radio_node, "BUS_HOST", "127.0.0.1")
     radio_node.main(["--seconds", "0.2"])
     err = capsys.readouterr().err.splitlines()
-    assert err[-3].split()[:5] == ["link", "n", "adverts/s", "lowest", "10s"]
-    assert err[-2].split()[:2] == ["east>pi5:ble", "1"] and err[-2].split()[-1] == "-61.0"
-    assert err[-1].split()[:2] == ["west>pi5:ble", "1"] and err[-1].split()[-1] == "-70.0"
+    rows = {line.split()[0]: line.split() for line in err[-len(radio_node.PI_LINKS):]}
+    assert err[-len(radio_node.PI_LINKS) - 1].split()[:5] == ["link", "n", "adverts/s", "lowest", "10s"]
+    assert list(rows) == list(radio_node.PI_LINKS)
+    assert rows["east>pi5:ble"][1] == "1" and rows["east>pi5:ble"][-1] == "-61.0"
+    assert rows["west>pi5:ble"][1] == "1" and rows["west>pi5:ble"][-1] == "-70.0"

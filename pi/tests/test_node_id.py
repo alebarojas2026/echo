@@ -33,10 +33,13 @@ def adv_data(fake):
     return next(p for p in fake.sent if p[1:3] == bytes([0x08, 0x20]))[4:]
 
 
-def test_pi5_by_default_advertises_s_and_reports_its_two_links():
+def test_pi5_by_default_advertises_s_and_reports_the_links_it_hears():
+    from radio.nodes import LINKS
     assert radio_node.RX == "pi5"
-    assert radio_node.RADIO_NODES == ["pi5"]
-    assert radio_node.heard_by("pi5") == radio_node.PI_LINKS == ("east>pi5:ble", "west>pi5:ble")
+    assert "pi5" in radio_node.RADIO_NODES   # and pi5b once nodes.json has the desk layout
+    heard = tuple(link for link, e in LINKS.items() if e["rx"] == "pi5" and e["kind"] == "ble")
+    assert radio_node.heard_by("pi5") == radio_node.PI_LINKS == heard
+    assert heard[:2] == ("east>pi5:ble", "west>pi5:ble")   # Pi A's line starts with these (pi.check)
     fake = FakeController()
     radio_node.run(hci.Hci(fake), bus_sock=None, stop=lambda: True, log=lambda line: None)
     assert adv_data(fake)[:8] == bytes.fromhex("07 06 FF FFFF525353")
