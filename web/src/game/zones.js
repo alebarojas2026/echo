@@ -41,16 +41,20 @@ export function deviceName(id) {
 }
 
 // The zones in floor order (north-west first, or west first on a strip; by id when there's neither),
-// each with the small line under its name: "Zone 1, north-west".
+// each with the small line under its name: "Zone 1, north-west". One spot (a single zone) has no line under
+// its name: there is no other zone to tell it from, so no number and no side.
 export function zoneList() {
   const rank = (id) => (ORDER.includes(CORNERS[id]) ? ORDER.indexOf(CORNERS[id]) : ORDER.length)
+  const one = Object.keys(ZONES).length === 1
   return Object.keys(ZONES).map(Number).sort((a, b) => rank(a) - rank(b) || a - b)
-    .map((id) => ({ id, name: ZONES[id], hint: WORDS[CORNERS[id]] ? `Zone ${id}, ${WORDS[CORNERS[id]]}` : `Zone ${id}` }))
+    .map((id) => ({ id, name: ZONES[id], hint: one ? '' : WORDS[CORNERS[id]] ? `Zone ${id}, ${WORDS[CORNERS[id]]}` : `Zone ${id}` }))
 }
 
 // The two words under the floor: which way is which. The square names the router's side; the desk strip
-// is a row of zones, so it names its ends.
+// is a row of zones, so it names its ends. One spot names nothing: the router sits beside the board at the
+// desk there, so "South: the router" would be wrong, and there are no ends to name.
 export function compass() {
+  if (Object.keys(ZONES).length === 1) return []
   const sides = Object.values(CORNERS)
   if (sides.length && sides.every((c) => c === 'W' || c === 'E')) return ['West', 'East']
   return ['South: the router', 'North is up']
