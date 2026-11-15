@@ -28,6 +28,7 @@ from brain.train import Model
 from brain.xray import Xray
 
 BASELINE_MS = 20_000
+BASELINE_GIVE_UP_MS = 120_000   # a baseline asked for by hand that still can't start after this long is dropped
 HOME = "S-home"
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 CAM_SILENT_MS = 3_000
@@ -511,9 +512,10 @@ class Brain:
 
     def _start_capture(self, new_place: Optional[bool] = None):
         """new_place None = keep what the running capture was asked for (a restart of its 20 s)."""
+        asked = self.capture["asked"] if self.capture else None   # set on the first tick: the clock may not have started
         if new_place is None:
             new_place = bool(self.capture and self.capture["new_place"])
-        self.capture = {"start": None, "messages": [], "new_place": new_place}
+        self.capture = {"start": None, "messages": [], "new_place": new_place, "asked": asked}
 
     def _new_place(self, now) -> None:
         """The operator's baseline finished: nothing learned before it is used from here on.
@@ -558,11 +560,21 @@ class Brain:
         now = self.now()
         if self.capture:
             wait = self._capture_wait(now)
+            if self.capture["asked"] is None:
+                self.capture["asked"] = now
             if wait != self._wait_said:             # said once per reason, not on every message
                 self._wait_said = wait
                 log = logging.getLogger("brain")
                 log.warning("baseline is waiting: %s", wait) if wait else log.info("baseline: capturing 20 s")
-            if wait:
+            if wait and self.capture["new_place"] and not self.recalibrating \
+                    and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS:
+                # Pressed by mistake in front of an audience, or the room never cleared: without
+                # this pred stays hidden for ever. The old baseline and the model are untouched.
+                logging.getLogger("brain").warning(
+                    "baseline given up after %d s (%s); press Baseline again when the square is clear",
+                    BASELINE_GIVE_UP_MS // 1000, wait)
+                self.capture, self._wait_said = None, ()
+            elif wait:
                 self._start_capture()               # a condition broke: the 20 s start again
             elif self.capture["start"] is None:
                 self.capture["start"] = now
