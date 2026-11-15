@@ -6,12 +6,16 @@ export function mountPanel(root:HTMLElement) {
   root.className='sealed-record';root.dataset.testid='sealed-record';root.hidden=true
   const privacy=root.closest('.judge')?.querySelector(':scope > .judge-privacy')
   privacy?.after(root)
+  const arrival=document.createElement('p');arrival.className='sealed-record';arrival.dataset.testid='sealed-record-arrival';arrival.hidden=true
   let chain:ChainState|null=null,stale=true,bad:number|null=null,request:AbortController|null=null,next=0,disposed=false
   const paint=()=>{
-    root.hidden=!chain
-    if (!chain) {root.textContent='';delete root.dataset.seq;return}
-    const line=chainLine(chain,stale,bad)
-    root.textContent=line.text;root.dataset.tone=line.fault?'fault':'';root.dataset.seq=String(chain.seq)
+    if (!arrival.isConnected) document.querySelector('.hud-arrival > header')?.after(arrival)
+    for (const view of [root,arrival]) {
+      view.hidden=!chain
+      if (!chain) {view.textContent='';delete view.dataset.seq;continue}
+      const line=chainLine(chain,stale,bad)
+      view.textContent=line.text;view.dataset.tone=line.fault?'fault':'';view.dataset.seq=String(chain.seq)
+    }
   }
   const clear=()=>{request?.abort();request=null;bad=null;next=0}
   const poll=async()=>{
@@ -35,6 +39,6 @@ export function mountPanel(root:HTMLElement) {
       if (chain?.verified===false && !stale) void poll()
     },
     reset(){clear();chain=null;paint()},
-    dispose(){disposed=true;clear();root.remove()},
+    dispose(){disposed=true;clear();root.remove();arrival.remove()},
   }
 }

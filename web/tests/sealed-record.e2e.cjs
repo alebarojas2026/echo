@@ -4,7 +4,10 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`sealed record remains
  await page.route('**/nodes.json',r=>r.fulfill({json:layout}));await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'})
  let calls=0,release
  await page.route('**/chain',async r=>{calls++;await new Promise(resolve=>release=resolve);await r.fulfill({json:{verified:false,first_bad_seq:4012}}).catch(()=>{})})
- await page.goto('/tests/arrival-harness.html?op=1');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:30000});await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
+ await page.goto('/tests/arrival-harness.html?op=1');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:30000});await page.keyboard.press('Escape')
+ await page.evaluate(chain=>window.arrival.update('empty',{chain}),chain);await expect(page.getByTestId('sealed-record-arrival')).toHaveText('Sealed record · verified · 2 witnesses');await expect(page.getByTestId('sealed-record-arrival')).toBeVisible()
+ if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-walk-up.png`)})}
+ await page.keyboard.press('o');await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
  const line=page.getByTestId('sealed-record'),send=async(value,stale=false)=>page.evaluate(({value,stale})=>window.arrival.update('empty',{chain:value,model:{trained:false,ver:null},teacher:null,cam:'off'},stale),{value,stale})
  const shot=async name=>{if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-${name}.png`)})}}
  await send(undefined);await expect(line).toBeHidden();expect(calls).toBe(0);await shot('absent')

@@ -1,3 +1,5 @@
-.judge > .sealed-record { flex-shrink:0; font:500 28px/36px var(--sans); color:var(--text-2); overflow-wrap:anywhere; }
-.judge > .sealed-record[hidden] { display:none; }
-.judge > .sealed-record[data-tone="fault"] { color:var(--fault); }
+.judge > .sealed-record,.hud-arrival > .sealed-record { flex-shrink:0; font:500 28px/36px var(--sans); color:var(--text-2); overflow-wrap:anywhere; }
+.sealed-record[hidden] { display:none; }
+.sealed-record[data-tone="fault"] { color:var(--fault); }
+
+.hud-arrival > .sealed-record { margin:24px 0 0; }
