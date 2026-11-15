@@ -1,6 +1,6 @@
-"""Pin the code under test: agent/ and store/ from #474's branch, nodes.json from the desk layout.
+"""Pin the code under test: agent/ and store/ (#474, now on main), nodes.json from the desk layout.
 
-    python -m lab.ask_bench.overlay [--agent origin/ask-the-room] [--nodes origin/layout-desk]
+    python -m lab.ask_bench.overlay [--agent origin/main] [--nodes origin/layout-desk]
 
 Files go to lab/ask_bench/.overlay/ (git-ignored) with the commit ids in pins.json, so a
 score always names the exact code it came from. Nothing is copied into this branch.
@@ -13,7 +13,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 OVERLAY = HERE / ".overlay"
-AGENT_REF, NODES_REF = "origin/ask-the-room", "origin/layout-desk"
+AGENT_REF, NODES_REF = "origin/main", "origin/layout-desk"   # #474 merged to main
 FILES = ("agent/__init__.py", "agent/ask.py", "agent/tools.py", "store/__init__.py", "store/__main__.py")
 
 
