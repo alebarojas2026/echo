@@ -721,6 +721,10 @@ def test_a_restart_brings_the_model_back_without_a_new_walk(tmp_path):
     first = again.state()["model"]
     assert first["trained"] and first["ver"] == "m1" and first["train_sessions"] == ["s01", "s02", "s10", "s11"]
     assert [e["kind"] for e in again.events] == []     # nothing trained, nothing announced
+    assert again.model.train_walkers == brain.model.train_walkers == ["w1", "w2"]   # provenance survives (#580)
+    import pickle
+    with open(tmp_path / "model.pkl", "rb") as f:
+        assert pickle.load(f)["train_walkers"] == ["w1", "w2"]
     feed2 = Feed(again)
     feed2.t = feed.t
     seen = []
