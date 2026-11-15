@@ -123,7 +123,9 @@ def test_report_with_several_intrusions_a_hall_link_and_a_tamper():
     assert out["intrusions"] == [{"t": T0 + 20_000, "zone": 1}, {"t": T0 + 30_000, "link": "h>unoq:ble"},
                                  {"t": T0 + 35_000, "zone": 2}]
     assert out["tamper"] == [{"t": T0 + 41_000, "node": "east"}]
-    assert "Intrusion alerts: 3, the first on the left" in out["text"] and "Tamper alerts: 1; the device east went quiet first, at " in out["text"]
+    assert "Intrusion alerts: 3, the first on the left" in out["text"] and "Tamper alerts: 1; " in out["text"]
+    named = R.device_names().get("east")          # the layout's own name for it, when nodes.json has one
+    assert f"{'the ' + named if named else 'the device east'} went quiet first, at " in out["text"]
     assert R.problem(out["text"], out) is None
     assert "the East beacon went quiet first, at " in R.template(out, ZONES, {"east": "East beacon"})
     assert "the first in the Hall zone at " in R.template(out, {1: "Hall"})
@@ -146,7 +148,9 @@ def test_never_armed_gives_no_report():
 def test_the_models_text_is_used_only_when_every_number_is_the_reports_own():
     s = armed_store(intrusions=[(20, {"zone": 2})])
     good = "While armed, one intrusion alert came from the right. Someone stayed for 20 s and the sensor was blind for 6 s."
-    assert run(s, lambda m: good) == ({**run(s)[0], "text": good, "ms": run(s, lambda m: good)[0]["ms"]}, "llm")
+    written, why = run(s, lambda m: good)
+    fields = lambda r: {k: v for k, v in r.items() if k not in ("text", "ms")}   # noqa: E731
+    assert (written["text"], why) == (good, "llm") and fields(written) == fields(run(s)[0])
     for bad, reason in (("Someone was here for 25 s.", "a number that is not in the report (25)"),
                         ("There were three intrusion alerts.", "a number that is not in the report (three)"),
                         ("A burglar was here for 20 s.", "a word we never use (burglar)"),
