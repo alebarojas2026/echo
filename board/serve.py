@@ -69,6 +69,7 @@ MAX_ASK_BYTES = 2048
 MAX_CLOCK_BYTES = 256
 SAVE_FROM = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "192.168.77.0/24", "10.42.0.0/24")]
 MAX_API_BODY = 8192
+DRAIN_MAX = 1 << 20   # a refused POST body is read and thrown away up to this size, so the refusal arrives
 # Added to index.html as it is served: the page knows it came from the board, so it shows live data.
 BOARD_META = '<meta name="radio-sight-board" content="live">'
 SPAN_MAX_MS = 30 * 60 * 1000    # /history answers at most 30 minutes per call (CONTRACTS.md section 10)
@@ -279,11 +280,18 @@ class Handler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
             return
-        if 0 < length <= MAX_API_BODY:
-            try:
-                self._read(length)
-            except OSError:
-                pass
+        # A body over the limit is refused too ("too big"), and it has to be read all the same or that
+        # answer is lost to the reset. It is thrown away piece by piece, up to DRAIN_MAX.
+        left = min(length, DRAIN_MAX)
+        self._body_read = True
+        try:
+            while left > 0:
+                piece = self.rfile.read(min(left, 65536))
+                if not piece:
+                    break
+                left -= len(piece)
+        except OSError:
+            pass
 
     def _clock_post(self):
         try:
