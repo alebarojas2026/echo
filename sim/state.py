@@ -51,10 +51,10 @@ SENTENCES = {   # template narration, one short sentence per event kind
     "advice_result": "The router's link went from {before_dbm} to {after_dbm} dBm.",
     "router_moved": "The router was moved.", "router_home": "The router is back home.",
     "cam_on": "The camera is on.", "cam_stalled": "The camera has stalled.", "cam_off": "The camera is off.",
+    "tamper": "A device went quiet while the space was armed.", "tamper_cleared": "The quiet device is back.",
 }
 ARMED_SENTENCES = {"armed": "Armed: this space should be empty now.", "disarmed": "Disarmed.",
-                   "intrusion": "Someone is here while armed, in zone {zone}.",
-                   "tamper": "A device went silent while armed.", "tamper_cleared": "The silent device is back."}
+                   "intrusion": "Someone is here while armed, in zone {zone}."}
 TAMPER_SILENT_S, TAMPER_CLEAR_S = 3.0, 2.0   # section 6, Tamper (issue #533), as in brain/alert.py
 NO_NODE = {"object_on": "Something new is sitting in the room.", "object_off": "The new object is gone."}
 

@@ -311,3 +311,61 @@ def test_serve_narrates_events_from_a_fake_feed():
     asyncio.run(n.serve(feed(), nar, poll_s=0.01))
     assert [(m["event_id"], m["source"], m["text"]) for m in sent] == [
         ("e2", "llm", "Someone moved over to zone 4.")]
+
+
+# ---------------------------------------------------------------- tamper (issue #578)
+
+DESK_NODES = {"zones": [{"id": 1, "name": "Left", "still_alert_s": 10}, {"id": 2, "name": "Right", "still_alert_s": 10}],
+              "nodes": [{"id": "east", "name": "East beacon"}, {"id": "pi5b", "name": "Pi B"}, {"id": "west"}],
+              "hall": {"beacons": [{"node": "h", "id": "H"}, {"node": "j", "id": "J"}]}}
+
+
+@pytest.fixture
+def desk_words(tmp_path):
+    f = tmp_path / "nodes.json"
+    f.write_text(json.dumps(DESK_NODES))
+    zones, devices = dict(n.ZONES), dict(n.DEVICES)
+    n.set_zones(n.load_zones(f))
+    n.set_devices(n.load_devices(f))
+    yield
+    n.set_zones(zones)
+    n.set_devices(devices)
+
+
+def test_tamper_names_the_device_on_the_square():
+    assert n.template("tamper", {"node": "east"}) == "The east beacon went quiet while the space was armed."
+    assert n.template("tamper_cleared", {"node": "east"}) == "The east beacon is back."
+    assert n.template("tamper", {}) == "A device went quiet while the space was armed."
+    assert n.template("tamper_cleared", {"node": "nobody-knows"}) == "The quiet device is back."
+
+
+def test_tamper_on_the_desk_uses_the_names_in_nodes_json_and_the_hall_paths(desk_words):
+    assert n.desk()
+    assert n.template("tamper", {"node": "east"}) == "The East beacon went quiet while the space was armed."
+    assert n.template("tamper", {"node": "west"}) == "The west beacon went quiet while the space was armed."   # no name: plain words
+    assert n.template("tamper", {"node": "h"}) == "The far beacon on path H went quiet while the space was armed."
+    assert n.template("tamper_cleared", {"node": "j"}) == "The far beacon on path J is back."
+
+
+@pytest.mark.parametrize("text", [n.template(k, {"node": node}) for k in ("tamper", "tamper_cleared")
+                                  for node in ("east", "pi5", "h", None)])
+def test_tamper_words_stay_inside_the_rules(text):
+    assert len(text.split()) <= 16 and n.problem(text, text, camera_off=True) is None
+    assert not any(word in text.lower() for word in ("attack", "burglar", "intruder", "who"))
+
+
+def test_tamper_waits_its_turn_in_the_8_s_spacing():
+    clock = Clock()
+    nar, sent = make(reply=lambda msgs: (msgs[-1]["content"].split("Facts: ")[1], "m"), clock=clock)
+    nar.observe(event("tamper", id="e1", info={"node": "east"}))
+    assert nar.step()["text"] == "The east beacon went quiet while the space was armed."
+    clock.t = NOW + 6000                            # east is back 6 s later
+    nar.observe(event("tamper_cleared", t=clock.t, id="e2", info={"node": "east"}))
+    assert nar.step() is None                       # inside the 8 s gap
+    clock.t = NOW + 8000
+    assert nar.step()["text"] == "The east beacon is back."
+    assert [m["event_id"] for m in sent] == ["e1", "e2"]
+
+
+def test_tamper_outranks_everything_but_an_intrusion():
+    assert n.rank("intrusion") < n.rank("tamper") < n.rank("alert_on")
