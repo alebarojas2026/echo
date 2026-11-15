@@ -11,19 +11,21 @@ LINKS = [link["id"] for link in DOC["links"]]
 T0 = 1_000_000
 
 
-def of(node):
-    return [link["id"] for link in DOC["links"] if node in (link["tx"], link["rx"])]
+def of(node, doc=DOC):
+    return [link["id"] for link in doc["links"] if node in (link["tx"], link["rx"])]
 
 
-def run(seconds, silent=(), armed=True, rule=None, t0=T0, loss=0.0, burst=None, seed=0, arm_at=None, last=None):
+def run(seconds, silent=(), armed=True, rule=None, t0=T0, loss=0.0, burst=None, seed=0, arm_at=None, last=None,
+        doc=DOC, dead=()):
     """10 ticks and 10 readings a second per link. silent: {node: (from_s, to_s)}. burst: (every_s, long_s)
-    of total silence on every link. Returns (rule, [(seconds, kind, node)], last_seen, end time)."""
-    rule, rng, last, events = rule or Tamper.from_nodes(DOC), random.Random(seed), dict(last or {}), []
+    of total silence on every link. dead: {link: (from_s, to_s)}, single links that stop.
+    Returns (rule, [(seconds, kind, node)], last_seen, end time)."""
+    rule, rng, last, events = rule or Tamper.from_nodes(doc), random.Random(seed), dict(last or {}), []
     for i in range(int(seconds * 10)):
         now, s = t0 + i * 100, i / 10
         in_burst = burst and s >= burst[0] and (s % burst[0]) < burst[1]   # the first burst after one period
-        for link in LINKS:
-            off = any(a <= s < b and link in of(node) for node, (a, b) in dict(silent).items())
+        for link in [link["id"] for link in doc["links"]]:
+            off = any(a <= s < b and link in of(node, doc) for node, (a, b) in dict(silent).items())                 or any(a <= s < b for k, (a, b) in dict(dead).items() if k == link)
             if not off and not in_burst and rng.random() >= loss:
                 last[link] = now
         on = armed if arm_at is None else s >= arm_at
@@ -50,6 +52,37 @@ def test_packet_loss_and_one_second_bursts_never_look_like_tamper():
         assert events == [], (seed, events[:3])
     _, events, _, _ = run(30, loss=0.6, burst=(7, 1.0), silent={"west": (10, 15)}, seed=9)
     assert [(k, n) for _, k, n in events if k == "tamper"] == [("tamper", "west")]   # a real 5 s silence: exactly one
+
+
+def test_a_device_that_is_back_is_cleared_even_when_most_of_its_packets_are_lost():
+    for seed in range(5):                                                      # 75% loss: 2 or 3 readings a second get through
+        _, events, _, _ = run(60, loss=0.75, burst=(7, 1.0), silent={"west": (10, 15)}, seed=seed)
+        assert [(k, n) for _, k, n in events] == [("tamper", "west"), ("tamper_cleared", "west")], (seed, events)
+        assert 16.9 <= events[1][0] <= 19.5, (seed, events)                    # about 2 s after it is back, and it stays cleared
+
+
+def test_on_the_desk_layout_the_node_named_is_the_one_that_went_silent():
+    from brain.tests.test_layout import desk
+    doc, ids = desk()
+    names = lambda events: [(k, n) for _, k, n in events]
+    _, events, _, _ = run(20, silent={"pi5b": (5, 10)}, doc=doc)               # Pi B unplugged: its six links stop
+    assert names(events) == [("tamper", "pi5b"), ("tamper_cleared", "pi5b")]
+    # Pi A unplugged: the hotspot goes with it, so what Pi B hears stops arriving too. Pi B is
+    # still heard by the board, so only Pi A is named.
+    relayed = {k: (5, 10) for k in ids if k.endswith(("pi5b:ble", "pi5b:wifi"))}
+    _, events, _, _ = run(20, silent={"pi5": (5, 10)}, dead=relayed, doc=doc)
+    assert names(events) == [("tamper", "pi5"), ("tamper_cleared", "pi5")]
+    # the board's Bluetooth reader stops but its Wi-Fi reading goes on: one reader down, no device named
+    reader = {k: (5, 10) for k in ids if k.endswith("unoq:ble")}
+    assert run(20, dead=reader, doc=doc)[1] == []
+
+
+def test_the_two_times_are_settings_with_the_contract_values_as_defaults():
+    rule = Tamper.from_nodes(DOC)
+    assert (rule.silent_ms, rule.clear_ms) == (3000, 2000)
+    quick = Tamper.from_nodes(DOC, silent_ms=1000, clear_ms=500)
+    _, events, _, _ = run(20, silent={"east": (5, 10)}, rule=quick)
+    assert [(s, k) for s, k, _ in events] == [(5.9, "tamper"), (10.5, "tamper_cleared")]
 
 
 def test_disarming_clears_it_and_arming_with_a_node_already_silent_raises_it_at_once():
