@@ -218,10 +218,52 @@ export function alertWordAt(zone: number): [Vec3, 'west' | 'east' | 'south'] {
   return [[east ? floorSize()[0] + 0.08 : -0.08, north ? y1 - 0.2 : y0 + 0.2, 0], east ? 'east' : 'west']
 }
 
-/** Where a node sits now. The router follows state.router to its spot. */
+/** Half a device's cube: how far its middle is above what it sits on. */
+const SEAT_M = 0.04
+/** How far above a device's own height the room looks for furniture it must be sitting on. */
+const SEAT_REACH_M = 0.4
+/** Around its middle a device rests on things this far out, so one on a desk's very edge still sits on the desk. */
+const SEAT_FOOT_M = 0.05
+
+type Surface = (x: number, y: number, top: number) => number | null
+let surface: Surface | null = null
+const seats = new Map<string, Vec3>()
+
+/**
+ * The room model's surfaces, when there is a model (the hall): `under(x, y, top)` is the height of its highest
+ * surface at or below `top` under a contract point, or null. With it, a device is never drawn inside furniture
+ * (seated). Null takes it away again. Call it again after the model is moved.
+ */
+export function setSurface(under: Surface | null) {
+  surface = under
+  seats.clear()
+}
+
+/**
+ * Where a device at `p` is drawn. Where the file has it, unless the room's model has furniture there whose top is
+ * above the device's underside: then it sits on that top. The file's heights are measured from one floor, and the
+ * hall's rows are tiered, so the far end of the gate on the desk of the row behind is really a step higher than
+ * the board; drawn at the file's height it would be inside that desk.
+ */
+export function seated(p: Vec3): Vec3 {
+  if (!surface) return p
+  const key = p.map((v) => Math.round(v * 100)).join(',')
+  const known = seats.get(key)
+  if (known) return known
+  let top: number | null = null
+  for (const [dx, dy] of [[0, 0], [SEAT_FOOT_M, 0], [-SEAT_FOOT_M, 0], [0, SEAT_FOOT_M], [0, -SEAT_FOOT_M]]) {
+    const h = surface(p[0] + dx, p[1] + dy, p[2] + SEAT_REACH_M)
+    if (h !== null && (top === null || h > top)) top = h
+  }
+  const at: Vec3 = top !== null && top > p[2] - SEAT_M ? [p[0], p[1], Math.round((top + SEAT_M) * 1000) / 1000] : p
+  seats.set(key, at)
+  return at
+}
+
+/** Where a node sits now. The router follows state.router to its spot. In a room model, on its furniture (seated). */
 export function nodePosition(id: NodeId, router: string | null | undefined): Vec3 {
-  if (id === routerId() && router && ROUTER_SPOTS[router]) return ROUTER_SPOTS[router]
-  return NODES[id]?.xyz ?? [0, 0, 0]
+  if (id === routerId() && router && ROUTER_SPOTS[router]) return seated(ROUTER_SPOTS[router])
+  return seated(NODES[id]?.xyz ?? [0, 0, 0])
 }
 
 /** How far from the router the tray goes, toward the receiver. */

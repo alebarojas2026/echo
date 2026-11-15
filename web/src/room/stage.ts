@@ -176,6 +176,21 @@ export function tableGeometry(up: number): BufferGeometry {
   ])
 }
 
+/**
+ * Whether a device gets a solid piece of desk top drawn under it: it stands across the spot on the room model's
+ * own furniture (the desk of the row behind). That desk is drawn see-through in the close view so the person
+ * shows through it, which would leave the device hanging in the air; the piece under it says what it sits on.
+ */
+export function onPad(p: Vec3, base: Vec3, inModel: boolean): boolean {
+  return inModel && STRIP_M !== null && p[1] < -0.01 && p[2] - base[2] < TABLE_MIN_M
+}
+
+/** The piece of desk top under a device that sits on the model's furniture: the table's top without its legs,
+ *  lying on that furniture. Scene units, the surface under the device at the origin. */
+export function padGeometry(): BufferGeometry {
+  return shadedGeometry([{ geom: new BoxGeometry(TABLE_W_M, 0.02, TABLE_D_M), light: mix(EDGE, SQUARE, 0.35), dark: mix(FLOOR, EDGE, 0.7), at: at(0, 0.006, TABLE_D_M / 2 - 0.05) }])
+}
+
 /** How far around its middle a device rests on things: its stand runs to the highest surface within this of it,
  *  so a device on a desk's very edge stands on the desk, not on the floor beside it. */
 const FOOT_M = 0.05
@@ -207,7 +222,8 @@ interface NodeMesh {
   /** 0..1 as drawn, and where it is heading: 1 heard, LOST_ALPHA heard before but quiet now, 0 never heard. */
   alpha: number
   alphaTo: number
-  /** The table under it, when it stands on one of its own (onTable), and how high above the ground it is. */
+  /** The table under it, when it stands on one of its own (onTable), and how high above the ground it is; or the
+   *  piece of desk top under it (onPad), with -1. */
   table: Mesh<BufferGeometry, MeshBasicMaterial> | null
   tableUp: number
 }
@@ -308,14 +324,15 @@ export class Stage {
       // The stand: a post up to the head from what is under it in the room's model, else from the drawn desk top
       // or the floor.
       const base = this.standFor(n.id, p)
-      // A device across the spot is on the edge of a table of its own, at whatever height it stands.
-      const up = onTable(p, base) ? Math.round((p[2] - base[2]) * 100) / 100 : 0
+      // A device across the spot is on the edge of a table of its own, at whatever height it stands; or on the
+      // model's furniture, with a piece of its top drawn solid under it (-1).
+      const up = onTable(p, base) ? Math.round((p[2] - base[2]) * 100) / 100 : onPad(p, base, this.ground !== null) ? -1 : 0
       if (up !== n.tableUp) {
         if (n.table) {
           this.group.remove(n.table)
           n.table.geometry.dispose()
         }
-        n.table = up ? new Mesh(tableGeometry(up), new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: n.alpha })) : null
+        n.table = up ? new Mesh(up > 0 ? tableGeometry(up) : padGeometry(), new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: n.alpha })) : null
         if (n.table) this.group.add(n.table)
         n.tableUp = up
       }
@@ -323,7 +340,7 @@ export class Stage {
         n.table.position.copy(v3(base))
         n.table.visible = n.alpha > 0
       }
-      n.post.geometry.setPositions([...v3(up ? [p[0], p[1], p[2] - HEAD_M / 2] : base).toArray(), ...top.toArray()])
+      n.post.geometry.setPositions([...v3(up > 0 ? [p[0], p[1], p[2] - HEAD_M / 2] : base).toArray(), ...top.toArray()])
       // Each label hangs off the cube's face on its side, so the cube never sits on its own label.
       const [dx, dz] = { above: [0, HEAD_M / 2], 'above-left': [0, HEAD_M / 2], 'above-right': [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0], 'below-right': [0, -HEAD_M / 2], 'below-left': [0, -HEAD_M / 2] }[nodeLabelSide(n.id)]
       this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))

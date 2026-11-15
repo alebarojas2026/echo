@@ -11,7 +11,7 @@ import { Fly, HallMarks, cutaway, hallShot, pinnedFraming } from './fly'
 import { Presence } from './ghost'
 import { HeardNodes } from './heard'
 import { Replay, rowAlert, rowPred, secondKind, type HistoryRow, type ReplayFrame } from './replay'
-import { NODES, SIZE_M, STRIP_M, deviceAcross } from './frame'
+import { NODES, SIZE_M, STRIP_M, deviceAcross, setSurface } from './frame'
 import { DEFAULT_CUT_M, loadScan, type Scan } from './scan'
 import { Mirror } from './mirror'
 import { RouterSpots } from './spots'
@@ -109,7 +109,11 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
         situ = s
         // Every device stands on what the hall really has under it, wherever nodes.json puts it.
         const [fw, fh] = SIZE_M
-        stage.setGround((x, y, z) => s.under(x - fw / 2, fh / 2 - y, z))
+        const under = (x: number, y: number, z: number) => s.under(x - fw / 2, fh / 2 - y, z)
+        // And never inside it: a device on the next row's desk sits on that desk's top, a tier above ours.
+        setSurface(under)
+        stage.setGround(under)
+        beams.refresh()
         presence.setTrueSize(true)
         fly.setClose(inSituShot)
       }

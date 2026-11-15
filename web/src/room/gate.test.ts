@@ -6,7 +6,7 @@ import { DESK_LAYOUT, GATE_LAYOUT } from './layouts.fixture'
 import { mockState, tourAt } from './mock'
 import { clearBox } from './scan'
 import { adviceArrow } from './spots'
-import { onTable, standBase, tableGeometry } from './stage'
+import { onPad, onTable, padGeometry, standBase, tableGeometry } from './stage'
 import { defaultSpot, deskFit, type HallDesks } from './desks'
 import { hallShot, mixShot } from './fly'
 import { xrayGeometry } from './xray'
@@ -148,6 +148,56 @@ describe('the gate layout', () => {
       expect(box.min.z).toBeCloseTo(-0.05) // the device at the table's near edge, the table reaching away from the spot
       expect(box.max.z).toBeCloseTo(0.25) // a small table: it clears the next block across a 1.2 m aisle
     }
+  })
+
+  it('seats a device on the hall\u2019s furniture when the file\u2019s height would put it inside it', () => {
+    // A hall with our desk's top at 0.745 m and the row behind a tier (0.156 m) higher, its desk from y = -0.195.
+    const under = (_x: number, y: number, top: number) => {
+      const tops = y >= 0.79 ? [0, 0.745] : y <= -0.195 ? [0.156, 0.901] : [0]
+      const below = tops.filter((h) => h <= top)
+      return below.length ? Math.max(...below) : null
+    }
+    const b = frame.NODES.pi5b.xyz
+    expect(frame.seated(b)).toEqual(b) // no model: where the file has it
+    frame.setSurface(under)
+    expect(frame.seated(b)).toEqual([0.4, -0.2, 0.941]) // on the row behind's desk, a step above the board
+    expect(frame.nodePosition('pi5b', null)[2]).toBeGreaterThan(frame.nodePosition('unoq', null)[2] + 0.1)
+    expect(frame.nodePosition('unoq', null)[2]).toBeCloseTo(0.785) // on our desk's top, not 3 cm into it
+    expect(frame.seated([0.4, 0.3, 0.75])).toEqual([0.4, 0.3, 0.75]) // over open floor: nothing to sit on
+    // Seated, it needs no table of its own; the desk it sits on is see-through there, so a piece of its top is drawn.
+    const at = frame.nodePosition('pi5b', null)
+    expect(onTable(at, [at[0], at[1], 0.901])).toBe(false)
+    expect(onPad(at, [at[0], at[1], 0.901], true)).toBe(true)
+    expect(onPad(at, standBase(at), false)).toBe(false) // no model: the table, as before
+    const board = frame.nodePosition('unoq', null)
+    expect(onPad(board, [board[0], board[1], 0.745], true)).toBe(false) // our own desk is drawn solid
+    padGeometry().computeBoundingBox()
+    frame.setSurface(null)
+    expect(frame.nodePosition('pi5b', null)).toEqual(b)
+  })
+
+  it('keeps the furniture a device across the spot stands on: the seats go, the desk behind stays', () => {
+    const box = clearBox()
+    const z = (y: number) => frame.toScene([0, y, 0])[2]
+    expect(box.max.z).toBeCloseTo(z(-0.12)) // 8 cm short of Pi B at y = -0.2
+    expect(box.containsPoint(new Vector3(frame.toScene([0.4, 0.3, 0.5])[0], 0.5, z(0.3)))).toBe(true) // a seat in the spot
+    expect(box.containsPoint(new Vector3(frame.toScene([0.4, -0.2, 0.9])[0], 0.9, z(-0.2)))).toBe(false) // the desk's front edge
+  })
+
+  it('stands between the second row and the third by default, on the block nearest straight ahead', () => {
+    const block = (row: number, wedge: number, th0: number, th1: number) => ({ row, wedge, r_m: 23 + 1.6 * row, th0_deg: th0, th1_deg: th1, floor_m: 0.156 * Math.ceil(row / 2 + 0.5) })
+    const hall: HallDesks = {
+      centre_m: [0, 0], desk_depth_m: 0.6, desk_height_m: 0.745,
+      desks: [block(0, 1, -15, -3), block(0, 2, 3, 15), block(1, 0, -21, -19), block(1, 2, 3, 15), block(1, 3, 18, 31), block(2, 1, -16, -3), block(2, 2, 0, 15), block(3, 2, 0, 15)],
+    }
+    expect(defaultSpot(hall)).toMatchObject({ desk: { row: 1, wedge: 2 }, along: 0.5, gap: 'behind' })
+    // A block with no desk of the next row behind its middle is passed over.
+    const gap: HallDesks = { ...hall, desks: hall.desks.filter((d) => !(d.row === 2 && d.wedge === 2)) }
+    expect(defaultSpot(gap).gap).toBe('end') // no pair of rows here: a row end, as before
+    expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)
+    expect(defaultSpot(hall)).toMatchObject({ desk: { row: 2 }, along: 0.5 }) // the desk layout: the third row, behind its desk
+    expect(defaultSpot(hall).gap).toBeUndefined()
+    expect(frame.applyLayout(GATE_LAYOUT)).toBe(true)
   })
 
   it('draws the Wi-Fi line across the gap boldest, at rest and when it explains the prediction', () => {

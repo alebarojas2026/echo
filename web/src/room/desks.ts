@@ -79,10 +79,19 @@ export function defaultSpot(h: HallDesks): DeskSpot {
   const row = rows[Math.min(2, rows.length - 1)]
   const desk = h.desks.filter((d) => d.row === row).sort((a, b) => mid(a) - mid(b))[0]
   if (!deviceAcross()) return { desk, along: 0.5 }
-  // With a device across the spot (the gate, about 1 m deep) the default is a desk's end: a stair aisle has the
-  // room for it, where the gap between two rows does not. Of the row's east ends that open on a stair aisle, the
-  // widest one (the hall's are 1.1 to 1.4 m, and the far end's table must clear the next block); with no aisle in
-  // the row, the east end of the block nearest straight ahead.
+  // With a device across the spot (the gate) the default is the team's own set-up: between two rows, the board's
+  // end on the second row's desk and the far end on the third's, straight across. The block nearest straight ahead
+  // that has a desk of the next row behind its middle.
+  const second = rows[Math.min(1, rows.length - 1)]
+  const between = h.desks
+    .filter((d) => d.row === second)
+    .sort((a, b) => mid(a) - mid(b))
+    .find((d) => h.desks.some((b) => b.row === second + 1 && b.th0_deg <= (d.th0_deg + d.th1_deg) / 2 && b.th1_deg >= (d.th0_deg + d.th1_deg) / 2))
+  if (between) return { desk: between, along: 0.5, gap: 'behind' }
+  // A hall with no such pair of rows: a desk's end, where a stair aisle has the room for a gate about 1 m deep.
+  // Of the row's east ends that open on a stair aisle, the widest one (the hall's are 1.1 to 1.4 m, and the far
+  // end's table must clear the next block); with no aisle in the row, the east end of the block nearest straight
+  // ahead.
   const inRow = h.desks.filter((d) => d.row === row).sort((a, b) => a.th0_deg - b.th0_deg)
   const aisles = inRow
     .slice(0, -1)
