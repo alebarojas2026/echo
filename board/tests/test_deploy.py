@@ -11,7 +11,7 @@ from board.tests.shell import BASH
 REPO = Path(__file__).resolve().parents[2]
 BOARD_UNITS = {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan",
                "radio-sight-camwatch", "radio-sight-brain", "radio-sight-serve",
-               "radio-sight-llm", "radio-sight-narrate"}
+               "radio-sight-llm", "radio-sight-narrate", "radio-sight-clock"}
 NEEDS_PI = {"radio-sight-wifi-rssi", "radio-sight-hci-scan"}
 
 
@@ -41,7 +41,7 @@ def repo(tmp_path):
     (r / "board").mkdir(parents=True)
     shutil.copy(REPO / "board" / "deploy.sh", r / "board" / "deploy.sh")
     shutil.copytree(REPO / "board" / "units", r / "board" / "units")
-    for path in ("board/serve.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
+    for path in ("board/serve.py", "board/clock.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
                  "teacher/camwatch.py", "brain/main.py", "advisor/advice.py", "narrator/narrate.py",
                  "pi/radio_node.py", "web/src/main.ts", "docs/notes.md"):
         write(r, path, "# v1\n")
@@ -92,9 +92,17 @@ def test_units_run_as_root_only_where_the_contract_says(repo):
     deploy(repo, "v1")
     units = repo.parent / "units"
     roots = {u.stem for u in units.glob("*.service") if "User=root" in u.read_text()}
-    assert roots == {"radio-sight-hci-scan"}
+    assert roots == {"radio-sight-hci-scan", "radio-sight-clock"}
     assert all("Restart=always" in (units / f"{u}.service").read_text()
                for u in BOARD_UNITS - {"radio-sight-llm"})
+
+
+def test_the_clock_helper_acts_for_the_clone_owner(repo):
+    deploy(repo, "v1")
+    lines = (repo.parent / "units" / "radio-sight-clock.service").read_text().splitlines()
+    exec_line = next(l for l in lines if l.startswith("ExecStart="))
+    assert " -m board.clock helper --user " in exec_line and "@USER@" not in exec_line
+    assert "RuntimeDirectory=radio-sight-clock" in lines
 
 
 def test_same_ref_restarts_nothing(repo):
@@ -109,6 +117,7 @@ def test_same_ref_restarts_nothing(repo):
     ("radio/nodes.json", {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan", "radio-sight-brain"}),
     ("advisor/advice.py", {"radio-sight-brain"}),
     ("board/serve.py", {"radio-sight-serve"}),
+    ("board/clock.py", {"radio-sight-serve", "radio-sight-clock"}),
     ("narrator/narrate.py", {"radio-sight-narrate"}),
     ("narrator/llm.service", {"radio-sight-llm", "radio-sight-narrate"}),
     ("teacher/camwatch.py", {"radio-sight-camwatch"}),
