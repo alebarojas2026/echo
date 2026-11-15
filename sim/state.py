@@ -18,11 +18,12 @@ from collections import Counter, deque
 from statistics import mean, median, pstdev
 
 from . import fake
+from .layout import LAYOUT
 from .wire import encoder
 from narrator.recap import template as recap_template
 
-STILL_ALERT_S = {1: 60, 2: None, 3: None, 4: 10}   # contract section 3
-GRID = {"w": 10, "h": 10, "cell_m": 0.24, "origin_m": [-0.2, -0.2]}
+STILL_ALERT_S = dict(LAYOUT.zones)   # zone -> still_alert_s, from radio/nodes.json (section 3)
+GRID = LAYOUT.grid                   # section 6: the layout plus 0.2 m on each side
 BASELINE_AT_S, TRAINED_AT_S = 1.0, 2.0
 STALE_RATIO, BLIND_AFTER_S, CLEAR_AFTER_S = 0.4, 3.0, 3.0   # section 6, link health
 OBJECT_AFTER_S, STATIC_AFTER_S, CHECKIN_AFTER_S = 2.0, 5.0, 1.25
@@ -287,7 +288,7 @@ class Brain:
 
         pred = None
         if trained and not blind and spot == "S-home":
-            probs = [0.03] * 5
+            probs = [0.03] * (len(STILL_ALERT_S) + 1)   # empty, then one per zone
             probs[zone] = 0.88
             pred = {"present": bool(pos), "kind": kind, "zone": zone, "zone_set": [zone] if pos else [],
                     "probs": probs, "motion": ("moving" if moving else "still") if pos else None,
