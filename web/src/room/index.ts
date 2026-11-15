@@ -101,6 +101,9 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     return null
   }
   host.dataset.quality = options.quality
+  // ?op=1: the operator's view. Set-up words (the new-beacon tray) show only with it, in align mode, or while the
+  // panels' operator controls are open (room.css).
+  if (params.get('op') === '1') host.dataset.op = '1'
   if (params.get('fps') === '1') startFpsMeter(view)
   const stage = new Stage(view)
   const scan = loadScan(view, stage.drawnRoom, params, options.quality).then(standAtDefaultDesk)
