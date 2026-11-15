@@ -1,4 +1,5 @@
 import './judge.css'
+import { mountAskRoom } from './ask-room'
 import { changingText } from './changing-text'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
@@ -17,7 +18,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     <header><span>Radio Sight</span><span data-testid="source-badge"></span></header>
     <section class="judge-moment" aria-live="polite"><h1 data-testid="judge-headline"></h1><p data-testid="judge-detail"></p></section>
     <div class="judge-extra"></div>
-    <p data-testid="cam-status"></p>
+    ${Object.keys(extraPanels).some(path => path.includes("camera")) ? "" : '<p data-testid="cam-status"></p>'}
     <p class="judge-narrator" data-testid="narrator-text"></p>
     <footer><dl></dl></footer>
     <aside class="hud-operator" hidden aria-label="Operator controls"><h2>Operator controls</h2><div class="operator-controls"></div><dl class="debug"></dl></aside>
@@ -52,14 +53,14 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     if (event.key === 'Escape') operator.hidden = true
   }
   document.addEventListener('keydown', key)
+  const disposeAsk = mountAskRoom(root.querySelector('header')!)
   let disposed = false
   const render = (state: StateMsg | null, stale: boolean) => {
     const [headline, detail] = judgeMoment(state, stale)
     headlineText.set(headline)
     set('judge-detail', detail)
     set('source-badge', state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO')
-    field('cam-status').hidden = Object.keys(extraPanels).some(path => path.includes('camera'))
-    set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] : '')
+    if (!Object.keys(extraPanels).some(path => path.includes('camera'))) set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] : '')
     set('narrator-text', !stale ? state?.narration?.text ?? '' : '')
     field('narrator-text').hidden = !field('narrator-text').textContent
     set('pred-zone', state?.pred?.zone ? String(state.pred.zone) : '__')
@@ -85,7 +86,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposeAsk(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 

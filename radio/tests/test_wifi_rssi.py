@@ -22,6 +22,7 @@ from radio.wifi_rssi import (
     _make_message,
     _read_station_info,
     find_tool,
+    joined_elsewhere,
     gate,
     gate_block,
     gate_rows,
@@ -212,6 +213,18 @@ class TestReader:
         station = FakeStation((-60, 500), (None, None), (-61, 3), (-62, 4))
         reader = Reader("wlan0", TEST_BSSID, read=station, say=quiet)
         assert [reader.poll() for _ in range(4)] == [None, None, None, -62]
+
+    def test_joined_to_another_access_point_says_so(self):
+        ours, other = ":".join(["0a"] * 5 + ["01"]), ":".join(["0a"] * 5 + ["02"])
+        said = []
+        reader = Reader("wlan0", ours, read=lambda *_: (None, None), say=said.append,
+                        link=lambda iface: f"Connected to {other} (on wlan0)\n\tSSID: phone\n")
+        reader.poll()
+        assert said == ["no signal: wlan0 is joined to another access point, not the one in WIFI_BSSID "
+                        "-> sudo bash radio/wifi_join.sh, and check the BSSID in .env"]
+        assert ours not in said[0] and other not in said[0]
+        assert joined_elsewhere(f"Connected to {ours.upper()} (on wlan0)", ours) is False
+        assert joined_elsewhere("Not connected.", ours) is False
 
     def test_waiting_and_recovery_are_logged_once_each(self):
         said = []

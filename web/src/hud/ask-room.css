@@ -1,0 +1,23 @@
+@import './tokens.css';
+.ask-room { box-sizing:border-box; width:min(1100px,calc(100% - 48px)); max-height:calc(100% - 64px); overflow:auto; padding:40px 48px; border:1px solid var(--edge); background:var(--floor); color:var(--text); font:500 28px/1.3 var(--sans); font-variant-numeric:tabular-nums; }
+.ask-room::backdrop { background:color-mix(in srgb,var(--bg) 90%,transparent); }
+.ask-room[open] { display:flex; flex-direction:column; gap:24px; }
+.ask-room [hidden] { display:none; }
+.ask-room header { display:flex; align-items:center; justify-content:space-between; gap:24px; }
+.ask-room :is(h2,h3,p,ul) { margin:0; }
+.ask-room h2 { font-size:56px; font-weight:600; letter-spacing:-.03em; }
+.ask-room h3 { font-size:28px; font-weight:600; margin-bottom:12px; }
+.ask-room :is(button,input) { box-sizing:border-box; font:inherit; min-height:48px; padding:8px 16px; color:var(--text); background:transparent; border:1px solid var(--square); }
+.ask-room :is(button,input):focus-visible,.ask-trigger:focus-visible { outline:2px solid var(--person); outline-offset:4px; }
+.ask-room .ask-submit { background:var(--text); color:var(--bg); }
+.ask-room .ask-submit:disabled { opacity:.6; }
+.ask-room label { display:block; margin-bottom:8px; }
+.ask-input { display:flex; gap:16px; }
+.ask-input input { min-width:0; flex:1; }
+.ask-examples { display:flex; flex-direction:column; align-items:flex-start; gap:12px; }
+.ask-examples button { text-align:left; border:0; padding:8px 0; text-decoration:underline; text-underline-offset:4px; }
+.ask-mode,.ask-room [data-testid="ask-time"],.ask-room [data-testid="ask-privacy"],.ask-evidence { color:var(--text-2); }
+.ask-result { display:grid; gap:24px; border-top:1px solid var(--edge); padding-top:24px; overflow-wrap:anywhere; }
+.ask-room [data-testid="ask-answer"] { font-size:40px; line-height:1.2; }
+.ask-room [role="alert"] { color:var(--fault); }
+@media(max-width:768px) { .ask-room { width:calc(100% - 24px); max-height:calc(100% - 24px); padding:24px; } .ask-room h2 { font-size:40px; } .ask-input { flex-direction:column; } }

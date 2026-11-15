@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from . import link_stats
-from .wifi_rssi import REPO, find_tool, iw_path, load_env_file
+from .wifi_rssi import REPO, find_tool, iw_path, joined_elsewhere, load_env_file, settings
 from .nodes import LINKS
 
 UNITS = ("radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan")
@@ -69,11 +69,14 @@ def check_ethernet(run=sh):
     return True, "Ethernet: 192.168.77.2/24 up, the Pi answers"
 
 
-def check_wifi(iface: str, run=sh, iw=None):
+def check_wifi(iface: str, run=sh, iw=None, bssid: str = ""):
     iw = iw or iw_path()
     _, link = run([iw, "dev", iface, "link"])
     if "Connected to" not in link:
         return False, f"Wi-Fi: {iface} isn't joined to the Pi's hotspot -> sudo bash radio/wifi_join.sh"
+    if bssid and joined_elsewhere(link, bssid):
+        return False, (f"Wi-Fi: {iface} is joined to another access point, not the BSSID in .env "
+                       "-> sudo bash radio/wifi_join.sh, and check SENSING_BSSID")
     _, addr = run(["ip", "-4", "-o", "addr", "show", "dev", iface])
     if " 10.42.0." not in addr:
         return False, f"Wi-Fi: {iface} is joined but has no 10.42.0.x address -> check the Pi's hotspot (pi/ap.sh)"
@@ -127,8 +130,9 @@ def main(argv=None) -> None:
     args = ap.parse_args(argv)
     load_env_file(REPO / ".env")  # WIFI_IFACE, as the reader's service sees it
     iface = os.environ.get("WIFI_IFACE") or "wlan0"
-    results = [check_tools(), check_radios(), check_ethernet(), check_wifi(iface), check_services(),
-               check_links(args.seconds)]
+    bssid = settings()["bssid"]
+    results = [check_tools(), check_radios(), check_ethernet(), check_wifi(iface, bssid=bssid),
+               check_services(), check_links(args.seconds)]
     for ok, text in results:
         print(f"{'ok  ' if ok else 'FAIL'}  {text}")
     if not all(ok for ok, _ in results):

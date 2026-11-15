@@ -10,12 +10,13 @@ sudo board/deploy.sh --install           # once the Pi's hotspot and the Etherne
 ```
 Each run installs every unit, reloads systemd, enables them, and starts any that aren't running. It restarts only units whose file changed. Running it again is safe.
 
-`--no-pi` still installs the units that need the Pi (`radio-sight-wifi-rssi` and `radio-sight-hci-scan`, the BLE scan), but stops and disables them, so they don't crash-loop. Run it again without `--no-pi` to start them.
+`--no-pi` still installs the units that need the Pi (`radio-sight-wifi-rssi` and `radio-sight-hci-scan`, the BLE scan), but stops and disables them until the Pi's hotspot and beacons are there. Run it again without `--no-pi` to start them. Once started, the Wi-Fi reader waits for the hotspot by itself (it says so once in its journal) and the BLE scan starts itself again when it goes quiet, so a Pi that comes up late or reboots needs nothing here.
 
 Check:
 ```sh
 systemctl list-units 'radio-sight-*'
-journalctl -u radio-sight-bus -f
+python3 -m radio.check            # the whole radio path: ok or FAIL per line, with the fix
+journalctl -u radio-sight-bus -f  # every 30 s a links: line; "<link> quiet for 3 s" the moment one stops
 ```
 
 Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sudo (it uses sudo itself). It checks out the ref and restarts only what changed. The Pi uses the same commands; there it installs only `radio-sight-radio-node`, and runs it with or without `--no-pi`, since beacon S doesn't need the cable.

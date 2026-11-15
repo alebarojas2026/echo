@@ -1,0 +1,13 @@
+{
+  "name": "arrival",
+  "about": "The hero arrival: nobody, then someone steps in on the left (zone 3), crosses to the right (zone 4) and stands still. Arm the fake brain before 5 s to see the intrusion.",
+  "duration_s": 30,
+  "person": [
+    {"t": 0, "x": null},
+    {"t": 5, "x": 0.0, "y": 0.5},
+    {"t": 6, "x": 0.5, "y": 0.5},
+    {"t": 9, "x": 0.5, "y": 0.5},
+    {"t": 11, "x": 1.5, "y": 0.5},
+    {"t": 30, "x": 1.5, "y": 0.5}
+  ]
+}

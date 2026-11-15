@@ -60,7 +60,7 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 
 | cmd | What the brain does |
 |---|---|
-| `baseline` | Sets label mode off and captures 20 s. With the camera off there is nobody to ask and the operator keeps the area empty; with it on, it must see nobody. The 20 s start again whenever a section 6 condition breaks: the camera is on and its labels stop or it sees anybody, label mode is turned on, health is not ok, or a link goes quiet for 1 s. Then it writes `data/sessions/baseline.json` and sends `baseline_done`. `baseline {keep_model: true}` is the same layout set down again (another desk, a knocked beacon): only the baseline is new, the model and the recordings stay, and each recording keeps the baseline it was made on (`data/sessions/baselines.jsonl`). The model's features are all drops and spreads against the baseline, never levels in dBm, which is why it carries over. Without `keep_model`: **A baseline asked for by hand means a new place**: when it finishes, the model is dropped (`pred` is null and `model.trained` false until the next `train`) and recordings made before it are never trained on again. Their files stay in `data/sessions`. The time is kept in `data/sessions/place.json`. |
+| `baseline` | Sets label mode off and captures 20 s. With the camera off there is nobody to ask and the operator keeps the area empty; with it on, it must see nobody. The 20 s start again whenever a section 6 condition breaks: the camera is on and its labels stop or it sees anybody, label mode is turned on, health is not ok, or a link goes quiet for 1 s. If it still can't start 120 s after the command, it is given up (logged; the old baseline and the model stay, `pred` comes back), so a Baseline pressed by mistake during a demo doesn't hide `pred` for good. Then it writes `data/sessions/baseline.json` and sends `baseline_done`. `baseline {keep_model: true}` is the same layout set down again (another desk, a knocked beacon): only the baseline is new, the model and the recordings stay, and each recording keeps the baseline it was made on (`data/sessions/baselines.jsonl`). The model's features are all drops and spreads against the baseline, never levels in dBm, which is why it carries over. Without `keep_model`: **A baseline asked for by hand means a new place**: when it finishes, the model is dropped (`pred` is null and `model.trained` false until the next `train`) and recordings made before it are never trained on again. Their files stay in `data/sessions`. The time is kept in `data/sessions/place.json`. |
 | `record_start`, `record_stop` | Sends a `recording` event. The bus records. The brain keeps its own copy of the session from the bus's `meta` message until `record_stop`. |
 | `train` | Trains on the kept sessions with purpose `train` or `object`, off the loop. Then `trained`. |
 | `relearn` | Drops the model and trains again, from this place's recordings only. |
@@ -68,7 +68,8 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 | `router_moved` | Sets `router`, moves the x-ray's geometry and freezes the advice's `before_dbm`. `pred` is null while the router is off S-home. 5 s later `after_dbm` is filled (the median over 3 s, starting 2 s after the move) and `advice_result` goes out. |
 | `router_home` | Back on S-home: clears the advice and the x-ray, then checks for 3 s that every pi5 link sits within 1 dB of its base (`pred` stays null meanwhile). If one doesn't, it sends `recalibrating` and runs an automatic 20 s baseline; if that baseline moved a link by more than 1 dB it sends `drift`, which is the cue for `relearn`. |
 | `reset_alert` | Clears the alert and restarts the still timer. |
-| `reset` | Between judges: clears the alert, still timer, check-in and narration. Then `reset`. |
+| `reset` | Between judges: clears the alert, still timer, check-in and narration, and disarms. Then `reset`. |
+| `arm` | `{on: true}` arms ("this space should be empty now"): `state.armed` is true and `armed` goes out. `{on: false}` (or `reset`) disarms and sends `disarmed`. While armed, one `intrusion` event with the zone each time a person appears: present with kind person in 6 of the last 10 decisions, after not being so. Arming with somebody already there raises it within 6 decisions. Objects never raise it, and nothing is raised from a decision that is hidden (blind, recalibrating, router away). `state.armed` is sent only while true until state.json has the field (#440). |
 | `truth` | Kept for the crowd game. |
 
 `brain/core.py` holds the rules with no sockets, so tests drive it with a fake clock.
@@ -100,6 +101,19 @@ The automatic baseline after `router_home` also runs with the camera unplugged; 
 - **LED grid:** `show_zone(n)` when the shown zone changes (`-1`, the "?", while `pred` is null or spans 2 or more zones), `alert(on)` when the alert turns on or off, `smile()` on a check-in. `led_grid()` gives the Bridge version on the board and a stand-in elsewhere.
 
 The constants at the top of the file are what gate 8 tunes.
+
+## The live lesson (`brain/lesson.py`)
+
+The camera teaches the radio on whoever is standing there, and is then unplugged. The screen sends commands that already exist:
+
+1. `label_mode` person, then `record_start` with purpose `train`: the person steps left and right for about 20 s.
+2. `train`, with the recording still open. That fit reads the recording as far as it has got (plus this place's earlier recordings, so an empty-room recording made at setup still teaches "nobody"), and it starts the lesson.
+3. While the camera is on, the brain fits again every 15 s from the growing recording.
+4. When the camera goes off, or on `record_stop`, there is one last fit. The model carries on; nothing else changes.
+
+During the lesson `model.training` stays set and carries `lesson: {started_t, agree, of, fits, fitting}`: of the last `of` (10 at most) decisions that had a fresh, non-clipped camera label, `agree` gave the camera's answer. That is the screen's "learning: 6 of 10". Wording for CONTRACTS.md is in #482.
+
+A `train` with no recording open, or after `record_stop`, is the plain one-off fit it always was. `python -m proof.lesson <session> <walker>` runs a lesson from a terminal and times it.
 
 ## Recording steps for training
 

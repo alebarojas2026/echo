@@ -51,6 +51,7 @@ KIND = "wifi"
 # ath10k reports chains, so iw prints "signal: -71 [-71, -74] dBm": take the number before the brackets.
 _SIGNAL_RE = re.compile(r"^\s*signal:\s*(-?\d+)", re.M)
 _RX_PACKETS_RE = re.compile(r"rx packets:\s+(\d+)")
+_LINK_RE = re.compile(r"Connected to ([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})")
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -146,6 +147,16 @@ def _read_station_info(iface: str, bssid: str) -> tuple[int | None, int | None]:
     return parse_station_output(out) if out is not None else (None, None)
 
 
+def joined_elsewhere(link_text: str | None, bssid: str) -> bool:
+    """True if `iw dev <iface> link` shows the interface joined to an access point other than bssid."""
+    m = _LINK_RE.search(link_text or "")
+    return bool(m) and m.group(1).lower() != bssid.strip().lower()
+
+
+def _iw_link(iface: str) -> str | None:
+    return _iw("dev", iface, "link")
+
+
 def _make_message(dbm: int, seq: int) -> bytes:
     msg = {
         "v": 2,
@@ -165,8 +176,8 @@ def _make_message(dbm: int, seq: int) -> bytes:
 class Reader:
     """Turns polls into fresh readings: a poll counts only when rx packets went up since the last one."""
 
-    def __init__(self, iface: str, bssid: str, read=_read_station_info, say=log):
-        self.iface, self.bssid, self.read, self.say = iface, bssid, read, say
+    def __init__(self, iface: str, bssid: str, read=_read_station_info, say=log, link=_iw_link):
+        self.iface, self.bssid, self.read, self.say, self.link = iface, bssid, read, say, link
         self.prev_rx: int | None = None
         self.joined: bool | None = None
 
@@ -187,6 +198,9 @@ class Reader:
             return
         if now:
             self.say(f"reading {LINK_ID} on {self.iface}")
+        elif joined_elsewhere(self.link(self.iface), self.bssid):
+            self.say(f"no signal: {self.iface} is joined to another access point, not the one in "
+                     "WIFI_BSSID -> sudo bash radio/wifi_join.sh, and check the BSSID in .env")
         else:
             self.say(f"no signal: {self.iface} isn't joined to the Pi's hotspot; still trying")
         self.joined = now

@@ -1,5 +1,5 @@
 import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
-import { SQUARE_M, toScene, type Vec3 } from './frame'
+import { NODES, SIZE_M, ZONES, alertWordAt, nodeLabelSide, toScene } from './frame'
 import { BG } from './palette'
 
 // Owns the renderer, the camera and the frame loop. Frames are drawn only when something changed
@@ -82,23 +82,32 @@ export interface Shot {
 export type ShotFor = (width: number, height: number) => Shot
 
 /**
- * Words that sit beside the square and need room toward the canvas edge: the beacons' names (beside their
- * heads, outward) and the no-movement word (on the floor just outside the square, outward). "West beacon" and
- * "No movement" at 28 px are about 170 px wide; with their gap and the 24 px edge margin, 200 px.
+ * Words that sit beside the layout and need room toward the canvas edge: the names of the nodes on its east
+ * and west edges (beside their heads, outward) and each zone's no-movement word (on the floor just outside,
+ * outward). "West beacon" and "No movement" at 28 px are about 170 px wide; with their gap and the 24 px edge
+ * margin, 200 px.
  */
 const SIDE_WORDS_PX = 200
 function sideWordAnchors(): Vector3[] {
-  const s = SQUARE_M
-  return ([[0, s / 2, 1], [s, s / 2, 1], [-0.08, 0.2, 0], [s + 0.08, 0.2, 0]] as Vec3[]).map((p) => new Vector3(...toScene(p)))
+  const nodes = Object.values(NODES).filter((n) => {
+    const side = nodeLabelSide(n.id)
+    return (side === 'left' && n.xyz[0] <= 0.05) || (side === 'right' && n.xyz[0] >= SIZE_M[0] - 0.05)
+  })
+  return [...nodes.map((n) => n.xyz), ...ZONES.map((z) => alertWordAt(z.id)[0])].map((p) => new Vector3(...toScene(p)))
+}
+
+/** The layout's framing scale: half its longer side (1 for the 2 m square). */
+function layoutScale(): number {
+  return Math.max(SIZE_M[0], SIZE_M[1]) / 2
 }
 
 /**
- * The room's normal framing, scaled to nodes.json's square. On a narrow canvas (a laptop, beside the panels'
+ * The room's normal framing, scaled to nodes.json's layout (the 2 m square, or the 1.6 x 1.1 m desk). On a narrow canvas (a laptop, beside the panels'
  * rail) it backs off just enough that the words beside the square stay on the canvas; on the 1920 x 1080
  * screen's 1280 x 1080 canvas they already fit, so it doesn't change there.
  */
 export function roomShot(width = 1280, height = 1080): Shot {
-  const scale = SQUARE_M / 2
+  const scale = layoutScale()
   const shot = { elevDeg: ELEV_DEG, target: TARGET_M.clone().multiplyScalar(scale), radiusM: FIT_RADIUS_M * scale }
   const room = width / 2 - SIDE_WORDS_PX
   if (room <= 0) return shot
@@ -118,7 +127,7 @@ export function roomShot(width = 1280, height = 1080): Shot {
 /** Straight down on the square, north up: for lining a scan up by eye (align mode). */
 export function topShot(): Shot {
   // 89.5 rather than 90 keeps "north up" well defined for lookAt.
-  return { elevDeg: 89.5, target: new Vector3(0, 0, 0), radiusM: FIT_RADIUS_M * (SQUARE_M / 2) }
+  return { elevDeg: 89.5, target: new Vector3(0, 0, 0), radiusM: FIT_RADIUS_M * layoutScale() }
 }
 
 /** Points the camera at the shot's target and backs off until its sphere fits the narrower field of view. */

@@ -130,7 +130,7 @@ def test_main_checks_the_interface_named_in_env(monkeypatch):
     monkeypatch.delenv("WIFI_IFACE", raising=False)
     monkeypatch.setattr(check, "load_env_file", lambda path: monkeypatch.setenv("WIFI_IFACE", "wlan1"))
     seen = []
-    monkeypatch.setattr(check, "check_wifi", lambda iface: seen.append(iface) or (True, "wifi"))
+    monkeypatch.setattr(check, "check_wifi", lambda iface, **kw: seen.append(iface) or (True, "wifi"))
     for name in ("check_tools", "check_radios", "check_ethernet", "check_services"):
         monkeypatch.setattr(check, name, lambda: (True, name))
     monkeypatch.setattr(check, "check_links", lambda seconds: (True, "links"))
@@ -157,3 +157,17 @@ def test_a_blocked_radio_says_how_to_unblock(tmp_path):
     rfkill(tmp_path, 2, "nfc", soft="1")          # not ours
     ok, text = check.check_radios(tmp_path)
     assert not ok and text.startswith("radios: bluetooth (soft) blocked -> sudo rfkill unblock all")
+
+
+def made_up_ap(last):
+    """A made-up access point address, built here so no address sits in the file."""
+    return ":".join(["0a"] * 5 + [f"{last:02x}"])
+
+
+def test_wifi_joined_to_another_access_point_fails():
+    run = fake_run({**GOOD, "iw dev wlan0 link": (0, f"Connected to {made_up_ap(1)} (on wlan0)\n")})
+    ok, text = check.check_wifi("wlan0", run, iw="iw", bssid=made_up_ap(2))
+    assert not ok and "joined to another access point" in text
+    assert made_up_ap(1) not in text and made_up_ap(2) not in text
+    ok, _ = check.check_wifi("wlan0", run, iw="iw", bssid=made_up_ap(1).upper())   # case doesn't matter
+    assert ok
