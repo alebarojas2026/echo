@@ -4,6 +4,10 @@
   "$comment": "Section 3: the optional parts of radio/nodes.json that the rules in section 6 read. The layout itself (nodes, links, zones, spots) is checked in tests/test_layout.py, so every other key is left alone here.",
   "type": "object",
   "properties": {
+    "nodes": {"$comment": "Section 3: device is the kind of hardware, for the screen's model. Optional.", "type": "array", "items": {
+      "type": "object", "properties": {"device": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,23}$"}}}},
+    "links": {"$comment": "Section 3: classifier false keeps a thin link out of the model and out of health blind. Missing means true.", "type": "array", "items": {
+      "type": "object", "properties": {"classifier": {"type": "boolean"}}}},
     "armed": {"$comment": "Armed, section 6. hold_s missing means 3.", "type": "object",
               "properties": {"hold_s": {"type": "number", "exclusiveMinimum": 0, "maximum": 30}},
               "additionalProperties": false},

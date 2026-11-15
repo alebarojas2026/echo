@@ -57,6 +57,25 @@ BAD_NODES = [
     "$.hall.links[0].id",               # only a hall link has an empty-hall level
     "'empty_quiet_db' is a required property",   # a link is listed only once it is calibrated
     "$.hall.links[0].empty_quiet_db",   # a quiet level is above 0
+    "$.links[0].classifier",            # classifier is true or false
+    "$.nodes[0].device",                # a short lower-case word, as in the screen's model names
+]
+BAD_PRIVACY = [
+    "does not allow 0",                 # not running, yet it says 0 images: never a zero in place of an unknown
+    "'bytes_out' is a required property",
+    "$.bytes_out",                      # an unknown is ok false, not null
+    "'why' is a required property",
+    "$.bytes_out",
+]
+BAD_CLOCKS = [
+    "$.t",                              # epoch ms, a whole number
+    "'busy' is a required property",    # null when nothing stands in the way
+    "'why' is a required property",     # a failed step says why
+]
+BAD_CLOCK_SETS = [
+    "'stepping' is a required property",
+    "'why' is a required property",     # a refusal says why
+    "does not allow True",              # refused, so nothing is stepped
 ]
 BAD_REPORTS = [
     "$.intrusions[0]",                  # a hall link is its link id, not the beacon's letter
@@ -73,7 +92,7 @@ def lines(name):
     return (FIXTURES / name).read_text(encoding="utf-8").splitlines()
 
 
-@pytest.mark.parametrize("schema", ["ask_question", "ask_reply", "history", "report", "layout", "nodes"])
+@pytest.mark.parametrize("schema", ["ask_question", "ask_reply", "history", "report", "layout", "nodes", "privacy", "clock", "clock_set"])
 def test_valid_ask_bodies_pass(schema):
     count, failures, warnings = check.check_lines(lines(f"{schema}_valid.jsonl"), schema)
     assert count >= 1 and failures == [] and warnings == []
@@ -81,7 +100,9 @@ def test_valid_ask_bodies_pass(schema):
 
 @pytest.mark.parametrize("schema, reasons", [("ask_question", BAD_QUESTIONS), ("ask_reply", BAD_REPLIES),
                                              ("history", BAD_HISTORIES), ("report", BAD_REPORTS),
-                                             ("layout", BAD_LAYOUTS), ("nodes", BAD_NODES)])
+                                             ("layout", BAD_LAYOUTS), ("nodes", BAD_NODES),
+                                             ("privacy", BAD_PRIVACY),
+                                             ("clock", BAD_CLOCKS), ("clock_set", BAD_CLOCK_SETS)])
 def test_each_invalid_ask_body_fails_for_its_reason(schema, reasons):
     bad = lines(f"{schema}_invalid.jsonl")
     assert len(bad) == len(reasons)

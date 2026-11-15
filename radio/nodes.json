@@ -13,11 +13,11 @@
     "note": "size_m is the whole layout from the origin: the strip (strip_m, the aisle floor a person stands on) plus the desk top behind it (y 0.6 to 1.1). People are only ever in the strip."
   },
   "nodes": [
-    {"id": "unoq", "name": "Board", "xyz_m": [1.1, 0.6, 1.0], "roles": ["receiver"]},
-    {"id": "pi5", "name": "Pi A", "xyz_m": [0.8, 1.1, 1.0], "roles": ["router", "beacon", "receiver"]},
-    {"id": "pi5b", "name": "Pi B", "xyz_m": [0.5, 0.6, 1.0], "roles": ["beacon", "receiver"]},
-    {"id": "east", "name": "East beacon", "xyz_m": [1.6, 0.25, 1.0], "roles": ["beacon"]},
-    {"id": "west", "name": "West beacon", "xyz_m": [0.0, 0.25, 1.0], "roles": ["beacon"]}
+    {"id": "unoq", "device": "unoq", "name": "Board", "xyz_m": [1.1, 0.6, 1.0], "roles": ["receiver"]},
+    {"id": "pi5", "device": "pi5", "name": "Pi A", "xyz_m": [0.8, 1.1, 1.0], "roles": ["router", "beacon", "receiver"]},
+    {"id": "pi5b", "device": "pi5", "name": "Pi B", "xyz_m": [0.5, 0.6, 1.0], "roles": ["beacon", "receiver"]},
+    {"id": "east", "device": "esp32", "name": "East beacon", "xyz_m": [1.6, 0.25, 1.0], "roles": ["beacon"]},
+    {"id": "west", "device": "esp32", "name": "West beacon", "xyz_m": [0.0, 0.25, 1.0], "roles": ["beacon"]}
   ],
   "links": [
     {"id": "pi5>unoq:wifi", "tx": "pi5", "rx": "unoq", "kind": "wifi", "expected_hz": null},
