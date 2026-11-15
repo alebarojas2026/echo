@@ -94,12 +94,12 @@ def hotspot(run=run):
 
 
 def forwarding(run=run):
-    """The demo laptop on the hotspot reaches the board through the Pi (the hotspot's shared mode forwards)."""
+    """The demo laptop and Pi B, both on the hotspot, reach the board through Pi A (the hotspot's shared mode forwards)."""
     code, out = run("cat", "/proc/sys/net/ipv4/ip_forward")
     if out.strip() != "1":
-        return False, "forwarding: off, so a laptop on the hotspot can't reach the board", \
+        return False, "forwarding: off, so the laptop and Pi B's readings can't reach the board", \
             "sudo nmcli connection up deadzone-ap (its shared mode turns forwarding on)"
-    return True, "forwarding: on (a laptop on the hotspot reaches 192.168.77.2)", None
+    return True, "forwarding: on (the laptop and Pi B on the hotspot reach 192.168.77.2)", None
 
 
 LINK_RATE = re.compile(r"(\S+>\S+:ble) ([\d.]+)/s")
@@ -139,6 +139,10 @@ def joined(run=run):
     if "inet 10.42.0." not in out or "inet 10.42.0.1/" in out:
         return False, f"hotspot: {WIFI} isn't joined to Pi A's hotspot", \
             "sudo bash radio/wifi_join.sh (SSID, passphrase and BSSID in .env)"
+    code, route = run("ip", "-4", "route", "get", "192.168.77.2")
+    if code != 0 or "via 10.42.0.1" not in route:
+        return False, "hotspot: joined, but there's no route to the board (192.168.77.2) through Pi A", \
+            "sudo bash radio/wifi_join.sh with RADIO_NODE=pi5b in .env (it adds 192.168.77.0/24 via 10.42.0.1)"
     code, _ = run("ping", "-c", "1", "-W", "1", "192.168.77.2")
     if code != 0:
         return False, "hotspot: joined, but the board (192.168.77.2) doesn't answer through Pi A", \
