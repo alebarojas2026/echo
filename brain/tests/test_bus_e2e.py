@@ -119,7 +119,7 @@ def test_record_and_train_through_the_real_bus(tmp_path):
     recorded = (tmp_path / "s1.jsonl").read_text().splitlines()      # the bus got our record_start
     assert json.loads(recorded[0])["type"] == "meta" and len(recorded) > 500, logs
     baseline = json.loads((tmp_path / "baseline.json").read_text())
-    assert len(baseline["links"]) == 6, logs
+    assert len(baseline["links"]) == len(json.loads((REPO / "radio" / "nodes.json").read_text())["links"]), logs
     assert (tmp_path / "label_mode").read_text() == "off\n"
 
     # After the hard kill: trained from the first state, the same version, and pred without a new walk.
