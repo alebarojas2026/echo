@@ -123,15 +123,17 @@ def desk_script():
     found (the judge steps up and is seen), lesson (the camera labels them stepping left and right; the
     screen sends train while that recording is still open, as in the live lesson), unplug (the camera is
     pulled and the radio still follows them), still (they stand still on the right until the no-movement
-    alert), then armed mode: they leave, the space is armed, stepping back in is an intrusion, and it is
-    disarmed at the end.
+    alert), then armed mode: they leave, the space is armed, stepping back in is an intrusion. They leave
+    again, and with the space still armed the east beacon is unplugged for 8 s: a tamper alert while the
+    sensor is blind, cleared when the beacon is back. It is disarmed at the end.
 
     Left and right are two zones side by side from radio/nodes.json: the desk strip's Left and Right,
     or the square's two southern zones. Before the still beat nobody stands anywhere for long: on the
     desk both zones alert, and an alert stays on until a check-in or a reset."""
     left, right = sorted((CALM, STILL), key=lambda z: Z[z][0])
     assert LAYOUT.zones[right], "the right-hand zone needs a still_alert_s for the still beat"
-    step_in, teach, train, cam_off, stop, still_from, leave, arm, back, finish = 5, 10, 30, 38, 40, 48, 64, 68, 72, 86
+    step_in, teach, train, cam_off, stop, still_from, leave, arm, back = 5, 10, 30, 38, 40, 48, 64, 68, 72
+    gone, unplug, plug, finish = 82, 85, 93, 101
     at = lambda zone, t: {"t": t, "x": Z[zone][0], "y": Z[zone][1]}   # noqa: E731
     person, t, side = [{"t": 0, "x": None}, {"t": step_in, **WEST_EDGE(left)}, at(left, 6)], 6, left
     while t + 4 <= still_from - 1:      # 3 s on a side, 1 s to cross, until the still beat
@@ -141,8 +143,9 @@ def desk_script():
         t += 4
     person += ([at(right, still_from), at(right, leave), {"t": leave + 1, **EAST_EDGE(right)}, {"t": leave + 1.1, "x": None},
                 {"t": back - 0.1, "x": None}, {"t": back, **WEST_EDGE(left)}, at(left, back + 1)]
-               + wander(left, back + 2, finish - 6) + [{"t": finish - 4, **WEST_EDGE(left)}, {"t": finish - 3.9, "x": None}])
+               + wander(left, back + 2, gone - 2) + [{"t": gone, **WEST_EDGE(left)}, {"t": gone + 0.1, "x": None}])
     path = {"name": "desk", "duration_s": finish, "person": person,
+            "outages": [{"node": "east", "t_on": unplug, "t_off": plug}],   # the east beacon unplugged while armed
             "camera": [{"t": 0, "state": "on"}, {"t": cam_off, "state": "off"}],
             "router": [{"t": 0, "spot": "S-home"}]}
     commands = [(teach, "label_mode", {"mode": "person"}),
@@ -175,6 +178,12 @@ def desk_script():
         ("walks out: nobody is here", leave, arm, "state", lambda s: pred(s, present=False)),
         ("armed, nobody here", arm, back, "state", lambda s: s.get("armed") is True and pred(s, present=False)),
         ("intrusion while armed", back, back + 10, "event", event("intrusion")),
+        ("tamper: a beacon unplugged while armed", unplug, unplug + 4, "event",
+         lambda e: e["kind"] == "tamper" and e["info"] == {"node": "east"}),
+        ("tamper: on the screen while the sensor is blind", unplug, plug, "state",
+         lambda s: s.get("tamper") == ["east"] and s["health"]["status"] == "blind" and s["pred"] is None),
+        ("tamper: cleared when the beacon is back", plug, plug + 3, "event",
+         lambda e: e["kind"] == "tamper_cleared" and e["info"] == {"node": "east"}),
         ("disarmed", finish - 4, finish, "event", event("disarmed")),
     ]
     return path, commands, beats
