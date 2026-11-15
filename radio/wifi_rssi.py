@@ -17,6 +17,8 @@ trying and says so once in the log, instead of exiting.
 
 Settings come from the environment. The service loads the repo's .env; a manual run reads it too,
 without overriding anything already set:
+    WIFI_LINK        which link this reader is (default pi5>unoq:wifi); tx and rx come from
+                     radio/nodes.json, so a second receiver only changes this
     WIFI_IFACE       the interface joined to the sensing hotspot (default wlan0)
     WIFI_BSSID       the Pi hotspot's BSSID (SENSING_BSSID also works). Never commit it.
     WIFI_PING_HOST   what to ping (default 10.42.0.1)
@@ -42,6 +44,8 @@ import sys
 import time
 from pathlib import Path
 
+from .nodes import LINKS
+
 LINK_ID = "pi5>unoq:wifi"
 TX = "pi5"
 RX = "unoq"
@@ -57,6 +61,16 @@ _LINK_RE = re.compile(r"Connected to ([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})")
 REPO = Path(__file__).resolve().parent.parent
 GATE_MIN_HZ = 20.0
 GATE_MIN_DROP_DB = 3.0
+
+
+def set_link(link_id: str) -> None:
+    """Which wifi link this reader is (WIFI_LINK). tx, rx and kind come from radio/nodes.json."""
+    global LINK_ID, TX, RX, KIND
+    link = LINKS.get(link_id)
+    if link is None or link.get("kind") != "wifi":
+        wifi = ", ".join(lid for lid, entry in LINKS.items() if entry.get("kind") == "wifi")
+        raise ValueError(f"WIFI_LINK={link_id!r} isn't a wifi link in radio/nodes.json ({wifi})")
+    LINK_ID, TX, RX, KIND = link_id, link["tx"], link["rx"], link["kind"]
 
 
 def log(text: str) -> None:
@@ -90,6 +104,7 @@ def load_env_file(path, environ=os.environ) -> None:
 
 def settings(environ=os.environ) -> dict:
     return {
+        "link": environ.get("WIFI_LINK") or "pi5>unoq:wifi",
         "iface": environ.get("WIFI_IFACE") or "wlan0",
         "bssid": environ.get("WIFI_BSSID") or environ.get("SENSING_BSSID") or "",
         "bus_host": environ.get("BUS_HOST") or "127.0.0.1",
@@ -451,6 +466,10 @@ def main(argv=None) -> None:
     if find_tool("iw") is None:
         sys.exit("wifi_rssi: iw isn't installed. Run: sudo apt install iw "
                  "(before the board joins the hotspot: there's no internet after)")
+    try:
+        set_link(cfg["link"])
+    except ValueError as e:
+        sys.exit(f"wifi_rssi: {e}")
     if not cfg["bssid"]:
         sys.exit("wifi_rssi: WIFI_BSSID (or SENSING_BSSID) isn't set. Put it in the repo's .env, "
                  "never in the repo")
