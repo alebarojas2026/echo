@@ -7,7 +7,10 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`one tap timeline, fai
  await page.route('**/ask',async r=>{requests.push(r.request().postDataJSON());await r.fulfill({json:response})})
  await page.goto('/tests/arrival-harness.html?op=1&ask=board');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:30000})
  await expect(page.getByTestId('arrival-claim')).toHaveText('A witness that never watches.')
- await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
+ await page.keyboard.press('Escape')
+ await page.getByTestId('arrival-what-happened').click();await expect(page.locator('.story-timeline li')).toHaveCount(2)
+ expect(requests).toEqual([{question:'what happened in the last five minutes'}]);requests=[]
+ await page.keyboard.press('Escape');await page.keyboard.press('o');await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
  await page.evaluate(()=>window.arrival.update('empty',{model:{trained:false,ver:null},teacher:null,cam:'off',baseline:{state:'idle'}}))
  expect(await page.locator('body').innerText()).not.toMatch(/camera|lesson/i)
  await page.evaluate(()=>window.arrival.update('empty',{cam:'on',model:{trained:false,training:{lesson:{started_t:1000,agree:3,of:10}}}}))
