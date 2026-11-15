@@ -54,7 +54,7 @@ export function mountPrivacyLine(host: HTMLElement) {
     values.dataset.tone = current && (current.images !== 0 || current.bytes_out !== 0) ? 'fault' : ''
     const seconds = current ? Math.floor((current.t - current.since_t) / 1000) : 0
     duration.textContent = current ? `Counting for ${Math.floor(seconds / 60)} min ${seconds % 60} s` : ''
-    duration.hidden = !current
+    duration.style.visibility = current ? 'visible' : 'hidden'
     line.dataset.reason = current ? '' : reason
   }
   listeners.add(paint)

@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test')
 const fs = require('node:fs'), path = require('node:path')
 for (const [width, height] of [[1920,1080],[1440,900]]) test(`privacy stays honest on both screens at ${width}`, async ({ page }) => {
   await page.setViewportSize({ width, height })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.clock.install()
   let value = { ok: true, images: 0, bytes_out: 0, since_t: 1000, t: 61000 }
   let broken = false, calls = 0
@@ -17,6 +18,12 @@ for (const [width, height] of [[1920,1080],[1440,900]]) test(`privacy stays hone
     await page.screenshot({ path: path.join(process.env.HUD_SCREENSHOTS, `${width}-${name}.png`) })
   }
   await capture('arrival')
+  const arrivalY = (await arrival.getByTestId('arrival-title').boundingBox()).y
+  const reading = value
+  value = { ok: false }
+  await page.clock.runFor(1100)
+  expect((await arrival.getByTestId('arrival-title').boundingBox()).y).toBe(arrivalY)
+  value = reading
   value = { ...value, images: 2, bytes_out: 4096, t: 62000 }
   await page.clock.runFor(1100)
   await expect(arrival.getByTestId('privacy-values')).toHaveText('2 images stored · 4096 bytes sent out')
@@ -31,15 +38,17 @@ for (const [width, height] of [[1920,1080],[1440,900]]) test(`privacy stays hone
   await page.clock.runFor(1100)
   await expect(main.getByTestId('privacy-values')).toHaveText('0 images stored · 0 bytes sent out')
   await capture('main')
+  const mainY = (await main.getByTestId('judge-headline').boundingBox()).y
   value = { ok: false, why: 'counter stopped' }
   await page.clock.runFor(1100)
   await expect(main.getByTestId('privacy-values')).toHaveText('privacy meter not running')
   await expect(main.getByTestId('privacy-duration')).toBeHidden()
+  expect((await main.getByTestId('judge-headline').boundingBox()).y).toBe(mainY)
   await capture('unavailable')
   broken = true
   await page.clock.runFor(1100)
   await expect(main.getByTestId('privacy-values')).toHaveText('privacy meter not running')
-  expect(calls).toBeLessThan(15)
+  expect(calls).toBeLessThan(17)
   await page.evaluate(() => window.arrival.dispose())
   const stopped = calls
   await page.clock.runFor(3000)
