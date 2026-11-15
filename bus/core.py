@@ -31,7 +31,8 @@ sealed record stands", is also sent on, from the bus's own port, to every socket
 chain_witness or a chain_sub in the last SUB_KEEP_S seconds, which is how a Pi behind the other
 Pi's hotspot hears the board at all. A chain_sub is only a witness saying it is there: it goes no
 further. chain_head and chain_witness go on to the brain like any message, but their seq is the
-chain's record number, so no gaps are counted on them.
+chain's record number, so no gaps are counted on them. Each chain_witness is also passed to the
+web server (127.0.0.1:5602, --chain), which checks the signature and stores it in the chain.
 
 A producer is one sending socket (address and port). Each process should send
 from a single socket for its whole life, or its seq gaps can't be counted.
@@ -217,7 +218,8 @@ class Recorder:
 
 
 class Bus:
-    def __init__(self, sessions=SESSIONS_DIR, send=None, clock=now_ms, reply=None):
+    def __init__(self, sessions=SESSIONS_DIR, send=None, clock=now_ms, reply=None, to_chain=None):
+        self.to_chain = to_chain or (lambda data: None)   # to the web server, which keeps the chain
         self.reply = reply or (lambda data, addr: None)   # sends from the listening socket
         self.chain_subs: dict = {}                        # a witness's (host, port) -> recv_t of its last message
         self.recorder = Recorder(sessions)
@@ -260,6 +262,11 @@ class Bus:
         chain = msg["type"] in CHAIN_KINDS
         if chain and self.chain(msg, tuple(addr[:2]), recv_t):
             return msg
+        if msg["type"] == "chain_witness":
+            try:
+                self.to_chain(encode(msg))
+            except OSError as e:
+                log.warning("signature not passed to the web server: %s", e)
 
         producer = self.producers.get(key)
         if producer is None:
@@ -453,12 +460,14 @@ def main(argv=None) -> None:
     ap.add_argument("--forward", default="127.0.0.1:5601", help="where the brain listens")
     ap.add_argument("--sessions", default=str(SESSIONS_DIR), help="folder for <session>.jsonl")
     ap.add_argument("--stats-every", type=float, default=30.0, help="seconds between seq reports")
+    ap.add_argument("--chain", default="127.0.0.1:5602", help="where the web server takes the witnesses' signatures")
     args = ap.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="bus: %(message)s", stream=sys.stderr)
     forward = parse_addr(args.forward)
     rx, tx, send = open_sockets(args.host, args.port, forward)
-    bus = Bus(sessions=args.sessions, send=send, reply=rx.sendto)
+    chain = parse_addr(args.chain)
+    bus = Bus(sessions=args.sessions, send=send, reply=rx.sendto, to_chain=lambda data: tx.sendto(data, chain))
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     log.info("listening on %s:%d, forwarding to %s:%d", args.host, rx.getsockname()[1], *forward)
     try:
