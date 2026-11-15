@@ -12,6 +12,7 @@ import argparse
 import datetime
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -75,6 +76,23 @@ def plan_jobs(repo, tree_list, only=()):
     return jobs, blobs
 
 
+def not_open(prs):
+    """The PRs GitHub no longer lists as open (read-only `gh` call; skipped if gh is missing)."""
+    if not prs:
+        return []
+    try:
+        proc = subprocess.run(
+            ["gh", "pr", "list", "--state", "open", "--limit", "500", "--json", "number"],
+            cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if proc.returncode != 0:
+        return []
+    open_now = {row["number"] for row in json.loads(proc.stdout or b"[]")}
+    return [n for n in prs if n not in open_now]
+
+
 def write_image_inputs(repo, main):
     """Requirement lines and the web lockfile from origin/main, for the cached image layers."""
     d = repo / "ci-out" / ".image"
@@ -115,6 +133,11 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding="utf-8")
     args = parse_args(argv)
     repo = Path(args.repo)
+    gone = not_open(args.pr_list)
+    if gone:
+        # A PR squash-merged since it was listed would show as a conflict with its own copy on main.
+        print(f"skipping PRs that are no longer open: {', '.join(f'#{n}' for n in gone)}", file=sys.stderr)
+        args.pr_list = [n for n in args.pr_list if n not in gone]
     if not args.no_fetch:
         trees.fetch(repo, args.pr_list)
     main_sha = trees.out(repo, "rev-parse", "refs/remotes/origin/main")
@@ -166,6 +189,7 @@ def main(argv=None):
         f"origin/main `{main_sha[:7]}`; Debian 13 (trixie) {versions}; {len(jobs)} containers, {wall:.0f} s wall, test time about ${spent:.2f} (Modal also bills container start-up; `modal billing report --for today` has the real figure).",
         "",
         report.render_summary(tree_list, rows),
+        f"- skipped, no longer open: {', '.join(f'#{n}' for n in gone)}" if gone else "",
         "",
         report.render_table(rows),
     ]
