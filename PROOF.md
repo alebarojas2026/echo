@@ -202,8 +202,8 @@ Limits and failures retained from the same report:
 
 Reproduction inputs still needed here: the scrubbed `flutter-122029`, `flutter-123232`
 and `flutter-123447` files, their INDEX.md, the completed run's exact boundaries and any
-saved state/HTTP captures. The hardware report places them in the hardware laptop's
-`~/radio-sight-recordings/2026-11-14/sessions/`. File hashes and independently recomputed
+saved state/HTTP captures. The hardware report says they are on the hardware laptop. File
+hashes and independently recomputed
 scores remain unavailable in this workspace until those inputs arrive. The request is
 [on #95][kit5-inputs]. The reported checks above are attributed observations, not substitutes
 for those missing recordings.
