@@ -155,3 +155,51 @@ def test_a_broken_store_file_reads_as_nothing_saved(site):
     site["layout_path"].parent.mkdir(parents=True)
     site["layout_path"].write_text("{")
     assert layout.Store(site["layout_path"]).load() == {"room": None, "hall": {}}
+
+
+# floor_m (#547): the square on a tier of the hall. The screen sends it only when it isn't 0.
+TIER = {**ROOM, "floor_m": 1.35}
+
+
+def test_floor_m_is_kept_and_returned(url):
+    status, view = call(url, {"room": TIER})
+    assert status == 200 and view["room"] == TIER
+    assert call(url)[1]["room"] == TIER
+
+
+def test_without_floor_m_the_room_is_the_four_keys(url):
+    _, view = call(url, {"room": ROOM})
+    assert view["room"] == ROOM and "floor_m" not in view["room"]
+
+
+def test_back_on_the_front_floor_clears_floor_m(url):
+    call(url, {"room": TIER})
+    _, view = call(url, {"room": ROOM})          # floor_m back to 0: the screen sends the four keys
+    assert view["room"] == ROOM
+
+
+@pytest.mark.parametrize("floor_m", [-2.5, 10.5, float("inf"), "1.2", True, None, [1.0]])
+def test_a_bad_floor_m_is_refused(url, floor_m):
+    call(url, {"room": TIER})
+    status, answer = call(url, {"room": {**ROOM, "floor_m": floor_m}})
+    assert status == 400 and "room.floor_m" in answer["error"]
+    assert call(url)[1]["room"] == TIER
+
+
+def test_floor_m_ends_are_allowed(url):
+    for f in (-2, 10, 0):
+        status, view = call(url, {"room": {**ROOM, "floor_m": f}})
+        assert status == 200 and view["room"]["floor_m"] == float(f)
+
+
+def test_a_restart_keeps_floor_m(site):
+    server, base = start(site)
+    call(base, {"room": TIER})
+    server.shutdown()
+    server.server_close()
+    server, base = start(site)
+    try:
+        assert call(base)[1]["room"] == TIER
+    finally:
+        server.shutdown()
+        server.server_close()
