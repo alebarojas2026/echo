@@ -2,6 +2,34 @@
 
 Use this checklist for the live building-safety demo. It follows `CONTRACTS.md` v2. The desk round is the primary path; the finalist extension comes second. A result missing from `PROOF.md` stays `__`.
 
+## At the desk
+
+| Role | Name | Does | Never |
+|---|---|---|---|
+| Talker | __ | Says the round, hands over the camera cable and phone | Touches the laptop |
+| Operator | __ | Drives the laptop: arm, reset between judges, and Ask | Explains while typing |
+| Hardware | __ | Handles the board, beacons, camera hand-off, and anything knocked | Leaves the desk |
+| Spotter | __ | Keeps the aisle behind the judge clear and places a second judge | Blocks the sensing strip |
+
+Keep at least two people at the desk for every half hour:
+
+| Time | Person | Person |
+|---|---|---|
+| 1:00–1:30 PM | __ | __ |
+| 1:30–2:00 PM | __ | __ |
+| 2:00–2:30 PM | __ | __ |
+| 2:30–3:00 PM | __ | __ |
+
+The Hardware role answers radio and hardware questions. The Operator answers model and proof-number questions. The Talker answers cost and what's next.
+
+While the Operator fixes a failure, the Talker says exactly one of these:
+
+- **Sensor blind:** “That's the honest failure. A radio link dropped, so it says blind instead of guessing the room is empty. Give us ten seconds.”
+- **No data:** “The screen lost the board's feed, so it says no data, not empty. Reconnecting.”
+- **The lesson fails:** “The lesson needs a moment with nobody in view. Step out for three seconds and back in.” If it fails twice: “We'll use the lesson it learned this morning.”
+- **Ask the room is slow or wrong:** “The language model on this board is tiny. The records it reads from are right; here they are.” Press Replay.
+- **The board will not return in 30 s:** “This is a recording of the real board from this morning.” Play the time-titled recording kept on the demo laptop, never the simulated demo.
+
 ## Preflight
 
 - [ ] Connect the UNO Q and Pi with the direct Ethernet cable.
@@ -46,7 +74,7 @@ Use these exact beat names and keep them in this order.
 7. **Ask the room:** Ask the prepared question only if the current build can answer from its local timestamped event records. Read the returned facts; do not improvise an answer.
 8. **Proof:** Finish on `/proof.json`. Say only completed values. Close with `Images stored: __` and `Bytes sent outside local network: __` until proof records replace them.
 
-If the feature gate for **Arm the space**, **Intrusion alert**, or **Ask the room** fails, stop the live sequence after **Still follows**. State that the remaining integrations are not ready, then go directly to **Proof**.
+If the feature gate for **Arm the space**, **Intrusion alert**, or **Ask the room** fails, stop the live sequence after **Still follows**, use the matching **At the desk** sentence, then go directly to **Proof**.
 
 ## Camera-unplug proof
 
@@ -121,7 +149,7 @@ Disarm, keep the judge outside the sensing area, and verify the live phone feed.
 
 ### Room-question failure
 
-Do not answer from memory. Show the local event record if it is available, or state that the question feature is not ready and continue to **Proof**.
+Do not answer from memory. Use the **Ask the room is slow or wrong** sentence, show the local event records with Replay, and continue to **Proof**.
 
 ### Router move does not recover
 
