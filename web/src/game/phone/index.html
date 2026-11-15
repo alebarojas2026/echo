@@ -39,6 +39,12 @@
       .foot { display: flex; flex-direction: column; gap: 0.75rem; }
       .checkin { margin: 0; font-size: 1.75rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
       .checkin[data-has='yes'] { color: var(--action); }
+      /* Two small lines that come from the board: a passer-by while armed (calm, no chime) and a device unplugged
+         while armed (the fault colour, with the word "unplugged"). Each is gone when there is nothing to say. */
+      .line { margin: 0; font-size: 1.75rem; line-height: 1.3; }
+      .line[data-has='no'] { display: none; }
+      .passed { color: var(--text-2); }
+      .tamper { color: var(--fault); font-weight: 600; }
       .sound {
         min-height: 3.5rem; padding: 0.75rem 1rem; border: 2px solid var(--square); border-radius: 0.5rem;
         background: transparent; color: var(--text); font: inherit; font-size: 1.75rem; font-weight: 600; touch-action: manipulation;
@@ -55,6 +61,8 @@
         <p class="detail" id="detail" data-testid="phone-detail"></p>
       </section>
       <div class="foot">
+        <p class="line tamper" id="tamper" data-testid="phone-tamper" data-has="no" role="alert"></p>
+        <p class="line passed" id="passed" data-testid="phone-passed" data-has="no" aria-live="polite"></p>
         <p class="checkin" id="checkin" data-testid="phone-checkin">No check-in yet</p>
         <button class="sound" id="sound" type="button">Tap to turn on sound</button>
       </div>

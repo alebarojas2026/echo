@@ -2,6 +2,8 @@
 // otherwise, so a new layout reaches both pages without a code change. No DOM in here.
 export const ZONES = { 1: 'Bed', 2: 'Chair', 3: 'Hall', 4: 'Bathroom' }
 export const CORNERS = { 1: 'NW', 2: 'NE', 3: 'SW', 4: 'SE' }
+// Device names by node id ("east" -> "East beacon"), from nodes.json's nodes and hall beacons. Empty until it loads.
+export const DEVICES = {}
 const WORDS = { NW: 'north-west', NE: 'north-east', SW: 'south-west', SE: 'south-east', W: 'west', E: 'east' }
 const ORDER = ['NW', 'NE', 'SW', 'SE', 'W', 'E']
 
@@ -20,6 +22,24 @@ export function useZones(nodes) {
   return true
 }
 
+// Take the device names from a parsed nodes.json: each node's name, and "Hall beacon H" for a hall beacon.
+export function useDevices(nodes) {
+  const named = (Array.isArray(nodes?.nodes) ? nodes.nodes : [])
+    .filter((n) => typeof n?.id === 'string' && typeof n.name === 'string' && n.name.trim())
+  const hall = (Array.isArray(nodes?.hall?.beacons) ? nodes.hall.beacons : [])
+    .filter((b) => typeof b?.node === 'string' && typeof b.id === 'string' && b.id.trim())
+  if (!named.length && !hall.length) return false
+  for (const k of Object.keys(DEVICES)) delete DEVICES[k]
+  for (const b of hall) DEVICES[b.node] = `Hall beacon ${b.id.trim()}`
+  for (const n of named) DEVICES[n.id] = n.name.trim()
+  return true
+}
+
+// A device in plain words, never its id.
+export function deviceName(id) {
+  return DEVICES[id] ?? 'A device'
+}
+
 // The zones in floor order (north-west first, or west first on a strip; by id when there's neither),
 // each with the small line under its name: "Zone 1, north-west".
 export function zoneList() {
@@ -36,11 +56,14 @@ export function compass() {
   return ['South: the router', 'North is up']
 }
 
-// Fetch /nodes.json from the board (or the dev server) and use its zones. True if they were taken.
+// Fetch /nodes.json from the board (or the dev server) and use its zones and device names. True if either was taken.
 export async function loadZones(fetchFn = globalThis.fetch) {
   try {
     const reply = await fetchFn('/nodes.json', { cache: 'no-store' })
-    return reply.ok && useZones(await reply.json())
+    if (!reply.ok) return false
+    const nodes = await reply.json()
+    const devices = useDevices(nodes)
+    return useZones(nodes) || devices
   } catch {
     return false
   }
