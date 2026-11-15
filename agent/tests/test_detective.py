@@ -227,7 +227,9 @@ def test_story_questions_go_to_the_detective(gate, question):
     ("how many people were here?", None)])
 def test_the_other_questions_keep_their_tools(gate, question, tool):
     reply = asked(gate, question, privacy_reader=lambda **kw: {"ok": False, "why": "test"})
-    assert reply["tool"] == tool and "steps" not in reply
+    assert reply["tool"] == tool and "story" not in [s["tool"] for s in reply.get("steps", [])]
+    # an answer read from a stretch of the record shows its work too (section 13); the others have nothing to show
+    assert ("steps" in reply) == (question in ("was anyone here in the last 10 minutes?", "Is the room armed?"))
 
 
 def test_the_privacy_answer_says_a_clock_time_not_an_epoch(gate):
