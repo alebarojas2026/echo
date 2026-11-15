@@ -84,7 +84,8 @@ def analyze(recording, annotations, keep_windows=False):
             'recording_sha256': digest(recording), 'annotations_sha256': digest(annotations),
             'measured_at': datetime.fromtimestamp(rows[-1]['recv_t']/1000, timezone.utc).isoformat(),
             'method': METHOD, 'lines': result, 'started_at_ms': origin, 'ended_at_ms': rows[-1]['recv_t'],
-            'duration_s': duration, 'group': note.get('group'), 'layout_sha256': note.get('layout_sha256')}
+            'duration_s': duration, 'group': note.get('group'), 'layout_sha256': note.get('layout_sha256'),
+            'layout_note': note.get('layout_note')}
 
 
 def summarize(link, windows, jitter, count, duration):
@@ -113,9 +114,13 @@ def group_reports(reports):
             groups[report['group']].append(report)
     for name, members in groups.items():
         members.sort(key=lambda r: r['started_at_ms'])
-        if len({r['commit'] for r in members}) != 1 or len({r['layout_sha256'] for r in members}) != 1 or not re.fullmatch(
-                r'[0-9a-f]{64}', members[0]['layout_sha256'] or ''):
-            raise ValueError('group recordings need the same board commit and layout SHA256')
+        # The layout file's hash, or, when the board's file was not kept, the operator's own words for the
+        # placement (layout_note): the same on every recording of the group, and printed under the table.
+        note = members[0].get('layout_note')
+        worded = members[0]['layout_sha256'] is None and isinstance(note, str) and len(note.strip()) >= 20
+        if len({r['commit'] for r in members}) != 1 or len({(r['layout_sha256'], r.get('layout_note')) for r in members}) != 1 or not (
+                worded or re.fullmatch(r'[0-9a-f]{64}', members[0]['layout_sha256'] or '')):
+            raise ValueError('group recordings need the same board commit and layout SHA256 (or the same layout_note)')
         if any(a['ended_at_ms'] > b['started_at_ms'] for a,b in zip(members,members[1:])):
             raise ValueError('group recordings overlap in time')
         report = dict(members[-1], session=name, lines=[], sources=[
@@ -168,8 +173,10 @@ def table(reports):
             out.append('| ' + ' | '.join(cell(v) for v in cells) + ' |')
         for source in sources:
             provenance.append(f"{cell(source['session'])}: recording SHA256 `{source['recording_sha256']}`; labels SHA256 `{source['annotations_sha256']}`.")
-        if report.get('group'):
+        if report.get('group') and report.get('layout_sha256'):
             provenance.append(f"Group {cell(report['group'])}: layout SHA256 `{report['layout_sha256']}`.")
+        elif report.get('group'):
+            provenance.append(f"Group {cell(report['group'])}: the board's layout file was not kept; the operator's note: {cell(report['layout_note'])}")
     out.extend(['', *provenance])
     out.extend(['', METHOD + '. Separation = weakest empty RSSI minus strongest person RSSI; a negative value means overlap. '
                 'Rate counts all readings over all labelled seconds, including gaps. Missing/partial windows are excluded from drop and jitter, never treated as empty.'])

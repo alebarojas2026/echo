@@ -20,4 +20,7 @@ contract does not include a timing sample count. Do not infer it from zone N.
 Rows without a section 7 source are preserved exactly, including independent
 latency and coverage measurements; this script never erases those results.
 
+`--replay proof/proof.replay.json` adds the rows of recordings replayed through the brain
+(proof/REPLAYED.md) to the generated block, with their stated limits.
+
 Tests use in-memory Markdown and JSON only: `python -m pytest proof/tests`.
