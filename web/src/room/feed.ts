@@ -1,9 +1,13 @@
 import type { CmdMsg, CmdName, EventMsg, StateMsg } from './contract'
-import { createMockSource, type MockScenario } from './mock'
+import { createMockSource, mockScenario } from './mock'
 
 // The one place screen data comes from. The room and the hud panels both read it.
-//   ?src=mock (default)  mock states, ?mock=<scenario> picks one (see mock.ts)
-//   ?src=ws              the brain's WebSocket, ws://<this host>:8765/ws (?ws=<url> overrides)
+//   live   the brain's WebSocket, ws://<this host>:8765/ws (?ws=<url> overrides)
+//   mock   mock states; ?mock=<scenario> picks one (see mock.ts)
+// Which one (feedSource): a page the board serves, and any built page, is live unless the address asks for the
+// mock in so many words (?mock=... or ?src=mock), so a bookmark, a restart or a typed address at the desk can
+// never show a judge a simulated person. Only the dev server (`vite`) plays the mock by default. ?src=ws is live
+// anywhere. Live with no state yet shows NO DATA, never the tour.
 
 export type FeedSource = 'mock' | 'ws'
 
@@ -36,12 +40,24 @@ export interface Transport {
   send(msg: CmdMsg): void
 }
 
+/** Live or mock for this address. `onBoard`: the board served the page (servedByBoard). `built`: a production
+ *  build, not the dev server. */
+export function feedSource(params: URLSearchParams, onBoard: boolean, built: boolean): FeedSource {
+  if (params.has('mock') || params.get('src') === 'mock') return 'mock'
+  return params.get('src') === 'ws' || onBoard || built ? 'ws' : 'mock'
+}
+
+/** board/serve.py marks the page it serves with <meta name="radio-sight-board" content="live"> (#642). */
+export function servedByBoard(doc: Pick<Document, 'querySelector'> = document): boolean {
+  return doc.querySelector('meta[name="radio-sight-board"]')?.getAttribute('content') === 'live'
+}
+
 export function createFeed(params = new URLSearchParams(location.search)): Feed {
-  if (params.get('src') === 'ws') {
+  if (feedSource(params, servedByBoard(), import.meta.env.PROD) === 'ws') {
     const url = params.get('ws') ?? `ws://${location.hostname || '127.0.0.1'}:8765/ws`
     return feedFrom('ws', wsTransport(url))
   }
-  return feedFrom('mock', createMockSource((params.get('mock') ?? 'tour') as MockScenario))
+  return feedFrom('mock', createMockSource(mockScenario(params.get('mock'))))
 }
 
 export function feedFrom(source: FeedSource, transport: Transport, now = () => performance.now()): Feed {

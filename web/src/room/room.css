@@ -30,6 +30,35 @@
   }
 }
 
+/* Mock data: a plain band across the room says so the whole time, and the room starts below it. Card colour and
+   secondary text: it is a fact about the page, not a status. Above the arrival card (20), under align mode (30). */
+.room--sim {
+  top: 56px;
+}
+
+.room-sim {
+  position: fixed;
+  z-index: 25;
+  top: 0;
+  left: 640px;
+  right: 0;
+  box-sizing: border-box;
+  height: 56px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--edge);
+  background: var(--floor);
+  color: var(--text-2);
+  font: 600 28px/56px 'Hanken Grotesk', system-ui, sans-serif;
+  text-align: center;
+  pointer-events: none;
+}
+
+@media (max-width: 1100px) {
+  .room-sim {
+    left: 0;
+  }
+}
+
 .room-canvas {
   display: block;
   width: 100%;

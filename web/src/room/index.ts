@@ -18,6 +18,9 @@ import { Stage } from './stage'
 import { RoomView, viewOptions } from './view'
 import { XrayLayer } from './xray'
 
+/** What the band across the room says while mock data plays. */
+export const SIM_WORDS = 'Simulated data'
+
 export interface Room {
   view: RoomView
   stage: Stage
@@ -26,6 +29,16 @@ export interface Room {
 /** Builds the 3D room inside `host` and keeps it in step with the feed. */
 export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchParams(location.search)): Room {
   host.classList.add('room')
+  // Mock data says so in plain words across the room, the whole time it plays (#642). The room starts below the
+  // band, so nothing is ever drawn under it.
+  if (feed.source === 'mock') {
+    host.classList.add('room--sim')
+    const band = document.createElement('div')
+    band.className = 'room-sim'
+    band.setAttribute('role', 'status')
+    band.textContent = SIM_WORDS
+    document.body.append(band)
+  }
   const options = viewOptions(params)
   const view = new RoomView(host, options)
   host.dataset.quality = options.quality
