@@ -293,3 +293,14 @@ def test_reset_sends_the_reset_event_and_the_template_recap():
     # the next reset only tells what happened since this one
     brain.command({"cmd": "reset"})
     assert brain.narration is None or brain.narration["text"] != recap["text"]
+
+
+def test_lesson_trains_live_then_the_radio_carries_on_without_the_camera():
+    states, events = run("lesson")
+    during, after, unplugged = at(states, 14), at(states, 25), at(states, 40)
+    assert during["model"]["trained"] is False and during["pred"] is None
+    assert during["model"]["training"]["sessions"] == ["lesson"] and 0.4 <= during["model"]["training"]["progress"] <= 0.6
+    assert during["teacher"]["present"] is True                       # the camera is labelling the person
+    assert after["model"]["trained"] is True and after["model"]["training"] is None and after["pred"]["zone"] == 4
+    assert unplugged["cam"] == "off" and unplugged["teacher"] is None and unplugged["pred"]["zone"] == 3
+    assert kinds(events)[:2] == ["baseline_done", "trained"] and "cam_off" in kinds(events)

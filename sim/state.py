@@ -225,7 +225,13 @@ class Brain:
         path = self.path
         dt = 0.0 if self.last_t is None else t - self.last_t
         self.last_t = t
-        baseline, trained = t >= BASELINE_AT_S, t >= TRAINED_AT_S
+        # A path with a "lesson" ({"t_on", "t_off"}) is taught live: the camera labels the person for the
+        # lesson, the fit runs during it (model.training), and the model is trained from t_off on.
+        lesson = path.get("lesson")
+        trained_at = lesson["t_off"] if lesson else TRAINED_AT_S
+        baseline, trained = t >= BASELINE_AT_S, t >= trained_at
+        training = ({"started_t": self._ms(lesson["t_on"]), "progress": round((t - lesson["t_on"]) / (lesson["t_off"] - lesson["t_on"]), 2),
+                     "sessions": ["lesson"]} if lesson and lesson["t_on"] <= t < lesson["t_off"] else None)
         pos = fake.position(path.get("person") or [], t)
         moving = fake.is_moving(path.get("person") or [], t)
         zone = fake.zone_of(*pos) if pos else 0
@@ -318,7 +324,8 @@ class Brain:
                 "teacher": {"present": bool(pos), "zone": zone,
                             "motion": ("moving" if moving else "still") if pos else None} if cam == "on" else None,
                 "model": {"trained": trained, "ver": "sim" if trained else None, "train_s": None,
-                          "ms_per_decision": None, "windows": 0, "train_sessions": [], "training": None},
+                          "ms_per_decision": None, "windows": 0,
+                          "train_sessions": ["lesson"] if lesson and trained else [], "training": training},
                 "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None}}
 
     def _event(self, t: float, kind: str, **info) -> None:
