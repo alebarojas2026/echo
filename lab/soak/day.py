@@ -72,11 +72,19 @@ def feeder(port):
     encode = encoder()
     hold, n = None, 0
 
+    import gate
+    from sim.layout import LAYOUT
+    nodes = json.loads((REPO / "radio" / "nodes.json").read_text(encoding="utf-8"))
+    one_spot = gate.is_gate(nodes)
+
     def play(path, seed):
         rng = random.Random(seed)
         start_ms = int(time.time() * 1000)
         events = fake.simulate(path, rate=15.0, seed=seed)
         events = with_passers(events, path.get("passers") or [], rng, fake)
+        if one_spot:   # the kit's own rates, noise and falls (issue #789), from lab/soak/gate.py
+            others = [e for e in events if e["type"] != "rssi"]
+            events = sorted(others + gate.readings(path, seed, nodes, LAYOUT, fake, passer_at), key=lambda e: e["t"])
         fake.pace(((e["t"], encode({**e, "t": e["t"] + start_ms / 1000})) for e in events), out=out)
 
     while True:
@@ -147,6 +155,19 @@ class Day:
             "clock_jumps": a.faketime and r.random() < 0.7,
             "disk_full": r.random() < 0.6,
         }
+        self.focus = a.focus
+        self.one_spot = any(l.get("crosses_spot") is True for l in json.loads(
+            (REPO / "radio" / "nodes.json").read_text(encoding="utf-8"))["links"])
+        if a.focus != "mix":   # one question per day: everything else quiet
+            self.cfg.update(loss=r.choice([0.0, 0.02, 0.05]), dup=0.0, jitter_ms=r.choice([0, 20]), kill_per_h=0,
+                            clock_jumps=False, disk_full=False, baseline_every=1, keep_model_share=0.0)
+        if a.focus == "memory":
+            self.cfg.update(baseline_every=10 ** 6, passers_per_min=r.choice([0, 2, 4]))
+        if a.focus == "spot":
+            self.cfg.update(passers_per_min=r.choice([2, 4, 6, 8, 12]), baseline_every=r.choice([1, 2, 4]))
+        if a.focus in ("clock", "disk", "armed"):
+            self.cfg.update(passers_per_min=r.choice([0, 2]))
+        self.cfg["focus"] = a.focus
         self.feat = {
             "store": has("store/__main__.py"), "ask": has("board/serve.py", "/ask"),
             "lesson": has("brain/lesson.py"), "arm": has("brain/core.py", "_cmd_arm"),
@@ -166,6 +187,7 @@ class Day:
         self.offset_s = 0
         self.ctx = type("Ctx", (), {"path": None, "chaos": None, "training": False})()
         self.lock, self.lock_log = threading.Lock(), threading.Lock()
+        self._present = "unset"
 
     # ---- problems
 
@@ -376,8 +398,12 @@ class Day:
             x0, x1 = (-0.6, w + 0.6) if self.rng.random() < 0.5 else (w + 0.6, -0.6)
             span = abs(x1 - x0) / speed
             y = self.rng.uniform(-0.35, 0.05) if self.L.strip_m else self.rng.uniform(-0.5, -0.05)
+            cut = False
+            if self.one_spot:   # behind Pi B (y -0.2), 0.1-0.65 m from it; one in ten cuts through the gap
+                cut = self.rng.random() < 0.1
+                y = self.rng.uniform(0.1, 0.5) if cut else self.rng.uniform(-0.85, -0.3)
             out.append({"t_on": t, "t_off": t + span, "x0": x0, "x1": x1, "y": y,
-                        "in_frame": self.rng.random() < 0.5})
+                        "in_frame": self.rng.random() < 0.5, "cut": cut})
         return out
 
     def spot(self, zone, jitter=0.12):
@@ -386,6 +412,8 @@ class Day:
 
     def outside(self):
         w, _ = self.area
+        if self.one_spot:   # the judge steps into the gap from one side
+            return (-0.5 if self.rng.random() < 0.5 else w + 0.5, self.rng.uniform(0.2, 0.4))
         return (self.rng.uniform(0.1, w - 0.1), -0.45)
 
     def play(self, path):
@@ -409,7 +437,8 @@ class Day:
                 break
             time.sleep(3)   # the feeder died; the supervisor brings it back
         self.run.log("segments.jsonl", path=path["name"], start=round(t0, 3), end=round(now(), 3),
-                     passers=len(path.get("passers") or []), visit=self.visit_n)
+                     passers=len(path.get("passers") or []), visit=self.visit_n,
+                     person=path.get("person"), passer_list=path.get("passers"), dur=path["duration_s"])
 
     # ---- one visit
 
@@ -426,6 +455,8 @@ class Day:
             rec["baseline"] = "keep_model" if keep else "new"
             self.cmd("baseline", **({"keep_model": True} if keep else {}))
             self.capturing_until = now() + 125
+            if self.focus == "disk" and v > 1:
+                threading.Thread(target=self.disk_at_baseline_end, args=(v,), daemon=True).start()
             t0 = now()
             self.play(self.seg("empty-baseline", 24, [(0.5, None)]))
             while m.wait_event("baseline_done", t0, 0.1) is None and now() - t0 < 90:
@@ -479,6 +510,17 @@ class Day:
         if self.feat["arm"]:
             self.play(self.seg("step-out", 5, [(2, self.outside()), (2.2, None)], cam="off"))
             self.cmd("arm", on=True)
+            if self.focus == "armed":   # the brain restarts while armed (systemd brings it back)
+                self.mon.wait(lambda s: s.get("armed"), 3)
+                tk = now()
+                self.kill("brain", why="armed-restart")
+                back = self.mon.wait(lambda s: True, 30)
+                armed = self.mon.wait(lambda s: s.get("armed"), 10)
+                said = self.mon.wait_event("disarmed", tk, 0.1)
+                rec["armed_restart"] = {"state_back": back is not None, "armed_after": armed is not None,
+                                        "disarmed_event": said is not None}
+                if back is not None and armed is None and said is None:
+                    self.problem("armed_lost_on_restart", key="brain", once_per=1e9)
             ti = now()
             b = r.choice(self.zones)
             self.play(self.seg("intruder", 9, [(0.1, self.outside()), (2.5, self.spot(b))], cam="off"))
@@ -571,6 +613,12 @@ class Day:
 
     def faults(self):
         r = self.rng
+        if self.focus == "clock":
+            return self.clock_script()
+        if self.focus != "mix":   # only the harmless background: screens come and go, the web is asked
+            while not self.run.stop.wait(r.uniform(60, 180)):
+                getattr(self, "fault_" + r.choice(["http", "stalled_screen"]))()
+            return
         kinds = ["rx_off", "tx_off", "garbage", "bad_cmds", "stalled_screen", "loss_spike", "http"]
         if self.cfg["clock_jumps"]:
             kinds.append("clock")
@@ -725,6 +773,24 @@ class Day:
             self.set_offset(0)
             self.run.log("chaos.jsonl", kind="clock_jump", jump_s=-jump, offset_s=0)
 
+    def clock_script(self):
+        """Round 3's blow-up, on purpose and on a schedule: 2 days forward, back 10 minutes later; an hour
+        back, forward again; repeated from minute 15. RSS and CPU are sampled every 30 s as always."""
+        steps = [(20, 172800), (30, 0), (45, -3600), (55, 0), (70, 172800), (75, 0)]
+        t0 = now()
+        while not self.run.stop.is_set():
+            for at_min, off in steps:
+                while now() - t0 < at_min * 60:
+                    if self.run.stop.wait(5):
+                        return
+                self.chaos_now.add("clock")
+                self.set_offset(off)
+                self.run.log("chaos.jsonl", kind="clock_jump", jump_s=None, offset_s=off)
+                if off == 0:
+                    self.run.stop.wait(60)
+                    self.chaos_now.discard("clock")
+            t0 = now() - 15 * 60
+
     def set_offset(self, s):
         self.offset_s = int(s)
         (self.out / "faketime").write_text(f"{self.offset_s:+d}\n")
@@ -756,6 +822,46 @@ class Day:
             if lag is not None and lag > 15 and not self.killed_recently("store", "brain", within=30):
                 self.problem("store_stopped_after_disk_full", key="store", once_per=1e9, lag_s=lag,
                              tail=self.tail("store", 20))
+
+    def disk_at_baseline_end(self, v):
+        """Full from 15 s after the baseline is asked for until 40 s, so it finishes on a full disk; then is
+        baseline_done there, is baseline.json whole, and does a restarted brain come back with it?"""
+        import psutil
+        t0 = now()
+        time.sleep(15)
+        names = [n for n in ("store", "bus", "brain") if n in self.procs]
+        self.disk_full = True
+        for n in names:
+            try:
+                psutil.Process(self.procs[n].pid).rlimit(psutil.RLIMIT_FSIZE, (1, psutil.RLIM_INFINITY))
+            except (psutil.Error, OSError, AttributeError):
+                pass
+        time.sleep(25)
+        for n in names:
+            try:
+                psutil.Process(self.procs[n].pid).rlimit(psutil.RLIMIT_FSIZE, (psutil.RLIM_INFINITY, psutil.RLIM_INFINITY))
+            except (psutil.Error, OSError, AttributeError):
+                pass
+        self.disk_full = False
+        done = self.mon.wait_event("baseline_done", t0, 30)
+        try:
+            doc = json.loads((self.out / "sessions" / "baseline.json").read_text(encoding="utf-8"))
+            whole = bool(doc.get("links"))
+        except (OSError, ValueError):
+            whole = False
+        rec = {"visit": v, "baseline_done": done is not None, "baseline_json_whole": whole}
+        if v % 2 == 0:   # and a restart after it
+            self.kill("brain", why="after-disk-full")
+            back = self.mon.wait(lambda s: True, 30)
+            rec["base_after_restart"] = (self.mon.wait(lambda s: any(l.get("base_dbm") is not None for l in s["links"]), 20)
+                                         is not None) if back is not None else None
+        self.run.log("disk.jsonl", **rec)
+        if done is None:
+            self.problem("baseline_done_lost_on_full_disk", key="done", once_per=1e9, visit=v)
+        if not whole:
+            self.problem("baseline_json_broken_on_full_disk", key="json", once_per=1e9, visit=v)
+        if rec.get("base_after_restart") is False:
+            self.problem("baseline_lost_on_restart", key="restart", once_per=1e9, visit=v)
 
     def proxy(self, **cmd):
         return self.proxyctl(**cmd)
@@ -862,7 +968,13 @@ class Day:
 
             def handle(msg, t):
                 orig(msg, t)
-                if msg.get("type") == "event" and msg.get("kind") in ("intrusion", "alert_on", "armed", "disarmed"):
+                if msg.get("type") == "state":
+                    pred = msg.get("pred")
+                    pres = None if pred is None else bool(pred.get("present"))
+                    if pres != day._present:
+                        day._present = pres
+                        day.run.log("presence.jsonl", present=pres, armed=bool(msg.get("armed")), seg=day.segment)
+                if msg.get("type") == "event" and msg.get("kind") in ("intrusion", "alert_on", "armed", "disarmed", "tamper"):
                     day.run.log("events.jsonl", kind=msg["kind"], info=msg.get("info"), visit=day.visit_n, seg=day.segment)
             self.mon.handle = handle
             for target in (self.faults, self.screens, self.checks):
@@ -915,6 +1027,8 @@ def main():
     ap.add_argument("--pace", choices=("real", "fast"), default="real")
     ap.add_argument("--out", default=str(HERE / "runs" / time.strftime("day-%Y%m%d-%H%M")))
     ap.add_argument("--faketime", action="store_true", help="jump the board's clock (Linux with libfaketime)")
+    ap.add_argument("--focus", default="mix", choices=("mix", "clock", "memory", "disk", "spot", "armed"),
+                    help="one question per day; mix = every fault at random")
     a = ap.parse_args()
     a.sync = None
     Day(a).main()

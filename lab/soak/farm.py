@@ -26,7 +26,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 TREES = HERE / "farm-trees"
-LAB_FILES = ("soak.py", "day.py", "proxy.py", "fake_llm.py", "feeder.py")
+LAB_FILES = ("soak.py", "day.py", "proxy.py", "fake_llm.py", "feeder.py", "gate.py")
 
 try:
     import modal
@@ -38,7 +38,7 @@ def git(*args, cwd=REPO, check=True):
     return subprocess.run(["git", *args], cwd=cwd, check=check, capture_output=True, text=True)
 
 
-def build_tree(name, prs, round_, base):
+def build_tree(name, prs, round_, base, layout=None):
     """A worktree of origin/main plus PRs, with lab/soak overlaid, as a tarball. Returns its record."""
     dest = TREES / round_ / name
     if dest.exists():
@@ -53,6 +53,8 @@ def build_tree(name, prs, round_, base):
         else:
             git("merge", "--abort", cwd=dest, check=False)
             skipped.append(n)
+    if layout:   # the layout the board runs: that file becomes radio/nodes.json, as on the board
+        (dest / "radio" / "nodes.json").write_bytes((dest / layout).read_bytes())
     (dest / "lab" / "soak").mkdir(parents=True, exist_ok=True)
     for f in LAB_FILES:
         (dest / "lab" / "soak" / f).write_bytes((HERE / f).read_bytes())
@@ -64,7 +66,7 @@ def build_tree(name, prs, round_, base):
                 tar.add(p, arcname=str(rel).replace("\\", "/"))
     (TREES / round_ / f"{name}.tar.gz").write_bytes(buf.getvalue())
     head = git("rev-parse", "HEAD", cwd=dest).stdout.strip()
-    return {"tree": name, "main": base, "head": head, "merged": merged, "skipped": skipped,
+    return {"tree": name, "layout": layout, "main": base, "head": head, "merged": merged, "skipped": skipped,
             "bytes": len(buf.getvalue())}
 
 
@@ -76,8 +78,14 @@ def cmd_trees(a):
     if a.heroes_ref:   # the exact tree going onto the hardware, e.g. a deploy branch
         git("fetch", "-q", "--force", "origin", f"+{a.heroes_ref}:refs/remotes/origin/{a.heroes_ref}", check=False)
         hero_base = git("rev-parse", f"origin/{a.heroes_ref}").stdout.strip()
-    out = [build_tree("main", [], a.round, base), build_tree("heroes", prs, a.round, hero_base)]
-    out[1]["ref"] = a.heroes_ref or "main"
+    if a.tree:   # name:prs:layout, e.g. kit:776,774:radio/layouts/gate.json
+        git("fetch", "-q", "--force", "origin", *[f"+pull/{n}/head:farm-pr{n}" for t in a.tree
+                                                 for n in t.split(":")[1].split(",") if n], check=False)
+        out = [build_tree(t.split(":")[0], [int(n) for n in t.split(":")[1].split(",") if n], a.round, base,
+                          t.split(":")[2] or None) for t in a.tree]
+    else:
+        out = [build_tree("main", [], a.round, base), build_tree("heroes", prs, a.round, hero_base)]
+        out[1]["ref"] = a.heroes_ref or "main"
     (TREES / a.round / "trees.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
 
@@ -99,14 +107,15 @@ if modal is not None:
                            "python3 -m pip install --break-system-packages --no-cache-dir "
                            "numpy scikit-learn 'websockets>=14' psutil 'jsonschema>=4.18'"))
 
-    def _day(tree_tar: bytes, tree: str, round_: str, seed: int, pace: str, hours: float, head: str) -> dict:
+    def _day(tree_tar: bytes, tree: str, round_: str, seed: int, pace: str, hours: float, head: str,
+             focus: str = "mix") -> dict:
         import shutil
         import threading
         work = Path("/work/tree")
         work.mkdir(parents=True, exist_ok=True)
         with tarfile.open(fileobj=io.BytesIO(tree_tar), mode="r:gz") as tar:
             tar.extractall(work)
-        name = f"{tree}-{pace}-s{seed}"
+        name = f"{tree}-{pace}-s{seed}" + ("" if focus == "mix" else f"-{focus}")
         out, res = Path("/tmp/out") / name, Path("/vol") / round_ / name
         res.mkdir(parents=True, exist_ok=True)
         lock = threading.Lock()
@@ -129,7 +138,8 @@ if modal is not None:
         os.chdir(work)
         os.environ["SOAK_TREE"] = f"{tree} {head}"
         ft = Path("/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1").exists()
-        args = ["--seed", str(seed), "--hours", str(hours), "--pace", pace, "--out", str(out)] + (["--faketime"] if ft else [])
+        args = (["--seed", str(seed), "--hours", str(hours), "--pace", pace, "--out", str(out), "--focus", focus]
+                + (["--faketime"] if ft else []))
         # day.py runs as a child so its imports resolve inside the tree; it syncs through a flag file.
         p = subprocess.Popen([sys.executable, str(work / "lab" / "soak" / "day.py"), *args], cwd=work,
                              stdout=open("/tmp/day.out", "w"), stderr=subprocess.STDOUT)
@@ -155,7 +165,7 @@ if modal is not None:
     def day_real(*args):
         return _day(*args)
 
-    @app.function(image=image, cpu=1.5, memory=2048, timeout=3 * 3600, volumes={"/vol": vol})
+    @app.function(image=image, cpu=1.5, memory=2048, timeout=5 * 3600, volumes={"/vol": vol})
     def day_fast(*args):
         return _day(*args)
 
@@ -164,12 +174,13 @@ if modal is not None:
         trees = {t["tree"]: t for t in json.loads((TREES / round / "trees.json").read_text())}
         calls, seed = [], seed0
         for item in plan.split(","):
-            tree, pace, n, hours = item.split(":")
+            tree, pace, n, hours, *rest = item.split(":")
+            focus = rest[0] if rest else "mix"
             tar = (TREES / round / f"{tree}.tar.gz").read_bytes()
             fn = day_real if pace == "real" else day_fast
             for _ in range(int(n)):
                 seed += 1
-                calls.append((tree, pace, seed, fn.spawn(tar, tree, round, seed, pace, float(hours), trees[tree]["head"])))
+                calls.append((tree, pace, seed, fn.spawn(tar, tree, round, seed, pace, float(hours), trees[tree]["head"], focus)))
         print(f"{len(calls)} days started: seeds {seed0 + 1}-{seed}", flush=True)
         for tree, pace, s, c in calls:
             try:
@@ -187,6 +198,7 @@ if __name__ == "__main__":
     t.add_argument("--round", required=True)
     t.add_argument("--prs", default="")
     t.add_argument("--heroes-ref", default="", help="build heroes from this branch instead of main (then --prs on top)")
+    t.add_argument("--tree", action="append", default=[], help="name:prs:layout, instead of main and heroes")
     f = sub.add_parser("fetch")
     f.add_argument("--round", required=True)
     a = ap.parse_args()
