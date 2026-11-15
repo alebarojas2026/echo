@@ -42,12 +42,14 @@
           "type": "object",
           "properties": {"entries": {"$ref": "#/$defs/count"}, "detected": {"$ref": "#/$defs/count"}, "ci95": {"$ref": "#/$defs/ci95"},
                          "armed_entries": {"$ref": "#/$defs/count"}, "intrusions": {"$ref": "#/$defs/count"}, "intrusion_ci95": {"$ref": "#/$defs/ci95"},
-                         "within_s": {"type": "number", "exclusiveMinimum": 0}},
+                         "within_s": {"type": "number", "exclusiveMinimum": 0},
+                         "hold_s": {"$comment": "Optional: the armed.hold_s that was set. within_s is hold_s + 2.", "type": "number", "exclusiveMinimum": 0}},
           "required": ["entries", "detected", "ci95", "armed_entries", "intrusions", "intrusion_ci95", "within_s"], "additionalProperties": false},
         "false_alarms": {
           "type": "object",
           "properties": {"presence_events": {"$ref": "#/$defs/count"}, "intrusions": {"$ref": "#/$defs/count"}, "duration_s": {"$ref": "#/$defs/num"},
-                         "armed_duration_s": {"$ref": "#/$defs/num"}, "presence_per_hour": {"$ref": "#/$defs/num"}, "intrusions_per_hour": {"$ref": "#/$defs/num"}},
+                         "armed_duration_s": {"$ref": "#/$defs/num"}, "presence_per_hour": {"$ref": "#/$defs/num"}, "intrusions_per_hour": {"$ref": "#/$defs/num"},
+                         "passed_by_events": {"$ref": "#/$defs/count"}, "passed_by_duration_s": {"$ref": "#/$defs/num"}, "passed_by_per_hour": {"$ref": "#/$defs/num"}},
           "required": ["presence_events", "intrusions", "duration_s", "armed_duration_s", "presence_per_hour", "intrusions_per_hour"],
           "additionalProperties": false},
         "fewer_devices": {"type": "array", "items": {

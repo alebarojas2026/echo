@@ -417,9 +417,10 @@ The values below show the format only; they are not results.
    // internet", never "nothing leaves the board": our own laptop and phone, on our own network, receive the
    // screen's data.
  "security":{
-   "detection":{"entries":null,"detected":null,"ci95":null,"armed_entries":null,"intrusions":null,"intrusion_ci95":null,"within_s":2},
+   "detection":{"entries":null,"detected":null,"ci95":null,"armed_entries":null,"intrusions":null,"intrusion_ci95":null,"within_s":5,"hold_s":3},
    "false_alarms":{"presence_events":null,"intrusions":null,"duration_s":null,"armed_duration_s":null,
-                   "presence_per_hour":null,"intrusions_per_hour":null},
+                   "presence_per_hour":null,"intrusions_per_hour":null,
+                   "passed_by_events":null,"passed_by_duration_s":null,"passed_by_per_hour":null},
    "fewer_devices":[{"name":"...","nodes":["unoq","pi5"],"links":["pi5>unoq:wifi"],
                      "zone":{"correct":null,"total":null},"presence":{"entries":null,"detected":null,"ci95":null}}]}}
    // A number not yet measured is null. Never invent one. PROOF.md, the docs and the operator's view show it as "__".
@@ -427,6 +428,13 @@ The values below show the format only; they are not results.
    // security is optional (the whole object may be missing). Every unmeasured value in it is null.
    // detection: entries are independently labeled empty -> present transitions; a trial counts only with continuous
    //   truth and captured predictions through the deadline (within_s). Intrusion trials also need captured armed coverage.
+   //   within_s is the deadline for an armed intrusion: armed.hold_s + 2 (5 by default). hold_s (optional) records
+   //   the hold that was set. A camera entry shorter than hold_s is not an armed-entry miss; it is still a presence
+   //   trial. Presence is always judged within 2 s, and the table says so.
+   // false_alarms: passed_by_events, passed_by_duration_s and passed_by_per_hour (optional) count passed_by events
+   //   over all continuously captured armed time, blind states included. They count events, not people. A passed_by
+   //   is never an intrusion or a false intrusion, and an intrusion matched within the deadline is not a false one
+   //   after the person has left.
    // false_alarms: the denominators cover independently labeled-empty time overlapping captured healthy states;
    //   no capture or no exposure stays null.
    // fewer_devices: one row per subset of nodes and links (ids from radio/nodes.json). Each has its own model, trained

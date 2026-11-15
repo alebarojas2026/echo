@@ -116,6 +116,17 @@ def test_proof_presence_is_optional_and_carries_its_always_empty_score():
     assert check.check_lines([json.dumps({**proof, "zone": zone})], "proof")[1] == []
 
 
+def test_proof_security_takes_the_armed_hold_and_the_passed_by_rate():
+    proof = json.loads(read("valid_proof.json"))
+    security = proof["security"]
+    assert "hold_s" not in security["detection"] and "passed_by_events" not in security["false_alarms"]   # older files pass
+    security["detection"].update(within_s=5, hold_s=3)
+    security["false_alarms"].update(passed_by_events=4, passed_by_duration_s=1800, passed_by_per_hour=8.0)
+    assert check.check_lines([json.dumps(proof)], "proof")[1] == []
+    security["false_alarms"]["passed_by_events"] = -1
+    assert "$.security.false_alarms.passed_by_events" in check.check_lines([json.dumps(proof)], "proof")[1][0][1]
+
+
 def test_proof_security_is_optional_and_names_real_links():
     proof = json.loads(read("valid_proof.json"))
     assert proof["security"]["detection"]["within_s"] == 2
