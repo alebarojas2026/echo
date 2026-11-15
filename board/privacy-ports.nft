@@ -1,0 +1,9 @@
+#!/usr/sbin/nft -f
+# Where the privacy meter's bytes out went, by protocol and destination port, for
+# `sudo python3 -m board.privacy --explain`. Loaded right after board/privacy.nft, on its own line
+# in the radio-sight-privacy unit, so a failure here never stops the meter itself. These rules sit
+# after the "out" counter, so they see exactly the packets it counted.
+add set inet radio_sight_privacy out_ports { type inet_proto . inet_service; flags dynamic; size 4096; }
+add counter inet radio_sight_privacy out_noport
+add rule inet radio_sight_privacy postrouting meta l4proto { tcp, udp } update @out_ports { meta l4proto . th dport counter }
+add rule inet radio_sight_privacy postrouting meta l4proto != { tcp, udp } counter name "out_noport"

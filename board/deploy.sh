@@ -3,6 +3,14 @@
 #
 #   sudo board/deploy.sh --install [--no-pi]   # install from the current checkout
 #   board/deploy.sh <tag|sha> [--no-pi]        # as the clone's owner: check out, then install
+#   ... --online                               # undo the quiet step (an install over a phone hotspot)
+#
+# The quiet step (board only, every run): the board's own services that call out to the internet
+# by themselves (time sync, apt's timers, firmware checks; QUIET_UNITS) are stopped and disabled,
+# because on the closed network they go nowhere and the privacy meter counts every byte they
+# send. The board's clock is set from the laptop instead (POST /clock). What was stopped is
+# written to /var/lib/radio-sight/quieted-units; --online starts exactly those again and forgets
+# them. Run with --online before installing anything over a phone hotspot, and without it after.
 #
 # Both are safe to run again. Every run installs this machine's units from
 # board/units/ (placeholders filled in, see board/units/README.md), then
@@ -29,7 +37,10 @@
 
 set -euo pipefail
 
-USAGE="usage: board/deploy.sh <tag|sha> [--no-pi]  or  sudo board/deploy.sh --install [--no-pi]"
+USAGE="usage: board/deploy.sh <tag|sha> [--no-pi] [--online]  or  sudo board/deploy.sh --install [--no-pi] [--online]"
+
+# Services that call out to the internet by themselves, quieted on the board (see the top).
+QUIET_UNITS='systemd-timesyncd.service chrony.service ntpsec.service ntp.service apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service fwupd-refresh.timer packagekit.service'
 
 # The units to install and run. needs: - = nothing else, pi = the Pi's hotspot
 # or beacons, link = the Ethernet link to the board. The Pi's radio node is -:
@@ -45,7 +56,7 @@ radio-sight-camwatch      board  -      board/units/radio-sight-camwatch.service
 radio-sight-brain         board  -      board/units/radio-sight-brain.service       brain/ advisor/ radio/nodes.json contracts/
 radio-sight-serve         board  -      board/units/radio-sight-serve.service       board/serve.py board/layout.py board/privacy.py board/clock.py agent/ store/
 radio-sight-store         board  -      board/units/radio-sight-store.service       store/ contracts/
-radio-sight-privacy       board  -      board/units/radio-sight-privacy.service     board/privacy.py board/privacy.nft
+radio-sight-privacy       board  -      board/units/radio-sight-privacy.service     board/privacy.py board/privacy.nft board/privacy-ports.nft
 radio-sight-clock         board  -      board/units/radio-sight-clock.service       board/clock.py
 radio-sight-llm           board  -      narrator/llm.service                        narrator/llm.service
 radio-sight-narrate       board  -      board/units/radio-sight-narrate.service     narrator/ contracts/
@@ -80,6 +91,43 @@ touches() {
     return 1
 }
 
+# The quiet step. quiet: stop and disable the QUIET_UNITS that are enabled here, and remember
+# them. online: enable and start again exactly the ones remembered.
+quiet_board() {
+    local mode=$1 state=${QUIET_STATE:-/var/lib/radio-sight/quieted-units}
+    local dirs=${QUIET_UNIT_DIRS:-/lib/systemd/system /usr/lib/systemd/system /etc/systemd/system}
+    local unit dir found
+    if [ "$mode" = online ]; then
+        if [ ! -s "$state" ]; then
+            say "online: nothing was quieted on this board"
+            return 0
+        fi
+        local back=()
+        while IFS= read -r unit; do
+            [ -n "$unit" ] || continue
+            $sudo $systemctl enable --now --quiet "$unit" && back+=("$unit") || say "couldn't start $unit again"
+        done < "$state"
+        $sudo rm -f "$state"
+        say "online: started again: ${back[*]}; the board may now call out (the privacy meter counts it)"
+        return 0
+    fi
+    local quieted=()
+    for unit in $QUIET_UNITS; do
+        found=0
+        for dir in $dirs; do [ -e "$dir/$unit" ] && found=1; done
+        [ "$found" -eq 1 ] || continue
+        $systemctl is-enabled --quiet "$unit" 2>/dev/null || continue
+        $sudo $systemctl disable --now --quiet "$unit" && quieted+=("$unit")
+    done
+    if [ ${#quieted[@]} -gt 0 ]; then
+        $sudo mkdir -p "$(dirname "$state")"
+        printf '%s\n' "${quieted[@]}" | $sudo tee -a "$state" > /dev/null
+        say "quiet: stopped ${quieted[*]} (they call out to the internet by themselves; --online undoes it)"
+    else
+        say "quiet: nothing here calls out by itself any more"
+    fi
+}
+
 # web/dist isn't built here (see board/push-web.sh for why). Say whether the
 # build that's there was made from the same web/ files as this checkout.
 check_web() {
@@ -96,11 +144,12 @@ check_web() {
 }
 
 main() {
-    local ref="" install=0 no_pi=0 arg
+    local ref="" install=0 no_pi=0 network=quiet arg
     for arg in "$@"; do
         case $arg in
             --install) install=1 ;;
             --no-pi) no_pi=1 ;;
+            --online) network=online ;;
             -*) die "unknown option $arg; $USAGE" ;;
             *) [ -z "$ref" ] || die "$USAGE"; ref=$arg ;;
         esac
@@ -197,6 +246,7 @@ main() {
     fi
 
     if [ "$role" = board ]; then
+        quiet_board "$network"
         check_web "$label"
     fi
     local req
