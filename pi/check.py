@@ -15,8 +15,9 @@ ETH = os.environ.get("ETH_IFACE", "eth0")
 WIFI = os.environ.get("SENSING_IFACE", "wlan0")
 UNIT = "radio-sight-radio-node"
 
-STATUS = re.compile(r"\[pi\.radio_node\] east>pi5:ble (?P<east>[\d.]+)/s, west>pi5:ble (?P<west>[\d.]+)/s; "
-                    r"sent (?P<sent>\d+), not sent (?P<failed>\d+)(?: \((?P<why>[^)]*)\))?")
+# Pi A's line lists east and west first; more links (Pi B's beacon, #460) may follow before the ";".
+STATUS = re.compile(r"\[pi\.radio_node\] east>pi5:ble (?P<east>[\d.]+)/s, west>pi5:ble (?P<west>[\d.]+)/s"
+                    r"(?:, [^;]*)?; sent (?P<sent>\d+), not sent (?P<failed>\d+)(?: \((?P<why>[^)]*)\))?")
 
 
 def run(*cmd: str) -> tuple[int, str]:
