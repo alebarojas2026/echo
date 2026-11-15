@@ -271,6 +271,12 @@ export function startPlacing({ view, scan, fly, hall, reseat, hallShotNow }: Pla
 
   const root = document.documentElement
   root.dataset.roomPlacing = '1'
+  // The operator drawer closes, as Esc closes it: its own keys (R reset, M and H router, T lesson, B baseline) act
+  // only while it is open, and none of them may fire while a desk is being chosen. Nothing keeps the focus either:
+  // Enter on a control that had it would press that control.
+  const drawer = document.querySelector<HTMLElement>('.hud-operator')
+  if (drawer) drawer.hidden = true
+  ;(document.activeElement as HTMLElement | null)?.blur?.()
   const panel = document.createElement('div')
   panel.className = 'room-place'
   panel.dataset.testid = 'place'
@@ -465,12 +471,14 @@ export function startPlacing({ view, scan, fly, hall, reseat, hallShotNow }: Pla
     if (event.ctrlKey || event.metaKey || event.altKey) return
     if ((event.target as HTMLElement | null)?.closest?.('input,select,textarea,[contenteditable]')) return
     const key = event.key
+    // No key reaches the rest of the page while a desk is being chosen: not the panels' (O, /, the arrows), not
+    // the room's own (H). Only this mode's keys do anything.
+    event.stopPropagation()
     if (key === 'Enter') save()
     else if (key === 'Escape') out()
     else if (key === 'g' || key === 'G') flip()
     else return
     event.preventDefault()
-    event.stopPropagation() // the panels' own Esc and Enter are not for this
   }
   document.addEventListener('keydown', onKey, true)
   panel.addEventListener('click', (event) => {

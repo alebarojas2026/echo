@@ -62,6 +62,14 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await expect(page.locator('html')).toHaveAttribute('data-room-placing', '1')
     await expect(page.locator('#hud')).toBeHidden() // the hall has the whole screen
     await expect(panel.locator('[data-do="save"]')).toBeDisabled()
+    // The operator drawer is closed (its keys R M H T B act only while it is open), and no other key reaches the
+    // page: O does not open the drawer again, / does not open the question box, nothing is saved or sent.
+    await expect(page.locator('html')).toHaveAttribute('data-hud-operator', 'closed')
+    for (const key of ['b', 'r', 't', 'm', 'h', 'o', '/', 'ArrowLeft', 'Enter']) await page.keyboard.press(key)
+    await expect(page.locator('html')).toHaveAttribute('data-hud-operator', 'closed')
+    await expect(page.locator('dialog[open]')).toHaveCount(0)
+    await expect(panel).toContainText('Click the desk your board is on.')
+    expect(saved.fits).toHaveLength(0)
     await page.waitForTimeout(300)
     await shot(page, `place-${width}-1-ask`)
 
