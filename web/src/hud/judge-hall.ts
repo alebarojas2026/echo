@@ -11,7 +11,7 @@ export type Tone = '' | 'fault' | 'action'
 export interface Moment { headline: string; detail: string; tone: Tone }
 
 /** The line under the alert's headline: how to answer it. */
-export const CHECKIN_WORDS = 'Step aside and back to say you’re okay.'
+export const CHECKIN_WORDS = "Step aside and back to say you're okay."
 /** A check-in is shown this long, as the stillness card showed it. */
 const CHECKIN_SHOWN_MS = 6000
 

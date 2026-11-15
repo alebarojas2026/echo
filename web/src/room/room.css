@@ -672,6 +672,12 @@ html[data-judge-layout='hall'] .room::after {
   height: calc(clamp(56px, 4.375vw, 84px) + 1.2 * clamp(28px, 2.084vw, 40px) + 96px);
 }
 
+/* Placing the kit is the whole hall from above with its own words: no bands over it. */
+html[data-room-placing] .room::before,
+html[data-room-placing] .room::after {
+  display: none;
+}
+
 /* The hall is what is looked at: it is not dimmed under the walk-up card's words, which have their band. */
 html[data-judge-layout='hall'] .room--arrival .room-canvas,
 html[data-judge-layout='hall'] .room--arrival .room-labels {

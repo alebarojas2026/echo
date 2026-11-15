@@ -30,7 +30,7 @@ test('nobody, somebody still and somebody moving', () => {
 test('the no-movement alert is the fault colour with its words, and a check-in answers it', () => {
   const alert = hallMoment(here('moving', { alert: { state: 'check_on', zone: 1, still_s: 13.4, limit_s: 10 } }), false, layout)
   expect(alert).toEqual({ headline: 'No movement for 13 s', detail: CHECKIN_WORDS, tone: 'fault' })
-  expect(CHECKIN_WORDS).toBe('Step aside and back to say you\u2019re okay.')
+  expect(CHECKIN_WORDS).toBe("Step aside and back to say you're okay.")
   const state = here('moving', { alert: quiet })
   expect(hallMoment({ ...state, checkin: { t: state.t - 1000, link: 'pi5>pi5b:wifi' } }, false, layout)).toEqual({ headline: 'Check-in received', detail: 'Someone is here, moving', tone: 'action' })
   expect(hallMoment({ ...state, checkin: { t: state.t - 7000, link: 'pi5>pi5b:wifi' } }, false, layout).headline).toBe('Someone is here.')

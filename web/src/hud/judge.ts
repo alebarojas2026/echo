@@ -54,6 +54,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const narrator = field('narrator-text')
   const narratorText = changingText(narrator)
   const hold = new ReadingHold()
+  let headlineShape = ''
   let nextNarration = ''
   let clearNarration = false
   const paintNarration = () => {
@@ -131,7 +132,10 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     const { headline, detail, tone } = hall ? hallMoment(state, stale) : { headline: railHeadline, detail: railDetail, tone: '' }
     field('judge-headline').parentElement!.dataset.tone = tone
     // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
-    headlineText.set(headline, !!(state as { replay?: unknown } | null)?.replay)
+    // A count in the headline ("No movement for 13 s") ticks once a second: only its figures change, so it changes at once too.
+    const shape = headline.replace(/\d+/g, '0')
+    headlineText.set(headline, !!(state as { replay?: unknown } | null)?.replay || shape === headlineShape)
+    headlineShape = shape
     set('judge-detail', detail)
     set('source-badge', sourceWords(state))
     if (!Object.keys(extraPanels).some(path => path.includes('camera'))) set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] ?? 'Camera status unknown' : '')
