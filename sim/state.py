@@ -53,8 +53,8 @@ SENTENCES = {   # template narration, one short sentence per event kind
     "cam_on": "The camera is on.", "cam_stalled": "The camera has stalled.", "cam_off": "The camera is off.",
 }
 ARMED_SENTENCES = {"armed": "Armed: this space should be empty now.", "disarmed": "Disarmed.",
-                   "intrusion": "Someone is here while armed, in zone {zone}.",
-                   "tamper": "A device went silent while armed.", "tamper_cleared": "The silent device is back."}
+                   "intrusion": "Someone is here while armed, in zone {zone}."}
+TAMPER_KINDS = ("tamper", "tamper_cleared")   # worded by the narrator's own template, with the device's name
 TAMPER_SILENT_S, TAMPER_CLEAR_S = 3.0, 2.0   # section 6, Tamper (issue #533), as in brain/alert.py
 NO_NODE = {"object_on": "Something new is sitting in the room.", "object_off": "The new object is gone."}
 
@@ -428,8 +428,10 @@ class Brain:
         self.events.append({"type": "event", "t": t, "id": f"e{self.n_events}", "kind": kind, "info": info})
         if kind == "reset":
             return   # no sentence of its own: the recap follows
-        if kind in ARMED_SENTENCES:
-            self.narration = {"text": ARMED_SENTENCES[kind].format(zone=info.get("zone", "")).replace(" in zone .", "."),
+        if kind in ARMED_SENTENCES or kind in TAMPER_KINDS:
+            text = (narrate.template(kind, info) if kind in TAMPER_KINDS
+                    else ARMED_SENTENCES[kind].format(zone=info.get("zone", "")).replace(" in zone .", "."))
+            self.narration = {"text": text,
                               "event_id": f"e{self.n_events}", "t": self._ms(t), "source": "template", "gen_ms": 0}
             self.demo.append({"kind": kind, "info": info, "t": self._ms(t)})
             return
