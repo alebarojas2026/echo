@@ -15,7 +15,7 @@ test('unknown, stalled and stale never claim radio only',()=>{
 test('missing or future timing cannot start a browser-local run',()=>{
  const s=mockState('still',0,0);s.cam='off'
  expect(handoff(s,false).time).toBe('');expect(handoff(s,false).edge).toBe(false)
- expect(handoff(state('off',20000),false).time).toBe('')
+ expect(handoff(state('off',20000),false)).toMatchObject({time:'',teaching:0,radio:0,edge:false})
 })
 test('teaching progress uses measured counts and fits',()=>{
  const s=state('on',13000);s.model!.training={lesson:{started_t:1000,agree:6,of:10,fits:2,fitting:true}}

@@ -19,7 +19,7 @@ export function handoff(state: StateMsg | null, stale: boolean) {
   const knownOff = cam === 'off' && stamp(off, state.t) && (!knownStart || off >= start)
   const total = knownStart ? state.t - start : 0
   const scale = Math.max(120000, total)
-  const teaching = knownStart ? ((knownOff ? off : state.t) - start) / scale : 0
+  const teaching = knownStart && (cam === 'on' || knownOff) ? ((knownOff ? off : state.t) - start) / scale : 0
   const radio = knownStart && knownOff ? (state.t - off) / scale : 0
   if (cam === 'off') return { phase: 'radio', title: 'RADIO ONLY', time: knownOff ? runTime(state.t - off) : '', detail: knownOff ? 'Camera unplugged' : 'Unplug time unavailable', teaching, radio, edge: knownStart && knownOff }
   const agreement = Number.isInteger(lesson?.agree) && Number.isInteger(lesson?.of) && lesson!.of! >= 3 && lesson!.agree! >= 0 && lesson!.agree! <= lesson!.of!

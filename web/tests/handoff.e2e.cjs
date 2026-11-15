@@ -1,7 +1,8 @@
 const {test,expect}=require('@playwright/test')
 const fs=require('node:fs'),path=require('node:path')
-require('./layout-fixture.cjs')
+const gate=require('./fixtures/gate-layout.json')
 for(const [width,height] of [[1920,1080],[1440,900]])test(`handoff with the hall loaded at ${width}`,async({page})=>{
+ await page.route('**/nodes.json',r=>r.fulfill({json:gate}))
  await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'})
  const open=async()=>{await page.goto('/tests/arrival-harness.html?op=1');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000});await expect(page.locator('#room')).toHaveAttribute('data-scan-file',/hall-.*\.glb/);await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')}
  await open()
