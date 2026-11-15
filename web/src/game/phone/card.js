@@ -23,6 +23,13 @@ function zoneWhere(z) {
   return placeName(z) ?? `in ${zoneName(z)}`
 }
 
+// Where nobody is, when no zone says it: on a layout that senses one spot and names it as a place ("At the
+// desk"), that place, as the alert and the intrusion already say it. Otherwise the room (the desk layouts).
+function emptyWhere() {
+  const ids = Object.keys(ZONES)
+  return (ids.length === 1 ? placeName(ids[0]) : null) ?? 'in the room'
+}
+
 // The words of the title that take the person colour: the zone's name as the title says it.
 function zoneWord(z) {
   return placeName(z) ?? ZONES[z] ?? null
@@ -103,7 +110,7 @@ export function card(state, ageMs, events = noEvents(), now = 0) {
   }
   const alert = state.alert ?? {}
   if (alert.state === 'check_on') {
-    const where = placeName(alert.zone) ?? (ZONES[alert.zone] ? `in the ${ZONES[alert.zone]}` : 'in the room')
+    const where = placeName(alert.zone) ?? (ZONES[alert.zone] ? `in the ${ZONES[alert.zone]}` : emptyWhere())
     const howLong = typeof alert.limit_s === 'number' ? ` for ${alert.limit_s} s` : ''
     return { mode: 'alert', label: 'NO-MOVEMENT ALERT', title: `No movement ${where}${howLong}.`, detail: CHECKIN.stepAside ? 'Stepping aside and back, or a tap on reset, clears it.' : 'A wave or a tap on reset clears it.', zone: zoneWord(alert.zone), checkinT, ...lines }
   }
@@ -112,7 +119,7 @@ export function card(state, ageMs, events = noEvents(), now = 0) {
     return { mode: 'waiting', label: 'GETTING READY', title: 'The radio is not ready yet.', detail: 'It is still being set up or recalibrating.', zone: null, checkinT, ...lines }
   }
   if (!(pred.present && pred.kind === 'person')) {
-    return { mode: 'calm', label: 'ALL GOOD', title: 'Nobody is in the room.', detail: '', zone: null, checkinT, ...lines }
+    return { mode: 'calm', label: 'ALL GOOD', title: `Nobody is ${emptyWhere()}.`, detail: '', zone: null, checkinT, ...lines }
   }
   const counting = alert.state === 'counting' && typeof alert.still_s === 'number' && alert.still_s >= 1 // no "0 s" right after a check-in
   return {

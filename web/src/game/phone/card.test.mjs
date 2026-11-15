@@ -36,6 +36,26 @@ test('alert: the hint names the check-in the layout has: step aside and back on 
   assert.equal(show('alert').detail, 'A wave or a tap on reset clears it.')
 })
 
+test('one spot: the calm card and an alert with no zone name the place, never the room', () => {
+  const before = { ...ZONES }
+  const back = () => useZones({ zones: Object.entries(before).map(([id, name]) => ({ id: Number(id), name })) })
+  const noZone = { ...MOCKS.alert, alert: { state: 'check_on', zone: null, still_s: 12, limit_s: null } }
+  // The one-spot layout: a single zone, named as a place.
+  useZones({ zones: [{ id: 1, name: 'At the desk' }], presence: { line: 'pi5>pi5b:wifi' } })
+  const empty = show('empty')
+  assert.deepEqual([empty.mode, empty.label, empty.title, empty.zone], ['calm', 'ALL GOOD', 'Nobody is at the desk.', null])
+  assert.equal(card(noZone, 0).title, 'No movement at the desk.')
+  // A single zone with a plain name is no place to say: the room stays.
+  useZones({ zones: [{ id: 1, name: 'Chair' }] })
+  assert.equal(show('empty').title, 'Nobody is in the room.')
+  // Two zones, even named as places: nobody is in either, so the room.
+  useZones({ zones: [{ id: 1, name: 'At the desk' }, { id: 2, name: 'By the door' }] })
+  assert.equal(show('empty').title, 'Nobody is in the room.')
+  assert.equal(card(noZone, 0).title, 'No movement in the room.')
+  back()
+  assert.equal(show('empty').title, 'Nobody is in the room.')
+})
+
 test('check-in: back to calm, with the time of the last check-in', () => {
   const c = show('checkin')
   assert.equal(c.mode, 'calm')
