@@ -1,178 +1,53 @@
-# Radio Sight: Three-Minute Video Shot List
+# Radio Sight: Three-minute Video Shot List
 
-The Devpost video, three minutes at most. The beats have the same names, in the same order, as [pitch.md](pitch.md) and [demo-runbook.md](demo-runbook.md).
+Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras during live sensing. The laptop shows the local interface; the phone is another local screen.
 
-**Where the footage comes from**
+Use the one-spot kit: Arduino UNO Q and Pi A on the desk, Pi B across the gap at desk height. This is a planned edit, not measured timing. No face that can be identified; no camera frame, ever. No number that is not in PROOF.md may be presented as a result. Capture only the live desk, never a simulated scene or rendered hall. Keep all media outside the repository.
 
-- **Screen:** a screen capture of the live system in the laptop browser. The laptop shows the local interface; never a mock or the simulator.
-- **Desk:** a phone filming the desk, the strip in front of it and the hardware, in one fixed frame.
-- **Hall:** the rendered fly-in through the hall model. It exists as video files outside the repo.
+## 0:00–0:25 — Found you
 
-**Two rules for every shot**
+**Source:** Desk camera view and Screen capture of the live interface.
+**Picture:** Start on the problem: a room needs presence without continuing camera use. The judge enters the spot; include the three labelled devices, disconnected teacher cable and changing cross-gap Wi-Fi trace.
+**Voiceover:** Walk between two devices and the Wi-Fi signal gives you away. Found you: the Arduino UNO Q makes that decision locally on its Qualcomm Dragonwing CPU.
+**On screen:** `Found you` · `Live` · `Wi-Fi across the gap`.
 
-- No face that can be identified. Film from the shoulders down or from behind, and frame the desk shot so heads are out of it.
-- No number that is not in PROOF.md. A value that is still pending is shown and said as `__`.
+## 0:25–1:05 — Teach the room
 
-## 0:00–0:10 — Opening
+**Source:** Desk view of the connection and Screen capture of actual lesson progress.
+**Picture:** Connect the temporary teacher and run the lesson. Show labels and progress, never the teacher's image; retain real completion before any cut to inference.
+**Voiceover:** The camera teaches the room locally. It supplies labels, not saved images.
+**On screen:** `Camera teaching` · `Training on the UNO Q`.
 
-**Source:** Hall.
+## 1:05–1:35 — Camera unplug
 
-**Picture:** The fly-in through the hall, ending above the desk. Nobody is at the desk.
+**Source:** Desk view of the unplug and Screen capture of fresh radio state.
+**Picture:** Keep cable and screen in one continuous view while unplugging, then show the judge moving and standing still. Show teacher off and the live privacy panel; omit unverified count tiles.
+**Voiceover:** Most Wi-Fi sensing only sees movement. Ours sees you standing still. Wi-Fi is primary, Bluetooth a second opinion, and the camera is unplugged.
+**On screen:** `Radio only` · `Still present` · `Camera off`.
 
-**Voiceover:** "Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras."
+## 1:35–2:00 — Intrusion alert
 
-**On screen:** `Radio Sight · safety and after-hours security · no cameras`
+**Source:** Desk view including the real phone and Screen capture from the same run.
+**Picture:** Judge leaves, Operator arms, judge returns and stays. Hold for the actual intrusion event and matching phone card; no invented notification.
+**Voiceover:** Armed means this spot should be empty. Sustained presence creates a local alert on the phone.
+**On screen:** `Armed`, then `Intrusion alert`.
 
-## 0:10–0:22 — Found you
+## 2:00–2:30 — Dead zone
 
-**Source:** Desk, then Screen.
+**Source:** Desk view of the object and Screen capture of the measured cross-gap link.
+**Picture:** Disarm and clear everyone from the spot. Place the object, wait for the object decision and advice, then clear the object or move Pi B; Pi A stays beside the cabled hub. Use a verified before-and-after gain only, never a person as the blockage result.
+**Voiceover:** Nobody is here; an object blocks the same Wi-Fi path. Clear it or move Pi B, then check the measured change.
+**On screen:** `Object blocking Wi-Fi`, then `Link recovered`; show measured gain only when verified.
 
-**Picture:** A person steps up to the desk, seen from behind. Cut to the screen as the figure appears on that side. The camera cable lies unplugged in the shot.
+## 2:30–3:00 — Ask the room and Proof
 
-**Voiceover:** "Step up, and it finds you. No camera is connected. Everything runs on an Arduino UNO Q, on its Dragonwing CPU."
+**Source:** Screen capture of the live local answer, source rows and proof, with a closing Desk view.
+**Picture:** Ask the prepared question, show its actual records, then completed proof tiles with their method. Finish on the UNO Q and disconnected cable; label any optional saved Replay as recorded.
+**Voiceover:** The room answers from its own records. We dug into a signal every building already has: taught by a camera, runs without one.
+**On screen:** `Local records` · `Measured proof` · `Radio Sight` · `MadHacks 2026` · `Qualcomm / N+1`.
 
-**On screen:** `Found you · camera: off`
+## Editor's proof worksheet
 
-## 0:22–0:32 — Live signal
+These are unpublished planning blanks, never voiceover or fabricated screen overlays: `Presence accuracy: __`, `Person versus object: __`, `Decision latency: __`, `Dead-zone improvement: __`, `Bytes sent outside local network: __`, `Images stored: __`. Copy a result only with its proof row and method.
 
-**Source:** Screen, with the Desk shot inset.
-
-**Picture:** The two side traces dip as the person steps in. A hand waves in the desk shot and the lines move with it.
-
-**Voiceover:** "These lines are the radio links on each side, live. Each shows that side's deepest drop."
-
-**On screen:** `Left and Right radio links · live`
-
-## 0:32–0:52 — Teach the room
-
-**Source:** Desk, then Screen.
-
-**Picture:** A hand plugs in the webcam. On the screen the lesson runs: empty, left, right, a step out, left, right. Only labels are shown, never the camera's picture.
-
-**Voiceover:** "A camera teaches the radio what left, right and nobody look like. The lesson takes __ seconds, on the board. No image is saved."
-
-**On screen:** `Lesson time: __ s · images stored: __`
-
-## 0:52–1:00 — Camera unplug
-
-**Source:** Desk, one unbroken shot.
-
-**Picture:** The hand unplugs the webcam and lays the cable down in view. The screen behind it keeps updating.
-
-**Voiceover:** "Then the camera is unplugged. Taught by a camera. Runs without one."
-
-**On screen:** `Camera: off · Radio: live`
-
-## 1:00–1:12 — Still follows
-
-**Source:** Screen, with the Desk shot inset.
-
-**Picture:** The person steps left, steps right, then stands still. The figure follows and the state reads still.
-
-**Voiceover:** "It still follows them, left and right, even standing still."
-
-**On screen:** `Person · Still · Right`
-
-## 1:12–1:32 — Dead zone
-
-**Source:** Desk, then Screen.
-
-**Picture:** Put the tray at its marked spot. Hold on `Dead zone found` and the named router move, then slide Pi A to that spot and show the before and after values.
-
-**Voiceover:** "The same links find Wi-Fi dead zones. The board says where to move the router, then measures the change."
-
-**On screen:** `Dead zone found · Before: __ · After: __`
-
-## 1:32–1:39 — Arm the space
-
-**Source:** Screen.
-
-**Picture:** The person has stepped out. The operator arms the space and the screen shows armed, nobody here.
-
-**Voiceover:** "After hours, the space is armed: it should be empty."
-
-**On screen:** `Armed`
-
-## 1:39–1:53 — Intrusion alert
-
-**Source:** Desk, then a phone screen.
-
-**Picture:** The person steps back in, stays put through the sustained-person wait, then the phone page shows the alert.
-
-**Voiceover:** "A passer-by gets no alert. Someone who steps in and stays raises one, naming the side, never the person."
-
-**On screen:** `Intrusion alert · Left`
-
-## 1:53–2:03 — Tamper alert
-
-**Source:** Desk, then Screen.
-
-**Picture:** A hand unplugs the east beacon. The screen names the device in the fault colour.
-
-**Voiceover:** "Unplug a device, and it notices. You cannot quietly switch it off."
-
-**On screen:** `East beacon unplugged while armed`
-
-## 2:03–2:15 — Ask the room
-
-**Source:** Screen.
-
-**Picture:** The question is typed. The answer appears with the records it came from under it.
-
-**Voiceover:** "Ask what happened. The board works out which records the question is about, then fills the answer from them."
-
-**On screen:** `Answered on the board`
-
-## 2:15–2:25 — Replay
-
-**Source:** Screen.
-
-**Picture:** Replay is pressed. The figure replays the last minute under the replay banner, then the screen returns to live.
-
-**Voiceover:** "And replay it. No video: only what the radio decided, once a second."
-
-**On screen:** `REPLAY · from the board's records`
-
-## 2:25–2:33 — Incident report
-
-**Source:** Screen.
-
-**Picture:** The space is disarmed and the report card appears. Hold on its text.
-
-**Voiceover:** "Disarm, and the board writes the incident report from its own records."
-
-**On screen:** `Incident report · written on the board`
-
-## 2:33–2:55 — Proof
-
-**Source:** Screen, with the unplugged camera cable at the edge of the Desk shot.
-
-**Picture:** The proof strip fills the frame. Use only values loaded from the measured proof report.
-
-**Voiceover:** "What we measured: zone accuracy __, decision latency __, images stored __, and bytes sent outside our local network __."
-
-**On screen:**
-
-- `Zone accuracy: __`
-- `Presence accuracy: __`
-- `Decision latency: __`
-- `Images stored: __`
-- `Bytes sent outside local network: __`
-
-## 2:55–3:00 — Close
-
-**Source:** Desk.
-
-**Picture:** The hardware and the live screen together, nobody in frame.
-
-**Voiceover:** "Radio Sight. Taught by a camera. Runs without one."
-
-**On screen:** `Radio Sight · MadHacks 2026 · Qualcomm / N+1`
-
-## Capture notes
-
-- Film the camera unplug and the beacon unplug without a cut, with the screen in the same frame.
-- Record the screen from the live system on the real hardware. If a beat has not passed preflight, leave its shot out and close the gap; never fill it with a mock.
-- Replace every `__` only with a value produced by the proof workflow, on screen and in the voiceover.
-- Check every shot for a face before it goes in. Reshoot or crop instead of blurring.
-- Do not add a claim that the recorded demo and proof data do not support.
+If interrupted or shortening the edit, cut optional Replay, Incident report and Tamper alert first, then the extra question. Keep Found you, Camera unplug, and at least one verified Intrusion alert or Dead zone; never edit away a failed check to imply success.

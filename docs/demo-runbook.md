@@ -46,7 +46,7 @@ Record the operator, checker, and actual finish time beside each step. These are
 | 6 | Run the morning lesson and confirm the model is trained | __ | __ |
 | 7 | Have someone outside the team walk the full round | __ | __ |
 | 8 | Ask one prepared question using the real local model and inspect its source records | __ | __ |
-| 9 | Copy what the board learned to the laptop over Ethernet, using the backup procedure once #679 lands | __ | __ |
+| 9 | Copy what the board learned to the laptop over Ethernet, using the verified backup procedure from #679 | __ | __ |
 
 Run `python scripts/demo_check.py` again after the lesson. A FAIL is a stop: page/layout means check the web server and deployed layout; WebSocket means check bus and brain; clock means set time while idle; links/health means inspect the named radio; model means baseline and lesson; records means check `radio-sight-store`; Ask means inspect the answer service and local model. A degraded-health WARN still has predictions; inspect the named device without calling it empty.
 
@@ -62,7 +62,7 @@ Record last good board tag __, last good screen build __, operator __, checker _
 2. `board/push-web.sh --back` — restore the previous screen build locally on the board.
 3. `python scripts/demo_check.py` — inspect the screen and every check before admitting another judge.
 
-The screen `--back` option and `board/keep.sh save` backup are pending #678 and #679 in this checkout. Confirm they exist in the deployed version and have passed a real restore before using this checklist as a recovery guarantee. Never rebuild or copy a screen bundle over the hotspot while the model runs.
+The screen `--back` option and `board/keep.sh save` backup are tracked in #678 and #679. Confirm they exist in the deployed version and have passed a real restore before using this checklist as a recovery guarantee. Never rebuild or copy a screen bundle over the hotspot while the model runs.
 
 - [ ] Connect the UNO Q and Pi with the direct Ethernet cable.
 - [ ] Ask Alexander to run `sudo bash pi/eth.sh` on the Pi and `sudo bash board/eth.sh` on the UNO Q.
@@ -95,18 +95,30 @@ If a step fails, fix it and repeat the baseline or lesson. Do not carry failed c
 
 ## Three-minute desk round
 
-Use these exact beat names and keep them in this order. The words to say with each are in [pitch.md](pitch.md).
+Follow the exact spoken script in [pitch.md](pitch.md). These are rehearsal allocations, not measured task durations; never claim a lesson or alert finished before it did.
 
-1. **Found you:** Start with the camera disconnected. Ask the judge to step up to the desk, into the sensing strip. Show a fresh `person` prediction and say, “Found you. Camera disconnected.” Do not substitute a numeric camera claim while proof remains pending.
-2. **Teach the room:** Connect the camera, start the fresh judge lesson, and display `Lesson time: __ s`. Show labels, not an image. Wait for successful training before continuing.
-3. **Camera unplug:** Unplug the camera in one continuous shot. Follow the camera-unplug proof below and leave the cable visible.
-4. **Still follows:** Ask the judge to move and then stand still in the spot. Show presence and motion continuing from radio alone, with Wi-Fi across the gap as the main sensor. If a required link goes blind, say so and stop; never call it empty.
-5. **Arm the space:** Ask the judge to step out. Use the arm control only if the current build exposes contract v2 `armed` state, emits `armed`, and the phone page is connected to the live feed.
-6. **Intrusion alert:** Ask the judge to re-enter and stay in the spot. Continue only after the board emits the live `intrusion` event and the phone page shows it. A passer-by gets no intrusion alert. Do not identify the judge or claim crowd counting.
-7. **Ask the room:** Ask the prepared question only if the current build can answer from its local timestamped event records. Read the returned facts; do not improvise an answer.
-8. **Proof:** Finish on `/proof.json`. Show `Images stored: __` and `Bytes sent outside local network: __` until proof replaces them, but say only completed values. Close with “We dug into a signal every building already has, for rooms where cameras cannot go. Taught by a camera. Runs without one. Next is the same lesson on real access points. We would like to keep building it.”
+| Time | Beat | Speaker and actions | Screen and gate |
+|---|---|---|---|
+| 0:00–0:25 | **Found you** | Talker invites judge into the spot; camera disconnected | Fresh presence and Live signal; Wi-Fi across the gap is primary |
+| 0:25–1:05 | **Teach the room** | Talker explains; Operator connects teacher and runs lesson | Camera teaching, labels, progress and trained confirmation; no image |
+| 1:05–1:35 | **Camera unplug** | Hardware unplugs; judge moves then stands still | Teacher off, radio only, Still follows and live privacy panel |
+| 1:35–2:00 | **Intrusion alert** | Operator arms only while empty; judge returns and stays | Armed state, sustained intrusion event and matching phone card |
+| 2:00–2:30 | **Dead zone** | Disarm; nobody in spot; Hardware adds object, then clears it or moves Pi B | Object decision, cross-gap Wi-Fi drop, advice and verified gain |
+| 2:30–3:00 | **Ask the room and Proof** | Operator asks prepared question, shows source rows and proof; Talker closes | Local answer, factual records and completed proof tiles |
 
-If the feature gate for **Arm the space**, **Intrusion alert**, or **Ask the room** fails, stop the live sequence after **Still follows**, use the matching **At the desk** sentence, then go directly to **Proof**.
+Pi A stays beside the cabled hub. The dead-zone beat requires nobody present and an object decision on `pi5>pi5b:wifi`; a person is never a dead zone. Confirm the deployed advisor uses that link and the configured drop threshold. Stop this beat if it still targets the short desk link or asks for a large router move. Gain comes from clearing the object or moving Pi B, with before/after evidence; do not improvise hardware or commands during judging.
+
+**If interrupted:** cut optional Replay, Incident report and Tamper alert first, then the extra Ask question, then teaching explanation. Keep Found you, Camera unplug, and at least one of Intrusion alert or Dead zone. With an already trained model, omit a fresh lesson honestly; do not pretend it happened. If neither outcome passed preflight, state the limit and finish on proof.
+
+Feature gates before admitting a judge:
+- **Live signal:** stepping into the spot changes the cross-gap trace; no side prediction is promised.
+- **Privacy:** teacher off and null labels after unplug; counts come from the live privacy meter and proof, never invented zeros.
+- **Intrusion:** stay until the live event arrives; a walk-through may show passed by without an alert, but its error rate is unclaimed.
+- **Tamper alert:** rehearse Pi B disconnection and reconnection; verify the named event, `tamper_cleared` and healthy sensing before continuing.
+- **Ask the room:** the answer must cite the board's records; show the actual rows if wording fails.
+- **Replay:** a recorded banner stays visible; missing records stay unknown.
+- **Incident report:** an actual saved armed stretch supplies all facts.
+- **Proof:** only completed results may be spoken; missing values remain `__` in records and are omitted from judge tiles.
 
 ## Camera-unplug proof
 
@@ -120,14 +132,9 @@ The camera supplies temporary setup labels. The demo must not show or save an im
 
 ## Five-minute finalist round
 
-Run the same one-spot kit: **Found you**, **Teach the room**, **Camera unplug**, **Still follows**, **Arm the space**, **Intrusion alert**, **Ask the room**, and **Proof** in that same order.
+Run the same six beats and one-spot kit. Add only extensions that passed preflight: Tamper alert, Replay, Incident report and the no-movement alert.
 
-After the primary path, use only the extensions that passed preflight:
-
-- **No-movement alert and check-in:** Wait for the configured local alert, ask the judge to lean aside for the “I'm okay” check, and confirm `checkin-toast` clears it. Do not claim success before that confirmation.
-- **Tray and router advice:** Ask Alexander to place the tray across the gap. Confirm the deployed advisor uses the cross-gap Wi-Fi link `pi5>pi5b:wifi` and its configured drop threshold; stop this beat if it still targets the short desk link. Wait for `advice-text`, move only to a spot from `/nodes.json`, send `router_moved`, and report the before/after result only if proof contains it.
-- **Recap:** Show the fact-based local recap. If generation is unavailable, use the template recap; never invent an event.
-- **Game:** Invite interaction without saying the system counts or identifies the crowd.
+For the “I'm okay” check, ask the judge to lean aside and confirm `checkin-toast` clears the no-movement alert. Do not claim success before that confirmation. If generation is unavailable, use factual template wording; never invent an event.
 
 ## If asked
 
@@ -141,8 +148,8 @@ After the primary path, use only the extensions that passed preflight:
 Alexander handles the tray and Pi; the operator handles software controls.
 
 1. If the tray was used, ask Alexander to remove it and wait for the object marker and static change to clear.
-2. If the router moved, ask Alexander to return the Pi to its home spot, then send `router_home`.
-3. After `router_home`, everyone steps away from the sensing area and its edge, including Alexander once the Pi is home, and stays out until a prediction returns or `baseline_done` appears.
+2. If Pi B moved, ask Alexander to return Pi B to its recorded position; use only the reset procedure rehearsed on this deployed build.
+3. Everyone steps away from the sensing area and its edge, including Alexander once Pi B is home, and stays out until a prediction returns or `baseline_done` appears.
 4. Wait until prediction resumes or the automatic baseline finishes; confirm health is `ok`.
 5. Disarm if needed, stop active recording, and send `reset`.
 6. If the recap was used, keep the screen visible until the fact-based recap appears. The narrator warms its normal sentence prompt again in the background after the recap; do not hold the next judge for that warmup.
@@ -183,9 +190,9 @@ Disarm, keep the judge outside the sensing area, and verify the live phone feed.
 
 Do not answer from memory. Use the **Ask the room is slow or wrong** sentence, show the local event records with Replay, and continue to **Proof**.
 
-### Router move does not recover
+### Object clearing or Pi B move does not recover
 
-Return the router to its home spot from `/nodes.json` and send `router_home`. Let the automatic baseline finish if the links do not recover.
+Clear the object, return Pi B to its recorded position from `/nodes.json`, and repeat the rehearsed baseline procedure. Keep Pi A beside the cabled hub; do not claim gain until healthy sensing and the before/after check return.
 
 ### Narration is unavailable
 

@@ -1,133 +1,83 @@
-# Radio Sight: Judge FAQ
+# Radio Sight: Twenty Hard Judge Questions
 
-## How does Radio Sight work?
+Each answer is two sentences. Speak the answer; offer source records or proof when asked.
 
-Walk between two devices and the signal gives you away. Wi-Fi between the Pis is the main sensor; Bluetooth to the Arduino UNO Q gives a second opinion, and the board reports presence and movement in one spot.
+## Isn't this just a laser tripwire?
 
-## Isn't this just a threshold on signal strength?
+Radio hidden in a bag or panel needs testing; we learn person versus thing and still versus moving. Compatible building Wi-Fi could avoid installing dedicated sensors; this desk line is one strand.
 
-A threshold can detect much of the empty-versus-present change. The local model learns signal patterns and movement from a camera's temporary labels; the camera is then unplugged.
+## Isn't presence just a signal-strength threshold?
 
-## How can so few links locate someone?
+For this spot, Wi-Fi attenuation provides the main presence decision and Bluetooth gives a second opinion. Learned patterns support person-versus-object and motion decisions, with the camera supplying temporary labels locally.
 
-We sense one spot across the gap between the desk and Pi B. This kit reports someone here, moving or still; it does not localize them to separate sides.
+## How does the real kit work?
 
-## Will it work on me?
+Walk between two devices and the Wi-Fi signal gives you away. The Arduino UNO Q and Pi A sit on the desk, with Pi B across one spot at desk height; the board computes locally.
 
-Bodies and rooms differ, so the board learns the setup locally. You can give it a short lesson, then try moving and standing still after the camera is unplugged.
+## Does standing still make me disappear?
 
-## What about two people, or someone walking behind me?
+Most Wi-Fi sensing only sees movement; ours sees you standing still. Presence uses the sustained Wi-Fi change, while movement is a separate decision; its accuracy still needs held-out proof.
 
-This demo is built around one person in the spot. An armed alert waits for sustained presence; multiple people and passers-by still need separate validation.
+## Will it work on me or in another room?
 
-## Why these three devices?
+People, furniture and radio paths differ, so the setup gets a local lesson. We have tested this desk arrangement, but another person or room needs independent validation rather than a promise of transfer.
 
-The Arduino UNO Q and Pi A sit together on the desk; Pi B sits across the gap at desk height. They stand in for compatible radios and computing already in a building.
+## What about two people or someone passing behind me?
 
-## Why not just use a camera?
+The demonstration is designed for one person in the spot, and intrusion waits for sustained presence. Multiple people and passers-by can disturb the signal, so their error rates remain unclaimed until measured.
 
-A camera captures identifying visual detail. Ours supplies temporary setup labels, saves no image, and is unplugged before continued radio sensing.
+## Why not CSI, radar or a motion sensor?
 
-## Why not a motion sensor?
+This board exposes signal strength rather than CSI, and radar needs dedicated sensing hardware. We want to reuse compatible building radios while reporting presence separately from movement.
 
-Most Wi-Fi sensing only sees movement. Ours sees you standing still. Here, the Wi-Fi path across the gap provides presence evidence even when the person stops moving.
+## Why use a camera if you promise privacy?
 
-## Why not CSI or radar?
-
-This board exposes signal strength, not CSI. Radar adds dedicated sensing hardware; our direction is to reuse compatible building radios.
-
-## Can it identify people or count a crowd?
-
-No, it reports presence and movement, not identity. Crowd counting is outside this prototype's validated scope.
-
-## Does it work in any building?
-
-It needs compatible radio readings and useful paths across the space. We have tested this desk arrangement; transfer to another room needs its own lesson and validation.
-
-## What happens in a Wi-Fi dead spot?
-
-The same Wi-Fi path across the gap shows a persistent blockage. The screen reports the weakened link, offers a configured router position, and shows a measured gain only when proof is available.
-
-## Is the radio X-ray a picture?
-
-No, it visualizes changes in measured radio links. It cannot reconstruct a face or camera-like detail, and one blocked path is not a complete building coverage map.
-
-## Why run it on-device?
-
-Training, inference, records, and answers stay on the board and our private network. The board has no internet connection on our demo network, so the live loop needs no cloud service.
-
-## What runs on the Arduino UNO Q?
-
-Training, inference, link health, alerts, advice, records, and local answers run on the Dragonwing CPU. The laptop and phone display the results through a browser on our network.
-
-## What do the Pis do?
-
-Pi A provides the private sensing hotspot and routes the laptop browser to the board over Ethernet. Pi B supplies the far endpoint across the gap; neither Raspberry Pi runs a model.
+The camera supplies temporary teaching labels and is unplugged before continued sensing. It saves no images, and the visible cable and teacher status let you check that boundary.
 
 ## Are you recording me?
 
-The board saves local radio summaries and events for replay and answers. It stores no camera images, identifies nobody, and does not send those records to the internet.
+The board records local radio summaries and events for replay, questions and reports, without identifying anyone. It stores no camera images and sends no sensing records to the internet during the local demo.
 
-## Isn't Wi-Fi sensing open to misuse?
+## What runs on the board and what needs the cloud?
 
-Radio sensing can reveal presence, which deserves clear disclosure and limits. Our prototype processes locally, records no pictures or identity, and keeps its display and records on our own network.
+Training, sensing decisions, alerts, records and answers run on the Arduino UNO Q's Qualcomm Dragonwing CPU. Neither Pi runs a model; the laptop and phone are local screens, and the live loop needs no cloud.
 
-## What about spoofing or jamming?
+## How is a person different from a dead zone?
+
+A person in the spot is never our dead-zone demonstration. It requires an object decision with nobody there and a weakened cross-gap Wi-Fi link; clearing the object or moving Pi B supplies the before-and-after test.
+
+## Why not move the router to fix the link?
+
+Pi A stays beside the cabled hub, so this kit cannot demonstrate a large router move. We clear the blocking object or move Pi B, then report only the measured change.
+
+## Can I spoof it, jam it or unplug it?
 
 A silent device while armed can raise a tamper alert, but that does not diagnose jamming. We do not claim defenses against spoofed radio data or deliberate interference.
 
-## What breaks first?
+## What happens when the board or a link fails?
 
-People outside the spot and radio interference can disturb the signal. A required link going blind produces Sensor blind, and stale data produces No data; neither means empty.
+A required link going blind pauses decisions, and a stale board feed makes the screens say No data. Neither means empty, and the board remains a single point of failure.
 
-## What if the board dies?
+## How accurate is it, and how do I know it isn't scripted?
 
-The screen and phone say No data when the feed goes stale. The board is a single point of failure; a building deployment would need independent health monitoring.
+You can change the live signal by stepping into the spot, then inspect the source records. That demonstration is not held-out accuracy; every published result needs a method, sample size, date and commit in PROOF.md.
 
-## How does it scale?
+## Can the language model invent a replay or report?
 
-The direction is local processing per space using compatible radios already there. We have tested one desk arrangement, not a building deployment.
+Replay comes from saved summaries, with missing records shown as unknown. Ask selects relevant records and reports use their facts; inspect those rows if generated wording is unavailable or doubtful.
 
-## What does it cost?
+## What is the no-movement alert and how do I answer it?
 
-This prototype uses an Arduino UNO Q and two Raspberry Pis, plus a temporary teaching camera. We have not established a deployment price; the product direction is software on compatible existing hardware.
+The no-movement alert prompts a check when someone stays present and still; it does not diagnose the cause. Lean aside for the “I'm okay” check, wait for confirmation, and remember that a blind required link pauses the timer.
 
-## What did you write, and what is a library?
+## What does it cost and how would it scale?
 
-We wrote the radio pipeline, contracts, features, alert rules, records, local tools, and interface. We use scikit-learn, NumPy, OpenCV, three.js, Arduino App Bricks, and other credited libraries; the full list is in our credits.
+This prototype uses an Arduino UNO Q, two Raspberry Pis and a temporary teaching camera; we have no validated deployment price. The direction is local processing with compatible building radios, but building-wide coverage remains unmeasured.
 
-## How does it fit Let's Dig In?
+## What did you write, and what came from libraries?
 
-We dig into radio changes that a normal connection indicator hides. The same signal reveals presence and a blocked Wi-Fi path.
+We wrote the radio pipeline, contracts, features, alert rules, records, local tools and interface. NumPy, scikit-learn, OpenCV, Three.js and Arduino App Bricks provide building blocks; the credits list libraries and the Wilson–Patwari research foundation.
 
-## Would you keep building it?
+## How does this fit Let's Dig In, and would you continue?
 
-Yes: the next work is repeatable tests across people, interference, and room layouts. Broader deployment should follow that evidence, with clear privacy and failure behavior.
-
-## How accurate is it?
-
-The live signal response is measured, but that is not a held-out accuracy result. We report accuracy only with its method, sample size, date, and commit in the proof record.
-
-## What is the no-movement alert?
-
-It prompts a check when someone remains present and still; it does not diagnose why. The check-in is to lean aside, and a blind required link pauses the timer.
-
-## What if someone unplugs it or blocks it?
-
-While the space is armed, a device that goes silent raises a tamper alert that names the device, and the screen never says all clear while one is listed. A blocked or failed radio link makes the sensor say it is blind, which is not the same as empty. Neither case is hidden as a quiet room.
-
-## What does the replay show, and is anything recorded?
-
-The board keeps what the radio decided, once a second: present or not, which side, moving or still, and any alert. The replay plays those records back, and a second with no record shows as no record, never as an empty room. No image, sound or identity is recorded, and the records stay on the board.
-
-## What about people walking past?
-
-A person who only walks through is shown as “Someone passed by” and raises no intrusion alert. A person who steps in and stays through the sustained-person wait raises one; the measured rate remains `__` until that proof row is complete. The long hall links only report movement on a path, never who or how many.
-
-## How do you know it isn't scripted?
-
-Wave your hand in the sensing area and the live signal line moves with you. Step in, step out, or stand on the other side, and the screen follows what you do, not a timeline. Unplugging the camera or a beacon in front of you changes the screen the same way.
-
-## What can Radio Sight not do yet?
-
-It cannot identify people, count a crowd, or reconstruct camera-like detail. Accuracy across new rooms, multiple people, unfamiliar objects, and interference still needs measured validation.
+We dug into signal changes hidden beneath an ordinary connection indicator to find presence and blocked Wi-Fi. We would keep building it through repeatable tests across people, objects and room layouts before promising broader deployment.

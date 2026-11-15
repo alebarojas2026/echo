@@ -102,7 +102,7 @@ The bus listens on `UDP 0.0.0.0:5600`, adds board receive time, records sequence
 
 ## Brain and advisor
 
-The brain builds signal windows, checks link health, and runs the trained presence, object, and motion model for the configured spot. It also produces the radio X-ray, applies the lean-aside check-in and no-movement alert rules, and contains the router advisor. The advisor reads persistent change on the same Wi-Fi link across the gap and configured router spots; it does not bypass the brain or run on a Pi. Positions and sensing links come from the deployed `radio/nodes.json`.
+The brain builds signal windows, checks link health, and runs the trained presence, object, and motion model for the configured spot. It also produces the radio X-ray, applies the lean-aside check-in and no-movement alert rules, and contains the router advisor. The advisor reads persistent change on the same Wi-Fi link across the gap only with an object decision and nobody present. On this kit Pi A stays beside the cabled hub; the before-and-after gain comes from clearing the object or moving Pi B. The advisor does not bypass the brain or run on a Pi. Positions and sensing links come from the deployed `radio/nodes.json`.
 
 If a required classifier link is blind, the brain sends a blind health state and no prediction. The screen must not translate missing or unhealthy input into an empty room.
 
