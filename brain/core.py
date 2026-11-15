@@ -33,6 +33,7 @@ from brain.train import Model
 from brain.xray import Xray
 
 BASELINE_MS = 20_000
+PASSER_PAUSE_MS = 3_000   # somebody in the camera's view but outside the layout pauses a capture this long at most
 BASELINE_GIVE_UP_MS = 120_000   # a baseline asked for by hand that still can't start after this long is dropped
 HOME = "S-home"
 NODES_JSON = layout.NODES_JSON   # radio/nodes.json
@@ -292,7 +293,7 @@ class Brain:
                     recent.popleft()
                 if link in self.base:
                     self.xray.add(link, t, self.base[link] - dbm)
-                if self.capture and self.capture["start"] is not None:
+                if self.capture and self.capture["start"] is not None and self.capture["paused"] is None:
                     self.capture["messages"].append(msg)
             if self.windower:
                 for window in self.windower.push(msg):
@@ -766,8 +767,10 @@ class Brain:
         asked = self.capture["asked"] if self.capture else None   # set on the first tick: the clock may not have started
         if new_place is None:
             new_place = bool(self.capture and self.capture["new_place"])
+        # clean_ms: capture time so far with every condition holding. paused: since when a passer-by
+        # has been in the camera's view. last: the previous clean tick.
         self.capture = {"start": None, "messages": [], "new_place": new_place, "asked": asked,
-                        "by_hand": by_hand}
+                        "by_hand": by_hand, "clean_ms": 0, "paused": None, "last": None}
 
     def _new_place(self, now) -> None:
         """The operator's baseline finished: nothing learned before it is used from here on.
@@ -812,6 +815,26 @@ class Brain:
             return "link health is blind"
         return None
 
+    def _passer_pause(self, now, wait) -> bool:
+        """True while a running capture is only held up by somebody in the camera's view who is not
+        in the layout (present false): a passer-by in the aisle. Their readings are left out and the
+        20 s carry on afterwards. Somebody inside the layout, or in view for over PASSER_PAUSE_MS,
+        starts the 20 s again, as does any other broken condition."""
+        c = self.capture
+        if c["start"] is None or wait != "the camera sees somebody" or (self.label or {}).get("present"):
+            return False
+        if c["paused"] is None:
+            c["paused"], c["last"] = now, None
+        return now - c["paused"] <= PASSER_PAUSE_MS
+
+    def _capture_clean_ms(self, now) -> int:
+        """Capture time so far, not counting the pauses."""
+        c = self.capture
+        if c["last"] is not None:
+            c["clean_ms"] += now - c["last"]
+        c["paused"], c["last"] = None, now
+        return c["clean_ms"]
+
     def _tick(self):
         now = self.now()
         if self.capture:
@@ -832,11 +855,13 @@ class Brain:
                     "baseline given up after %d s (%s); press Baseline again when the square is clear",
                     BASELINE_GIVE_UP_MS // 1000, wait)
                 self.capture, self._wait_said = None, ()
+            elif wait and self._passer_pause(now, wait):
+                pass                                # somebody walks past the camera: hold, don't start again
             elif wait:
                 self._start_capture()               # a condition broke: the 20 s start again
             elif self.capture["start"] is None:
-                self.capture["start"] = now
-            elif now - self.capture["start"] >= BASELINE_MS:
+                self.capture["start"] = self.capture["last"] = now
+            elif self._capture_clean_ms(now) >= BASELINE_MS:
                 msgs, new_place, self.capture = self.capture["messages"], self.capture["new_place"], None
                 self._wait_said = ()
                 expected = {link: round(sum(1 for m in msgs if m["link"] == link) / (BASELINE_MS / 1000), 1)
