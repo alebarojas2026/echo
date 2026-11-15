@@ -37,6 +37,7 @@ ADVICE_DROP_DB = 3.0      # section 6: advice only while pi5>unoq:wifi drops at 
 JUMP_DB, STEADY_DB = 6.0, 0.8        # section 6: the jump rule, and what counts as a steady drop
 MOVING_RUN, RECENT = 5, 10           # section 6: the still timer is judged on smoothed decisions
 OBJECT_GONE_S = 1.0                  # section 6: a removed object's link comes down after about 1 s
+ADVICE_KEEP_S = 10.0                 # section 6: the advice about a thing in the presence line stays this long after the gain
 NEAR_M = 0.5   # section 5: near is the closest node within this distance, else null
 HALL_RATE_S, HALL_MIN_READINGS = 2.0, 4          # hall links (issue #358): rate window, and fewer readings = stale
 HALL_ON_AFTER_S, HALL_FADE_S = 0.5, 3.0          # movement shows 0.5 s into a walk and fades out 3 s after it
@@ -97,6 +98,7 @@ class Brain:
         self.last_t = self.zone = None
         self.checkin = self.narration = self.advice = None
         self.waves_done, self.moved_at, self.advice_off = set(), None, False
+        self.gone_at = self.measured_at = None   # the thing in the presence line: when it went, when the gain was measured
         self.before = {"present": False, "zone": 0, "alert": "none", "cam": "on", "spot": "S-home",
                        "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
@@ -290,6 +292,51 @@ class Brain:
             if l["id"] in self.jumped:
                 l["status"] = "blind"
 
+    def _line_advice(self, t: float, things: list, here: bool) -> None:
+        """Section 6, on a layout with a presence line (the gate): the router is cabled and stays put, so
+        the advice is about a thing left standing in that line and names no spot (to_spot null). It shows
+        once the thing has stood 5 s with nobody on the spot; when the thing is taken away the gain is
+        measured over 3 s, starting 2 s later, and the advice stays 10 s more. Somebody on the spot takes
+        it away at once: a person is never a dead zone."""
+        line, (tx, rx) = LAYOUT.presence_line, LAYOUT.presence_ends()
+        a, b = fake.NODES[tx], fake.NODES[rx]
+        if here:
+            self.advice = self.gone_at = self.measured_at = None
+            return
+        there = [o for o in things if t - o.get("t_on", 0.0) >= STATIC_AFTER_S and t < o.get("t_off", math.inf)
+                 and object_drop(o, a, b) >= ADVICE_DROP_DB]
+        if there:
+            self.gone_at = None
+            if self.advice_off:
+                return                                   # cleared by reset while this thing stays
+            if self.advice is None or self.advice["after_dbm"] is not None:
+                xy = [round((a[0] + b[0]) / 2, 2), round((a[1] + b[1]) / 2, 2)]   # the middle of the line
+                names, radio = LAYOUT.node_names, "Wi-Fi" if line.endswith(":wifi") else "Bluetooth"
+                self.measured_at = None
+                self.advice = {"id": f"a{self.n_events + 1}", "cause": "obstruction", "near": near(fake.NODES, xy),
+                               "xy_m": xy, "link": line, "to_spot": None, "move_m": [0, 0], "dist_change_m": 0,
+                               "text": f"Something is standing in the {radio} line from {names[tx]} to {names[rx]}. "
+                                       f"Take it away to get the signal back.",
+                               "before_dbm": None, "after_dbm": None, "why": [line]}
+                self._event(t, "advice", link=line, node=self.advice["near"])
+            recent = self._median(line, t - MEDIAN_S, t + 1e-9)
+            self.advice["before_dbm"] = self.last_dbm.get(line) if recent is None else recent
+            return
+        self.advice_off = False
+        if self.advice is None:
+            return
+        if self.advice["after_dbm"] is not None:
+            if t - self.measured_at >= ADVICE_KEEP_S:
+                self.advice = self.measured_at = None
+            return
+        if self.gone_at is None:
+            self.gone_at = t
+        if t >= self.gone_at + RESULT_WAIT_S + MEDIAN_S:      # 3 s, starting 2 s after it went
+            self.advice["after_dbm"] = self._median(line, self.gone_at + RESULT_WAIT_S, t + 1e-9)
+            self.gone_at, self.measured_at = None, t
+            self._event(t, "advice_result", link=line, before_dbm=self.advice["before_dbm"],
+                        after_dbm=self.advice["after_dbm"])
+
     def _advise(self, t: float, things: list, spot: str, nodes: dict, links: list) -> None:
         """Section 6: an object that stays 5 s within 0.5 m of the router link gets advice, but only
         while pi5>unoq:wifi is dropping now (drop_db >= 3 dB; no row or a null drop means no advice)."""
@@ -401,7 +448,9 @@ class Brain:
                 self.checkin = {"t": self._ms(t), "link": w.get("link", WIFI)}
                 self.alert_s = 0.0
                 self._event(t, "checkin", link=self.checkin["link"])
-        if baseline:
+        if baseline and LAYOUT.presence_line:
+            self._line_advice(t, things, bool(pos))   # the router can't be moved here: never "move the router"
+        elif baseline:
             self._advise(t, things, spot, nodes, links)
 
         pred = None

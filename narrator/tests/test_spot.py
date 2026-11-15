@@ -17,11 +17,16 @@ SIDES = re.compile(r"\b(the left|the right|east|west|zone|side)\b", re.I)   # "t
 @pytest.fixture(autouse=True)
 def gate():
     zones, devices = dict(n.ZONES), dict(n.DEVICES)
+    crossing = set(n.CROSSING_WIFI)
     n.set_zones(n.load_zones(GATE))
     n.set_devices(n.load_devices(GATE))
+    n.CROSSING_WIFI.clear()
+    n.CROSSING_WIFI.update(n.load_crossing_wifi(GATE))
     yield
     n.set_zones(zones)
     n.set_devices(devices)
+    n.CROSSING_WIFI.clear()
+    n.CROSSING_WIFI.update(crossing)
 
 
 def every_sentence():
@@ -53,7 +58,7 @@ def test_the_spot_says_at_the_desk():
     assert n.template("alert_off", {"zone": 1}) == "The alert at the desk is cleared."
     assert n.template("intrusion", {"zone": 1}) == "Someone is here while armed, at the desk."
     assert n.template("checkin", {"zone": 1}) == "Check-in received at the desk."
-    assert n.template("object_on", {"zone": 0}) == "A new object on the desk is weakening the signal."
+    assert n.template("object_on", {"zone": 0}) == "Something was left in the Wi-Fi line."
     assert n.template("recalibrating", {}) == "Recalibrating: please keep the space in front of the desk clear for 20 seconds."
 
 
@@ -85,9 +90,52 @@ def test_the_recap_of_a_visit_to_the_spot():
         demo[:3] + [("armed", {}), ("intrusion", {"zone": 1})])]
     lines = r.facts(events)
     assert lines == ["0:00 someone stepped up to the desk", "0:01 no-movement alert at the desk",
-                     "0:02 a wave check-in was received", "0:03 the space was armed",
+                     "0:02 a check-in was received", "0:03 the space was armed",
                      "0:04 someone came in while armed, at the desk"]
     text = r.template(events)
-    assert text == ("Someone stepped up to the desk. A no-movement alert fired at the desk and a wave check-in "
+    assert text == ("Someone stepped up to the desk. A no-movement alert fired at the desk and a check-in "
                     "answered it. While it was armed, someone came in.")
     assert not SIDES.search(text) and r.problem(text, lines, camera_off=True) is None
+
+
+@pytest.mark.parametrize("motion, words", [("still", "standing still"), ("moving", "moving")])
+def test_narration_uses_existing_current_motion(motion, words):
+    from contracts.check import errors
+    nar = n.Narrator(lambda messages: (messages[-1]["content"].split("Facts: ")[1], "fake"), lambda msg: None,
+                     clock=lambda: 10_000)
+    nar.observe({"type": "state", "t": 10_000, "pred": {"present": True, "kind": "person", "motion": motion}})
+    out = nar.narrate({"type": "event", "t": 10_000, "kind": "enter", "id": "enter1", "src": "sim", "info": {"zone": 1}})
+    assert out["text"] == f"Someone is at the desk, {words}."
+    assert errors(out) == []
+
+
+def test_person_cannot_be_narrated_as_an_object():
+    nar = n.Narrator(lambda messages: ("", None), lambda msg: None, clock=lambda: 10_000)
+    person = {"type": "state", "t": 10_000, "pred": {"present": True, "kind": "person", "motion": "still"}}
+    obj = {"type": "event", "t": 10_000, "kind": "object_on", "id": "object1", "info": {}}
+    nar.observe(person)
+    nar.observe(obj)
+    assert nar.pending is None
+    nar.state = None
+    nar.observe(obj)
+    nar.observe(person)
+    assert nar.pending is None
+
+
+def test_gain_never_assumes_the_cabled_router_was_moved():
+    info = {"before_dbm": -60, "after_dbm": -50}
+    assert n.template("advice_result", info) == "The Wi-Fi signal changed from -60 to -50 dBm."
+    assert "router" not in n.template("advice", {})
+    assert "router" not in r.template([{"kind": "advice_result", "info": info}])
+    assert n.problem("Moving the router improved the Wi-Fi.", n.template("advice_result", info), False)
+    assert n.problem("A dead zone appeared at the desk.", "Someone is at the desk, standing still.", False)
+
+
+@pytest.mark.parametrize("link, present, allowed", [("pi5>pi5b:wifi", False, True), ("pi5>unoq:wifi", False, False),
+                                                  ("pi5>pi5b:wifi", True, False)])
+def test_object_narration_requires_no_person_and_the_configured_crossing_wifi(link, present, allowed):
+    nar = n.Narrator(lambda messages: ("", None), lambda msg: None, clock=lambda: 10_000)
+    nar.observe({"type": "state", "t": 10_000, "pred": {"kind": "object", "present": present},
+                 "links": [{"id": link, "status": "ok", "drop_db": 12}]})
+    nar.observe({"type": "event", "t": 10_000, "kind": "object_on", "id": "o1", "info": {}})
+    assert (nar.due(10_000) is not None) is allowed

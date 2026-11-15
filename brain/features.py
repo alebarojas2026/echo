@@ -34,6 +34,7 @@ STEADY_DROP_DB = 3.0
 STEADY_STD_DB = 0.8
 STEADY_BIN_MS = 500    # the std is taken over 0.5 s means, the same way the x-ray does it
 STEADY_COVER = 0.9     # readings must span this much of the 2 s
+LONG_MIN = 8           # a link's 2 s median and spread need this many readings (a line at 4 a second or more)
 
 # Classifier links, in the fixed order used for feature vectors (section 3): radio/nodes.json's.
 from brain.layout import LINKS  # noqa: E402
@@ -67,12 +68,13 @@ def quiet(messages: Iterable[dict]) -> Dict[str, float]:
 def link_stats(dbms: List[float], base_dbm: Optional[float]) -> dict:
     """Features of one link in one window. Empty input -> all None, n 0."""
     if not dbms:
-        return {"n": 0, "mean": None, "std": None, "min": None, "max": None, "drop_db": None}
+        return {"n": 0, "mean": None, "median": None, "std": None, "min": None, "max": None, "drop_db": None}
     mean = sum(dbms) / len(dbms)
     std = math.sqrt(sum((d - mean) ** 2 for d in dbms) / len(dbms))
     return {
         "n": len(dbms),
         "mean": mean,
+        "median": statistics.median(dbms),
         "std": std,
         "min": min(dbms),
         "max": max(dbms),
@@ -120,13 +122,40 @@ def steady_drop(readings: List[tuple], base_dbm: Optional[float], end: int) -> b
     return base_dbm - statistics.median(d for _, d in pts) >= STEADY_DROP_DB
 
 
+def long_stats(readings: List[tuple]) -> dict:
+    """A link over the 2 s before a window's end: {"n", "median", "std"} of its readings (dBm).
+
+    std is the spread a presence line is judged on (CONTRACTS.md section 6): a line that arrives 25
+    times a second and sits within 1 dB when the spot is empty spreads when a body is in it and
+    does not when a thing is. median and std are None under LONG_MIN readings."""
+    dbms = [d for _, d in readings]
+    if len(dbms) < LONG_MIN:
+        return {"n": len(dbms), "median": None, "std": None}
+    mean = sum(dbms) / len(dbms)
+    return {"n": len(dbms), "median": statistics.median(dbms),
+            "std": math.sqrt(sum((d - mean) ** 2 for d in dbms) / len(dbms))}
+
+
 def _majority(counts: Counter):
     """Most common value; ties go to the value seen first (Counter order)."""
     return counts.most_common(1)[0][0] if counts else None
 
 
-def vector(window: dict, links=LINKS) -> List[float]:
-    """Flat feature list for a model: per link, STATS in order.
+def crossing_drop(window: dict, crossing) -> Optional[float]:
+    """How far the lines that cross the spot sit under their baselines in this window: each
+    line's median drop (a median shrugs off the odd wild reading on a line with 2 to 6 readings
+    a second), averaged over the lines that have a reading. None when none has."""
+    drops = []
+    for link in crossing:
+        s, base = window["links"].get(link) or {}, window["base"].get(link)
+        if s.get("n") and base is not None:
+            drops.append(base - s["median"])
+    return sum(drops) / len(drops) if drops else None
+
+
+def vector(window: dict, links=LINKS, crossing=()) -> List[float]:
+    """Flat feature list for a model: per link, STATS in order. Then, when the layout says which
+    lines cross the spot (crossing), each of those lines' median drop and their average.
 
     A link with no readings in the window, or with no baseline, counts as sitting
     on its baseline (every feature 0). Link health (section 6) is what reports a
@@ -140,11 +169,18 @@ def vector(window: dict, links=LINKS) -> List[float]:
             out += [0.0, 0.0, 0.0, 0.0]
         else:
             out += [base - s["mean"], s["std"], base - s["max"], base - s["min"]]
+    for link in crossing:
+        s = window["links"].get(link) or {"n": 0}
+        base = window["base"].get(link)
+        out.append(0.0 if s["n"] == 0 or base is None else base - s["median"])
+    if crossing:
+        out.append(crossing_drop(window, crossing) or 0.0)
     return out
 
 
-def feature_names(links=LINKS) -> List[str]:
-    return [f"{link}.{stat}" for link in links for stat in STATS]
+def feature_names(links=LINKS, crossing=()) -> List[str]:
+    names = [f"{link}.{stat}" for link in links for stat in STATS]
+    return names + [f"{link}.drop_median_db" for link in crossing] + (["crossing.drop_median_db"] if crossing else [])
 
 
 class Windower:
@@ -216,6 +252,7 @@ class Windower:
             "base": self.base,
             "links": {link: link_stats(per_link.get(link, []), self.base.get(link))
                       for link in self.links},
+            "long": {link: long_stats(trail.get(link, [])) for link in self.links},   # the last 2 s
             "label": window_label(labels),
         }
 

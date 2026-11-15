@@ -350,6 +350,13 @@ def _majority(values: list, current, majority: int = S.DEFAULT.smooth_majority):
     return current
 
 
+LEAN_DB = 4.0          # leaning aside: the crossing lines come back up by this much (or settings.lean_x_quiet x quiet) ...
+LEAN_SHARE = 0.5       # ... and by this share of what the person standing there took off them
+LEAN_MIN_MS = 300      # for at least this long
+LEAN_MAX_MS = 2500     # and no longer: a recovery that stays is the person leaving
+STOOD_MS = 3000        # "standing there" is the lines' drop smoothed over about this long
+
+
 class Watch:
     """The check-in and alert rules together, driving the LED grid."""
 
@@ -375,6 +382,46 @@ class Watch:
         self._kind = "none"                                    # person | object | none, smoothed
         self._raw_zone = 0                                     # the zone of the last single decision
         self._moving_run = 0
+        self._lean_zone = 0
+        self._stood: Optional[float] = None    # the crossing lines' drop while the person stands there, smoothed
+        self._lean_t: Optional[int] = None     # since when the lines have been back up
+        self._lean_last: Optional[int] = None
+
+    def on_crossing(self, t: int, drop_db: Optional[float], quiet_db: float = 0.0, link: Optional[str] = None) -> None:
+        """One decision's drop of the lines that cross the spot (their median drops, averaged), on a
+        layout that marks them. This is the check-in there: "lean aside to say you're okay".
+
+        While the still timer is counting or the alert is on, the lines coming back up towards the
+        empty level for a moment (by LEAN_DB, or lean_x_quiet x their quiet level, and by half of
+        what the person took off them) and then dropping again is a check-in: the alert clears,
+        as for a wave. Back up for longer than LEAN_MAX_MS is the person leaving: an alert that was
+        on ends, because nobody is there, and no check-in is said."""
+        dt, self._lean_last = (0 if self._lean_last is None else max(0, t - self._lean_last)), t
+        if drop_db is None:
+            return
+        if self._stood is None or not (self.still_ms > 0 or self.alerting or self._lean_t is not None):
+            self._stood, self._lean_t = (drop_db if self._person else None), None
+            return
+        need = max(LEAN_DB, self.settings.lean_x_quiet * quiet_db)
+        up = self._stood - drop_db >= need and drop_db <= self._stood * (1 - LEAN_SHARE)
+        if self._lean_t is None:
+            if up:
+                self._lean_t = t
+            else:
+                self._stood += (drop_db - self._stood) * min(1.0, dt / STOOD_MS)
+            return
+        lasted = t - self._lean_t
+        if up and lasted > LEAN_MAX_MS:            # they left
+            self._stood = self._lean_t = None
+            if self.alerting:
+                self._clear()
+        elif not up and self._stood - drop_db < need / 2:   # back down: they are standing there again
+            self._lean_t = None
+            if lasted >= LEAN_MIN_MS:
+                self.checkin = {"t": t, "link": link or CHECKIN_LINK}
+                self._events.append(("checkin", {"zone": self.alert_zone or self.zone or self._lean_zone, "link": link or CHECKIN_LINK}))
+                self.led.smile()
+                self._clear()
 
     def on_rssi(self, msg: dict) -> None:
         t = msg["recv_t"]
@@ -405,6 +452,7 @@ class Watch:
         self._moving_run = self._moving_run + 1 if moving else 0
         if zone != self.zone:                      # a change that held for most of the last second
             self._reset_timer("zone" if zone else "gone")
+            self._lean_zone = self.zone or zone    # where the person who may be leaning aside was standing
             self.zone = zone
         elif not self._person:
             self._reset_timer("gone")              # nobody

@@ -5,10 +5,17 @@ systemd units for every program in CONTRACTS.md section 9. Install them with `bo
 ## Install on the board
 From the repo root, with the Python env already at /opt/rs/venv:
 ```sh
-sudo board/deploy.sh --install --no-pi   # before the Pi is connected
+sudo board/deploy.sh --install --no-pi --no-check   # first install, before the Pi is connected
 sudo board/deploy.sh --install           # once the Pi's hotspot and the Ethernet link are up (pi/eth.sh on the Pi, board/eth.sh here)
 ```
 Each run installs every unit, reloads systemd, enables them, and starts any that aren't running. It restarts only units whose file changed. Running it again is safe.
+
+Deploy waits up to 20 s for its required units, prints any failed Radio Sight
+units, and runs the read-only `scripts/demo_check.py` against localhost on the
+board. Either failed check makes deploy exit non-zero. Pi roles check units only.
+The final line gives the running commit, the commit replaced, and the command to
+go back. `--no-check` skips these checks for a first install; run again without
+it once the stack and radios are available.
 
 `--no-pi` still installs the units that need the Pi (`radio-sight-wifi-rssi` and `radio-sight-hci-scan`, the BLE scan), but stops and disables them until the Pi's hotspot and beacons are there. Run it again without `--no-pi` to start them. Once started, the Wi-Fi reader waits for the hotspot by itself (it says so once in its journal) and the BLE scan starts itself again when it goes quiet, so a Pi that comes up late or reboots needs nothing here.
 
@@ -20,6 +27,34 @@ journalctl -u radio-sight-bus -f  # every 30 s a links: line; "<link> quiet for 
 ```
 
 Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sudo (it uses sudo itself). It checks out the ref and restarts only what changed. The Pi uses the same commands; there it installs only `radio-sight-radio-node`, and runs it with or without `--no-pi`, since beacon S doesn't need the cable.
+
+## Keep what the board learned
+After the final lesson, connect the laptop through Ethernet and run
+`board/keep.sh save`. Use BOARD_USER (the checkout owner), BOARD_REPO and
+BOARD_HOST from the laptop's environment or .env, as for push-web. The host must
+be 192.168.77.2, with no PI_HOST hop; the script checks that the laptop's route
+is not Wi-Fi. KEEP_INTERFACE may name the expected Ethernet adapter. Linux
+needs `ip`; macOS uses `route` and `networksetup`.
+An explicit environment value wins over .env, including `PI_HOST=` to disable
+a saved proxy hop for this wired command.
+
+The dated laptop folder under data/keep/ is gitignored. It contains only
+model.pkl, baseline.json, place.json, baselines.jsonl, a consistent store.db
+snapshot made by Python's SQLite backup API (the same online snapshot as
+`sqlite3 .backup`), the source COMMIT and checksums. No extra SQLite CLI package
+is required. Recordings
+are never copied. If learning changes during save, the snapshot is refused.
+
+To recover, deploy the backup's COMMIT first, then run
+`board/keep.sh restore <saved-folder>` from the wired laptop. It checks the
+files and commit before stopping the brain/store, stages on the board's data
+filesystem, replaces the five files with renames, starts both services, waits
+up to 20 s for service/port readiness, then runs the localhost read-only demo
+check. A failure while replacing files leaves
+services stopped; inspect the error and retry before using the judge screen.
+The SSH login must have noninteractive sudo for the service stop/start. Rehearse
+one real restore after the last lesson; no successful hardware restore is
+claimed by the fixture tests.
 
 ## Going back
 Save the incident log first:

@@ -1,4 +1,4 @@
-import { mountRoom } from './room'
+import { mountRoom, refuseLayout } from './room'
 import { createFeed } from './room/feed'
 import { hostHud, type HudModule } from './room/hud-host'
 import { loadLayout } from './room/layout'
@@ -13,7 +13,9 @@ const roomEl = document.getElementById('room')!
 // The room waits (at most 2 s) for the real layout; the panels don't need it.
 loadLayout().then((layout) => {
   roomEl.dataset.layout = layout
-  mountRoom(roomEl, feed)
+  // A layout file the room does not understand is said in words; it never draws some other layout in its place.
+  if (layout === 'refused') refuseLayout(roomEl)
+  else mountRoom(roomEl, feed)
 })
 hostHud(document.getElementById('hud')!, feed, {
   ...Object.values(hudState)[0],

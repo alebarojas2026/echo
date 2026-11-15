@@ -6,9 +6,9 @@ import { zoneName } from './judge-moment'
 export function stillness(state: StateMsg | null, stale: boolean) {
   if (!state || stale || state.health.status === 'blind') return { text: '', tone: '', progress: 0, detail: '' }
   const alert = state.alert
-  if (alert?.state === 'check_on') return { text: `No movement ${zonePlace(alert.zone)} for ${alert.limit_s ?? '__'} s`, tone: 'fault', progress: 1, detail: alert.still_s == null ? '__' : `Still for ${Math.floor(alert.still_s)} s` }
+  if (alert?.state === 'check_on') return { text: `No movement ${zonePlace(alert.zone)} · ${alert.still_s == null ? '__' : Math.floor(alert.still_s)} s`, tone: 'fault', progress: 1, detail: '' }
   const age = state.checkin ? state.t - state.checkin.t : Infinity
-  if (age >= 0 && age <= 6000) return { text: 'Wave seen', tone: 'action', progress: 0, detail: 'Check-in received' }
+  if (age >= 0 && age <= 6000) return { text: 'Check-in received', tone: 'action', progress: 0, detail: '' }
   if (alert?.state !== 'counting') return { text: '', tone: '', progress: 0, detail: '' }
   const seconds = alert.still_s == null ? '__' : Math.floor(alert.still_s)
   const limit = alert.limit_s
@@ -17,9 +17,10 @@ export function stillness(state: StateMsg | null, stale: boolean) {
 
 export function mountPanel(root: HTMLElement) {
   root.className = 'stillness-card'
-  root.innerHTML = '<p data-testid="alert-banner"></p><p data-testid="checkin-toast"></p><p data-testid="alert-zone"></p><p data-testid="alert-seconds"></p><div class="stillness-track"><span></span></div>'
+  root.innerHTML = '<p data-testid="alert-banner"></p><p data-testid="checkin-toast"></p><p data-testid="alert-zone"></p><p data-testid="alert-seconds"></p><p data-testid="checkin-instruction" hidden>Lean aside to say you&#39;re okay.</p><div class="stillness-track"><span></span></div>'
   const text = root.querySelector<HTMLElement>('[data-testid="alert-banner"]')!
-  const wave = root.querySelector<HTMLElement>('[data-testid="checkin-toast"]')!
+  const checkin = root.querySelector<HTMLElement>('[data-testid="checkin-toast"]')!
+  const instruction = root.querySelector<HTMLElement>('[data-testid="checkin-instruction"]')!
   const detail = root.querySelector<HTMLElement>('[data-testid="alert-seconds"]')!
   const zone = root.querySelector<HTMLElement>('[data-testid="alert-zone"]')!
   const bar = root.querySelector<HTMLElement>('.stillness-track span')!
@@ -41,8 +42,9 @@ export function mountPanel(root: HTMLElement) {
       const apply = () => {
         root.hidden = !value.text
         root.dataset.tone = value.tone
+        instruction.hidden = value.tone !== 'fault'
         text.textContent = value.tone === 'action' ? '' : value.text
-        wave.textContent = value.tone === 'action' ? value.text : ''
+        checkin.textContent = value.tone === 'action' ? value.text : ''
       }
       if (identity === previous) { apply(); return }
       previous = identity

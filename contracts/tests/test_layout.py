@@ -1,7 +1,10 @@
 """The layout is written in three places: radio/nodes.json, CONTRACTS.md section 3 and contracts/schemas.
 
-nodes.json is the one code reads. These tests fail when one of the three is changed without the others,
-so the next layout change shows up here and not on the demo desk.
+nodes.json is the one code reads, and it is a copy of one of radio/layouts/ (python -m radio.use_layout).
+The desk layout's numbers are written out by hand below and checked against radio/layouts/desk.json, so
+these tests pass whichever layout is in use; the schemas are checked against every layout file. They fail
+when one of the three is changed without the others, so the next layout change shows up here and not on
+the demo desk.
 """
 import json
 import math
@@ -13,7 +16,9 @@ import pytest
 from contracts import check
 
 REPO = Path(__file__).resolve().parents[2]
-DOC = json.loads((REPO / "radio" / "nodes.json").read_text(encoding="utf-8"))
+ACTIVE = json.loads((REPO / "radio" / "nodes.json").read_text(encoding="utf-8"))   # the layout in use
+LAYOUTS = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in sorted((REPO / "radio" / "layouts").glob("*.json"))}
+DOC = LAYOUTS["desk"]   # the desk layout: the one whose numbers are written out below
 SCHEMAS = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in (REPO / "contracts" / "schemas").glob("*.json")}
 DEFS = SCHEMAS["common"]["$defs"]
 SECTION_3 = (REPO / "CONTRACTS.md").read_text(encoding="utf-8").split("## 3. ")[1].split("## 4. ")[0]
@@ -36,7 +41,12 @@ def zone_of(x, y):
     return 1 + int(x >= 0.8) if 0 <= x <= 1.6 and 0 <= y <= 0.6 else 0
 
 
-def test_nodes_json_is_the_desk_layout():
+def test_nodes_json_is_a_copy_of_one_of_the_layout_files():
+    assert ACTIVE in LAYOUTS.values()
+    assert LAYOUTS[ACTIVE["layout"]] == ACTIVE
+
+
+def test_the_desk_layout_file_is_the_desk_layout():
     assert DOC["v"] == 2 and DOC["layout"] == "desk"
     frame = DOC["frame"]
     assert (frame["size_m"], frame["strip_m"], frame["zone_split_x_m"]) == ([1.6, 1.1], [1.6, 0.6], 0.8)
@@ -80,9 +90,46 @@ def test_the_schemas_name_the_same_nodes_links_spots_and_zones():
     assert SCHEMAS["label"]["properties"]["zone"]["maximum"] == len(DOC["zones"])
     state = SCHEMAS["state"]["properties"]
     assert state["alert"]["properties"]["zone"]["maximum"] == len(DOC["zones"])
-    probs = state["pred"]["properties"]["probs"]
-    assert probs["minItems"] == probs["maxItems"] == 1 + len(DOC["zones"])   # [empty, z1, z2]
-    assert state["advice"]["properties"]["to_spot"]["enum"] == [s for s in ROUTER_SPOTS if s != "S-home"]
+    # a spot to move the router to, or null where the router stays put (a layout with a presence line)
+    assert state["advice"]["properties"]["to_spot"]["enum"] == [s for s in ROUTER_SPOTS if s != "S-home"] + [None]
+
+
+@pytest.mark.parametrize("name", sorted(LAYOUTS))
+def test_the_schemas_hold_every_layout_file(name):
+    """The schemas list the union of the layout files, so a message of any of them passes the schema;
+    what belongs to one layout (probs, near) is checked against that layout in check.py."""
+    doc = LAYOUTS[name]
+    assert {n["id"] for n in doc["nodes"]} <= set(DEFS["node"]["enum"])
+    assert {link["id"] for link in doc["links"]} <= set(DEFS["link"]["enum"])
+    assert {s["id"] for s in doc["router_spots"]} <= set(DEFS["router_spot"]["enum"])
+    assert {n["id"] for n in doc["nodes"] if "receiver" in n["roles"]} <= set(DEFS["receiver"]["enum"])
+    zones = [z["id"] for z in doc["zones"]]
+    assert zones == list(range(1, len(zones) + 1)) and len(zones) <= DEFS["zone"]["maximum"]
+    probs = SCHEMAS["state"]["properties"]["pred"]["properties"]["probs"]
+    assert probs["minItems"] <= 1 + len(zones) <= probs["maxItems"]   # [empty, z1, ...]
+    rules = {r["if"]["properties"]["link"]["const"]: {k: v["const"] for k, v in r["then"]["properties"].items()}
+             for r in SCHEMAS["rssi"]["allOf"]}
+    for link in doc["links"]:
+        assert link["id"] == f"{link['tx']}>{link['rx']}:{link['kind']}"
+        assert rules[link["id"]] == {"tx": link["tx"], "rx": link["rx"], "kind": link["kind"]}
+    assert check.errors(doc, "nodes") == []
+    presence = doc.get("presence")
+    if presence:   # the line that decides, and its second opinion, are lines of this layout that cross the spot
+        crossing = {link["id"] for link in doc["links"] if link.get("crosses_spot") is True}
+        assert presence["line"] in crossing and presence.get("second", presence["line"]) in crossing
+
+
+def test_probs_has_one_entry_for_empty_and_one_per_zone_of_the_layout():
+    pred = {"present": True, "kind": "person", "zone": 1, "zone_set": [1], "motion": "still", "still_s": 1.0, "why": []}
+    for name, doc in LAYOUTS.items():
+        right = state("S-home", None, None)
+        right["objects"] = []
+        n = 1 + len(doc["zones"])
+        right["pred"] = {**pred, "probs": [round(1 / n, 3)] * n}
+        assert check.errors(right, layout=doc) == [], name
+        for wrong in (n - 1, n + 1):
+            bad = {**right, "pred": {**pred, "probs": [0.1] * wrong}}
+            assert any("$.pred.probs" in e for e in check.errors(bad, layout=doc)), (name, wrong)
 
 
 def test_the_rssi_schema_pins_tx_rx_and_kind_for_every_link():
@@ -129,12 +176,16 @@ def test_section_3_says_what_nodes_json_says():
 
 
 def test_check_reads_positions_from_nodes_json():
-    assert check.NODES == {k: v[:2] for k, v in NODES.items()}
-    assert check.ROUTER_SPOTS == {k: v[:2] for k, v in ROUTER_SPOTS.items()}
+    assert check.NODES == {n["id"]: tuple(n["xyz_m"][:2]) for n in ACTIVE["nodes"]}
+    assert check.ROUTER_SPOTS == {s["id"]: tuple(s["xyz_m"][:2]) for s in ACTIVE["router_spots"]}
+    assert check.load_layout("desk") == DOC and check.load_layout() == ACTIVE
+    assert check._xy(DOC["nodes"]) == {k: v[:2] for k, v in NODES.items()}
+    assert check._xy(DOC["router_spots"]) == {k: v[:2] for k, v in ROUTER_SPOTS.items()}
 
 
 def state(router, xy, near):
-    line = (REPO / "contracts" / "fixtures" / "valid_state.jsonl").read_text(encoding="utf-8").splitlines()[1]
+    """An untrained state (pred null) with one object, to be checked against a layout."""
+    line = (REPO / "contracts" / "fixtures" / "desk" / "valid_state.jsonl").read_text(encoding="utf-8").splitlines()[1]
     return {**json.loads(line), "router": router, "objects": [{"xy_m": xy, "near": near, "since_s": 6.0, "drop_db": 5.1}]}
 
 
@@ -148,8 +199,31 @@ def state(router, xy, near):
     ("S-E30", [1.35, 1.05], "pi5", True),     # the router moved east, to 0.25 m away
 ])
 def test_near_follows_the_router_to_its_spot(router, xy, near, ok):
-    found = [e for e in check.errors(state(router, xy, near)) if ".near" in e]
+    found = [e for e in check.errors(state(router, xy, near), layout=DOC) if ".near" in e]
     assert (found == []) is ok, found
+
+
+@pytest.mark.parametrize("xy, near, ok", [
+    ([0.4, 0.2], "pi5b", True),      # on the spot, 0.4 m from Pi B
+    ([0.4, 0.2], None, False),
+    ([0.4, 0.78], "unoq", True),     # at the desk's edge: the board is 4.5 cm away, Pi A the same, and a tie is the board's
+    ([0.36, 0.78], "pi5", True),
+    ([0.4, 0.2], "east", False),     # no such device on the gate
+])
+def test_near_is_judged_on_the_layout_the_state_belongs_to(xy, near, ok):
+    found = [e for e in check.errors(state("S-home", xy, near), layout=LAYOUTS["gate"]) if ".near" in e]
+    assert (found == []) is ok, found
+
+
+def test_section_3_has_the_gate_layout_too():
+    gate = LAYOUTS["gate"]
+    for n in gate["nodes"]:
+        assert f'{n["id"]} ({", ".join(str(v) for v in n["xyz_m"])})' in SECTION_3, n["id"]
+    assert ", ".join(link["id"] for link in gate["links"]) in SECTION_3
+    zone = gate["zones"][0]
+    assert f'{zone["id"]} "{zone["name"]}", centre ({zone["centre_m"][0]}, {zone["centre_m"][1]}), still_alert_s {zone["still_alert_s"]}' in SECTION_3
+    assert "python -m radio.use_layout <name>" in SECTION_3 and '"crosses_spot": true | false' in SECTION_3
+    assert "gate-3 (radio/layouts/gate-3.json)" in SECTION_3 and len(LAYOUTS["gate-3"]["links"]) == 3
 
 
 def test_nodes_are_far_enough_apart_for_near_to_mean_something():

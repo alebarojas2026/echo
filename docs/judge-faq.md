@@ -1,65 +1,83 @@
-# Radio Sight: Judge FAQ
+# Radio Sight: Twenty Hard Judge Questions
 
-## How does Radio Sight work?
+Each answer is two sentences. Speak the answer; offer source records or proof when asked.
 
-Radio Sight reads changes across Wi-Fi and Bluetooth links around a room. A model on the Arduino UNO Q's Dragonwing CPU turns those patterns into presence, movement, zone, and person-versus-object predictions while link health prevents a broken sensor from looking like an empty room.
+## Isn't this just a laser tripwire?
 
-## Why are there so many boards?
+Radio hidden in a bag or panel needs testing; we learn person versus thing and still versus moving. Compatible building Wi-Fi could avoid installing dedicated sensors; this desk line is one strand.
 
-The boards create several radio paths so the prototype can learn where and how the room changed. They stand in for compatible radios and access points already distributed through a building, not a requirement to install this exact hardware set in every room.
+## Isn't presence just a signal-strength threshold?
 
-## Why not just use a camera?
+For this spot, Wi-Fi attenuation provides the main presence decision and Bluetooth gives a second opinion. Learned patterns support person-versus-object and motion decisions, with the camera supplying temporary labels locally.
 
-A camera captures identifying visual detail and needs a useful view of the space. Radio Sight uses one only as a temporary setup teacher, saves no image, unplugs it after the lesson, and continues from radio changes.
+## How does the real kit work?
 
-## Why not use a motion sensor or radar?
+Walk between two devices and the Wi-Fi signal gives you away. The Arduino UNO Q and Pi A sit on the desk, with Pi B across one spot at desk height; the board computes locally.
 
-A basic motion sensor can stop reporting when a person stands still, while Radio Sight is designed to retain a learned presence state and distinguish it from movement. Radar can be effective, but it adds dedicated sensing hardware; our product direction is to reuse compatible building radios.
+## Does standing still make me disappear?
 
-## Can it identify people or count a crowd?
+Most Wi-Fi sensing only sees movement; ours sees you standing still. Presence uses the sustained Wi-Fi change, while movement is a separate decision; its accuracy still needs held-out proof.
 
-No: it classifies a radio pattern as person or object and reports presence, zone, and movement, not identity. It does not claim crowd counting, and a multi-person scene remains outside the measured scope.
+## Will it work on me or in another room?
 
-## Does it work in any building?
+People, furniture and radio paths differ, so the setup gets a local lesson. We have tested this desk arrangement, but another person or room needs independent validation rather than a promise of transfer.
 
-With compatible radios and adequate link coverage, presence is the portable capability, but this prototype has been measured only in its current setup. Detailed zone and motion behavior needs a local lesson whose measured duration is still `__` seconds, plus validation in that room.
+## What about two people or someone passing behind me?
 
-## What happens in a Wi-Fi dead spot?
+The demonstration is designed for one person in the spot, and intrusion waits for sustained presence. Multiple people and passers-by can disturb the signal, so their error rates remain unclaimed until measured.
 
-Radio Sight can report the measured link that something starts blocking and show the change behind a weak area. A complete building coverage map is future work, so we do not turn one blocked-link result into a whole-floor claim.
+## Why not CSI, radar or a motion sensor?
 
-## Why run it on-device?
+This board exposes signal strength rather than CSI, and radar needs dedicated sensing hardware. We want to reuse compatible building radios while reporting presence separately from movement.
 
-Local training and inference keep the room's sensing loop available without a cloud service or venue internet. They also keep radio windows and event decisions on the UNO Q and private network; measured outbound bytes remain `__` until proof is complete.
+## Why use a camera if you promise privacy?
 
-## What runs on the Arduino UNO Q?
+The camera supplies temporary teaching labels and is unplugged before continued sensing. It saves no images, and the visible cable and teacher status let you check that boundary.
 
-Model training and inference, signal-health checks, the radio X-ray, alert logic, advisor, narration, and local event decisions run on the UNO Q. Learned work runs on its Dragonwing CPU, and the Raspberry Pi runs no model.
+## Are you recording me?
 
-## Why is there a Raspberry Pi too?
+The board records local radio summaries and events for replay, questions and reports, without identifying anyone. It stores no camera images and sends no sensing records to the internet during the local demo.
 
-The Pi provides the private sensing hotspot, receives radio samples, and routes the laptop browser to the board. It is a network and radio participant while the UNO Q remains the computing hub for learned decisions.
+## What runs on the board and what needs the cloud?
 
-## How do you protect privacy?
+Training, sensing decisions, alerts, records and answers run on the Arduino UNO Q's Qualcomm Dragonwing CPU. Neither Pi runs a model; the laptop and phone are local screens, and the live loop needs no cloud.
 
-The system does not identify anyone, stores no camera images, and needs no cloud account for the live loop. The laptop and phone page are local displays, and images stored and bytes sent outside the local network remain `__` until the proof record supplies measured values.
+## How is a person different from a dead zone?
 
-## How accurate is it?
+A person in the spot is never our dead-zone demonstration. It requires an object decision with nobody there and a weakened cross-gap Wi-Fi link; clearing the object or moving Pi B supplies the before-and-after test.
 
-We will report held-out zone, presence, and person-versus-object results from sessions that were not used for training. Every result remains `__` until `PROOF.md` contains its method, sample size, date, and commit; a successful stage moment is not an accuracy study.
+## Why not move the router to fix the link?
 
-## What is the no-movement alert?
+Pi A stays beside the cabled hub, so this kit cannot demonstrate a large router move. We clear the blocking object or move Pi B, then report only the measured change.
 
-The timer runs only while the radio model reports a person present, still, and in the same enabled zone. It is a prompt to check on someone, not a diagnosis, and a blind required link pauses the timer rather than declaring the room empty.
+## Can I spoof it, jam it or unplug it?
 
-## What can Radio Sight not do yet?
+A silent device while armed can raise a tamper alert, but that does not diagnose jamming. We do not claim defenses against spoofed radio data or deliberate interference.
 
-It cannot identify a person, count a crowd, reconstruct camera-like detail, or make a prediction while required links are blind. Armed-mode event logic is in `main`, but the live phone display and room-question integrations are not yet complete, and transfer to other rooms and full coverage mapping still need measured tests.
+## What happens when the board or a link fails?
 
-## Honest limits
+A required link going blind pauses decisions, and a stale board feed makes the screens say No data. Neither means empty, and the board remains a single point of failure.
 
-- Radio patterns change with layout, interference, node placement, materials, and people, so calibration belongs to the deployment room.
-- Person-versus-object behavior is limited to represented training patterns; an unfamiliar scene can be uncertain.
-- Armed mode raises one intrusion event for a new sustained person appearance, but it does not identify who entered.
-- Blind or stale input produces no prediction, not an “all clear.”
-- Every public performance, timing, power, storage, and network result stays `__` until its proof record is complete.
+## How accurate is it, and how do I know it isn't scripted?
+
+You can change the live signal by stepping into the spot, then inspect the source records. That demonstration is not held-out accuracy; every published result needs a method, sample size, date and commit in PROOF.md.
+
+## Can the language model invent a replay or report?
+
+Replay comes from saved summaries, with missing records shown as unknown. Ask selects relevant records and reports use their facts; inspect those rows if generated wording is unavailable or doubtful.
+
+## What is the no-movement alert and how do I answer it?
+
+The no-movement alert prompts a check when someone stays present and still; it does not diagnose the cause. Lean aside for the “I'm okay” check, wait for confirmation, and remember that a blind required link pauses the timer.
+
+## What does it cost and how would it scale?
+
+This prototype uses an Arduino UNO Q, two Raspberry Pis and a temporary teaching camera; we have no validated deployment price. The direction is local processing with compatible building radios, but building-wide coverage remains unmeasured.
+
+## What did you write, and what came from libraries?
+
+We wrote the radio pipeline, contracts, features, alert rules, records, local tools and interface. NumPy, scikit-learn, OpenCV, Three.js and Arduino App Bricks provide building blocks; the credits list libraries and the Wilson–Patwari research foundation.
+
+## How does this fit Let's Dig In, and would you continue?
+
+We dug into signal changes hidden beneath an ordinary connection indicator to find presence and blocked Wi-Fi. We would keep building it through repeatable tests across people, objects and room layouts before promising broader deployment.

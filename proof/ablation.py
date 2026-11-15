@@ -6,9 +6,16 @@ def subsets(layout):
     receivers = [n["id"] for n in nodes if "receiver" in n.get("roles", []) and n["id"] not in routers]
     if not routers or not receivers: raise ValueError("layout needs a router and a distinct receiver")
     pair = [routers[0], receivers[0]]
-    four = (pair + [n["id"] for n in nodes if n["id"] not in pair])[:4]
-    groups = [("all", [n["id"] for n in nodes]), ("four_nodes", four if len(four)==4 else []), ("router_receiver", pair)]
-    return [(name, ids, [l["id"] for l in layout["links"] if l["tx"] in ids and l["rx"] in ids]) for name, ids in groups]
+    reduced = (pair + [n["id"] for n in nodes if n["id"] not in pair])[:-1]
+    groups = [("all", [n["id"] for n in nodes]), (f"{len(reduced)}_nodes", reduced), ("router_receiver", pair)]
+    result, seen = [], set()
+    for name, ids in groups:
+        identity = frozenset(ids)
+        if len(ids)<2 or identity in seen: continue
+        seen.add(identity)
+        links = [l["id"] for l in layout["links"] if l.get("classifier",True) is not False and l["tx"] in ids and l["rx"] in ids]
+        result.append((name,ids,links))
+    return result
 
 
 def compare(training, heldout, baseline, layout, allow_sim=False):

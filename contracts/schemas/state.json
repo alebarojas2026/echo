@@ -23,7 +23,7 @@
       "type": ["object", "null"],
       "properties": {"present": {"type": "boolean"}, "kind": {"enum": ["person", "object", "none"]}, "zone": {"$ref": "common.json#/$defs/zone"},
                      "zone_set": {"type": "array", "items": {"$ref": "common.json#/$defs/zone"}},
-                     "probs": {"$comment": "[empty, z1, z2]: one entry for empty, then one per zone in radio/nodes.json.", "type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1}, "minItems": 3, "maxItems": 3},
+                     "probs": {"$comment": "[empty, z1, ...]: one entry for empty, then one per zone in radio/nodes.json (one zone: [empty, z1]). The length is checked against the layout in check.py.", "type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1}, "minItems": 2, "maxItems": 5},
                      "motion": {"enum": ["moving", "still", null]}, "still_s": {"type": "number", "minimum": 0}, "why": {"$ref": "common.json#/$defs/links"}},
       "required": ["present", "kind", "zone", "zone_set", "probs", "motion", "still_s", "why"], "additionalProperties": false,
       "if": {"type": "object", "properties": {"present": {"const": false}}}, "then": {"properties": {"zone": {"const": 0}, "zone_set": {"maxItems": 0}, "motion": {"type": "null"}}},
@@ -51,7 +51,7 @@
     "advice": {
       "type": ["object", "null"],
       "properties": {"id": {"type": "string"}, "cause": {"type": "string"}, "near": {"$ref": "common.json#/$defs/near"}, "xy_m": {"$ref": "common.json#/$defs/xy_m"},
-                     "link": {"$ref": "common.json#/$defs/link"}, "to_spot": {"enum": ["S-W30", "S-E30"]}, "move_m": {"$ref": "common.json#/$defs/xy_m"},
+                     "link": {"$ref": "common.json#/$defs/link"}, "to_spot": {"$comment": "null = nothing to move: on a layout with a presence line the router is cabled and stays put. Then move_m is [0, 0] and dist_change_m 0 (checked in check.py).", "enum": ["S-W30", "S-E30", null]}, "move_m": {"$ref": "common.json#/$defs/xy_m"},
                      "dist_change_m": {"type": "number"}, "text": {"type": "string"}, "before_dbm": {"type": "number"},
                      "after_dbm": {"type": ["number", "null"]}, "why": {"$ref": "common.json#/$defs/links"}},
       "required": ["id", "cause", "near", "xy_m", "link", "to_spot", "move_m", "dist_change_m", "text", "before_dbm", "after_dbm", "why"],

@@ -37,6 +37,6 @@
     {"t": 30, "state": "off"}
   ],
   "outages": [
-    {"node": "east", "t_on": 50, "t_off": 56}
+    {"node": "prop", "t_on": 50, "t_off": 56}
   ]
 }

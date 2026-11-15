@@ -7,12 +7,18 @@ finished (no train) until the camera has really seen nobody for a few seconds.
 
 "Empty" means the camera sees nobody at all (state.teacher present false). Someone standing back
 is not empty: the desk view drops those frames (state.teacher is null), see teacher/DESK.md.
+
+On a layout with one zone (the one spot) there is no side to step to, so the words never name one:
+about 10 s empty, step onto the spot and stand still, shift your weight and move your arms, step off
+for 5 s, step back on. A layout with two zones keeps its left and right.
 """
 
 EMPTY_S = 6        # nobody in view at the start
 OUT_S = 5          # the step out of view in the middle
 MIN_EMPTY_S = 3.0  # the shortest stretch of nobody that counts
+SPOT_EMPTY_S = 10  # nobody in view at the start, on one spot
 EMPTY, LEFT, RIGHT = "empty", "left", "right"
+STILL, MOVE = "still", "move"   # on one spot: standing still on it, or moving on it
 WORDS = {
     (EMPTY, True): "Stay out of the camera's view: the lesson starts with the space empty.",
     (EMPTY, False): "Step right out of the camera's view and wait.",
@@ -23,11 +29,30 @@ WORDS = {
 }
 NO_EMPTY = ("This lesson has no empty time yet, so it would teach the radio that someone is always here. "
             "Step right out of the camera's view for a few seconds; train is sent as soon as the camera has seen nobody.")
+SPOT_WORDS = {
+    "start": "Stay off the spot and out of the camera's view: the lesson starts with the space empty.",
+    "on": "Step onto the spot and stand still.",
+    "back": "Step back onto the spot and stand still.",
+    "still": "Stand still on the spot.",
+    "move": "Stay on the spot: shift your weight and move your arms.",
+    "off": f"Step off the spot, out of the camera's view, for {OUT_S} seconds.",
+}
+SPOT_NO_EMPTY = ("This lesson has no empty time yet, so it would teach the radio that someone is always here. "
+                 "Step off the spot and out of the camera's view for a few seconds; train is sent as soon as the "
+                 "camera has seen nobody.")
 
 
-def script(teach_s: float, step_s: float) -> list:
+def no_empty(one_zone: bool = False) -> str:
+    """What to say when the lesson has no empty time yet."""
+    return SPOT_NO_EMPTY if one_zone else NO_EMPTY
+
+
+def script(teach_s: float, step_s: float, one_zone: bool = False) -> list:
     """[(from s, what, words)] up to teach_s: empty, left and right, a step out in the middle, then
-    left and right again. A lesson too short for the step out still starts empty."""
+    left and right again. A lesson too short for the step out still starts empty.
+    one_zone: the layout has one zone, so the steps are on and off the spot (spot_script)."""
+    if one_zone:
+        return spot_script(teach_s, step_s)
     empty = min(EMPTY_S, teach_s / 3)
     with_out = teach_s >= empty + OUT_S + 4 * step_s
     out_at = empty + 2 * step_s if with_out else None
@@ -40,6 +65,26 @@ def script(teach_s: float, step_s: float) -> list:
         steps.append((t, (LEFT, RIGHT)[side % 2], entering))
         t, side, entering = t + step_s, side + 1, False
     return [(s[0], s[1], WORDS[(s[1], s[2] if len(s) == 3 else s[0] == 0)]) for s in steps]
+
+
+def spot_script(teach_s: float, step_s: float) -> list:
+    """[(from s, what, words)] on one spot: about 10 s empty, onto the spot and still, then moving on it
+    (shift your weight, move your arms), a step off for OUT_S after two steps, back on, still and moving
+    again. A lesson too short for the step off still starts empty."""
+    empty = min(SPOT_EMPTY_S, teach_s / 3)
+    out_at = empty + 2 * step_s if teach_s >= empty + 3 * step_s + OUT_S else None
+    steps, t, n, back = [(0.0, EMPTY, SPOT_WORDS["start"])], empty, 0, False
+    while t < teach_s:
+        if out_at is not None and t >= out_at:
+            steps.append((t, EMPTY, SPOT_WORDS["off"]))
+            t, out_at, n, back = t + OUT_S, None, 0, True
+            continue
+        if n % 2:
+            steps.append((t, MOVE, SPOT_WORDS["move"]))
+        else:
+            steps.append((t, STILL, SPOT_WORDS["back" if back else "on"] if n == 0 else SPOT_WORDS["still"]))
+        t, n = t + step_s, n + 1
+    return steps
 
 
 class EmptyTime:

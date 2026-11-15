@@ -34,6 +34,30 @@ const REPLAY_BAR_PX = 184
 /** What the room says when the browser gives it no 3D context. The text column runs on the feed alone. */
 export const NO_3D_WORDS = ['3D view unavailable', 'The radio keeps working.'] as const
 
+/** What the room says when the layout file was read but not understood (layout.ts, 'refused'). */
+export const LAYOUT_REFUSED_WORDS = ['Layout not understood', 'The room can\u2019t draw this layout file. The radio keeps working.'] as const
+
+/** Instead of mounting the room on a layout it does not understand: the notice, and nothing from any other
+ *  layout. The text column runs on the feed alone. */
+export function refuseLayout(host: HTMLElement) {
+  host.classList.add('room')
+  addNotice(host)(...LAYOUT_REFUSED_WORDS)
+}
+
+/** What the room says under "Sensor blind" when nothing gives it the panels' own sentence. */
+export const BLIND_WORDS = 'A radio link is not heard.'
+
+/**
+ * The room's words for a blind sensor: [heading, line], or null for no notice.
+ * - The line is the panels' own sentence when they publish one (`sentence`: "Pi B not heard. Check it is on the
+ *   hotspot."), so one state reads one way across the screen (#662). On its own the room says BLIND_WORDS.
+ * - No notice while a tamper alert is up: the device is drawn in the room in the fault colour with "not heard",
+ *   the tamper words are the headline, and a notice across the room would hide the one device a judge should see.
+ */
+export function blindNotice(sentence: string, tamper: boolean): [string, string] | null {
+  return tamper ? null : ['Sensor blind', sentence.trim() || BLIND_WORDS]
+}
+
 /** The room's notice: a heading and one line over the room, hidden while the heading is empty. */
 function addNotice(host: HTMLElement): (title: string, line: string) => void {
   const notice = document.createElement('div')
@@ -207,9 +231,11 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     // NO DATA: the last state is more than 1 s old. The room greys out and holds still (not while replaying).
     if (!replay.playing) {
       host.classList.toggle('room--stale', stale)
+      // The panels keep their sentence for this state on #hud (data-health-sentence); the room reads it there and
+      // imports nothing from them. It is set before the room is told, since the panels subscribe first.
+      const blind = state?.health?.status === 'blind' ? blindNotice(document.getElementById('hud')?.dataset.healthSentence ?? '', !!state.armed && !!state.tamper?.length) : null
       if (stale) say('No data', 'The feed has paused. Nothing here is current.')
-      else if (state?.health?.status === 'blind') say('Sensor blind', 'A radio link failed, so predictions pause.')
-      else say('', '')
+      else say(...(blind ?? ['', '']))
     }
     host.dataset.feed = stale ? 'stale' : 'live'
     if (stale || !state) return

@@ -32,6 +32,14 @@ FAKE_JOIN = r"""#!/usr/bin/env bash
 echo "wifi_join" >> "$FAKE_LOG"
 """
 
+FAKE_SYSTEMCTL = r"""#!/usr/bin/env bash
+case "$1" in
+    is-active) exit 0 ;;
+    list-units) [ -z "${FAILED_UNIT:-}" ] || echo "$FAILED_UNIT loaded failed failed" ;;
+    *) echo "systemctl $*" ;;
+esac
+"""
+
 
 def git(repo, *args):
     subprocess.run(["git", "-c", "user.name=test", "-c", "user.email=test@example.com", *args],
@@ -54,7 +62,8 @@ def pi(tmp_path):
     git(repo, "commit", "-q", "-m", "first")
     fakes = tmp_path / "bin"
     fakes.mkdir()
-    for name, text in (("python3", FAKE_PYTHON3), ("nmcli", FAKE_NMCLI), ("ip", FAKE_IP), ("join", FAKE_JOIN)):
+    for name, text in (("python3", FAKE_PYTHON3), ("nmcli", FAKE_NMCLI), ("ip", FAKE_IP), ("join", FAKE_JOIN),
+                       ("systemctl", FAKE_SYSTEMCTL)):
         (fakes / name).write_text(text, newline="\n")
         (fakes / name).chmod(0o755)
     (tmp_path / "units").mkdir()
@@ -66,7 +75,7 @@ def install(pi, *args, addr="", code=0):
     env = {k: v for k, v in os.environ.items() if k not in ("PYTHON", "ROLE", "RADIO_NODE", "WIFI_IFACE")}
     env.update(PATH=str(tmp / "bin") + os.pathsep + env["PATH"], FAKE_LOG=str(tmp / "calls.log"),
                VENV=(tmp / "venv").as_posix(), UNIT_DIR=(tmp / "units").as_posix(),
-               SYSTEMCTL="echo systemctl", SUDO="", NMCLI=(tmp / "bin" / "nmcli").as_posix(),
+               SYSTEMCTL=(tmp / "bin" / "systemctl").as_posix(), SUDO="", NMCLI=(tmp / "bin" / "nmcli").as_posix(),
                IP=(tmp / "bin" / "ip").as_posix(), WIFI_JOIN=(tmp / "bin" / "join").as_posix(),
                FAKE_ADDR=addr, CHECK_WAIT_S="0")
     r = subprocess.run([BASH, "pi/install.sh", *args], cwd=repo, env=env, capture_output=True, text=True)
@@ -145,7 +154,7 @@ def run_install(pi, *args, code=0, **extra):
     env = {k: v for k, v in os.environ.items() if k not in ("PYTHON", "ROLE", "RADIO_NODE", "WIFI_IFACE")}
     env.update(PATH=str(tmp / "bin") + os.pathsep + env["PATH"], FAKE_LOG=str(tmp / "calls.log"),
                VENV=(tmp / "venv").as_posix(), UNIT_DIR=(tmp / "units").as_posix(),
-               SYSTEMCTL="echo systemctl", SUDO="", NMCLI=(tmp / "bin" / "nmcli").as_posix(),
+               SYSTEMCTL=(tmp / "bin" / "systemctl").as_posix(), SUDO="", NMCLI=(tmp / "bin" / "nmcli").as_posix(),
                IP=(tmp / "bin" / "ip").as_posix(), WIFI_JOIN=(tmp / "bin" / "join").as_posix(),
                FAKE_ADDR="", CHECK_WAIT_S="0", SYSTEMD_RUN="echo systemd-run", JOURNALCTL="echo journalctl",
                **extra)
@@ -208,3 +217,10 @@ def test_wifi_on_cancels_the_timers_and_rejoins_now(pi):
     out, calls = run_install(pi, "--node", "pi5b", "--wifi-on")
     assert "systemctl stop radio-sight-wifi-off.timer radio-sight-wifi-back.timer" in out
     assert calls == ["nmcli device connect wlan0"]
+
+
+def test_failed_service_stops_install_before_joining(pi,monkeypatch):
+    monkeypatch.setenv('FAILED_UNIT','radio-sight-radio-node.service')
+    out,calls = install(pi,'--node','pi5b',code=1)
+    assert 'radio-sight-radio-node.service loaded failed failed' in out
+    assert 'wifi_join' not in calls and not any('pi.check' in line for line in calls)

@@ -1,0 +1,6 @@
+.privacy-line { flex-shrink:0; color:var(--text-2); min-height:72px; font:500 28px/36px var(--sans); font-variant-numeric:tabular-nums; }
+.privacy-line p { margin:0; min-height:36px; font:inherit; }
+.privacy-line [data-tone="fault"] { color:var(--fault); }
+.hud-arrival > .privacy-line { margin-top:24px; }
+/* A short window: the counts keep their line and the running time gives its line to the cards below. */
+@media(min-width:1101px) and (max-height:1000px) { .judge .privacy-line { min-height:36px; } .judge .privacy-line [data-testid="privacy-duration"] { display:none; } }

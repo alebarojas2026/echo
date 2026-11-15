@@ -82,17 +82,23 @@ function tourStops(): { xy: [number, number]; angle: number }[] {
   return stops.map((xy) => ({ xy, angle: at(xy) })).sort((a, b) => a.angle - b.angle)
 }
 
-/** The person's floor point at time t in the tour, and whether they're walking. With three or more zones they
- *  walk the circle through the zone centres; with two, straight back and forth. */
+/** The person's floor point at time t in the tour, and whether they're walking. On a strip they walk straight
+ *  along it from one zone's middle to the next and back again; on the square, the circle through the zone
+ *  centres. */
 export function tourAt(tMs: number): { xy: [number, number]; moving: boolean } {
   const k = Math.floor(tMs / SEG_MS)
   const f = (tMs % SEG_MS) / SEG_MS
   const walking = f < 0.6
   const u = walking ? smooth(f / 0.6) : 1
-  const stops = tourStops()
+  let stops = tourStops()
+  if (STRIP_M) {
+    // West to east and back: the zones lie in a line, and a circle through three points in a line is no path.
+    const line = [...stops].sort((a, b) => a.xy[0] - b.xy[0])
+    stops = [...line, ...line.slice(1, -1).reverse()]
+  }
   const from = stops[k % stops.length]
   const to = stops[(k + 1) % stops.length]
-  if (stops.length < 3) return { xy: [from.xy[0] + (to.xy[0] - from.xy[0]) * u, from.xy[1] + (to.xy[1] - from.xy[1]) * u], moving: walking }
+  if (STRIP_M || stops.length < 3) return { xy: [from.xy[0] + (to.xy[0] - from.xy[0]) * u, from.xy[1] + (to.xy[1] - from.xy[1]) * u], moving: walking }
   const [fw, fh] = floorSize()
   const r = Math.hypot(from.xy[0] - fw / 2, from.xy[1] - fh / 2)
   const turn = (to.angle - from.angle + 2 * Math.PI) % (2 * Math.PI)
@@ -225,7 +231,9 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
   })
   const offBlind = (scene.off?.forS ?? 0) >= 3
   const blind = scene.blind || (offBlind && offIds.length > 0)
-  const blindIds = scene.blind ? ['east>unoq:ble'] : offBlind ? offIds : []
+  // The blind scene fails one link of the layout that is there: the last one listed (a link to a device across the
+  // spot on the gate, a beacon's on the desk).
+  const blindIds = scene.blind ? LINK_IDS.slice(-1) : offBlind ? offIds : []
   const links: LinkState[] = LINK_IDS.map((id, i) => {
     const drop = linkDrop(id, i, person?.xy ?? null, object, router, tMs)
     const quiet = offIds.includes(id)

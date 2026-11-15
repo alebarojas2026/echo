@@ -1,0 +1,25 @@
+const {test,expect}=require('@playwright/test')
+const fs=require('node:fs'),path=require('node:path')
+require('./layout-fixture.cjs')
+for(const [width,height] of [[1920,1080],[1440,900]]) test(`readable panels at ${width}`,async({page})=>{
+ await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'});await page.clock.install()
+ await page.goto('/tests/arrival-harness.html?scan=0&op=1')
+ await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
+ const narration='Someone is on the left. They have stopped moving. The radio is still following them.'
+ await page.evaluate(text=>window.arrival.update('still',{narration:{text,source:'template'},alert:{...window.arrival.peek('still').alert,state:'check_on',still_s:13,limit_s:10}}),narration)
+ const narrator=page.getByTestId('narrator-text')
+ await expect(narrator).toHaveText(narration)
+ expect(await narrator.evaluate(el=>el.scrollHeight<=el.clientHeight+1)).toBe(true)
+ await expect(page.getByTestId('alert-banner')).toContainText('· 13 s')
+ await expect(page.getByTestId('alert-seconds')).toBeEmpty()
+ await page.evaluate(()=>window.arrival.update('still',{narration:{text:'The next sentence.',source:'template'},alert:{...window.arrival.peek('still').alert,state:'check_on',still_s:13,limit_s:10}}))
+ await page.clock.runFor(3000);await expect(narrator).toHaveText(narration)
+ if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-narration.png`)})}
+ await page.clock.runFor(1300);await expect(narrator).toHaveText('The next sentence.')
+ await page.getByRole('button',{name:'Ask the room',exact:true}).click()
+ await page.getByRole('button',{name:'Was anyone here in the last 10 minutes?',exact:true}).click();await page.clock.runFor(700)
+ const replay=page.getByTestId('ask-replay');await expect(replay).toBeVisible()
+ expect(await replay.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+ if(process.env.HUD_SCREENSHOTS)await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-ask.png`)})
+})
+

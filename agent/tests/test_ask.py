@@ -55,7 +55,7 @@ def visited(store) -> int:
 
 EXPECT = {"presence": "Yes. Someone was here for", "still_spans": "The longest time without movement was",
           "alerts": "No-movement alerts in the last 10 minutes: {alerts}.", "intrusions": "Intrusion alerts in the last 10 minutes: 1.",
-          "link_history": "In the last 10 minutes: east>pi5:ble read", "explain_advice": "The last advice was: ",
+          "link_history": "In the last 10 minutes: {link} read", "explain_advice": "The last advice was: ",
           "model_card": "Model sim runs on this board"}
 
 
@@ -65,10 +65,36 @@ def test_each_tool_answers_from_its_rows(store, tool):
     # The demo path stands still once, so it raises one alert on every layout (sim/tests/test_state.py
     # checks the path itself). The count is still read from the store, not written here.
     assert alerts_in(store) == 1
-    assert EXPECT[tool].format(alerts=alerts_in(store)) in reply["answer"], reply["answer"]
+    first_link = min(i for r in store.seconds() for i in r["links"])   # the links are the layout's, whatever it holds
+    if tool == "explain_advice" and not any(r["advice"] for r in store.seconds()):
+        # On one spot the demo path moves no router, so it holds no advice (the thing left in the line has its own test).
+        assert reply["answer"] == "No advice has been given." and reply["rows"] == []
+        return
+    assert EXPECT[tool].format(alerts=alerts_in(store), link=first_link) in reply["answer"], reply["answer"]
     assert reply["tool"] == tool and reply["picked_by"] == "llm" and reply["src"] == "sim" and reply["rows"]
     # no number that isn't in a row (or the minutes that were asked for)
     assert numbers_in(reply["answer"]) <= numbers_in(reply["rows"]) | {str(reply["args"]["minutes"])}
+
+
+def test_advice_that_names_no_spot_is_told_without_a_move():
+    """On one spot the router is cabled: the advice is about a thing left in the line (to_spot null), and
+    the answer gives the line with the thing there and once it was taken away, never a move."""
+    advice = {"id": "a1", "cause": "obstruction", "near": None, "xy_m": [0.38, 0.3], "link": "pi5>pi5b:wifi",
+              "to_spot": None, "move_m": [0, 0], "dist_change_m": 0, "before_dbm": -45, "after_dbm": -40.0,
+              "text": "Something is standing in the Wi-Fi line from Pi A to Pi B. Take it away to get the signal back.",
+              "why": ["pi5>pi5b:wifi"]}
+
+    class Rows:
+        def seconds(self, *_):
+            return [{"t": NOW - 5000, "advice": advice}]
+
+    reply = TOOLS["explain_advice"](Rows(), NOW, ZONES)
+    assert reply["answer"] == ("The last advice was: " + advice["text"]
+                               + " The line read -45 dBm with it there and -40.0 dBm once it was taken away.")
+    assert "move" not in reply["answer"] and "router" not in reply["answer"]
+    assert reply["rows"][0]["to_spot"] is None and reply["rows"][0]["link"] == "pi5>pi5b:wifi"
+    moved = TOOLS["explain_advice"](type("R", (), {"seconds": lambda self, *_: [{"t": NOW, "advice": dict(advice, to_spot="S-W30")}]})(), NOW, ZONES)
+    assert "before the move" in moved["answer"]
 
 
 def test_a_zone_and_a_link_narrow_the_answer(store):

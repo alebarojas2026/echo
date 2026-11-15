@@ -1,6 +1,6 @@
 const layoutFixture = require('./layout-fixture.cjs')
 const { test, expect } = require('@playwright/test')
-test('counts, alerts, expires waves and respects reduced motion', async ({ page }) => {
+test('counts, alerts, expires check-ins and respects reduced motion', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/src/hud/index.html')
   await page.evaluate(async () => {
@@ -15,11 +15,11 @@ test('counts, alerts, expires waves and respects reduced motion', async ({ page 
   await expect(page.getByTestId('alert-banner')).toHaveCSS('color', 'rgb(255, 159, 67)')
   await expect(page.locator('.stillness-track span')).toHaveCSS('transform', 'matrix(0.7, 0, 0, 1, 0, 0)')
   await page.evaluate(() => window.panel.update(window.mock('still', 0, 11000), false))
-  await expect(page.getByTestId('alert-banner')).toHaveText(`No movement ${layoutFixture.place} for ${layoutFixture.zone.still_alert_s} s`)
+  await expect(page.getByTestId('alert-banner')).toHaveText(`No movement ${layoutFixture.place} · 11 s`)
   await expect(page.getByTestId('alert-zone')).toHaveText(layoutFixture.zone.name)
-  await expect(page.getByTestId('alert-seconds')).toHaveText('Still for 11 s')
+  await expect(page.getByTestId('alert-seconds')).toBeEmpty()
   await page.evaluate(() => window.panel.update(window.mock('checkin', 0, 7000), false))
-  await expect(page.getByTestId('checkin-toast')).toHaveText('Wave seen')
+  await expect(page.getByTestId('checkin-toast')).toHaveText('Check-in received')
   await page.evaluate(() => { const state = window.mock('checkin', 0, 7000); state.t += 7000; window.panel.update(state, false) })
   await expect(page.locator('#test-panel')).toBeHidden()
 })

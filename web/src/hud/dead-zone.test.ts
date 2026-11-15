@@ -48,7 +48,7 @@ test('found, measuring, and the gain or loss the board measured', () => {
   state.advice!.before_dbm = -71.2
   expect(deadZone(state, false)).toMatchObject({ step: 'found', headline: 'Dead zone found', detail: 'Something is blocking the Wi-Fi from Pi A to Board', text: 'Move the router 30 cm left', way: -1, before: -71.2, after: null })
   expect(judgeMoment(state, false, desk)).toEqual(['Dead zone found', 'Something is blocking the Wi-Fi from Pi A to Board'])
-  state.router = state.advice!.to_spot
+  state.router = state.advice!.to_spot!
   state.pred = null
   expect(deadZone(state, false)).toMatchObject({ step: 'measuring', headline: 'Router moved', text: 'Measuring…' })
   state.advice!.after_dbm = -63.4
@@ -69,7 +69,7 @@ test('advice with no move in it falls back to the board\'s own sentence', () => 
 test('the last advice is kept only while the router stays on the advised spot', () => {
   const advised = mockState('object', 0, 1000)
   expect(holdAdvice(advised)).toBe(advised)
-  const moved = { ...mockState('empty', 1, 1100), router: advised.advice!.to_spot }
+  const moved = { ...mockState('empty', 1, 1100), router: advised.advice!.to_spot! }
   expect(holdAdvice(moved).advice).toBe(advised.advice)
   const elsewhere = { ...moved, router: 'S-E30' }
   expect(holdAdvice(elsewhere).advice).toBeNull()

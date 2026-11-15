@@ -52,7 +52,22 @@ TRAIN_KEEP = 8           # a fit reads the newest this-many recordings of each k
                          # room for 3+ walkers with two walks each, and a bound on an afternoon of lessons
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 GONE_READINGS = 8        # a link is gone, not just slow, once silent for this many readings at its own rate
+SUSPECT_DB = 2.0         # the empty level stops following a crossing line once the lines are this far down ...
+UNSTICK_MS = 30_000      # ... unless the model has said "nobody" all through a dip this long: then that is the new empty
+DRIFT_NOTE_MS = 10_000   # the followed level is noted for the recordings this often, when it has moved
+DRIFT_NOTE_DB = 0.5
+STAY_DB = 3.0            # somebody who was there stays while the crossing lines are still this far down (settings.stay_x_quiet)
 SILENT_MS = 3_000        # a baseline restarts only for a link with no reading for this long
+# A layout with a presence line ("presence" in nodes.json). These are the defaults for the keys it may carry:
+# the kit's own numbers go in the file, not here.
+OBJECT_DB = 3.0          # object_db: a thing left in the line takes at least this off it ...
+OBJECT_MAX_DB = 10.0     # object_max_db: ... and less than this (a person took 13.5 to 24 dB on the kit); null = no limit
+OBJECT_SPREAD_DB = 1.0   # object_spread_db: ... with the line as steady as when the spot is empty (its 2 s spread)
+OBJECT_HOLD_S = 3.0      # object_hold_s: ... for this long
+MOVING_SPREAD_DB = 2.0   # moving_spread_db: a person is moving when the line's 2 s spread is this or more
+STILL_SHARE = 0.8        # ... and still again once it is under this share of that
+THING_GRACE_MS = 1_000   # a thing in the line stays one for this long after the line stops looking like it
+ADVICE_KEEP_MS = 10_000  # the advice about a thing in the line stays this long once the gain has been measured
 LABEL_MODES = ("person", "object", "off")
 CAM_STATES = ("on", "off", "stalled")
 
@@ -158,13 +173,27 @@ class Brain:
         # but it is no feature, never blinds the sensor, never holds up a baseline, and the x-ray,
         # objects, the check-in and the advice don't look at it.
         thin = {link["id"] for link in nodes["links"] if link.get("classifier") is False}
+        # The layout's presence line is the main sensor: an older "classifier": false on it (written when Wi-Fi
+        # did not react to a person, with Pi A off to the side) must not switch it off. It is said, and ignored.
+        main_line = (nodes.get("presence") or {}).get("line")
+        if main_line in thin:
+            logging.getLogger("brain").warning(
+                '%s is the presence line of this layout: its "classifier": false is ignored', main_line)
+            thin.discard(main_line)
         self.model_links = tuple(k for k in links if k not in thin)
+        # The lines a person on the spot stands in, when the layout marks them ("crosses_spot": true).
+        self.crossing = tuple(link["id"] for link in nodes["links"]
+                              if link.get("crosses_spot") is True and link["id"] in self.model_links)
         self.health = Health.from_nodes(
             nodes, classifier_links=[k for k in self.model_links if k not in over_hotspot])
         self.xray = Xray.from_nodes(dict(nodes, links=[k for k in nodes["links"] if k["id"] not in thin]))
         self.router_links = [k for k in self.router_links if k not in thin]   # the 3 s check after router_home
         self.hall = Hall.from_nodes(nodes)    # optional long links (brain/hall.py); none unless nodes.json lists them
-        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led, self.settings)
+        # On a layout that marks the lines crossing the spot, moving and still are told apart on few, slow
+        # lines, and a short run of "moving" is often wrong: the still timer wants spot_moving_run of them.
+        crossing = any(link.get("crosses_spot") is True for link in nodes["links"])
+        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led,
+                           self.settings.with_(moving_run=self.settings.spot_moving_run) if crossing else self.settings)
         # after hours: a person who appears and is still there armed.hold_s later is an intrusion
         self.armed = Armed(self.settings, S.hold_s(nodes))
         self.tamper = Tamper.from_nodes(nodes, silent_ms=self.settings.tamper_silent_ms,
@@ -185,6 +214,40 @@ class Brain:
         self.settle: Optional[int] = None         # when router_home came, while its 3 s check runs
         self.recalibrating = False                # the automatic baseline after a failed check
         self._old_base: Dict[str, float] = {}
+        # "presence" in nodes.json: one line decides whether somebody is there (the gate: the Wi-Fi line from
+        # Pi A to Pi B, which fell 15 to 21 dB with a person on the kit and under 1 dB empty). Its 1 s
+        # median drop turns presence on at on_db and off under off_db.
+        rule = nodes.get("presence") or {}
+        self.presence_line = rule.get("line") if rule.get("line") in self.model_links else None
+        # No second opinion: on the kit the Bluetooth lines dipped 9 to 20 dB with nobody there, so "second"
+        # in the file is read and not used. While the line is silent its last word stands for second_hold_s.
+        self.presence_second = None
+        if self.presence_line:
+            # The sensor is that one line. Health is blind only when it is silent or stale; the level of a
+            # Bluetooth line, or of a line that does not cross the spot, never blinds (they dip and drift by
+            # themselves), and a line going quiet still shows in its own row and counts for tamper.
+            self.health.classifier_links = [self.presence_line]
+            self.health.judge_level = False
+        self.presence_on_db, self.presence_off_db = float(rule.get("on_db", 7.0)), float(rule.get("off_db", 4.0))
+        self.presence_hold_ms = int(float(rule.get("second_hold_s", 5.0)) * 1000)
+        self._line_present, self._line_seen = False, None
+        # A thing left standing in that line: down object_db or more (and less than a person takes), as steady
+        # as the empty line, for object_hold_s. And where moving begins: the line's 2 s spread.
+        self.object_db = float(rule.get("object_db", OBJECT_DB))
+        top = rule.get("object_max_db", OBJECT_MAX_DB)
+        self.object_max_db = math.inf if top is None else float(top)
+        self.object_spread_db = float(rule.get("object_spread_db", OBJECT_SPREAD_DB))
+        self.object_hold_ms = int(float(rule.get("object_hold_s", OBJECT_HOLD_S)) * 1000)
+        self.moving_spread_db = float(rule.get("moving_spread_db", MOVING_SPREAD_DB))
+        self._thing = False                        # the decision is "a thing in the line"
+        self._thing_since: Optional[int] = None    # since when the line has looked like one
+        self._thing_lost: Optional[int] = None     # since when it has stopped looking like one
+        self._moving = False                       # the last word on moving / still from the line's spread
+        self._gone_t: Optional[int] = None         # when the thing the advice is about was taken away
+        self._measured_t: Optional[int] = None     # when the gain from that was measured
+        self._drift_t: Optional[int] = None        # when the empty level last followed the crossing lines
+        self._suspect_t: Optional[int] = None      # since when those lines have been down with the model saying nobody
+        self._noted = (0, {})                      # (when, the levels) last noted for the recordings
         self._said_zone = 0                        # the zone last announced (0 = nobody)
         self._next_zone = (0, 0)                   # (a different zone, decisions in a row)
         self._said_cam = "off"                     # the camera state last announced
@@ -372,8 +435,8 @@ class Brain:
         self.training = {"started_t": self.now(), "progress": None,
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
-        history, links, zones = self._baselines(), self.model_links, self.zone_ids
-        motion_links = self.settings.motion_links
+        history, links, zones, crossing = self._baselines(), self.model_links, self.zone_ids, self.crossing
+        motion_links, motion_line = self.settings.motion_links, self.presence_line
 
         def fit():   # may run on another thread: touches nothing of ours
             for s in sessions:   # read back from the bus's files; nothing is kept after the fit
@@ -381,7 +444,8 @@ class Brain:
                     s["messages"] = read_session(s["path"], s["meta"].get("recv_t"))
                 if not s.get("base"):
                     s["base"] = base_at(history, s["meta"].get("recv_t"))
-            return Model(base, ver=ver, links=links, zones=zones, motion_links=motion_links).fit(sessions)
+            return Model(base, ver=ver, links=links, zones=zones, motion_links=motion_links,
+                         crossing=crossing, motion_line=motion_line).fit(sessions)
 
         def done(model):   # back on the loop; model None = the fit failed
             self.training = None
@@ -555,7 +619,7 @@ class Brain:
             with open(self.sessions_dir / "model.pkl", "rb") as f:
                 doc = pickle.load(f)
             model, ver = doc["model"], str(doc["ver"])
-            want = F.feature_names(self.model_links)
+            want = F.feature_names(self.model_links, self.crossing)
             if getattr(model, "features", None) != want or getattr(model, "classes", None) != [0] + self.zone_ids:
                 logging.getLogger("brain").warning(
                     "model.pkl was trained on other features or zones (%d features, first %s) than this layout "
@@ -637,7 +701,62 @@ class Brain:
         settings.settle_x_quiet x its own quiet level when that is more."""
         return max(SETTLE_DB, self.settings.settle_x_quiet * self.quiet_db.get(link, 0.0))
 
+    def _line_advice(self, now) -> None:
+        """Advice on a layout with a presence line (section 6): the router is cabled and stays put, so the
+        advice is about a thing left standing in that line and names no spot to move to.
+
+        It shows while the decision is "object". before_dbm is the line's median over the last 3 s, kept
+        current while the thing is there. Once the thing is taken away, after_dbm is the median over 3 s
+        starting 2 s later, advice_result carries both, and the advice stays ADVICE_KEEP_MS more.
+        Somebody stepping onto the spot takes the advice away at once: a person is never a dead zone."""
+        line, adv = self.presence_line, self.advice
+        if self.capture or (self.pred and self.pred["present"]):
+            self.advice = self._gone_t = self._measured_t = None
+            return
+        if self._thing:
+            self._gone_t = None
+            before = self._median(line, now - ADVICE_MEDIAN_MS)
+            if before is None or self._dismissed:
+                return                               # no reading to show, or cleared by reset while this thing stays
+            if adv is not None and adv["after_dbm"] is None:
+                adv["before_dbm"] = before           # kept current while the advice shows
+                return
+            tx, rx = _ends(line)
+            names = {n["id"]: n.get("name") or n["id"] for n in self.nodes["nodes"]}
+            spots = {n["id"]: n["xyz_m"][:2] for n in self.nodes["nodes"]}
+            xy = [round((a + b) / 2, 2) for a, b in zip(spots[tx], spots[rx])]   # the middle of the line
+            radio = "Wi-Fi" if line.endswith(":wifi") else "Bluetooth"
+            self._measured_t = None
+            self.advice = {"id": f"a-{line}-{self._event_n + 1}", "cause": "obstruction", "near": self.xray.nearest_node(xy),
+                           "xy_m": xy, "link": line, "to_spot": None, "move_m": [0, 0], "dist_change_m": 0,
+                           "text": f"Something is standing in the {radio} line from {names[tx]} to {names[rx]}. "
+                                   f"Take it away to get the signal back.",
+                           "before_dbm": before, "after_dbm": None, "why": [line]}
+            self.emit("advice", {"link": line, "node": self.advice["near"], "before_dbm": before})
+            return
+        self._dismissed = None
+        if adv is None:
+            return
+        if adv["after_dbm"] is not None:
+            if self._measured_t is None or now - self._measured_t >= ADVICE_KEEP_MS:
+                self.advice = self._measured_t = None
+            return
+        if self._gone_t is None:
+            self._gone_t = now
+        start = self._gone_t + AFTER_START_MS
+        if now < start + ADVICE_MEDIAN_MS:
+            return
+        after, self._gone_t = self._median(line, start, start + ADVICE_MEDIAN_MS), None
+        if after is None or line not in self.base or self.base[line] - after >= self.object_db:
+            self.advice = None                       # no reading, or the line is still down: nothing was taken away
+            return
+        adv["after_dbm"], self._measured_t = after, now
+        self.emit("advice_result", {"link": line, "before_dbm": adv["before_dbm"], "after_dbm": after})
+
     def _update_advice(self, now, xray: dict, links: List[dict]) -> None:
+        if self.presence_line:
+            self._line_advice(now)
+            return
         if self.router == HOME:
             adv = advise(xray["xray"], links, self.nodes, xray["objects"]) \
                 if xray["xray"] and self.settle is None and not self.capture else None
@@ -686,7 +805,15 @@ class Brain:
         s = self.settings
         self.health.set_quiet(self.quiet_db, s.steady_x_quiet)
         self.watch.checkin_rule.other_db_of = {k: s.checkin_x_quiet * q for k, q in self.quiet_db.items()}
+        self.xray.object_min_db = {k: s.object_x_quiet * q for k, q in self.quiet_db.items()}
+        if self.presence_line:   # only a thing in the presence line is an object there: no other line can raise one
+            self.xray.object_min_db = {k: self.xray.object_min_db.get(k, 0.0) if k == self.presence_line else math.inf
+                                       for k in self.links}
         self.windower, self.window = F.Windower(self.base, self.model_links), None
+        self._drift_t = self._suspect_t = None
+        self._line_present, self._line_seen = False, None
+        self._thing, self._thing_since, self._thing_lost, self._moving = False, None, None, False
+        self._noted = (self.now(), dict(self.base))
         self.health.set_base(self.base)
         self.health.set_expected(self.expected_hz)
         self.xray.reset()
@@ -921,7 +1048,18 @@ class Brain:
             return
         if not self.window.get("decided"):   # the classifier runs on every new window
             t0 = time.perf_counter()
-            self._raw = self.model.predict(self.window)
+            thing = self._thing_says()
+            # present is passed only on a layout with a presence line: everywhere else the call is the one
+            # it always was, for anything that stands in for the model (proof's replay does).
+            line = {"present": False if thing else self._line_says()} if self.presence_line else {}
+            self._raw = self.model.predict(self.window, hold=self._still_down(), **line)
+            if thing:
+                self._raw["kind"] = "object"   # down and steady with no body in it: never a person, never nobody
+                self._raw["why"] = [self.presence_line]
+            elif self.presence_line and self._raw["present"]:
+                self._raw["motion"] = self._motion_says()
+            elif self.presence_line and line["present"] is False and self._raw["kind"] == "object":
+                self._raw["kind"] = "none"     # the line is clear: no other line can say "object" on this layout
             self.decision_ms.append((time.perf_counter() - t0) * 1000)
             self.window["decided"] = True
             self.raw_kind = self._raw["kind"]   # health wants this even while pred is hidden
@@ -946,8 +1084,13 @@ class Brain:
         self._fresh = False
         pred = dict(self._raw)
         self.watch.on_pred(self.window["end"], pred)
+        if self.crossing:                        # the check-in on this layout: leaning out of the lines
+            quiet = [self.quiet_db[k] for k in self.crossing if k in self.quiet_db]
+            self.watch.on_crossing(self.window["end"], F.crossing_drop(self.window, self.crossing),
+                                   sum(quiet) / len(quiet) if quiet else 0.0, self.crossing[0])
         pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
+        self._follow_drift(self.window["end"], pred)
         self.lesson.saw(now, pred, self.label)
         self._announce(pred["zone"] if pred["present"] else 0)
         intruder = self.armed.on_pred(pred)
@@ -955,6 +1098,141 @@ class Brain:
             self.emit("intrusion", {"zone": intruder})
         for zone in self.armed.pop_passed():   # appeared while armed and gone before the hold was over
             self.emit("passed_by", {"zone": zone})
+
+    def _follow_drift(self, now, pred) -> None:
+        """The empty level of the lines that cross the spot follows slow drift (settings.drift_follow_s).
+
+        On the kit the empty level of the one good line moved 5 dB in five minutes, more than the
+        weakest person takes off it. So while the decision is "nobody", each crossing line's
+        baseline moves towards its median in this window with a time constant of drift_follow_s:
+        at 30 s a drift of 1 dB a minute is followed half a dB behind, and a person stepping in
+        over a second moves it by a tenth of a dB before it stops. It stops (the level is frozen)
+        the moment the lines are SUSPECT_DB down, or settings.suspect_x_quiet x their quiet level,
+        which is well before the model says "present", and stays stopped for as long as somebody
+        is there: a person standing still for three minutes, or thirty, is never taken for the
+        empty spot. The one way back: the model has said "nobody" all through a dip of
+        UNSTICK_MS, so the dip is the room (a chair moved), not a person.
+        Only the crossing lines: the desk's own lines keep the captured baseline, since a tray
+        left on them is what the dead-zone advice measures. A layout that marks no crossing
+        lines keeps the fixed baseline it always had."""
+        tau_ms = self.settings.drift_follow_s * 1000
+        if not (self.crossing and tau_ms and self.windower):
+            return
+        last, self._drift_t = self._drift_t, now
+        if pred["present"] or last is None:
+            self._suspect_t = None
+            return
+        if self._thing:
+            return   # a thing in the presence line: its empty level stays, so the gain shows when the thing goes
+        drop = F.crossing_drop(self.window, self.crossing)
+        quiet = [self.quiet_db[k] for k in self.crossing if k in self.quiet_db]
+        floor = max(SUSPECT_DB, self.settings.suspect_x_quiet * (sum(quiet) / len(quiet) if quiet else 0.0))
+        if drop is None:
+            return
+        # The presence line on its own, too: a thing in it may take 3 dB off that line and nothing off the others.
+        own = self.window["links"].get(self.presence_line) or {} if self.presence_line else {}
+        line_down = bool(own.get("n")) and self.window["base"][self.presence_line] - own["median"] >= SUSPECT_DB
+        if drop >= floor or line_down:
+            self._suspect_t = now if self._suspect_t is None else self._suspect_t
+            if now - self._suspect_t < UNSTICK_MS:
+                return
+        else:
+            self._suspect_t = None
+        share = 1.0 - math.exp(-min(now - last, 1000) / tau_ms)
+        for link in self.crossing:
+            stats = self.window["links"].get(link) or {}
+            if stats.get("n") and link in self.base:
+                self.base[link] += (stats["median"] - self.base[link]) * share
+                self.windower.base[link] = self.base[link]
+        self.health.set_base({k: self.base[k] for k in self.crossing if k in self.base})
+        noted_t, noted = self._noted
+        if now - noted_t >= DRIFT_NOTE_MS and any(abs(self.base[k] - noted.get(k, self.base[k] + 99)) >= DRIFT_NOTE_DB
+                                                  for k in self.crossing if k in self.base):
+            # A recording is read against the level in force when it was made (train), so the
+            # followed level is kept with the baselines: in memory, and in baselines.jsonl.
+            self._noted = (now, dict(self.base))
+            self._base_log.append({"t": now, "base": dict(self.base)})
+            if self.sessions_dir:
+                try:
+                    with open(self.sessions_dir / "baselines.jsonl", "a", encoding="utf-8") as f:
+                        f.write(json.dumps({"t": now, "base": self.base}) + "\n")
+                except OSError:
+                    pass   # the level is still followed; only a later fit reads it less exactly
+
+    def _line_says(self) -> Optional[bool]:
+        """What the layout's presence line says about this window: True somebody, False nobody, None when
+        the layout names no such line (then the model decides, as on every other layout)."""
+        if not self.presence_line:
+            return None
+        end = self.window["end"]
+
+        def drop(link):
+            stats, base = self.window["links"].get(link) or {}, self.window["base"].get(link)
+            return base - stats["median"] if stats.get("n") and base is not None else None
+
+        down = drop(self.presence_line)
+        if down is not None:
+            self._line_seen = end
+            self._line_present = down >= (self.presence_off_db if self._line_present else self.presence_on_db)
+        elif self._line_present:
+            # The line is silent (Pi B's readings come over the hotspot). Its last word stands for
+            # second_hold_s; by then health is blind and no decision is shown. No other line has a say.
+            if not (self._line_seen is not None and end - self._line_seen <= self.presence_hold_ms):
+                self._line_present = False
+        return self._line_present
+
+    def _thing_says(self) -> bool:
+        """True while the presence line says a thing has been left standing in it (section 6): over the
+        last 2 s its median sits object_db or more under the empty level, and less than a person takes
+        (object_max_db), and its spread is no more than the empty line's own (object_spread_db): a steady
+        drop with no body wobbling in it. That has to hold for object_hold_s, and ends THING_GRACE_MS after
+        it stops. A person is deeper or wobbles, so a person on the spot is never a thing, however still."""
+        if not self.presence_line:
+            return False
+        end = self.window["end"]
+        long = (self.window.get("long") or {}).get(self.presence_line) or {}
+        base = self.window["base"].get(self.presence_line)
+        looks = False
+        if long.get("median") is not None and base is not None:
+            looks = (self.object_db <= base - long["median"] < self.object_max_db
+                     and long["std"] <= self.object_spread_db)
+        if looks:
+            self._thing_lost = None
+            self._thing_since = end if self._thing_since is None else self._thing_since
+            if not self._thing and end - self._thing_since >= self.object_hold_ms:
+                self._thing, self._line_present = True, False   # whoever put it there has to arrive again to be somebody
+        elif self._thing:
+            self._thing_lost = end if self._thing_lost is None else self._thing_lost
+            if end - self._thing_lost >= THING_GRACE_MS:
+                self._thing, self._thing_since, self._thing_lost = False, None, None
+        else:
+            self._thing_since = None
+        return self._thing
+
+    def _motion_says(self) -> str:
+        """moving | still for somebody on the spot, from the presence line's spread over the last 2 s
+        (section 6). The line arrives 25 times a second and sits within 1 dB when the spot is empty, so
+        its spread is the body moving; the Bluetooth lines wobble 2 to 5 dB by themselves and have no
+        say. Moving at the boundary or over it, still again under STILL_SHARE of it. The boundary is
+        the one the lesson's labels gave the model, else the layout file's (moving_spread_db)."""
+        std = ((self.window.get("long") or {}).get(self.presence_line) or {}).get("std")
+        if std is not None:
+            edge = getattr(self.model, "spread_split", None) or self.moving_spread_db
+            self._moving = std >= (edge * STILL_SHARE if self._moving else edge)
+        return "moving" if self._moving else "still"
+
+    def _still_down(self) -> bool:
+        """True when the last decision sent said somebody is there and the lines that cross the
+        spot still sit under their baselines: their median drops in this window, averaged, are
+        at least STAY_DB, or settings.stay_x_quiet x their quiet level where that is more. The
+        model, taught by the camera, decides when somebody has arrived; this keeps a person who is
+        standing there from blinking out for a window. Only on a layout that marks those lines."""
+        if self.presence_line or not (self.crossing and self.pred and self.pred["present"]):
+            return False   # with a presence line, that line's own on and off levels are the hold
+        drop = F.crossing_drop(self.window, self.crossing)
+        quiet = [self.quiet_db[k] for k in self.crossing if k in self.quiet_db]
+        floor = max(STAY_DB, self.settings.stay_x_quiet * (sum(quiet) / len(quiet) if quiet else 0.0))
+        return drop is not None and drop >= floor
 
     def _unheard(self, now) -> List[str]:
         """The links that can blind the sensor and have no reading in the last window (1 s),

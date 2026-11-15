@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Feed } from './feed'
-import { mountRoom, NO_3D_WORDS } from './index'
+import { BLIND_WORDS, blindNotice, LAYOUT_REFUSED_WORDS, mountRoom, NO_3D_WORDS, refuseLayout } from './index'
 
 /** Just enough of an element for the room's start: it keeps what is appended and the words set on it. */
 function el(tag: string): Record<string, unknown> & { children: ReturnType<typeof el>[] } {
@@ -41,5 +41,36 @@ describe('a 3D view that cannot start', () => {
     expect(notice.children.map((c) => c.textContent)).toEqual(['3D view unavailable', 'The radio keeps working.'])
     expect([...NO_3D_WORDS]).toEqual(['3D view unavailable', 'The radio keeps working.'])
     expect(host.children.some((c) => c.tag === 'canvas')).toBe(false) // no dead canvas left in the room
+  })
+})
+
+describe('a layout file the room does not understand', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('is said in words in the room, with no canvas and nothing drawn from another layout', () => {
+    vi.stubGlobal('document', { createElement: el, createElementNS: (_ns: string, tag: string) => el(tag), body: el('body') })
+    const host = el('main')
+    refuseLayout(host as unknown as HTMLElement)
+    const notice = host.children.find((c) => c.className === 'room-notice')!
+    expect(notice.hidden).toBe(false)
+    expect(notice.children.map((c) => c.textContent)).toEqual([...LAYOUT_REFUSED_WORDS])
+    expect(LAYOUT_REFUSED_WORDS[0]).toBe('Layout not understood')
+    expect(host.children).toHaveLength(1) // the notice alone: no canvas, no devices, no zone names
+  })
+})
+
+describe('a blind sensor, said in the room', () => {
+  it('uses the panels\u2019 own sentence, so the state reads one way across the screen', () => {
+    expect(blindNotice('Pi B not heard. Check it is on the hotspot.', false)).toEqual(['Sensor blind', 'Pi B not heard. Check it is on the hotspot.'])
+  })
+
+  it('has its own words when no panel gives it a sentence', () => {
+    expect(blindNotice('', false)).toEqual(['Sensor blind', BLIND_WORDS])
+    expect(blindNotice('   ', false)).toEqual(['Sensor blind', 'A radio link is not heard.'])
+  })
+
+  it('stays out of the way of a tamper alert: the red device in the room is what a judge should see', () => {
+    expect(blindNotice('Pi B not heard. Check it is on the hotspot.', true)).toBeNull()
+    expect(blindNotice('', true)).toBeNull()
   })
 })

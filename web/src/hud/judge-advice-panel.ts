@@ -1,5 +1,5 @@
 import { changingText } from './changing-text'
-import { dbm, deadZone } from './dead-zone'
+import { dbm, deadZone, LineRecovery } from './dead-zone'
 import type { StateMsg } from '../room/contract'
 import './dead-zone.css'
 
@@ -16,12 +16,15 @@ export function mountPanel(root: HTMLElement) {
   const title = root.querySelector<HTMLElement>('[data-testid="advice-text"]')!
   const field = (id: string) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`)!
   const text = changingText(title)
+  const recovery = new LineRecovery()
   return {
     update(state: StateMsg | null, stale: boolean) {
-      const zone = deadZone(state, stale)
+      const zone = recovery.update(state, stale)
       root.hidden = !zone
       if (!zone) return
+      root.dataset.fixed = String(!!zone.fixed)
       root.dataset.step = zone.step
+      root.querySelector('dl')!.hidden = !!zone.fixed && zone.step === 'found'
       root.dataset.way = String(zone.way)
       text.set(zone.text)
       // Before the move there is one reading, the link as it is now; after it, the pair the board measured.
@@ -30,6 +33,7 @@ export function mountPanel(root: HTMLElement) {
       field('after-dbm').textContent = dbm(zone.after)
       root.querySelector<HTMLElement>('[data-part="after"]')!.hidden = zone.step === 'found'
     },
-    dispose() { text.dispose() },
+    reset() { recovery.reset() },
+    dispose() { text.dispose(); recovery.reset() },
   }
 }

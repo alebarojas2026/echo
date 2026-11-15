@@ -2,12 +2,14 @@
 
 The store is filled by hand here, so nothing depends on the fake feed."""
 import re
+from functools import partial
 from pathlib import Path
 
 import pytest
 
 from agent import ask as A
 from agent import report as R
+from agent import tools
 from agent.tools import place
 from store import Store
 
@@ -15,6 +17,12 @@ T0 = 1_763_149_500_000
 GATE = Path(__file__).resolve().parents[2] / "narrator" / "tests" / "gate_nodes.json"
 ZONES, LINKS = A.layout(GATE)
 SIDES = re.compile(r"\b(left|right|east|west|zone)\b", re.I)
+
+
+@pytest.fixture(autouse=True)
+def configured_gate(monkeypatch):
+    monkeypatch.setattr(tools, "NODES_JSON", GATE)
+    monkeypatch.setattr(A, "ask", partial(A.ask, nodes_path=GATE))
 
 
 def second(store, s, present=True, armed=False, health="ok", tamper=()):
@@ -93,3 +101,74 @@ def test_the_report_says_at_the_desk_and_names_pi_b(store):
     assert "Intrusion alerts: 1, the first at the desk at " in text
     assert "Pi B went quiet first" in text and "Someone was here for 20 s." in text
     assert not SIDES.search(text)
+
+
+def decision(kind="person", motion="still", drop=10, result=None):
+    return {"type": "state", "t": T0, "src": "sim", "health": {"status": "ok"},
+            "pred": {"present": kind == "person", "kind": kind, "zone": 1 if kind == "person" else 0, "motion": motion},
+            "links": [{"id": "pi5>pi5b:wifi", "drop_db": drop, "dbm": -60, "status": "ok"}],
+            "advice": {"id": "a1", "link": "pi5>pi5b:wifi", "text": "Move the router 30 cm.", "before_dbm": -60, "after_dbm": result}}
+
+
+@pytest.mark.parametrize("motion, words", [("still", "standing still"), ("moving", "moving")])
+def test_current_questions_use_saved_motion(motion, words):
+    from contracts.check import errors
+    s = Store(":memory:")
+    s.add(decision(motion=motion))
+    for question in ("What is happening at the desk?", "Is someone standing still?", "Is someone moving?"):
+        out = A.ask(question, s, now_ms=T0, zones=ZONES, links=LINKS)
+        assert out["answer"] == f"Someone is at the desk, {words}."
+        assert errors(out, "ask_reply") == []
+
+
+def test_only_an_object_with_wifi_drop_gets_obstruction_words():
+    for kind, drop in (("person", 18), ("object", 2), ("none", 10)):
+        s = Store(":memory:")
+        s.add(decision(kind=kind, drop=drop))
+        out = A.ask("Why is the Wi-Fi blocked?", s, now_ms=T0, zones=ZONES, links=LINKS)
+        assert "No object blocking" in out["answer"]
+    s = Store(":memory:")
+    s.add(decision(kind="object"))
+    out = A.ask("Why is the Wi-Fi blocked?", s, now_ms=T0, zones=ZONES, links=LINKS)
+    assert "Something was left in the Wi-Fi line" in out["answer"]
+    assert "Clear the obstruction or move Pi B" in out["answer"]
+    assert "30 cm" not in out["answer"] and "move the router" not in out["answer"]
+    current = A.ask("What is happening at the desk?", s, now_ms=T0, zones=ZONES, links=LINKS)
+    assert "Something was left in the Wi-Fi line" in current["answer"]
+
+
+def test_gain_is_reported_without_guessing_what_was_moved():
+    s = Store(":memory:")
+    s.add(decision(kind="object", result=-52))
+    out = A.ask("What did moving the router do?", s, now_ms=T0, zones=ZONES, links=LINKS)
+    assert "gain of 8 dB" in out["answer"]
+    assert "router" not in out["answer"]
+
+
+@pytest.mark.parametrize("delta", [-3000, 6000])
+def test_current_question_rejects_future_or_stale_decision(delta):
+    s = Store(":memory:")
+    s.add(decision())
+    out = A.ask("Is someone standing still?", s, now_ms=T0 + delta, zones=ZONES, links=LINKS)
+    assert out["answer"] == "I have no current decision for the desk."
+
+
+def test_short_desk_link_cannot_be_an_obstruction_across_the_gap():
+    s = Store(":memory:")
+    state = decision(kind="object", drop=0)
+    state["links"].append({"id": "pi5>unoq:wifi", "drop_db": 12, "dbm": -70, "status": "ok"})
+    state["advice"]["link"] = "pi5>unoq:wifi"
+    s.add(state)
+    current = A.ask("What is happening at the desk?", s, now_ms=T0, zones=ZONES, links=LINKS)
+    advice = A.ask("Why is the Wi-Fi blocked?", s, now_ms=T0, zones=ZONES, links=LINKS)
+    assert "Something was left" not in current["answer"]
+    assert "No object blocking" in advice["answer"]
+
+
+def test_object_word_does_not_override_present_person_flag():
+    s = Store(":memory:")
+    state = decision(kind="object")
+    state["pred"]["present"] = True
+    s.add(state)
+    out = A.ask("What is happening at the desk?", s, now_ms=T0, zones=ZONES, links=LINKS)
+    assert "Something was left" not in out["answer"]
