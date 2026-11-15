@@ -8,9 +8,15 @@ import pytest
 
 from board import privacy, serve
 
-JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 60
-PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 60
-MP4 = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 60
+# The meter knows a file by its name or its first bytes, so the tests plant 64-byte stubs that only
+# start like these files: a few literal bytes, never a picture, and nothing here encodes one.
+STUB = {"jpeg": b"\xff\xd8\xff\xe0" + b"\x00" * 60, "png": b"\x89PNG\r\n\x1a\n" + b"\x00" * 60,
+        "mp4": b"\x00\x00\x00\x18ftypisom" + b"\x00" * 60}
+
+
+def plant(path, kind):
+    """Put a stub that starts like a `kind` file at path, in the test's temp folder."""
+    path.write_bytes(STUB[kind])
 
 
 class FakeCounter:
@@ -73,7 +79,7 @@ def test_no_images_in_clean_folders(folders):
 
 @pytest.mark.parametrize("name, data", [
     ("frame.jpg", b"not really"), ("CLIP.MP4", b""), ("x.webp", b""),
-    ("frame.bin", JPEG), ("dump", PNG), ("video.dat", MP4),
+    ("frame.bin", STUB["jpeg"]), ("dump", STUB["png"]), ("video.dat", STUB["mp4"]),
 ])
 def test_an_image_or_video_by_name_or_by_its_first_bytes_is_counted(folders, name, data):
     data_dir, apps = folders
@@ -85,8 +91,8 @@ def test_images_anywhere_below_are_counted_and_gone_ones_are_not(folders):
     data_dir, apps = folders
     deep = data_dir / "sessions" / "a" / "b"
     deep.mkdir(parents=True)
-    (deep / "one.png").write_bytes(PNG)
-    (apps / "two.jpeg").write_bytes(JPEG)
+    plant(deep / "one.png", "png")
+    plant(apps / "two.jpeg", "jpeg")
     scan = privacy.FolderScan(folders)
     assert scan.count() == 2
     (deep / "one.png").unlink()
@@ -97,7 +103,7 @@ def test_library_icons_are_not_stored_pictures(folders):
     data_dir, apps = folders
     lib = apps / "teacher" / ".cache" / "venv" / "lib" / "site-packages" / "pkg"
     lib.mkdir(parents=True)
-    (lib / "icon.png").write_bytes(PNG)
+    plant(lib / "icon.png", "png")
     assert privacy.FolderScan(folders).count() == 0
 
 
@@ -140,14 +146,14 @@ def test_an_app_icon_elsewhere_is_not_counted_and_a_planted_frame_is(tmp_path, m
     (teacher / "calib.json").write_text("{}")
     other = home / "ArduinoApps" / "blink-example" / "assets"
     other.mkdir(parents=True)
-    (other / "icon.png").write_bytes(PNG)                        # another app's icon: not the camera pipeline
+    plant(other / "icon.png", "png")                        # another app's icon: not the camera pipeline
     (repo / "data" / "sessions").mkdir(parents=True)
     monkeypatch.setattr(privacy, "REPO", repo)
     scan = privacy.FolderScan(privacy.default_folders({"TEACHER_APP": "user:radio-sight-teacher"}, home=home))
     assert scan.count() == 0 and scan.missing == []
-    (repo / "data" / "sessions" / "frame.jpg").write_bytes(JPEG)  # a planted frame in a data folder
+    plant(repo / "data" / "sessions" / "frame.jpg", "jpeg")  # a planted frame in a data folder
     assert scan.count() == 1
-    (teacher / "grab.jpg").write_bytes(JPEG)                     # and one in the teacher's own folder
+    plant(teacher / "grab.jpg", "jpeg")                     # and one in the teacher's own folder
     assert scan.count() == 2
 
 
@@ -264,7 +270,7 @@ def test_on_a_new_boot_everything_the_kernel_counted_is_kept(meter):
 
 def test_a_stored_image_is_counted_live(meter, folders):
     m = meter(containers=FakeContainers(1))
-    (folders[0] / "leak.png").write_bytes(PNG)
+    plant(folders[0] / "leak.png", "png")
     assert m.tick()["images"] == 2
 
 
