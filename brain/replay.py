@@ -117,7 +117,7 @@ def prepared(sessions_dir, settings: Optional[S.Settings] = None, train: Optiona
         brain.model = Model(brain.base, ver="replay", links=brain.model_links, zones=brain.zone_ids,
                             motion_links=brain.settings.motion_links, crossing=brain.crossing,
                             motion_line=brain.presence_line).fit(sessions)
-    if brain.model is None:
+    if brain.model is None and not brain.presence_line:   # with a presence line the line decides without a model
         raise SystemExit(f"no model: {src} has no model.pkl for this baseline and layout; name recordings with --train")
     return brain
 

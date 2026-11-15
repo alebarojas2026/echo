@@ -91,8 +91,13 @@ def links_check(state, layout=None):
         raise ValueError(f"no readings on {', '.join(missing)}: check the sender is powered and joined")
 
 
-def model_check(state, before_lesson=False):
+def model_check(state, before_lesson=False, layout=None):
     if (need_state(state).get("model") or {}).get("trained") is True:
+        return
+    if (layout or configured_layout()).get("presence"):
+        # A layout with a presence line needs no model and no lesson: the line decides once there is a baseline.
+        if state.get("pred") is None:
+            raise ValueError("no decision yet: keep the spot empty and take the baseline (no lesson is needed on this layout)")
         return
     if before_lesson:
         raise Warn("not trained yet: run the lesson before the first judge")
