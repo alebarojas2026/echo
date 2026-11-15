@@ -1,5 +1,5 @@
 import {expect,test} from 'vitest'
-import {handoff} from './handoff'
+import {handoff,handoffReady} from './handoff'
 import {mockState} from './mock-layout'
 const state=(cam:string,t:number)=>({...mockState('still',0,0),cam,t,handoff:{started_t:1000,radio_only_t:31000}} as unknown as ReturnType<typeof mockState>)
 test('the handoff uses board timestamps across a new render or reload',()=>{
@@ -20,4 +20,9 @@ test('missing or future timing cannot start a browser-local run',()=>{
 test('teaching progress uses measured counts and fits',()=>{
  const s=state('on',13000);s.model!.training={lesson:{started_t:1000,agree:6,of:10,fits:2,fitting:true}}
  expect(handoff(s,false)).toMatchObject({title:'CAMERA TEACHING',time:'0:12',detail:'6 of 10 agree · 2 fits · Fitting'})
+})
+
+test('without persistent timing the existing camera and lesson lines stay in charge',()=>{
+ expect(handoffReady(mockState('still',0,0))).toBe(false)
+ expect(handoffReady(state('off',91000))).toBe(true)
 })

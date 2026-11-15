@@ -15,6 +15,6 @@
   .judge.shell-hud[data-proof-docked] .handoff-strip { padding-block:0; gap:8px; }
   .judge.shell-hud[data-proof-docked] .handoff-track { height:16px; }
 }
-.judge:has(.tamper-alert:not([hidden])) > .judge-moment { display:none; }
+.judge[data-tamper-headline="true"] > .tamper-alert { display:none; }
 .judge > .tamper-alert { position:static; width:auto; padding:0 0 0 16px; margin:0; background:transparent; border-bottom:0; flex-shrink:0; }
 .judge > .tamper-alert h2 { font-size:56px; }

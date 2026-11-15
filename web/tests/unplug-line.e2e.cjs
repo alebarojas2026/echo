@@ -18,5 +18,5 @@ for(const [width,height] of [[1920,1080],[1440,900]]) test(`unplug is one statio
  expect((await narrator.boundingBox()).y).toBe(y)
  if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-unplug.png`)})}
  await page.evaluate(()=>{window.arrival.event('reset');window.arrival.update('still',{cam:'off',t:109000})})
- await expect(line).toHaveText('Radio only')
+ await expect(line).toHaveText('Camera unplugged · radio only')
 })

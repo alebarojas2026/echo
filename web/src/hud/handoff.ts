@@ -21,9 +21,14 @@ export function handoff(state: StateMsg | null, stale: boolean) {
   const scale = Math.max(120000, total)
   const teaching = knownStart && (cam === 'on' || knownOff) ? ((knownOff ? off : state.t) - start) / scale : 0
   const radio = knownStart && knownOff ? (state.t - off) / scale : 0
-  if (cam === 'off') return { phase: 'radio', title: 'RADIO ONLY', time: knownOff ? runTime(state.t - off) : '', detail: knownOff ? 'Camera unplugged' : 'Unplug time unavailable', teaching, radio, edge: knownStart && knownOff }
+  if (cam === 'off') return { phase: 'radio', title: 'RADIO ONLY', time: knownOff ? runTime(state.t - off) : '', detail: 'Camera unplugged', teaching, radio, edge: knownStart && knownOff }
   const agreement = Number.isInteger(lesson?.agree) && Number.isInteger(lesson?.of) && lesson!.of! >= 3 && lesson!.agree! >= 0 && lesson!.agree! <= lesson!.of!
   const fits = Number.isInteger(lesson?.fits) && lesson!.fits! >= 0 ? `${lesson!.fits} fits` : ''
   const detail = [agreement ? `${lesson!.agree} of ${lesson!.of} agree` : '', fits, lesson?.fitting ? 'Fitting' : ''].filter(Boolean).join(' · ')
   return { phase: 'teaching', title: lesson ? 'CAMERA TEACHING' : 'CAMERA ON', time: knownStart ? runTime(total) : '', detail: detail || (lesson ? 'Learning from the camera' : 'Ready for a lesson'), teaching, radio: 0, edge: false }
+}
+
+export function handoffReady(state: StateMsg | null): boolean {
+ const timing = (state as (StateMsg & {handoff?: Timing}) | null)?.handoff
+ return !!state && stamp(timing?.started_t, state.t)
 }

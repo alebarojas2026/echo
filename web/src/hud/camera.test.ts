@@ -10,7 +10,7 @@ test('explains camera agreement, unplug and stalled states', () => {
   state.pred!.zone = hudLayout.zones[0].id
   expect(cameraLine(state)).not.toContain('agrees')
   state.cam = 'off'
-  expect(cameraLine(state)).toBe('Radio only')
+  expect(cameraLine(state)).toBe('Camera unplugged · radio only')
   state.cam = 'stalled'
   expect(cameraLine(state)).toBe('Camera stalled · radio only')
 })

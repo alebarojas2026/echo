@@ -1,5 +1,5 @@
 import type { StateMsg } from '../room/contract'
-import { handoff } from './handoff'
+import { handoff, handoffReady } from './handoff'
 import './handoff.css'
 
 export function mountPanel(root: HTMLElement) {
@@ -10,7 +10,7 @@ export function mountPanel(root: HTMLElement) {
   const teaching = root.querySelector<HTMLElement>('.handoff-teaching')!, radio = root.querySelector<HTMLElement>('.handoff-radio')!, edge = root.querySelector<HTMLElement>('i')!
   return {
     update(state: StateMsg | null, stale: boolean) {
-      root.hidden = state?.src === 'replay'
+      root.hidden = state?.src === 'replay' || !handoffReady(state)
       const value = handoff(state, stale)
       root.dataset.phase = value.phase
       if (title.textContent !== value.title) title.textContent = value.title
