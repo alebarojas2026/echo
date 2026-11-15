@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { beamLook, DROPPING_DB, explains, nodePair, overFloor, WHY_OFF_MS, WHY_ON_MS } from './beams'
+import { amberDb, beamLook, DROPPING_DB, explains, nodePair, overFloor, WHY_OFF_MS, WHY_ON_MS } from './beams'
 import { Held } from './motion'
 import type { LinkState } from './contract'
 
@@ -36,6 +36,19 @@ describe('beam look', () => {
     expect(explains(link(-4), true)).toBe(false) // a stronger signal is not a drop
     expect(explains(link(null), true)).toBe(false) // no baseline yet
     expect(explains(undefined, true)).toBe(false)
+  })
+
+  it('takes the drop that lights a line from the address when it is set, else 3 dB', () => {
+    const at = (q: string) => amberDb(new URLSearchParams(q))
+    expect(at('')).toBe(3)
+    expect(at('amber_db=5')).toBe(5)
+    expect(at('amber_db=4.5')).toBe(4.5)
+    expect(at('amber_db=0')).toBe(3) // would light every listed line: not believed
+    expect(at('amber_db=99')).toBe(3)
+    expect(at('amber_db=')).toBe(3)
+    expect(at('amber_db=abc')).toBe(3)
+    expect(explains(link(4), true, 5)).toBe(false)
+    expect(explains(link(5), true, 5)).toBe(true)
   })
 
   it('holds the highlight steady while a link wobbles across the 3 dB line', () => {

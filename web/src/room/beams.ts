@@ -45,12 +45,23 @@ export function overFloor(a: Vec3, b: Vec3): boolean {
 export const DROPPING_DB = 3
 
 /**
- * Whether a link is one the person's body is cutting right now: listed in pred.why, and its own drop_db at 3 dB or
- * more. pred.why names the brain's top links whether or not they moved, so on its own it would light a line that
+ * The drop at which a listed link lights, as a setting: ?amber_db=<dB> on the page's address, else 3 dB. On the
+ * real kit the weakest step-on drops a line by about 3 dB and an empty spot stays within 2, so the number sits
+ * close to both; it is a setting so it can follow whatever level the brain settles on for "present" without a
+ * new build. Kept between 1 and 20 dB.
+ */
+export function amberDb(params: URLSearchParams): number {
+  const v = Number(params.get('amber_db'))
+  return params.get('amber_db') !== null && v >= 1 && v <= 20 ? v : DROPPING_DB
+}
+
+/**
+ * Whether a link is one the person's body is cutting right now: listed in pred.why, and its own drop_db at `bar`
+ * (3 dB unless set) or more. pred.why names the brain's top links whether or not they moved, so on its own it would light a line that
  * sits at its baseline. A null drop (before the baseline) is not a drop.
  */
-export function explains(link: LinkState | undefined, inWhy: boolean): boolean {
-  return inWhy && (link?.drop_db ?? 0) >= DROPPING_DB
+export function explains(link: LinkState | undefined, inWhy: boolean, bar = DROPPING_DB): boolean {
+  return inWhy && (link?.drop_db ?? 0) >= bar
 }
 
 export function beamLook(link: LinkState | undefined, why: boolean, blind: ReadonlySet<string>, onFloor = true): BeamLook {
@@ -130,7 +141,7 @@ export class Beams {
   /** The link that just carried a wave check-in, drawn green and wide while the wave shows. */
   private waveLink: string | null = null
 
-  constructor(private readonly view: RoomView, private readonly mirror: Mirror) {
+  constructor(private readonly view: RoomView, private readonly mirror: Mirror, private readonly amberAt = DROPPING_DB) {
     for (const id of LINK_IDS) {
       const mat = new LineMaterial({ color: LINK, linewidth: 3, transparent: true, dashSize: 0.08, gapSize: 0.09 })
       const line = new Line2(new LineGeometry(), mat)
@@ -173,7 +184,7 @@ export class Beams {
     const brokenPairs = new Set<string>()
     for (const b of this.beams) {
       const link = state.links.find((l) => l.id === b.id)
-      b.look = beamLook(link, b.why.update(explains(link, why.has(b.id)), nowMs), blind, b.onFloor)
+      b.look = beamLook(link, b.why.update(explains(link, why.has(b.id), this.amberAt), nowMs), blind, b.onFloor)
       if (b.mat.dashed !== b.look.broken) b.mat.dashed = b.look.broken
       if (b.look.broken) brokenPairs.add(b.pair)
       const drop = link?.drop_db

@@ -1,5 +1,5 @@
 import './room.css'
-import { Beams } from './beams'
+import { amberDb, Beams } from './beams'
 import type { Feed } from './feed'
 import { startFpsMeter } from './fps'
 import { AlertMarks, WaveClock } from './alert'
@@ -47,7 +47,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   const stage = new Stage(view)
   const scan = loadScan(view, stage.drawnRoom, params, options.quality).then(standAtDefaultDesk)
   const mirror = new Mirror(host)
-  const beams = new Beams(view, mirror)
+  const beams = new Beams(view, mirror, amberDb(params))
   const xray = new XrayLayer(view, mirror)
   const presence = new Presence(view)
   const hallBeacons = new HallBeacons(view)
