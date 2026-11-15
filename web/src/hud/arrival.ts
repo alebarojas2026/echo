@@ -3,6 +3,7 @@ import type { Feed } from '../room/feed'
 import { changingText } from './changing-text'
 import './arrival.css'
 import { judgeMoment } from './judge-moment'
+import { blindSentence } from './health-words'
 import { zonePlace } from './layout'
 
 type ArrivalState = StateMsg & { armed?: boolean }
@@ -87,7 +88,8 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     arm.disabled = !feed || stale
     source.textContent = state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO'
     if (!state || stale) { cancelHold(); show('No data', 'Waiting for the room signal.'); return }
-    if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', 'A radio link stopped.'); return }
+    if (state.armed && state.tamper?.length) { cancelHold(); close(); return }
+    if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', blindSentence(state)); return }
     if (!state.pred || state.router !== 'S-home') {
       cancelHold()
       const [heading, line] = judgeMoment(state, false)

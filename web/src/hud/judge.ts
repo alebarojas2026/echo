@@ -1,3 +1,5 @@
+import { publishHealth } from './health-words'
+import './health-words.css'
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import { routerWords } from './router-words'
@@ -82,6 +84,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     lastState = state
     lastStale = stale
     if (feed?.source === 'mock') state = alignMockState(state)
+    publishHealth(root, state, stale)
     const [headline, detail] = judgeMoment(state, stale)
     headlineText.set(headline)
     set('judge-detail', detail)
