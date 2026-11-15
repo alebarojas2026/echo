@@ -28,8 +28,11 @@ export function mountPanel(root: HTMLElement) {
   alert.setAttribute('role', 'alert')
   alert.hidden = true
   alert.innerHTML = '<p>Tamper alert</p><h2 data-testid="tamper-text"></h2>'
+  const host = root.closest('.judge')
+  const moment = host?.querySelector('.judge-moment')
+  if (moment) moment.before(alert)
+  else root.before(alert)
   root.remove()
-  document.body.append(alert)
   const text = alert.querySelector('h2')!
   return {
     update(state: StateMsg | null, stale: boolean) {
