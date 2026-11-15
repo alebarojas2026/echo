@@ -147,6 +147,19 @@ test('the Wi-Fi line never shows a number it does not have', async ({ page }) =>
   await expect(value).toHaveText('')
 })
 
+test('a replay hides the Wi-Fi line, because the records hold no link readings', async ({ page }) => {
+  await open(page, 1920, 1080)
+  await expect(page.getByTestId('wifi-line')).toBeVisible()
+  await page.keyboard.press('o')
+  await page.getByTestId('replay-last').click()
+  await expect(page.getByTestId('replay')).toBeVisible()
+  await page.clock.runFor(500)
+  await expect(page.getByTestId('wifi-line')).toBeHidden()
+  await page.keyboard.press('Escape')
+  await page.clock.runFor(500)
+  await expect(page.getByTestId('wifi-line')).toBeVisible()
+})
+
 test('an alert or an armed space keeps the headline', async ({ page }) => {
   await open(page, 1920, 1080)
   const words = await page.evaluate(async () => {

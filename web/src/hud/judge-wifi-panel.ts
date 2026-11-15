@@ -21,6 +21,9 @@ export function mountPanel(root: HTMLElement) {
   return {
     update(state: StateMsg | null, stale: boolean) {
       place()
+      // A replayed second holds no link readings (the records keep none), so the line steps out with the trace.
+      line.hidden = !!(state as { replay?: unknown } | null)?.replay
+      if (line.hidden) return
       const wifi = wifiLine(state, stale)
       line.setAttribute('aria-label', `Wi-Fi link, ${wifi.ends}`)
       // The number is rewritten four times a second, and at once when the word changes.
