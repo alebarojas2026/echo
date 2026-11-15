@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { placeScan, scanUrl } from './scan'
+import { hallLift, placeScan, scanUrl } from './scan'
 
 describe('scan placement', () => {
   it('puts the scan floor under the square, centred, by default', () => {
@@ -32,5 +32,14 @@ describe('which hall model to load', () => {
     expect(scanUrl({ lo: 'models/room.glb', fit: {} }, 'hi')).toBe('models/room.glb')
     expect(scanUrl({ hi: 'models/hall-hi.glb', fit: {} }, 'pi')).toBe('models/hall-hi.glb')
     expect(scanUrl({ fit: {} }, 'hi')).toBeUndefined()
+  })
+})
+
+describe('?lift', () => {
+  it('brightens only when asked, and only within 0.5 to 2', () => {
+    expect(hallLift(new URLSearchParams(''))).toBe(1)
+    expect(hallLift(new URLSearchParams('lift=1.4'))).toBe(1.4)
+    expect(hallLift(new URLSearchParams('lift=5'))).toBe(1)
+    expect(hallLift(new URLSearchParams('lift=nope'))).toBe(1)
   })
 })
