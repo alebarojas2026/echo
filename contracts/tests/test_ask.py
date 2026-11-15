@@ -139,9 +139,24 @@ def test_the_repo_nodes_json_passes_and_its_optional_parts_may_be_missing():
     doc = json.loads((FIXTURES.parent.parent / "radio" / "nodes.json").read_text(encoding="utf-8"))
     assert check.errors(doc, "nodes") == []
     assert check.errors({**doc, "armed": {"hold_s": 3}}, "nodes") == []
-    calibrated = {**doc["hall"], "links": [{"id": "h>unoq:ble", "empty_quiet_db": 0.8}]}
+    calibrated = {**(doc.get("hall") or {}), "links": [{"id": "h>unoq:ble", "empty_quiet_db": 0.8}]}   # the gate has no hall
     assert check.errors({**doc, "hall": calibrated}, "nodes") == []
     assert "$.armed.hold_s" in check.errors({**doc, "armed": {"hold_s": -1}}, "nodes")[0]
+
+
+def test_the_presence_block_names_a_line_and_its_numbers():
+    doc = json.loads((FIXTURES.parent.parent / "radio" / "nodes.json").read_text(encoding="utf-8"))
+    line = {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble"}
+    numbers = {"on_db": 7, "off_db": 4, "second_hold_s": 5, "object_db": 3, "object_max_db": 10,
+               "object_spread_db": 1.0, "object_hold_s": 3, "moving_spread_db": 2.0}
+    for presence in (line, {"line": line["line"]}, {**line, **numbers}, {**line, "object_max_db": None}):
+        assert check.errors({**doc, "presence": presence}, "nodes") == [], presence
+    for bad, where in (({"second": line["second"]}, "$.presence"), ({"line": "pi5>nowhere:wifi"}, "$.presence.line"),
+                       ({**line, "on_db": 0}, "$.presence.on_db"), ({**line, "spread": 1}, "$.presence"),
+                       ({**line, "moving_spread_db": "2"}, "$.presence.moving_spread_db")):
+        assert where in check.errors({**doc, "presence": bad}, "nodes")[0], bad
+    links = [{**link, "crosses_spot": "yes"} for link in doc["links"]]
+    assert "$.links[0].crosses_spot" in check.errors({**doc, "links": links}, "nodes")[0]
 
 
 def test_history_keeps_not_known_apart_from_nobody():

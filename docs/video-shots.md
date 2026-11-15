@@ -1,87 +1,53 @@
-# Radio Sight: 60-Second Video Shot List
+# Radio Sight: Three-minute Video Shot List
 
-## 0:00–0:05 — The problem
+Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras during live sensing. The laptop shows the local interface; the phone is another local screen.
 
-**Picture:** Open on a stalled call or download in one corner, then pull back to show the router nearby.
+Use the one-spot kit: Arduino UNO Q and Pi A on the desk, Pi B across the gap at desk height. This is a planned edit, not measured timing. No face that can be identified; no camera frame, ever. No number that is not in PROOF.md may be presented as a result. Capture only the live desk, never a simulated scene or rendered hall. Keep all media outside the repository.
 
-**Voiceover:** "Wi-Fi bars miss what happens across a real room. People and objects reshape the signal and create dead zones."
+## 0:00–0:25 — Found you
 
-**On screen:** `Strong here. Dead here.`
+**Source:** Desk camera view and Screen capture of the live interface.
+**Picture:** Start on the problem: a room needs presence without continuing camera use. The judge enters the spot; include the three labelled devices, disconnected teacher cable and changing cross-gap Wi-Fi trace.
+**Voiceover:** Walk between two devices and the Wi-Fi signal gives you away. Found you: the Arduino UNO Q makes that decision locally on its Qualcomm Dragonwing CPU.
+**On screen:** `Found you` · `Live` · `Wi-Fi across the gap`.
 
-## 0:05–0:10 — Meet Radio Sight
+## 0:25–1:05 — Teach the room
 
-**Picture:** Clean close shots of the Arduino UNO Q, Pi, radio nodes, and live display.
+**Source:** Desk view of the connection and Screen capture of actual lesson progress.
+**Picture:** Connect the temporary teacher and run the lesson. Show labels and progress, never the teacher's image; retain real completion before any cut to inference.
+**Voiceover:** The camera teaches the room locally. It supplies labels, not saved images.
+**On screen:** `Camera teaching` · `Training on the UNO Q`.
 
-**Voiceover:** "Radio Sight is Wi-Fi that understands the room. Every learned decision runs locally on the Dragonwing CPU; the Pi is the router and radio node, and the laptop shows the local interface."
+## 1:05–1:35 — Camera unplug
 
-**On screen:** `Local · Room-aware · No cloud`
+**Source:** Desk view of the unplug and Screen capture of fresh radio state.
+**Picture:** Keep cable and screen in one continuous view while unplugging, then show the judge moving and standing still. Show teacher off and the live privacy panel; omit unverified count tiles.
+**Voiceover:** Most Wi-Fi sensing only sees movement. Ours sees you standing still. Wi-Fi is primary, Bluetooth a second opinion, and the camera is unplugged.
+**On screen:** `Radio only` · `Still present` · `Camera off`.
 
-## 0:10–0:18 — Judge walks in, X-ray responds
+## 1:35–2:00 — Intrusion alert
 
-**Picture:** Keep the judge, marked floor, and display in one wide shot as the judge enters. Cut close to the radio X-ray changing on the floor plan and the live links reacting.
+**Source:** Desk view including the real phone and Screen capture from the same run.
+**Picture:** Judge leaves, Operator arms, judge returns and stays. Hold for the actual intrusion event and matching phone card; no invented notification.
+**Voiceover:** Armed means this spot should be empty. Sustained presence creates a local alert on the phone.
+**On screen:** `Armed`, then `Intrusion alert`.
 
-**Voiceover:** "When our judge walks in, the radio X-ray follows fresh activity and the screen reports presence, movement, and zone."
+## 2:00–2:30 — Dead zone
 
-**On screen:** `Person · Moving · Zone __`
+**Source:** Desk view of the object and Screen capture of the measured cross-gap link.
+**Picture:** Disarm and clear everyone from the spot. Place the object, wait for the object decision and advice, then clear the object or move Pi B; Pi A stays beside the cabled hub. Use a verified before-and-after gain only, never a person as the blockage result.
+**Voiceover:** Nobody is here; an object blocks the same Wi-Fi path. Clear it or move Pi B, then check the measured change.
+**On screen:** `Object blocking Wi-Fi`, then `Link recovered`; show measured gain only when verified.
 
-## 0:18–0:23 — Wave check-in
+## 2:30–3:00 — Ask the room and Proof
 
-**Picture:** The judge makes the practiced wave without changing zones. Hold on the live check-in confirmation.
+**Source:** Screen capture of the live local answer, source rows and proof, with a closing Desk view.
+**Picture:** Ask the prepared question, show its actual records, then completed proof tiles with their method. Finish on the UNO Q and disconnected cable; label any optional saved Replay as recorded.
+**Voiceover:** The room answers from its own records. We dug into a signal every building already has: taught by a camera, runs without one.
+**On screen:** `Local records` · `Measured proof` · `Radio Sight` · `MadHacks 2026` · `Qualcomm / N+1`.
 
-**Voiceover:** "A deliberate wave creates a radio check-in without a phone or button."
+## Editor's proof worksheet
 
-**On screen:** `Check-in received`
+These are unpublished planning blanks, never voiceover or fabricated screen overlays: `Presence accuracy: __`, `Person versus object: __`, `Decision latency: __`, `Dead-zone improvement: __`, `Bytes sent outside local network: __`, `Images stored: __`. Copy a result only with its proof row and method.
 
-## 0:23–0:31 — Metal tray reveals the dead zone
-
-**Picture:** Place the metal tray at its marked spot beside the router. Show the static X-ray change, object result, generated advice, recommended west or east floor mark, and before value.
-
-**Voiceover:** "The metal tray creates a stable obstruction. Radio Sight separates it from the person, finds the affected link, and recommends a tested router position."
-
-**On screen:** `Before: __ dBm · Move router to __`
-
-## 0:31–0:39 — Move, fix, verify
-
-**Picture:** Move the router to the recommended west or east floor mark. Hold on the after value and advice result; keep the before value beside it.
-
-**Voiceover:** "We make the recommended move and verify the same link. Before: __ dBm. After: __ dBm. Dead-zone improvement: __."
-
-**On screen:** `Before: __ dBm · After: __ dBm · Improvement: __`
-
-## 0:39–0:46 — Unplug the camera
-
-**Picture:** Show the setup camera, cable, and live status together. Unplug it in one continuous shot, then hold on the disconnected plug and still-updating radio display.
-
-**Voiceover:** "The camera supplied setup labels only. Now it is unplugged, no image is saved, and live sensing continues from radio alone."
-
-**On screen:** `Camera: off · Radio: live`
-
-## 0:46–0:56 — Proof strip
-
-**Picture:** Fill the frame with the proof strip while the disconnected camera cable remains visible at the edge. Use only values loaded from the measured proof report.
-
-**Voiceover:** "The proof is measured: zone accuracy __, person-versus-object accuracy __, decision latency __, and bytes sent outside our local network __."
-
-**On screen:**
-
-- `Zone accuracy: __`
-- `Person-versus-object accuracy: __`
-- `Decision latency: __`
-- `Bytes sent outside local network: __`
-- `Images stored: __`
-
-## 0:56–1:00 — Close
-
-**Picture:** End on the hardware and live room display together.
-
-**Voiceover:** "Radio Sight. Wi-Fi that understands the room."
-
-**On screen:** `Radio Sight · MadHacks 2026 · Qualcomm / N+1`
-
-## Capture notes
-
-- Record the before and after values in the same unbroken view when possible.
-- Keep the judge, marked floor, and live display visible together for the entry and check-in.
-- Keep the camera cable and disconnected state unmistakable after the unplug shot.
-- Replace every `__` only with a value produced by the proof workflow.
-- Do not add a claim that the recorded demo and proof data do not support.
+If interrupted or shortening the edit, cut optional Replay, Incident report and Tamper alert first, then the extra question. Keep Found you, Camera unplug, and at least one verified Intrusion alert or Dead zone; never edit away a failed check to imply success.

@@ -182,13 +182,16 @@ test('a phone that joins late shows Armed. until the next event, never a guessed
 
 test('tamper: the device by its nodes.json name, only while armed, through a blind sensor', () => {
   assert.equal(tamperText({ tamper: ['east'] }), 'A device unplugged while armed.') // before nodes.json loads
-  useDevices(JSON.parse(readFileSync(new URL('../../../../radio/nodes.json', import.meta.url), 'utf8')))
+  // The desk file by name (it has the east beacon), so the test holds whichever layout radio/nodes.json is.
+  useDevices(JSON.parse(readFileSync(new URL('../../../../radio/layouts/desk.json', import.meta.url), 'utf8')))
   const c = show('tamper')
   assert.deepEqual([c.mode, c.tamper], ['blind', 'East beacon unplugged while armed.'])
   assert.equal(tamperText({ tamper: ['east', 'west', 'h', 'east'] }), 'East beacon, West beacon and Hall beacon H unplugged while armed.')
   assert.equal(card({ ...MOCKS.tamper, armed: false }, 0).tamper, '')
   assert.equal(card(MOCKS.armed, 0).tamper, '')
   assert.equal(card(MOCKS.tamper, 2000).tamper, '') // no data: nothing from an old state
+  useDevices(JSON.parse(readFileSync(new URL('../../../../radio/layouts/gate.json', import.meta.url), 'utf8')))
+  assert.equal(tamperText({ tamper: ['pi5b'] }), 'Pi B unplugged while armed.') // one spot: the file's name, no beacon
 })
 
 test('only v2 events are taken, and other kinds change nothing', () => {

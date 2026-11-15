@@ -11,7 +11,7 @@ import { Fly, HallMarks, cutaway, hallShot, pinnedFraming } from './fly'
 import { Presence } from './ghost'
 import { HeardNodes } from './heard'
 import { Replay, rowAlert, rowPred, secondKind, type HistoryRow, type ReplayFrame } from './replay'
-import { NODES, SIZE_M, STRIP_M, deviceAcross } from './frame'
+import { NODES, SIZE_M, STRIP_M, deviceAcross, setSurface } from './frame'
 import { DEFAULT_CUT_M, loadScan, type Scan } from './scan'
 import { Mirror } from './mirror'
 import { RouterSpots } from './spots'
@@ -33,6 +33,16 @@ const REPLAY_BAR_PX = 184
 
 /** What the room says when the browser gives it no 3D context. The text column runs on the feed alone. */
 export const NO_3D_WORDS = ['3D view unavailable', 'The radio keeps working.'] as const
+
+/** What the room says when the layout file was read but not understood (layout.ts, 'refused'). */
+export const LAYOUT_REFUSED_WORDS = ['Layout not understood', 'The room can\u2019t draw this layout file. The radio keeps working.'] as const
+
+/** Instead of mounting the room on a layout it does not understand: the notice, and nothing from any other
+ *  layout. The text column runs on the feed alone. */
+export function refuseLayout(host: HTMLElement) {
+  host.classList.add('room')
+  addNotice(host)(...LAYOUT_REFUSED_WORDS)
+}
 
 /** The room's notice: a heading and one line over the room, hidden while the heading is empty. */
 function addNotice(host: HTMLElement): (title: string, line: string) => void {
@@ -109,7 +119,11 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
         situ = s
         // Every device stands on what the hall really has under it, wherever nodes.json puts it.
         const [fw, fh] = SIZE_M
-        stage.setGround((x, y, z) => s.under(x - fw / 2, fh / 2 - y, z))
+        const under = (x: number, y: number, z: number) => s.under(x - fw / 2, fh / 2 - y, z)
+        // And never inside it: a device on the next row's desk sits on that desk's top, a tier above ours.
+        setSurface(under)
+        stage.setGround(under)
+        beams.refresh()
         presence.setTrueSize(true)
         fly.setClose(inSituShot)
       }

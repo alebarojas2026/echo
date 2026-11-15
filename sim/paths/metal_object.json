@@ -4,7 +4,7 @@
   "duration_s": 30,
   "person": null,
   "objects": [
-    {"near": "east", "drop_db": 6}
+    {"near": "prop", "drop_db": 6}
   ],
   "label_mode": "object",
   "meta": {"purpose": "object"}

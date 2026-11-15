@@ -18,6 +18,7 @@ from .layout import LAYOUT
 RECORD_S, ARRIVE_S, OUT_S, BACK_S, TRAIN_S, CAM_OFF_S, STOP_S, END_S = 2.0, 10.0, 22.0, 27.0, 31.0, 51.0, 68.0, 72.0
 STAND_S, MOVE_S = 3.0, 1.0
 REFIT_S = 15.0
+ONE_SPOT_STEP_M = 0.1     # on a layout with one zone the person shifts this far either side of its centre
 DEAD_BAND_M = 0.1         # the camera gives no label this close to the split line
 AGREE = (6, 8, 9)         # the fake brain's "N of 10" after its first, second and later fits
 SESSION = "sim-lesson"
@@ -25,6 +26,9 @@ SESSION = "sim-lesson"
 
 def sides(layout=LAYOUT):
     """((zone, (x, y)), (zone, (x, y))): where a person stands on the left, then on the right."""
+    if len(layout.centres) == 1:               # one spot: no sides, so they shift a step either way on it
+        (zone, (x, y)), = layout.centres.items()
+        return ((zone, (x - ONE_SPOT_STEP_M, y)), (zone, (x + ONE_SPOT_STEP_M, y)))
     left, right = sorted(layout.centres)[:2]   # zones 1 and 2: either side of the split in both layouts
     return tuple((layout.zone_of(*layout.centres[z]), layout.centres[z]) for z in (left, right))
 
@@ -42,19 +46,22 @@ def stands(layout=LAYOUT):
 
 
 def path(layout=LAYOUT) -> dict:
-    spot = dict(sides(layout))
+    spots, one = sides(layout), len(layout.centres) == 1
     person = [{"t": 0, "x": None}]
-    for start, end, zone in stands(layout):
-        x, y = spot[zone]
+    for i, (start, end, zone) in enumerate(stands(layout)):
+        x, y = spots[i % 2][1] if one else dict(spots)[zone]
         if start == BACK_S:                          # they stepped out at OUT_S and are back now
             person += [{"t": OUT_S, "x": None}, {"t": BACK_S - 0.1, "x": None}]
         person += [{"t": start, "x": x, "y": y}, {"t": end, "x": x, "y": y}]
     return {"name": "lesson", "duration_s": END_S, "person": person,
-            "about": "The lesson starts on an empty strip, the camera on the desk teaches left and right with a "
-                     "step out of view in the middle, the model is fit, the camera is unplugged and the radio "
-                     "carries on.",
+            "about": ("The lesson starts on an empty spot, the camera on the desk teaches somebody standing there "
+                      "with a step out of view in the middle, the model is fit, the camera is unplugged and the "
+                      "radio carries on.") if one else
+                     ("The lesson starts on an empty strip, the camera on the desk teaches left and right with a "
+                      "step out of view in the middle, the model is fit, the camera is unplugged and the radio "
+                      "carries on."),
             "meta": {"session": SESSION, "purpose": "train", "walker": "sim"},
-            "teacher": "desk", "dead_band_m": DEAD_BAND_M,
+            "teacher": "desk", "dead_band_m": 0.0 if one else DEAD_BAND_M,   # one spot has no line to be near
             "camera": [{"t": 0, "state": "on"}, {"t": CAM_OFF_S, "state": "off"}],
             "lesson": {"record_at": RECORD_S, "train_at": TRAIN_S, "refit_s": REFIT_S,
                        "stop_at": STOP_S, "agree": list(AGREE)}}

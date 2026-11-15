@@ -148,14 +148,17 @@ def link_history(store, now_ms, zones, minutes=10, link=None, **_):
 
 
 def explain_advice(store, now_ms, zones, minutes=10, **_):
-    """the last router advice and what the move changed"""
+    """the last advice and what following it changed"""
     told = [r for r in store.seconds(now_ms - minutes * 60_000, now_ms) if r["advice"]]
     if not told:
-        return {"answer": "No router advice has been given.", "rows": []}
+        return {"answer": "No advice has been given.", "rows": []}
     advice = told[-1]["advice"]
     row = {"at": clock(told[-1]["t"]), **{k: advice.get(k) for k in ("text", "link", "to_spot", "before_dbm", "after_dbm")}}
     result = ""
-    if row["after_dbm"] is not None:
+    if row["after_dbm"] is not None and row["to_spot"] is None:
+        # Nothing was moved (on one spot the router is cabled): the advice was about a thing left in the line.
+        result = f" The line read {row['before_dbm']} dBm with it there and {row['after_dbm']} dBm once it was taken away."
+    elif row["after_dbm"] is not None:
         result = f" The link read {row['before_dbm']} dBm before the move and {row['after_dbm']} dBm after it."
     return {"answer": f"The last advice was: {row['text']}{result}", "rows": [row]}
 

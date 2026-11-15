@@ -138,8 +138,23 @@ describe('when /nodes.json cannot be read', () => {
     expect(frame.LINK_IDS).toEqual(real.links.map((l) => l.id))
   })
 
-  it('falls back to the layout the page was built with, not the old square: offline, not found, or malformed', async () => {
-    for (const fetch of [() => Promise.reject(new Error('offline')), reply(404, null), reply(200, { v: 2, nodes: 'none' })]) {
+  it('refuses a file that is served but not understood, and draws nothing from the layout the page was built with', async () => {
+    const notJson = () => Promise.resolve({ ok: true, json: () => Promise.reject(new SyntaxError('Unexpected token')) })
+    const fiveZones = { ...DESK_LAYOUT, zones: [1, 2, 3, 4, 5].map((id) => ({ id, name: `Zone ${id}` })) }
+    for (const fetch of [reply(200, { v: 2, nodes: 'none' }), reply(200, { ...DESK_LAYOUT, v: 3 }), reply(200, fiveZones), notJson]) {
+      expect(other()).toBe(true)
+      vi.stubGlobal('fetch', fetch)
+      expect(await loadLayout('/nodes.json', 50, DESK_LAYOUT)).toBe('refused')
+      // Nothing was applied: not the file, and not the built layout's five devices either.
+      expect(frame.STRIP_M).toEqual([1.2, 0.6])
+      expect(frame.NODES.pi5b.name).toBe('Elsewhere')
+    }
+  })
+
+  it('falls back to the layout the page was built with, not the old square: offline, not found, or too slow', async () => {
+    const slow = (_url: string, init: { signal: AbortSignal }) =>
+      new Promise((_ok, fail) => init.signal.addEventListener('abort', () => fail(new DOMException('aborted', 'AbortError'))))
+    for (const fetch of [() => Promise.reject(new Error('offline')), reply(404, null), slow]) {
       expect(other()).toBe(true)
       vi.stubGlobal('fetch', fetch)
       expect(await loadLayout('/nodes.json', 50, DESK_LAYOUT)).toBe('contract')

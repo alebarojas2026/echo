@@ -30,7 +30,7 @@ test('fresh arrival distinguishes training, recalibration and a moved router', a
   await expect(page.getByTestId('arrival-title')).toHaveText('Recalibrating')
   await page.evaluate(() => window.arrival.update('empty', { pred: null, router: 'S-W30', armed: true }))
   await expect(page.getByTestId('arrival-title')).toHaveText('Paused')
-  await expect(page.getByTestId('arrival-detail')).toHaveText('Armed, but not watching right now.')
+  await expect(page.getByTestId('arrival-detail')).toHaveText('Armed. Monitoring is paused.')
   await page.evaluate(() => { window.arrival.update('still', { armed: true }); window.arrival.event('intrusion') })
   await expect(page.getByTestId('arrival-title')).toHaveText('Someone is here.')
 })

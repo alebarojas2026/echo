@@ -24,10 +24,10 @@ function onTheSpot(run) {
 }
 
 test('one spot: the list has one zone with no side, and a place name is said as it is', () => onTheSpot(() => {
-  assert.deepEqual(zoneList(), [{ id: 1, name: 'At the desk', hint: 'Zone 1' }])
+  assert.deepEqual(zoneList(), [{ id: 1, name: 'At the desk', hint: '' }])   // no "Zone 1" under the only zone
   assert.equal(placeName(1), 'at the desk')
   assert.equal(placeName(2), null)
-  assert.deepEqual(compass(), ['South: the router', 'North is up'])
+  assert.deepEqual(compass(), [])   // the router is at the desk on the gate: "South: the router" would be wrong
 }))
 
 test('a plain zone name still gets its words', () => {

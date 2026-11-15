@@ -168,6 +168,7 @@ Use the short name: `python -m sim.fake zone_tour`.
 | `passed_by` | Nobody there. Armed at 3 s; at 10 s someone crosses the area in 1.5 s without stopping: `passed_by` once they are gone, no `intrusion`; disarmed at 21 s | 24 s |
 | `step_in` | Nobody there. Armed at 3 s; at 10 s someone steps in and stands for 6 s: one `intrusion` about 3.5 s after stepping in; disarmed at 21 s | 24 s |
 | `tray_removed` | Person in zone 2 throughout; tray at T1 from 5 s to 14 s, gone from the picture about 1 s later | 20 s |
+| `thing_left` | Nobody there; something left standing in the line the dead-zone advice is about from 10 s to 40 s (on a layout with a presence line: the middle of that line, 5 dB off it), then taken away. The fake brain says an object, gives advice with no spot to move the router to on such a layout, and reports the gain about 5 s after it goes | 60 s |
 | `lesson` | The live lesson (built from the layout in `sim/lesson.py`, no file): someone steps left and right, desk-view labels with no foot point, the camera unplugged at 45 s. The fake brain shows `model.training.lesson` ("learning: 6 of 10", then 8) from 25 s until the camera goes | 66 s |
 
 ## Replay a recording

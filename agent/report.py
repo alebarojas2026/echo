@@ -35,7 +35,13 @@ def stretch(store: Store, now_ms: int = 0):
         return None
     start = armed[-1]["t"]
     ended = store.events(start, ("disarmed",))
-    return start, (ended[0]["t"] if ended else None)
+    if ended:
+        return start, ended[0]["t"]
+    latest = store.latest()
+    if latest and latest["armed"] and 0 <= now_ms - latest["t"] <= 10_000:
+        return start, None
+    armed_seconds = [r["t"] for r in store.seconds(start) if r["armed"] and r["t"] <= now_ms]
+    return start, max(armed_seconds, default=start)
 
 
 def facts(store: Store, from_t: int, to_t, now_ms: int) -> dict:
@@ -77,6 +83,8 @@ def template(f: dict, zones: dict, names=None) -> str:
     """The fixed report: one sentence per field."""
     armed = (f"Armed at {clock(f['armed_from_t'])} and still armed." if f["armed_to_t"] is None
              else f"Armed from {clock(f['armed_from_t'])} to {clock(f['armed_to_t'])}.")
+    if f.get("_record_stopped"):
+        armed = f"Armed from {clock(f['armed_from_t'])} until {clock(f['armed_to_t'])}, when the record of it stops."
     hits = f["intrusions"]
     intrusion = ("No intrusion alert." if not hits else
                  f"Intrusion alerts: {len(hits)}, the first {_where(hits[0], zones)} at {clock(hits[0]['t'])}.")
@@ -145,7 +153,7 @@ class Writer:
 def write(f: dict, zones: dict, llm=None, timeout_s: float = TIMEOUT_S) -> tuple:
     """(text, where it came from): the model's paragraph when it passes `problem`, else the template."""
     text = template(f, zones)
-    if llm is None:
+    if llm is None or f.get("_record_stopped"):
         return text, "template"
     try:
         written = " ".join(within(timeout_s, llm, messages(f, zones)).split())
@@ -161,6 +169,7 @@ def report(store: Store, llm=None, from_t=None, to_t=None, now_ms=None, zones=No
     said, if given, is called with where the text came from ("llm", "template", "template (why)")."""
     start = timer()
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+    inferred = from_t is None
     if from_t is None:
         last = stretch(store, now_ms)
         if last is None:
@@ -168,7 +177,10 @@ def report(store: Store, llm=None, from_t=None, to_t=None, now_ms=None, zones=No
         from_t, to_t = last
     zones = layout()[0] if zones is None else zones
     f = facts(store, from_t, to_t, now_ms)
+    if inferred and to_t is not None and not store.events(from_t, ("disarmed",)):
+        f["_record_stopped"] = True
     text, why = write(f, zones, llm, timeout_s)
+    f.pop("_record_stopped", None)
     if said:
         said(why)
     return {**f, "text": text, "ms": round((timer() - start) * 1000)}

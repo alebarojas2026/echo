@@ -6,6 +6,7 @@ import pytest
 from contracts.check import check_lines
 from sim import fake, lesson, rehearse, state
 from sim.layout import Layout
+from sim.tests.conftest import two_sides
 from sim.wire import encoder
 
 STRIP = {"frame": {"size_m": [1.6, 1.1], "strip_m": [1.6, 0.6], "zone_split_x_m": 0.8}, "nodes": [], "links": [],
@@ -14,12 +15,14 @@ STRIP = {"frame": {"size_m": [1.6, 1.1], "strip_m": [1.6, 0.6], "zone_split_x_m"
 
 
 def test_left_and_right_come_from_the_layout():
-    assert [zone for zone, _ in lesson.sides()] == [1, 2]
+    if len(lesson.LAYOUT.zones) > 1:
+        assert [zone for zone, _ in lesson.sides()] == [1, 2]
     assert lesson.sides(Layout(STRIP)) == ((1, (0.4, 0.3)), (2, (1.2, 0.3)))
     strip = lesson.path(Layout(STRIP))
     assert {(w["x"], w["y"]) for w in strip["person"] if w["x"] is not None} == {(0.4, 0.3), (1.2, 0.3)}
 
 
+@two_sides
 def test_the_path_is_the_lesson_then_the_unplug():
     path = fake.load_path("lesson")
     assert path == lesson.path() and path["name"] == "lesson"
@@ -44,6 +47,7 @@ def test_the_lesson_has_empty_time_in_two_pieces_before_train():
     assert len(first) >= 20 and len(second) >= 15 and len(first) + len(second) == len(empty)
 
 
+@two_sides
 def test_the_feed_has_desk_labels_until_the_camera_goes():
     events = list(fake.simulate(lesson.path()))
     labels = [e for e in events if e["type"] == "label"]
@@ -111,6 +115,7 @@ def results():
     return rehearse.rehearse(lesson=True)
 
 
+@two_sides
 def test_teach_then_unplug_passes(results):
     names = [name for name, _, _ in results]
     assert names[:2] == ["setup: baseline", "setup: no model yet"]
@@ -123,6 +128,7 @@ def test_the_first_model_comes_within_seconds_of_train(results):
     assert shown["lesson: a model within 5 s of train"] <= 1      # sim time: the fit is instant on the feed's clock
 
 
+@two_sides
 def test_without_the_train_command_the_lesson_beats_fail_by_name():
     path, commands, beats = rehearse.lesson_script()
     results = rehearse.rehearse((path, [c for c in commands if c[1] != "train"], beats), lesson=True)

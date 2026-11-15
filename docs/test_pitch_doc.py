@@ -2,6 +2,8 @@ import re
 import unittest
 from pathlib import Path
 
+from beats import BEATS, CORE
+
 
 PITCH = Path(__file__).with_name("pitch.md")
 PROOF = PITCH.parents[1] / "PROOF.md"
@@ -38,29 +40,12 @@ class PitchDocTest(unittest.TestCase):
         self.assertLessEqual(len(re.findall(r"\b[\w'-]+\b", spoken)), 170)
 
     def test_required_demo_beats_are_present(self):
-        for phrase in (
-            "found you",
-            "teach the room",
-            "camera unplug",
-            "still follows",
-            "arm the space",
-            "intrusion alert",
-            "ask the room",
-            "proof",
-        ):
-            self.assertIn(f"### {phrase}", self.lower)
+        for phrase in BEATS:
+            self.assertIn(f"### {phrase.lower()}", self.lower)
+        self.assertEqual(len(re.findall(r"^### ", self.text, re.M)), len(BEATS))
 
     def test_demo_beats_are_in_run_order(self):
-        beats = (
-            "### found you",
-            "### teach the room",
-            "### camera unplug",
-            "### still follows",
-            "### arm the space",
-            "### intrusion alert",
-            "### ask the room",
-            "### proof",
-        )
+        beats = [f"### {beat.lower()}\n" for beat in BEATS]
         positions = [self.lower.index(beat) for beat in beats]
         self.assertEqual(positions, sorted(positions))
 
@@ -73,6 +58,20 @@ class PitchDocTest(unittest.TestCase):
     def test_compute_and_screen_roles_are_clear(self):
         self.assertIn("qualcomm", self.spoken.lower())
         self.assertIn("dragonwing cpu", self.spoken.lower())
+
+    def test_qualcomm_and_on_device_land_immediately_after_found_you(self):
+        after_found = self.spoken.lower().split("found you", 1)[1]
+        first_sixty = " ".join(re.findall(r"\b[\w'-]+\b", after_found)[:60])
+        self.assertIn("qualcomm", first_sixty)
+        self.assertIn("on device", first_sixty)
+
+    def test_theme_and_ask_close_the_pitch(self):
+        for phrase in (
+            "we dug into a signal every building already has",
+            "taught by a camera. runs without one",
+            "we would like to keep building it",
+        ):
+            self.assertIn(phrase, self.spoken.lower())
 
     def test_feature_status_is_current(self):
         self.assertIn("a beat is shown only after it passes preflight", self.lower)
