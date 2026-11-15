@@ -177,8 +177,8 @@ def test_recap_keeps_the_8_s_spacing_on_both_sides():
     clock.t = NOW + 9000
     nar.observe(ev(9, "enter", id="e9", zone=3))  # the next judge walks in at 9 s
     nar.step()
-    assert [(m["event_kind"], m["t"] - NOW, m["seq"]) for m in sent] == [
-        ("enter", 0, 1), ("recap", 8000, 2), ("enter", 16000, 3)]
+    assert [(m["event_kind"], m["t"] - NOW, m["seq"]) for m in sent if m.get("source") != "llm" or m["event_kind"] == "recap"] == [
+        ("enter", 0, 1), ("recap", 8000, 3), ("enter", 16000, 4)]   # seq 2 and 5: the model's wording of each sentence
 
 
 def test_recap_and_sentence_on_two_threads_never_share_a_seq_or_the_gap():
@@ -196,8 +196,8 @@ def test_recap_and_sentence_on_two_threads_never_share_a_seq_or_the_gap():
         th.start()
     for th in threads:
         th.join()
-    assert sorted(m["seq"] for m in sent) == [1, 2, 3, 4]
-    times = sorted(m["t"] for m in sent)
+    assert sorted(m["seq"] for m in sent) == [1, 2, 3, 4, 5, 6, 7]   # three sentences twice (template, then the model's), one recap
+    times = sorted(m["t"] for m in sent if not (m["event_kind"] == "enter" and m["source"] == "llm"))
     assert all(b - a >= 200 for a, b in zip(times, times[1:]))
 
 

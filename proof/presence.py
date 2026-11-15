@@ -10,6 +10,7 @@ import subprocess
 
 from proof.score import load_session, presence_from_confusion, training_walkers, walker_id, validate_report
 from proof.provenance import prepare_update, require_board, empty_proof
+from proof import layout as L
 
 
 def read_log(path):
@@ -29,14 +30,16 @@ def read_log(path):
     return out
 
 
-def score_cycles(session, capture, log, training, allow_sim=False):
+def score_cycles(session, capture, log, training, allow_sim=False, layout=None):
+    # On a layout with a presence line the brain decides with no model: its own decisions are scored as they are.
+    line = L.presence_line(layout or L.load())
     meta = session["meta"]
     if meta.get("purpose") != "heldout": raise ValueError("presence needs a predeclared heldout session")
     if any(s["meta"].get("purpose") not in {"train","object"} for s in training): raise ValueError("invalid training purpose")
     ids = [s["meta"]["session"] for s in training]
     if len(ids)!=len(set(ids)) or meta["session"] in ids: raise ValueError("training/heldout session leakage")
     walker = walker_id(meta.get("walker"),"held-out cycles")
-    if not training: raise ValueError("original training provenance is required")
+    if not training and not line: raise ValueError("original training provenance is required")
     sources = session["messages"] + capture + [m for s in training for m in s["messages"]]
     if not allow_sim and any(r.get("state",r).get("src")!="live" for r in sources):
         raise ValueError("synthetic inputs cannot populate measured presence")
@@ -54,15 +57,18 @@ def score_cycles(session, capture, log, training, allow_sim=False):
     for s in sorted(states,key=lambda s:s["recv_t"]):
         t = s["recv_t"]
         if not starts[0] <= t < starts[-1]: continue
-        if s.get("cam") != "off": raise ValueError("camera must remain off throughout independent cycles")
         model = s.get("model") or {}
         fitted = model.get("train_sessions")
-        if model.get("trained") is not True or not isinstance(fitted,list) or not fitted or not model.get("ver"):
+        if line and model.get("trained") is not True:
+            if s.get("cam") in {"on","stalled"}: raise ValueError("no camera may run during the cycles")
+            fitted = []
+        elif s.get("cam") != "off": raise ValueError("camera must remain off throughout independent cycles")
+        elif model.get("trained") is not True or not isinstance(fitted,list) or not fitted or not model.get("ver"):
             raise ValueError("cycle evaluation requires a trained model with known provenance")
         if not set(fitted)<=set(ids): raise ValueError("missing metadata for model training sessions")
         if not versions and walker in training_walkers([s for s in training if s["meta"]["session"] in fitted]):
             raise ValueError("training/held-out walker leakage")
-        versions.add((model["ver"],tuple(sorted(fitted))))
+        versions.add((model.get("ver") if fitted else None,tuple(sorted(fitted))))
         if len(versions)>1: raise ValueError("model changed during held-out cycles")
         pred = s.get("pred") or {}
         bucket = int((t-starts[0])//1000)
@@ -72,6 +78,9 @@ def score_cycles(session, capture, log, training, allow_sim=False):
         actual = log[bisect_right(starts,t)-1][1]
         counts[(int(actual),int(pred["present"]))] += 1
     matrix = [[counts[(a,p)] for p in (0,1)] for a in (0,1)]
+    if line and versions <= {(None,())}:
+        return presence_from_confusion({"classes":[0,1],"counts":matrix},(len(log)-1)//2,("SYNTHETIC SELF-TEST; " if allow_sim else "")
+                                       + f"the line {line} decides, no model and no lesson; no camera; 1 Hz states against written enter/leave log; see proof/PRESENCE.md")
     method = ("SYNTHETIC SELF-TEST; " if allow_sim else "") + "walker-independent; camera off; 1 Hz states against written enter/leave log; see proof/PRESENCE.md"
     return presence_from_confusion({"classes":[0,1],"counts":matrix},(len(log)-1)//2,method)
 
@@ -93,11 +102,12 @@ def main():
     parser.add_argument("states",type=Path)
     parser.add_argument("log",type=Path)
     parser.add_argument("--more-record",nargs=3,type=Path,action="append",default=[])
-    parser.add_argument("--train",nargs="+",type=Path,required=True)
+    parser.add_argument("--train",nargs="+",type=Path,default=[],help="not needed on a layout with a presence line")
     parser.add_argument("--proof",type=Path)
     parser.add_argument("--allow-sim",action="store_true")
     args = parser.parse_args()
     if args.allow_sim and args.proof: parser.error("synthetic diagnostics cannot write proof")
+    if not args.train and not L.presence_line(L.load()): parser.error("--train is required on a layout with no presence line")
     training, results, seen = [load_session(p) for p in args.train], [], set()
     for s,c,l in [(args.session,args.states,args.log)]+args.more_record:
         session = load_session(s)

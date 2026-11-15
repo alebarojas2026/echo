@@ -24,6 +24,7 @@ lab-ask-bench branch) checks all of this against a few thousand questions.
 import argparse
 import difflib
 import json
+import os
 import math
 import re
 import threading
@@ -36,7 +37,9 @@ from .tools import TOOLS, current_spot
 from . import detective, room_facts
 
 LLM_URL = "http://127.0.0.1:8091"
-TIMEOUT_S = 8.0
+# A question that matches no keyword goes to the on-board model to pick the tool. It gets this long
+# (ASK_PICK_S, 3 s unless set); with no pick by then the reply is, at once, the list of what can be asked.
+TIMEOUT_S = float(os.environ.get("ASK_PICK_S") or 3.0)
 MAX_QUESTION = 200
 MINUTES = (1, 1440, 10)   # least, most, when not said
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
@@ -312,7 +315,7 @@ USES_MINUTES = ("presence", "still_spans", "alerts", "intrusions", "link_history
 
 
 def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic,
-        nodes_path=None, privacy_reader=None, writer=None) -> dict:
+        nodes_path=None, privacy_reader=None, writer=None, pick_s=None) -> dict:
     """{"answer", "rows", "tool", "args", "picked_by": "llm"|"rules", "src", "ms"} for one question.
     src is the newest record's src ("live", "sim" or "replay"; None when the store is empty).
     A "what happened" question gets the detective's story, with "steps", "cites" and "chain_ok" too;
@@ -338,7 +341,9 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
             pick = {"tool": tool, "link": "any"}
         elif llm is not None:
             try:
-                pick, picked_by = llm(messages(question, zones, links), schema(zones, links)), "llm"
+                from narrator.narrate import within   # the whole wait, not one read of the socket
+                pick = within(TIMEOUT_S if pick_s is None else pick_s, llm, messages(question, zones, links), schema(zones, links))
+                picked_by = "llm"
             except Exception:   # down, slow, or not JSON: the list of what can be asked
                 pick = {"tool": "none"}
     if isinstance(pick, dict):

@@ -28,6 +28,7 @@ def analyze(recordings, layout):
     if len(ids) != len(set(ids)): raise ValueError("duplicate session")
     zones = {z["id"]: z.get("still_alert_s") for z in layout["zones"]}
     nodes = {n["id"] for n in layout["nodes"]}
+    line = (layout.get("presence") or {}).get("line")   # with a presence line the brain decides with no model and no lesson
     passes = affected = crowd_events = still = alerts = unplugs = caught = false = correct = total = 0
     crowd_ms = clean_ms = 0
     lessons = []
@@ -97,7 +98,8 @@ def analyze(recordings, layout):
                 clean = overlap(clean,observed)
                 clean_ms += sum(y-x for x,y,_ in clean)
                 false += sum(e["kind"] == "tamper" and any(x<=e["recv_t"]<y for x,y,_ in clean) for e in events.values())
-            off = spans(states, lambda s:s.get("cam") == "off" and healthy(s) and (s.get("model") or {}).get("trained") is True
+            modelless = lambda s: bool(line) and (s.get("model") or {}).get("trained") is not True and s.get("cam") not in {"on","stalled"}
+            off = spans(states, lambda s:healthy(s) and (modelless(s) or s.get("cam") == "off" and (s.get("model") or {}).get("trained") is True)
                         and identity not in (s.get("model") or {}).get("train_sessions",[]), 1000)
             for a in selected("walk"):
                 if not covered(off,a["recv_t"],a["end_t"]): continue
@@ -109,7 +111,7 @@ def analyze(recordings, layout):
                         total += 1
                         correct += s["pred"].get("zone") == a["zone"]
             if total > old_total: walk_counts.append((correct-old_correct,total-old_total))
-        if purpose == "train":
+        if purpose == "train" and not line:   # a lesson fits a model; a layout with a presence line has neither
             ready = None
             captured = spans(states,lambda s:True,1000)
             for s in states:

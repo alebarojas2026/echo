@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+from proof.layout import load as load_layout, presence_line
 from proof.score import from_this_place, load_session, place_start
 
 
@@ -121,9 +122,10 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
         log, states = path.with_suffix(".presence.csv"), path.with_suffix(".states.jsonl")
         if session["meta"].get("purpose") == "heldout" and log.exists():
             if not states.exists(): missing.append(f"presence state capture: {states}")
-            elif groups["train"] or groups["object"]: cycles.append((str(path),str(states),str(log)))
+            elif groups["train"] or groups["object"] or presence_line(load_layout()): cycles.append((str(path),str(states),str(log)))
     if cycles:
-        command = [sys.executable,"-m","proof.presence",*cycles[0],"--train",*groups["train"],*groups["object"],"--proof",str(output)]
+        trained = groups["train"] + groups["object"]   # none on a layout whose presence line decides with no model
+        command = [sys.executable,"-m","proof.presence",*cycles[0],*(["--train",*trained] if trained else []),"--proof",str(output)]
         for record in cycles[1:]: command.extend(["--more-record",*record])
         commands.append(command)
     line_report = output.with_suffix(".lines.json")
