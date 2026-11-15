@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-# Today's square has no centre_m in its zones; these are its centres.
+# Historical square fixtures have no centre_m in their zones.
 SQUARE_CENTRES = {1: (0.5, 1.5), 2: (1.5, 1.5), 3: (0.5, 0.5), 4: (1.5, 0.5)}
 
 
@@ -78,7 +78,9 @@ def link_zones(doc):
     if is_spot(doc) and any("crosses_spot" in link for link in doc["links"]):
         return {link["id"]: int(doc["zones"][0]["id"]) for link in doc["links"] if link.get("crosses_spot")}
     out = {}
+    enabled = {link["id"] for link in doc["links"] if link.get("classifier",True) is not False}
     for link, (x, y) in link_midpoints(doc).items():
+        if link not in enabled: continue
         zone = zone_at(doc, x, y)
         if zone:
             out[link] = zone
