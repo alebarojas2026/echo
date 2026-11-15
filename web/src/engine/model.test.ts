@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ENGINE_SCENES, MOCK_LAYOUT, engineScene, fakeHash, records, sceneAt, witnessIds } from './mock'
 import { mockProve } from './source'
-import { ago, blocks, boardId, count, deviceViews, hash8, headlines, heardNow, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveAsk, proveWords, seenHeads, span, timings, watchLine, type ChainInfo } from './model'
+import { ago, blocks, boardId, count, deviceViews, hash8, headlines, heardNow, hearsLines, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveAsk, proveWords, seenHeads, span, timings, watchLine, type ChainInfo } from './model'
 
 const HASH = 'a3f09c21'.repeat(8)
 const chain = (over: Partial<ChainInfo> = {}): ChainInfo => ({
@@ -34,7 +34,8 @@ describe('what the board says, read carefully', () => {
     expect(ask).toEqual({ question: null, answer: 'Nobody was here.', steps: [{ tool: 'presence', ms: 12, rows: 60 }], cites: [1180, 1185], chain_ok: true })
     expect(parseAsk({ answer: '' })).toBeNull()
     expect(parsePrivacy({ ok: true, images: 0, bytes_out: 0, since_t: 1, t: 2 })).toEqual({ images: 0, bytes_out: 0 })
-    expect(parsePrivacy({ ok: false, why: 'privacy meter is not running' })).toBeNull()
+    expect(parsePrivacy({ ok: false, why: 'privacy meter is not running' })).toEqual({ why: 'privacy meter is not running' })
+    expect(parsePrivacy({ ok: true })).toBeNull()
   })
 
   it('reads the devices and lines from the layout file', () => {
@@ -84,6 +85,8 @@ describe('words and numbers', () => {
   it('never writes a zero it has not measured', () => {
     expect(watchLine(null, null)).toEqual(['Camera: __', 'No microphone on any device', 'privacy meter not answering'])
     expect(watchLine({ t: 0, cam: 'off' }, { images: 0, bytes_out: 0 })).toEqual(['0 cameras', 'No microphone on any device', '0 images stored', '0 bytes out'])
+    // The board's own reason for having no numbers is shown as it gave it.
+    expect(watchLine({ t: 0, cam: 'off' }, { why: 'privacy meter is not running' })).toEqual(['0 cameras', 'No microphone on any device', 'privacy meter is not running'])
     expect(watchLine({ t: 0, cam: 'on' }, null, true)).toEqual(['Camera ON', 'No microphone on any device', 'privacy meter: simulated, nothing measured'])
     expect(timings({ t: 0, model: { ms_per_decision: null, train_s: null } }, null)).toEqual([])
     expect(timings({ t: 0, model: { ms_per_decision: 3.1, train_s: null }, narration: { gen_ms: 410 } }, { question: null, answer: 'x', steps: [{ tool: 'a', ms: 3, rows: 1 }, { tool: 'b', ms: 12, rows: 1 }], cites: [], chain_ok: true })).toEqual(['Decision 3.1 ms', 'Sentence 410 ms', 'Answer 15 ms'])
@@ -99,9 +102,19 @@ describe('the devices', () => {
     expect(board).toMatchObject({ name: 'Board', board: true, does: 'Senses, decides, seals the record', hz: 37, heard: true, witness: null })
     expect(a.board).toBe(false)
     expect(board.hears).toEqual([{ from: 'Pi A', radio: 'Wi-Fi', hz: 25 }, { from: 'Pi A', radio: 'Bluetooth', hz: 6 }, { from: 'Pi B', radio: 'Bluetooth', hz: 6 }])
-    expect(a).toMatchObject({ name: 'Pi A', does: 'The Wi-Fi of the room, and a witness', hz: 6, heard: true })
+    expect(a).toMatchObject({ name: 'Pi A', does: 'The Wi-Fi of the room', hz: 6, heard: true })
     expect(a.witness).toEqual({ seq: 1185, ago: '2 s ago', ok: true, silent: false, quiet: null })
-    expect(b).toMatchObject({ name: 'Pi B', does: 'Listens across the gap, and a witness', hz: 31 })
+    expect(b).toMatchObject({ name: 'Pi B', does: 'Listens across the gap', hz: 31 })
+  })
+
+  it('lists at most three of the lines a device hears, and says what a beacon is', () => {
+    const hears = [1, 2, 3, 4, 5].map((i) => ({ from: `Device ${i}`, radio: 'Bluetooth', hz: i }))
+    expect(hearsLines(hears.slice(0, 3))).toHaveLength(3)
+    expect(hearsLines(hears)).toEqual(['Device 1 over Bluetooth: 1 a second', 'Device 2 over Bluetooth: 2 a second', 'and 3 more lines'])
+    expect(hearsLines([{ from: 'Pi A', radio: 'Wi-Fi', hz: null }])).toEqual(['Pi A over Wi-Fi: no reading'])
+    const five = { nodes: [...MOCK_LAYOUT.nodes, { id: 'east', name: 'East beacon', device: 'esp32', roles: ['beacon'] }], links: [...MOCK_LAYOUT.links, { id: 'east>unoq:ble', tx: 'east', rx: 'unoq', kind: 'ble' }] }
+    const east = deviceViews(five, null, chain(), 0, new Map()).find((d) => d.id === 'east')!
+    expect(east).toMatchObject({ does: 'Sends a signal the others hear', witness: null, hz: null })
   })
 
   it('says how long a device has not been heard and how long a witness has not signed; the rest goes on', () => {

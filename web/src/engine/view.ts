@@ -1,4 +1,4 @@
-import { blocks, count, deviceViews, headlines, proveAsk, proveWords, seenHeads, timings, toolWord, watchLine, type AskLast, type Block, type ChainInfo, type EngineState, type Layout, type Privacy, type ProveResult, type TailRecord } from './model'
+import { blocks, count, deviceViews, headlines, hearsLines, proveAsk, proveWords, seenHeads, timings, toolWord, watchLine, type AskLast, type Block, type ChainInfo, type EngineState, type Layout, type Privacy, type ProveResult, type TailRecord } from './model'
 import { engineState, type Source } from './source'
 
 // The engine room: a second screen beside the judge's, showing the machinery as it runs. Three devices, the
@@ -165,7 +165,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
       const quiet = !v.heard || !!v.witness?.silent
       d.card.dataset.state = quiet ? 'quiet' : 'ok'
       say(d.rate, v.hz === null ? (v.hears.length ? '__ readings a second' : 'Sends its signal; hears no line') : `${v.hz} readings a second`)
-      const lines = v.hears.map((h) => `${h.from} over ${h.radio}: ${h.hz === null ? 'no reading' : `${h.hz} a second`}`)
+      const lines = hearsLines(v.hears)
       if (d.hears.dataset.lines !== lines.join('|')) {
         d.hears.dataset.lines = lines.join('|')
         d.hears.replaceChildren(...lines.map((l) => el('li', '', l)))

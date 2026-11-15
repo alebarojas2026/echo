@@ -52,11 +52,8 @@ export interface AskLast {
   chain_ok: boolean | null
 }
 
-/** GET /privacy. */
-export interface Privacy {
-  images: number
-  bytes_out: number
-}
+/** GET /privacy: the meter's numbers, or the board's own reason for having none. */
+export type Privacy = { images: number; bytes_out: number } | { why: string }
 
 /** What the engine room reads from a state message. */
 export interface EngineState {
@@ -154,7 +151,9 @@ export function parseAsk(v: unknown): AskLast | null {
 }
 
 export function parsePrivacy(v: unknown): Privacy | null {
-  return obj(v) && v.ok === true && int(v.images) && int(v.bytes_out) ? { images: v.images, bytes_out: v.bytes_out } : null
+  if (!obj(v)) return null
+  if (v.ok === true && int(v.images) && int(v.bytes_out)) return { images: v.images, bytes_out: v.bytes_out }
+  return v.ok === false && typeof v.why === 'string' && v.why.trim() ? { why: v.why.trim() } : null
 }
 
 /** "1,187": a count as people read it. */
@@ -205,6 +204,15 @@ const KIND_WORDS: Record<string, string> = {
 /** A record's kind as a word a person reads; an unknown kind is shown as it is, with spaces. */
 export function kindWord(kind: string): string {
   return KIND_WORDS[kind] ?? kind.replace(/_/g, ' ')
+}
+
+/** How many of the lines a device hears are listed in its column before "and N more". */
+export const HEARS_SHOWN = 3
+
+/** A device's lines as the column lists them: the first few, then how many more there are. */
+export function hearsLines(hears: DeviceView['hears']): string[] {
+  const lines = hears.map((h) => `${h.from} over ${h.radio}: ${h.hz === null ? 'no reading' : `${h.hz} a second`}`)
+  return lines.length <= HEARS_SHOWN ? lines : [...lines.slice(0, HEARS_SHOWN - 1), `and ${lines.length - HEARS_SHOWN + 1} more lines`]
 }
 
 /** A tool's name as words: "still_spans" -> "still spans". */
@@ -279,8 +287,10 @@ export function deviceViews(layout: Layout, state: EngineState | null, chain: Ch
       does: isBoard
         ? 'Senses, decides, seals the record'
         : n.roles.includes('router')
-          ? 'The Wi-Fi of the room, and a witness'
-          : 'Listens across the gap, and a witness',
+          ? 'The Wi-Fi of the room'
+          : n.roles.includes('receiver')
+            ? 'Listens across the gap'
+            : 'Sends a signal the others hear', // a beacon: no computer in it, so it hears nothing and signs nothing
       hears,
       hz: known.length ? Math.round(known.reduce((s, h) => s + (h.hz ?? 0), 0) * 10) / 10 : null,
       heard: isHeard,
@@ -407,6 +417,10 @@ export function timings(state: EngineState | null, ask: AskLast | null): string[
  */
 export function watchLine(state: EngineState | null, privacy: Privacy | null, simulated = false): string[] {
   const cam = !state ? 'Camera: __' : state.cam === 'off' ? '0 cameras' : state.cam === 'on' ? 'Camera ON' : 'Camera state unknown'
-  const meter = privacy ? [`${count(privacy.images)} images stored`, `${count(privacy.bytes_out)} bytes out`] : [simulated ? 'privacy meter: simulated, nothing measured' : 'privacy meter not answering']
+  const meter = !privacy
+    ? [simulated ? 'privacy meter: simulated, nothing measured' : 'privacy meter not answering']
+    : 'why' in privacy
+      ? [privacy.why] // the board's own words: "privacy meter is not running"
+      : [`${count(privacy.images)} images stored`, `${count(privacy.bytes_out)} bytes out`]
   return [cam, 'No microphone on any device', ...meter]
 }
