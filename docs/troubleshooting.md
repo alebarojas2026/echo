@@ -4,6 +4,18 @@ Use this guide when the live demo is not ready. Fix the first failed check, then
 
 ## Fast checks
 
+| Failure point | What the screen may say | First check |
+|---|---|---|
+| Pi B | Degraded, no readings, or a named device alert | Power and hotspot join; this kit has only the Arduino and two Pis |
+| Pi A or Ethernet cable | NO DATA or page unavailable | Pi A power and direct cable to the board hub |
+| Camera watcher | Camera unknown, off, or stalled | `radio-sight-camwatch` and the physical USB connection |
+| Brain | NO DATA | `radio-sight-brain` and `radio-sight-bus`; save logs before restart |
+| Store | Empty history or missing answer records | `radio-sight-store`; unknown records are not an empty room |
+| Question model | Slow answer or rules-selected tool | Local `radio-sight-llm`; inspect the returned rows |
+| Laptop Wi-Fi | Disconnected page or NO DATA | Join Pi A's hotspot again, then verify the live URL |
+
+There are no separate beacon devices in the current demo kit.
+
 1. **Page:** Open `http://192.168.77.2:8080/?src=ws`. Confirm `/nodes.json` and `/proof.json` load from the same board address.
 2. **Source:** Confirm the source badge says `live`. A mock or replay source is not live proof.
 3. **Feed:** Confirm the screen does not say `NO DATA` and that contract v2 state is arriving from `ws://192.168.77.2:8765/ws`.

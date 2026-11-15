@@ -32,6 +32,38 @@ While the Operator fixes a failure, the Talker says exactly one of these:
 
 ## Preflight
 
+### Before the first judge
+
+Record the operator, checker, and actual finish time beside each step. These are scheduling blanks, not performance results.
+
+| Order | Action | Time | Operator / checker |
+|---|---|---|---|
+| 1 | Power up the Arduino UNO Q, Pi A, Pi B, and laptop | __ | __ |
+| 2 | Set the board's clock from the laptop using the operator clock control; disarm and stop recordings first, then wait for reconnection | __ | __ |
+| 3 | Run `python scripts/demo_check.py --before-lesson`; fix every FAIL using its printed instruction | __ | __ |
+| 4 | Write down the commit the deploy printed and the served screen build: board __, screen __, previous good tag __ | __ | __ |
+| 5 | Capture the empty baseline | __ | __ |
+| 6 | Run the morning lesson and confirm the model is trained | __ | __ |
+| 7 | Have someone outside the team walk the full round | __ | __ |
+| 8 | Ask one prepared question using the real local model and inspect its source records | __ | __ |
+| 9 | Copy what the board learned to the laptop over Ethernet, using the backup procedure once #679 lands | __ | __ |
+
+Run `python scripts/demo_check.py` again after the lesson. A FAIL is a stop: page/layout means check the web server and deployed layout; WebSocket means check bus and brain; clock means set time while idle; links/health means inspect the named radio; model means baseline and lesson; records means check `radio-sight-store`; Ask means inspect the answer service and local model. A degraded-health WARN still has predictions; inspect the named device without calling it empty.
+
+**From Sunday 9:30 AM the board runs a tagged commit. Nothing goes onto it afterwards except a rollback to the previous tag: no deploy or screen build pushed during judging.**
+
+**Before any restart, save the logs: `journalctl -u 'radio-sight-*' --since -5min > incident-<time>.txt`. Replace `<time>` with the actual incident time in the local filename.**
+
+### Going back
+
+Record last good board tag __, last good screen build __, operator __, checker __, and measured recovery time __ s. Save the logs first. The recovery sequence from #678 is:
+
+1. `board/deploy.sh <last-good-tag>` — use the recorded previous tag, already available locally.
+2. `board/push-web.sh --back` — restore the previous screen build locally on the board.
+3. `python scripts/demo_check.py` — inspect the screen and every check before admitting another judge.
+
+The screen `--back` option and `board/keep.sh save` backup are pending #678 and #679 in this checkout. Confirm they exist in the deployed version and have passed a real restore before using this checklist as a recovery guarantee. Never rebuild or copy a screen bundle over the hotspot while the model runs.
+
 - [ ] Connect the UNO Q and Pi with the direct Ethernet cable.
 - [ ] Ask Alexander to run `sudo bash pi/eth.sh` on the Pi and `sudo bash board/eth.sh` on the UNO Q.
 - [ ] Ask Alexander to run `sudo bash pi/ap.sh` on the Pi and `sudo bash radio/wifi_join.sh` on the UNO Q.

@@ -29,6 +29,9 @@ flowchart LR
         end
 
         NARRATOR["Narrator"]
+        STORE["store/ — local records"]
+        AGENT["agent/ — Ask the room and incident report"]
+        TAMPER["Tamper rule"]
         LLAMA["llama-server<br/>http://127.0.0.1:8091"]
         SERVE["Web server<br/>http://192.168.77.2:8080"]
         BRIDGE["Host Bridge<br/>arduino package"]
@@ -60,6 +63,12 @@ flowchart LR
     SCREEN -->|"cmd over the same WebSocket"| MODEL
 
     MODEL -->|"events"| NARRATOR
+    MODEL -->|"state and events"| STORE
+    MODEL --> TAMPER
+    TAMPER -->|"named device alert"| SCREEN
+    STORE -->|"saved rows"| AGENT
+    AGENT -->|"answer and report"| SERVE
+    STORE -->|"history for replay"| SERVE
     NARRATOR -->|"prompt"| LLAMA
     LLAMA -->|"generated sentence"| NARRATOR
     NARRATOR -->|"narration<br/>127.0.0.1:5600"| BUS
@@ -87,6 +96,8 @@ The brain builds signal windows, checks link health, and runs the trained person
 If a required classifier link is blind, the brain sends a blind health state and no prediction. The screen must not translate missing or unhealthy input into an empty room.
 
 ## Screen, narration, and LED grid
+
+The `store/` service keeps local state summaries and events on the UNO Q. `agent/` answers Ask the room questions and builds incident reports from those records; the web server also serves history for replay. Tamper reports a silent device while armed. Missing history stays unknown, and replay is always labelled as recorded rather than live.
 
 The brain publishes contract-v2 `state` and `event` messages on `ws://192.168.77.2:8765/ws`. The laptop joins the Pi hotspot and opens `http://192.168.77.2:8080/?src=ws`; the Pi routes the page, proof data, state, and commands over its direct Ethernet cable to the board. Only light browser traffic uses the hotspot during a demo or recording.
 
