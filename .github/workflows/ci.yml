@@ -37,6 +37,9 @@ jobs:
       - name: tests bus
         if: ${{ !cancelled() && hashFiles('bus/**/test_*.py') != '' }}
         run: lane=bus; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
+      - name: tests ci
+        if: ${{ !cancelled() && hashFiles('ci/**/test_*.py') != '' }}
+        run: lane=ci; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q
       - name: tests contracts
         if: ${{ !cancelled() && hashFiles('contracts/**/test_*.py') != '' }}
         run: lane=contracts; if [ -f $lane/requirements.txt ]; then pip install -r $lane/requirements.txt; fi; python -m pytest $lane -q --ignore=contracts/tests/test_e2e.py
