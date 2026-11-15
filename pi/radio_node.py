@@ -2,8 +2,8 @@
 
 Runs on the Raspberry Pi 5 as root (CONTRACTS.md §9).
 
-Advertises as beacon S (manufacturer data FFFF 52 53 'S') every 20 ms, and scans
-with duplicate filtering OFF for east and west beacons.  Forwards kept readings
+Advertises its own beacon (manufacturer data FFFF 52 53 'S' for pi5, from radio/nodes.json) every
+20 ms, and scans with duplicate filtering OFF for the other beacons.  Forwards kept readings
 to the board bus at 192.168.77.2:5600 as contract-v2 rssi messages.
 
 Matching is by advertised manufacturer data, never by MAC address.
@@ -19,6 +19,7 @@ It keeps going when things around it fail:
 Every 10 s it prints one status line (journalctl -u radio-sight-radio-node).
 
 Environment variables (set in .env at repo root, gitignored):
+    RADIO_NODE   which Pi this is, a node id from nodes.json that is a beacon and a receiver (default pi5)
     HCI_IFACE    HCI device index (default 0  → hci0)
     BUS_HOST     bus UDP host (default 192.168.77.2)
     BUS_PORT     bus UDP port (default 5600)
@@ -40,12 +41,30 @@ import time
 
 from radio import hci
 from radio.hci_scan import BeaconScanner, kept, make_bus_emitter, open_controller
+from radio.nodes import BEACONS, DOC, LINKS
 
 HCI_IDX: int = int(os.environ.get("HCI_IFACE", "0").strip().removeprefix("hci") or "0")  # "0" or "hci0"
 BUS_HOST: str = os.environ.get("BUS_HOST", "192.168.77.2")
 BUS_PORT: int = int(os.environ.get("BUS_PORT", "5600"))
 
-RX = "pi5"
+# The Pis that both advertise and listen (nodes.json roles). Each runs this node with its own id:
+# --node, or RADIO_NODE in .env, else pi5.
+RADIO_NODES = [n["id"] for n in DOC["nodes"] if {"beacon", "receiver"} <= set(n.get("roles", []))]
+RX = os.environ.get("RADIO_NODE", "pi5")
+
+
+def beacon_payload(node: str) -> bytes:
+    """The node's manufacturer data from nodes.json, company id first: FFFF 52 53 <letter>."""
+    return next(payload for payload, who in BEACONS.items() if who == node)
+
+
+def beacon_letter(node: str) -> str:
+    return chr(beacon_payload(node)[-1])
+
+
+def heard_by(node: str) -> tuple:
+    """The Bluetooth links whose receiver is `node`, in nodes.json order."""
+    return tuple(link for link, e in LINKS.items() if e["rx"] == node and e["kind"] == "ble")
 
 # 20 ms interval in 0.625 ms units: 20 / 0.625 = 32 = 0x0020
 ADV_INTERVAL_HCI: int = 32
@@ -70,8 +89,6 @@ SETTLE_S = 1.0    # wait this long after the last outside change before setting 
 QUIET_S = 5.0     # no advert from anything for this long: the scan was stopped, set up again
 STATUS_S = 10.0   # one status line this often
 
-_MFR_DATA = bytes.fromhex("FFFF525353")
-_ADV_DATA = bytes([len(_MFR_DATA) + 1, 0xFF]) + _MFR_DATA
 
 
 def build_adv_params_params(interval: int = ADV_INTERVAL_HCI) -> bytes:
@@ -92,22 +109,23 @@ def build_adv_params_cmd() -> bytes:
     return hci.command_packet(LE_SET_ADV_PARAMS, build_adv_params_params())
 
 
-def build_adv_data_params() -> bytes:
+def build_adv_data_params(node: str = RX) -> bytes:
     """32 parameter bytes: length of significant data (7) + 31 padded data bytes."""
-    padded = _ADV_DATA + bytes(31 - len(_ADV_DATA))
-    return bytes([len(_ADV_DATA)]) + padded
+    payload = beacon_payload(node)
+    adv = bytes([len(payload) + 1, 0xFF]) + payload
+    return bytes([len(adv)]) + adv + bytes(31 - len(adv))
 
 
-def build_adv_data_cmd() -> bytes:
-    return hci.command_packet(LE_SET_ADV_DATA, build_adv_data_params())
+def build_adv_data_cmd(node: str = RX) -> bytes:
+    return hci.command_packet(LE_SET_ADV_DATA, build_adv_data_params(node))
 
 
 def build_adv_enable_cmd(enable: bool) -> bytes:
     return hci.command_packet(LE_SET_ADV_ENABLE, bytes([0x01 if enable else 0x00]))
 
 
-def start_advertising(dev: hci.Hci, interval: int = ADV_INTERVAL_HCI) -> int:
-    """Advertise beacon S. Returns the interval the controller took (0.625 ms units)."""
+def start_advertising(dev: hci.Hci, interval: int = ADV_INTERVAL_HCI, node: str = RX) -> int:
+    """Advertise this node's beacon. Returns the interval the controller took (0.625 ms units)."""
     dev.command(LE_SET_ADV_ENABLE, bytes([0x00]), check=False)
     try:
         dev.command(LE_SET_ADV_PARAMS, build_adv_params_params(interval))
@@ -115,11 +133,11 @@ def start_advertising(dev: hci.Hci, interval: int = ADV_INTERVAL_HCI) -> int:
         if e.status != INVALID_PARAMS or interval >= ADV_INTERVAL_4X_MIN:
             raise
         print(f"[pi.radio_node] this controller refuses a {interval * 0.625:.0f} ms advert interval; "
-              f"advertising every {ADV_INTERVAL_4X_MIN * 0.625:.0f} ms instead, so pi5 adverts/s will be lower",
+              f"advertising every {ADV_INTERVAL_4X_MIN * 0.625:.0f} ms instead, so {node} adverts/s will be lower",
               file=sys.stderr, flush=True)
         interval = ADV_INTERVAL_4X_MIN
         dev.command(LE_SET_ADV_PARAMS, build_adv_params_params(interval))
-    dev.command(LE_SET_ADV_DATA, build_adv_data_params())
+    dev.command(LE_SET_ADV_DATA, build_adv_data_params(node))
     dev.command(LE_SET_ADV_ENABLE, bytes([0x01]))
     return interval
 
@@ -148,8 +166,8 @@ class BusSender:
     and scanning, and the readings flow again as soon as the link is up.
     """
 
-    def __init__(self, sock: socket.socket, target: tuple[str, int]):
-        self._emit = make_bus_emitter(sock, target, rx=RX)
+    def __init__(self, sock: socket.socket, target: tuple[str, int], rx: str = RX):
+        self._emit = make_bus_emitter(sock, target, rx=rx)
         self.sent = self.failed = 0
         self.error: OSError | None = None
 
@@ -163,21 +181,21 @@ class BusSender:
 
 
 def set_up(dev: hci.Hci, scanner: BeaconScanner, interval: int = ADV_INTERVAL_HCI) -> int:
-    """Advertise beacon S and scan, from whatever state the controller is in. Returns the advert interval.
+    """Advertise this node's beacon and scan, from whatever state the controller is in. Returns the interval.
 
     Both turn themselves off first, because their parameters can't change while they're on.
     """
-    interval = start_advertising(dev, interval)
+    interval = start_advertising(dev, interval, scanner.rx)
     scanner.start()
     return interval
 
 
-PI_LINKS = (f"east>{RX}:ble", f"west>{RX}:ble")
+PI_LINKS = heard_by("pi5")
 
 
-def status_line(counts: dict, seconds: float, bus: BusSender, redone: int) -> str:
+def status_line(counts: dict, seconds: float, bus: BusSender, redone: int, links=PI_LINKS) -> str:
     """Rates and sends since the last status line; how often the controller was set up again since start."""
-    rates = ", ".join(f"{link} {counts.get(link, 0) / seconds:.1f}/s" for link in PI_LINKS)
+    rates = ", ".join(f"{link} {counts.get(link, 0) / seconds:.1f}/s" for link in links)
     line = f"[pi.radio_node] {rates}; sent {bus.sent}, not sent {bus.failed}"
     if bus.failed and bus.error is not None:
         line += f" ({bus.error.strerror or bus.error})"
@@ -186,11 +204,11 @@ def status_line(counts: dict, seconds: float, bus: BusSender, redone: int) -> st
     return line + f"; set up again {redone}x since start"
 
 
-def summary(seen: dict, windows: dict, seconds: float) -> str:
+def summary(seen: dict, windows: dict, seconds: float, links=PI_LINKS) -> str:
     """One line per Pi link for the Gate 2 table: readings, adverts/s over the run, the lowest and
     median 10 s rate (a beacon that slows down or drops out shows up here), and the median dBm."""
     lines = [f"{'link':<14} {'n':>6} {'adverts/s':>10} {'lowest 10s':>11} {'median 10s':>11} {'median dBm':>11}"]
-    for link in PI_LINKS:
+    for link in links:
         values, rates = seen.get(link, []), windows.get(link, [])
         low = f"{min(rates):.1f}" if rates else "__"
         mid = f"{statistics.median(rates):.1f}" if rates else "__"
@@ -201,8 +219,8 @@ def summary(seen: dict, windows: dict, seconds: float) -> str:
 
 def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
         seconds: float = 0, stop=lambda: False, seen=None, windows=None, bus_sock=None,
-        clock=time.monotonic, log=lambda line: print(line, file=sys.stderr, flush=True)) -> dict | None:
-    """Advertise beacon S and scan for east/west beacons, forwarding rssi to the board bus.
+        clock=time.monotonic, log=lambda line: print(line, file=sys.stderr, flush=True), node: str = RX) -> dict | None:
+    """Advertise `node`'s beacon and scan for the beacons it hears, forwarding rssi to the board bus.
 
     If given, `seen` is filled with {link: [dbm, ...]} and returned (the service passes none, so
     nothing piles up). If given, `windows` gets each Pi link's rate for every 10 s status line.
@@ -211,11 +229,12 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
     """
     own_sock = bus_sock is None
     bus_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if own_sock else bus_sock
-    bus = BusSender(bus_sock, (bus_host, bus_port))
+    bus = BusSender(bus_sock, (bus_host, bus_port), rx=node)
+    links = heard_by(node)
     scanner = None
     end = clock() + seconds if seconds else None
     try:
-        scanner = BeaconScanner(dev, rx=RX)
+        scanner = BeaconScanner(dev, rx=node)
         # The Pi advertises with the legacy commands, so its scan stays legacy too: the two
         # command families must not be mixed on one controller.
         scanner.ext = False
@@ -233,7 +252,7 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
             if packet:
                 if is_advert(packet):
                     last_advert, quiet_told = now, False
-                    for link, dbm in kept(packet, RX):
+                    for link, dbm in kept(packet, node):
                         bus(link, dbm)
                         if seen is not None:
                             seen.setdefault(link, []).append(dbm)
@@ -256,9 +275,9 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
                 last_advert = clock()
             if now - last_status >= STATUS_S:
                 if windows is not None:
-                    for link in PI_LINKS:
+                    for link in links:
                         windows.setdefault(link, []).append(counts.get(link, 0) / (now - last_status))
-                log(status_line(counts, now - last_status, bus, redone))
+                log(status_line(counts, now - last_status, bus, redone, links))
                 counts, last_status = {}, now
         return seen
     finally:
@@ -277,6 +296,8 @@ def main(argv=None) -> None:
     ap.add_argument("--dev", type=int, default=HCI_IDX, help="HCI device number (default: 0)")
     ap.add_argument("--seconds", type=float, default=0,
                     help="stop after this long and print a Gate 2 summary (0 = run until stopped)")
+    ap.add_argument("--node", choices=RADIO_NODES, default=RX,
+                    help="which Pi this is (default: RADIO_NODE from .env, else pi5)")
     args = ap.parse_args(argv)
     # Only a timed run keeps readings, for its summary; the service keeps nothing.
     seen, windows = ({}, {}) if args.seconds else (None, None)
@@ -285,13 +306,14 @@ def main(argv=None) -> None:
     dev = open_controller(args.dev)
 
     print(
-        f"[pi.radio_node] advertising beacon S, scanning on hci{args.dev}; "
+        f"[pi.radio_node] {args.node}: advertising beacon {beacon_letter(args.node)}, scanning on hci{args.dev}; "
         f"forwarding to {BUS_HOST}:{BUS_PORT}",
         file=sys.stderr, flush=True,
     )
     started = time.monotonic()
     try:
-        run(dev, bus_host=BUS_HOST, bus_port=BUS_PORT, seconds=args.seconds, seen=seen, windows=windows)
+        run(dev, bus_host=BUS_HOST, bus_port=BUS_PORT, seconds=args.seconds, seen=seen, windows=windows,
+            node=args.node)
     except KeyboardInterrupt:
         pass
     except hci.HciError as e:
@@ -302,7 +324,8 @@ def main(argv=None) -> None:
     finally:
         dev.close()
         if seen is not None:
-            print(summary(seen, windows, max(time.monotonic() - started, 1e-3)), file=sys.stderr)
+            print(summary(seen, windows, max(time.monotonic() - started, 1e-3), heard_by(args.node)),
+                  file=sys.stderr)
 
 
 if __name__ == "__main__":
