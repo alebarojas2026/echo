@@ -19,7 +19,7 @@ case "$1" in
     run)
         [ -z "$FAKE_BUILD_FAIL" ] || exit 1
         rm -rf dist && mkdir -p dist/assets
-        echo '<!doctype html><title>Radio Sight</title>' > dist/index.html
+        echo '<!doctype html><title>Echo</title>' > dist/index.html
         echo 'console.log(1)' > dist/assets/app.js ;;
 esac
 """

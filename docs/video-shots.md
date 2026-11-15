@@ -1,4 +1,4 @@
-# Radio Sight: Three-minute Video Shot List
+# Echo: Three-minute Video Shot List
 
 Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras during live sensing. The laptop shows the local interface; the phone is another local screen.
 
@@ -44,7 +44,7 @@ Use the one-spot kit: Arduino UNO Q and Pi A on the desk, Pi B across the gap at
 **Source:** Screen capture of the live local answer, source rows and proof, with a closing Desk view.
 **Picture:** Ask the prepared question, show its actual records, then completed proof tiles with their method. Finish on the UNO Q and disconnected cable; label any optional saved Replay as recorded.
 **Voiceover:** The room answers from its own records. We dug into a signal every building already has: taught by a camera, runs without one.
-**On screen:** `Local records` · `Measured proof` · `Radio Sight` · `MadHacks 2026` · `Qualcomm / N+1`.
+**On screen:** `Local records` · `Measured proof` · `Echo` · `MadHacks 2026` · `Qualcomm / N+1`.
 
 ## Editor's proof worksheet
 

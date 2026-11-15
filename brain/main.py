@@ -198,7 +198,7 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
 
 
 def main(argv=None) -> None:
-    ap = argparse.ArgumentParser(description="Radio Sight brain: live loop")
+    ap = argparse.ArgumentParser(description="Echo brain: live loop")
     ap.add_argument("--bus-port", type=int, default=5601, help="UDP port the bus forwards to")
     ap.add_argument("--bus", default=os.environ.get("BRAIN_BUS", "127.0.0.1:5600"),
                     help="host:port of the bus, where commands are passed on (or BRAIN_BUS)")

@@ -454,7 +454,7 @@ def parse_addr(text: str) -> tuple[str, int]:
 
 
 def main(argv=None) -> None:
-    ap = argparse.ArgumentParser(description="Radio Sight message bus and session recorder")
+    ap = argparse.ArgumentParser(description="Echo message bus and session recorder")
     ap.add_argument("--host", default="0.0.0.0", help="address to listen on")
     ap.add_argument("--port", type=int, default=5600)
     ap.add_argument("--forward", default="127.0.0.1:5601", help="where the brain listens")

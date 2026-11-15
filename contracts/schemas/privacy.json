@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/privacy.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/privacy.json",
   "$comment": "Section 11: the answer of GET /privacy. Not a bus message: no envelope. ok false carries no numbers: never a zero in place of an unknown.",
   "type": "object",
   "properties": {"ok": {"type": "boolean"}, "images": {"type": "integer", "minimum": 0}, "bytes_out": {"type": "integer", "minimum": 0},

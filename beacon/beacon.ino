@@ -1,4 +1,4 @@
-// Radio Sight Bluetooth beacon on a Seeed XIAO ESP32-S3 (CONTRACTS.md section 3, radio/nodes.json).
+// Echo Bluetooth beacon on a Seeed XIAO ESP32-S3 (CONTRACTS.md section 3, radio/nodes.json).
 //
 // The sketch drives the ESP32-S3's Bluetooth controller directly over its virtual HCI, with the same
 // commands radio/hci.py uses on the scanner side (Bluetooth Core spec, Vol 4 Part E, 7.8). No host stack

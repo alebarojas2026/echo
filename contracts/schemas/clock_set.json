@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/clock_set.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/clock_set.json",
   "$comment": "Section 12 (as proposed): the answer of POST /clock, whatever its status code. Not a bus message: no envelope. The request body is {\"t\": epoch ms}.",
   "type": "object",
   "properties": {"ok": {"type": "boolean"}, "diff_ms": {"type": "integer"}, "stepping": {"type": "boolean"}, "why": {"type": "string", "minLength": 1}},

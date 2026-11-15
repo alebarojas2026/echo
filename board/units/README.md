@@ -10,7 +10,7 @@ sudo board/deploy.sh --install           # once the Pi's hotspot and the Etherne
 ```
 Each run installs every unit, reloads systemd, enables them, and starts any that aren't running. It restarts only units whose file changed. Running it again is safe.
 
-Deploy waits up to 20 s for its required units, prints any failed Radio Sight
+Deploy waits up to 20 s for its required units, prints any failed Echo
 units, and runs the read-only `scripts/demo_check.py` against localhost on the
 board. Either failed check makes deploy exit non-zero. Pi roles check units only.
 The final line gives the running commit, the commit replaced, and the command to

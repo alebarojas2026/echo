@@ -1,4 +1,4 @@
-# Radio Sight: Wi-Fi that understands the room
+# Echo: Wi-Fi that understands the room
 
 **Taught by a camera. Runs without one.**
 
@@ -6,11 +6,11 @@
 
 Some places need to know someone is present without keeping a camera on them: patient rooms, bathrooms, study rooms and offices after hours. We wanted safety and after-hours security using the Wi-Fi already there, with a clear privacy boundary and a useful answer when the connection itself is blocked.
 
-We built Radio Sight at MadHacks 2026 for the Qualcomm / N+1 track and the theme “Let's Dig In.” We dug into the signal changes that an ordinary connection indicator hides.
+We built Echo at MadHacks 2026 for the Qualcomm / N+1 track and the theme “Let's Dig In.” We dug into the signal changes that an ordinary connection indicator hides.
 
 ## What it does
 
-Walk between two devices and the Wi-Fi signal gives you away. Radio Sight reports presence and movement in one spot from the Wi-Fi path between Pi A and Pi B; Bluetooth to the Arduino UNO Q gives a second opinion.
+Walk between two devices and the Wi-Fi signal gives you away. Echo reports presence and movement in one spot from the Wi-Fi path between Pi A and Pi B; Bluetooth to the Arduino UNO Q gives a second opinion.
 
 Most Wi-Fi sensing only sees movement. Ours sees you standing still. A temporary camera teaches the local model, then is unplugged; the radio keeps supplying the presence evidence. The prototype aims to distinguish person-vs-object patterns and movement from stillness, without identifying anyone or counting a crowd.
 
