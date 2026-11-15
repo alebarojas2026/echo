@@ -1,3 +1,4 @@
+import { spotMoment } from './spot-moment'
 import type { StateMsg } from '../room/contract'
 import { hudLayout, zoneName, zonePlace } from './layout'
 import { KIND_WORDS, type SecondKind } from './records'
@@ -10,6 +11,8 @@ export function judgeMoment(state: StateMsg | null, stale: boolean, layout = hud
   if (replayed && replayed !== 'record') return KIND_WORDS[replayed]
   if (!state || stale) return ['No data', 'Last update more than 1 s ago']
   if (state.health.status === 'blind') return ['Sensor blind', 'A radio link stopped. Alerts are paused']
+  const spot = spotMoment(state, layout)
+  if (spot) return spot
   // A dead zone is the moment while the board advises a move and measures it. An alert or an armed space comes first.
   const zone = state.alert?.state === 'check_on' || state.armed ? null : deadZone(state, false)
   if (zone) return [zone.headline, zone.detail]
