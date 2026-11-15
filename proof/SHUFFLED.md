@@ -28,7 +28,7 @@ How each is scored:
   trial and the 5 s after it. The space is armed for the whole run.
 - **Empty hour:** all false presence stretches (including brief blips), false intrusions, and per hour, over the length
   actually observed with known decisions. Gaps over 0.5 s and hidden predictions do not count as clean empty time.
-- A trial with incomplete or unknown state coverage is left out and counted as left out.
+- A trial with incomplete or unknown state coverage is left out and counted as left out. For a walk-through, coverage includes the five-second clearance when an alert may still arrive; missing that period never counts as "nothing".
 
 The wall between tuning and reporting: a recording is made as one or the other and keeps
 that role. `report` refuses a tuning recording, a recording that isn't live, and a file

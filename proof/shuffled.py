@@ -7,7 +7,8 @@
     python -m proof.shuffled report data/sessions/<session>.shuffled.jsonl         # never a tuning recording
 
 A trial run is 40 trials of 20 s in an order the person can't predict: 16 stand on the spot,
-12 empty, 12 walk through without stopping. Each is followed by 5 s to step away, not scored.
+12 empty, 12 walk through without stopping. Each is followed by 5 s to step away;
+walk-through alerts and their state coverage include these 5 s.
 The space is armed throughout, so a walk-through comes out as passed-by, intrusion or nothing.
 
 Everything is scored from the brain's own states and events, as this tool heard them on the
@@ -144,8 +145,9 @@ def score(header, rows):
     unheard = 0
     for tr in trials:
         t0, t1 = tr["t0"], tr["t1"]
-        spans = coverage(states, t0, t1)
-        if (not spans or spans[0][0]-t0 > MAX_GAP_MS or t1-spans[-1][1] > MAX_GAP_MS
+        observed_until = t1 + REST_S * 1000 if tr["kind"] == "walk" else t1
+        spans = coverage(states, t0, observed_until)
+        if (not spans or spans[0][0]-t0 > MAX_GAP_MS or observed_until-spans[-1][1] > MAX_GAP_MS
                 or any(a[1] != b[0] for a,b in zip(spans,spans[1:]))):
             unheard += 1
             continue
@@ -160,7 +162,7 @@ def score(header, rows):
             empty["false"] += int(bool(runs))
         else:
             walk["n"] += 1
-            kinds = {e["kind"] for e in events if t0 <= e["t"] < t1 + REST_S * 1000}
+            kinds = {e["kind"] for e in events if t0 <= e["t"] < observed_until}
             walk["intrusion" if "intrusion" in kinds else "passed_by" if "passed_by" in kinds else "nothing"] += 1
     secs = sorted(stand["seconds"])
     out.update(trials=len(trials), unheard_trials=unheard, stand=stand, empty=empty, walk=walk,
