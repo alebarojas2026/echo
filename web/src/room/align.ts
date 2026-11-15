@@ -11,6 +11,7 @@ import { roomShot, topShot, type RoomView } from './view'
 //   Q / E   turn it left / right: 1 degree (Shift: 15)
 //   + / -   scale it by 1%
 //   [ / ]   lower / raise the cut height by 5 cm
+//   PgUp / PgDn  raise / lower the model: 2 cm (Shift: one 0.156 m riser), for a square on a tier
 //   V       straight-down view, or back to the normal one
 //   S       save room.json
 // Hall beacons (devices.ts): Tab picks the next heard one (or a click on it); while one is picked the arrows move
@@ -24,6 +25,8 @@ const BIG_TURN_DEG = 15
 const SCALE_STEP = 1.01
 const CUT_STEP_M = 0.05
 const MIN_CUT_M = 0.2
+const FLOOR_STEP_M = 0.02
+const RISER_M = 0.156 // one step of the judging hall's tiers (HALL.md)
 
 const round = (v: number, places: number) => Number(v.toFixed(places))
 
@@ -36,6 +39,7 @@ export function tidyFit(fit: ScanFit): Required<ScanFit> {
     yaw_deg: round(yaw === -180 ? 180 : yaw, 1),
     scale: round(fit.scale && fit.scale > 0 ? fit.scale : 1, 3),
     cut_m: round(fit.cut_m ?? DEFAULT_CUT_M, 2),
+    floor_m: round(fit.floor_m ?? 0, 3),
   }
 }
 
@@ -57,6 +61,9 @@ export function nudge(fit: ScanFit, key: string, shift: boolean): Required<ScanF
     case '-': case '_': return tidyFit({ ...f, scale: f.scale / SCALE_STEP })
     case ']': case '}': return tidyFit({ ...f, cut_m: f.cut_m + CUT_STEP_M })
     case '[': case '{': return tidyFit({ ...f, cut_m: Math.max(MIN_CUT_M, f.cut_m - CUT_STEP_M) })
+    // floor_m is how far the model sits below our floor: PageDown lowers the model, PageUp raises it.
+    case 'PageDown': return tidyFit({ ...f, floor_m: f.floor_m + (shift ? RISER_M : FLOOR_STEP_M) })
+    case 'PageUp': return tidyFit({ ...f, floor_m: f.floor_m - (shift ? RISER_M : FLOOR_STEP_M) })
   }
   return null
 }
@@ -66,7 +73,7 @@ export function describeFit(fit: ScanFit): string {
   const f = tidyFit(fit)
   const signed = (v: number, places: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(places)}`
   const where = `East ${signed(f.offset_m[0], 2)} m · North ${signed(f.offset_m[1], 2)} m`
-  return `${where}\nTurn ${signed(f.yaw_deg, 1)}° · Scale ${f.scale.toFixed(3)} · Cut ${f.cut_m.toFixed(2)} m`
+  return `${where}\nTurn ${signed(f.yaw_deg, 1)}° · Scale ${f.scale.toFixed(3)} · Cut ${f.cut_m.toFixed(2)} m · Floor ${signed(-f.floor_m, 2)} m`
 }
 
 /** Draws everything under `root` except `skip` over whatever is in front of it (the scan). */
@@ -80,7 +87,11 @@ function drawOnTop(root: Object3D, skip: Object3D) {
 
 /** The body of the board's POST /layout (#532): the alignment and, when there are any, the hall beacons. */
 export function layoutBody(fit: ScanFit, beacons: { node: string; xyz_m: unknown }[] | undefined): string {
-  return JSON.stringify(beacons?.length ? { room: tidyFit(fit), hall_beacons: beacons } : { room: tidyFit(fit) })
+  // floor_m goes only when the square is on a tier (non-zero): the board's /layout takes the four alignment keys,
+  // so a desk on the front floor saves there as it always did.
+  const { floor_m, ...flat } = tidyFit(fit)
+  const room = floor_m ? { ...flat, floor_m } : flat
+  return JSON.stringify(beacons?.length ? { room, hall_beacons: beacons } : { room })
 }
 
 /** Saves the alignment and the hall beacons' spots where the page is served from: under `vite` into the repo's
@@ -123,7 +134,7 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
     return
   }
 
-  keys.innerHTML = 'Arrows move · Q E turn · + − scale<br>[ ] cut height · Shift for big steps<br>Tab picks a beacon · Esc lets go<br>V view from above · S save'
+  keys.innerHTML = 'Arrows move · Q E turn · + − scale<br>[ ] cut height · PgUp PgDn floor<br>Shift for big steps<br>Tab picks a beacon · Esc lets go<br>V view from above · S save'
   fitLine.textContent = describeFit(scan.fit)
   beacons?.startEditing(() => (beaconLine.textContent = beacons.describe()))
   drawOnTop(stage.group, stage.drawnRoom)

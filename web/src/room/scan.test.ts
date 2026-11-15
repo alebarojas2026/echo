@@ -22,6 +22,11 @@ describe('scan placement', () => {
     expect(p.cut).toBe(1.2)
     expect(placeScan([0, 0, 0], [1, 1, 1], { scale: -2 }).scale).toBe(1)
   })
+
+  it('lowers the model by floor_m, so a tier can be our floor', () => {
+    expect(placeScan([0, 0, 0], [2, 2, 2]).outer[1]).toBeCloseTo(-0.03)
+    expect(placeScan([0, 0, 0], [2, 2, 2], { floor_m: 0.312 }).outer[1]).toBeCloseTo(-0.342)
+  })
 })
 
 describe('which hall model to load', () => {
