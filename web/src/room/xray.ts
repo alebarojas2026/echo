@@ -1,6 +1,6 @@
 import { BufferGeometry, Color, DataTexture, Float32BufferAttribute, LinearFilter, Mesh, RGFormat, ShaderMaterial, UnsignedByteType } from 'three'
 import type { Xray } from './contract'
-import { SIZE_M, STRIP_M, toScene, type Vec3 } from './frame'
+import { SIZE_M, STRIP_M, deskEdge, toScene, type Vec3 } from './frame'
 import type { Mirror } from './mirror'
 import { OBJECT, PERSON, PERSON_HOT } from './palette'
 import { DESK_TOP_M, v3 } from './stage'
@@ -16,12 +16,14 @@ const LIFT_M = 0.002 // just above the surface it lies on
  * The surface the X-ray image lies on, for a grid from `origin` (contract metres) `size` metres across: the floor.
  * On the desk layout the part over the desk lies on the desk top instead, so the tray on the desk shows its
  * shadow there and not on the floor under the desk; past the desk's far edge there is nothing to draw on. One
- * texture across both, so the image is continuous from the strip onto the desk.
+ * texture across both, so the image is continuous from the strip onto the desk. When the spot stops short of the
+ * desk (the gate), the floor between them is left bare: an object at the desk's edge would otherwise throw half
+ * its mark onto the floor below, where it reads as a second object.
  */
 export function xrayGeometry(origin: [number, number], size: [number, number]): BufferGeometry {
   const [ox, oy] = origin
   const [sx, sy] = size
-  const fold = STRIP_M ? Math.min(Math.max(STRIP_M[1], oy), oy + sy) : oy + sy
+  const fold = STRIP_M ? Math.min(Math.max(deskEdge() ?? STRIP_M[1], oy), oy + sy) : oy + sy
   const top = STRIP_M ? Math.min(SIZE_M[1], oy + sy) : oy + sy
   const pos: number[] = []
   const uv: number[] = []
@@ -35,7 +37,7 @@ export function xrayGeometry(origin: [number, number], size: [number, number]): 
       uv.push((corners[i][0] - ox) / sx, (corners[i][1] - oy) / sy)
     }
   }
-  quad(oy, fold, LIFT_M)
+  quad(oy, STRIP_M ? Math.min(fold, Math.max(STRIP_M[1], oy)) : fold, LIFT_M)
   quad(fold, top, DESK_TOP_M + LIFT_M)
   const g = new BufferGeometry()
   g.setAttribute('position', new Float32BufferAttribute(pos, 3))

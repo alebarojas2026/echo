@@ -11,7 +11,7 @@ import { Fly, HallMarks, cutaway, hallShot, pinnedFraming } from './fly'
 import { Presence } from './ghost'
 import { HeardNodes } from './heard'
 import { Replay, rowAlert, rowPred, secondKind, type HistoryRow, type ReplayFrame } from './replay'
-import { NODES, SIZE_M, STRIP_M } from './frame'
+import { NODES, SIZE_M, STRIP_M, deviceAcross } from './frame'
 import { DEFAULT_CUT_M, loadScan, type Scan } from './scan'
 import { Mirror } from './mirror'
 import { RouterSpots } from './spots'
@@ -79,7 +79,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
         presence.setTrueSize(true)
         fly.setClose(inSituShot)
       }
-      fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M))
+      fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M, s.fit.yaw_deg ?? 0))
     })
     feed.onEvent((event) => event.kind === 'reset' && fly.reset())
     // The arrival screen (#552): while the HUD says "Nobody is here." the live hall shows under its words, dimmed
@@ -200,7 +200,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     alertMarks.update(state.alert)
     // The advice's words sit just south of the square, where the X-ray caption goes: one at a time.
     // In situ the aisle in front of the strip is the next row's desk: the X-ray's caption has no floor to sit on.
-    xray.update(state.xray, state.health?.status === 'blind', spots.tagShown || situ !== null)
+    xray.update(state.xray, state.health?.status === 'blind', spots.tagShown || situ !== null || deviceAcross())
     presence.update(state.pred, state.objects ?? [], state.xray)
     // Zone names follow the zones the figure shows (held), so one wrong decision never flashes a name.
     stage.markZones(presence.shownZones(), state.alert?.state === 'check_on' ? state.alert.zone : null)

@@ -1,4 +1,4 @@
-import { SIZE_M, STRIP_M } from './frame'
+import { SIZE_M, STRIP_M, deskEdge, deviceAcross } from './frame'
 import type { Scan, ScanFit } from './scan'
 
 // The hall model's desks (models/hall-desks.json, made from the hall builder's hall.json by
@@ -75,7 +75,9 @@ export function defaultSpot(h: HallDesks): DeskSpot {
   const rows = [...new Set(h.desks.map((d) => d.row))].sort((a, b) => a - b)
   const row = rows[Math.min(2, rows.length - 1)]
   const desk = h.desks.filter((d) => d.row === row).sort((a, b) => mid(a) - mid(b))[0]
-  return { desk, along: 0.5 }
+  // With a device across the spot (the gate, about 1 m deep) the default is the desk's end: the stair aisle has
+  // the room for it, where the gap between two rows does not, so nothing is ever drawn inside the next desk.
+  return deviceAcross() ? { desk, along: 0.5, gap: 'end' } : { desk, along: 0.5 }
 }
 
 const rad = (deg: number) => (deg * Math.PI) / 180
@@ -133,7 +135,8 @@ function frameAt(h: HallDesks, s: DeskSpot) {
  * bounding box (x and z), as placeScan centres it.
  */
 export function deskFit(h: HallDesks, spot: DeskSpot, box: { min: number[]; max: number[] }, cut_m: number): Required<ScanFit> {
-  const [sw, sh] = STRIP_M ?? SIZE_M
+  const [sw] = STRIP_M ?? SIZE_M
+  const sh = deskEdge() ?? SIZE_M[1] // the layout's y at our desk's edge: the strip's north edge, or past it
   const [fw, fh] = SIZE_M
   const { north, east, edge, floor_m } = frameAt(h, spot)
   // The layout's origin (the strip's aisle-side west corner) in the model.

@@ -35,3 +35,27 @@ export const DESK_LAYOUT = {
     ],
   },
 }
+
+// The gate: three devices and one spot (AGENTS.md "Right now"). The board and Pi A side by side at our desk's
+// edge, Pi B on a chair across the spot. One zone, no split; each link says whether it crosses the spot.
+export const GATE_LAYOUT = {
+  v: 2,
+  layout: 'gate',
+  frame: { units: 'm', size_m: [0.85, 1.35], strip_m: [0.8, 0.6] },
+  nodes: [
+    { id: 'unoq', name: 'Board', xyz_m: [0.44, 0.8, 0.75], roles: ['receiver'] },
+    { id: 'pi5', name: 'Pi A', xyz_m: [0.36, 0.8, 0.75], roles: ['router', 'beacon', 'receiver'] },
+    { id: 'pi5b', name: 'Pi B', xyz_m: [0.4, -0.2, 0.75], roles: ['beacon', 'receiver'] },
+  ],
+  links: ['pi5>unoq:wifi', 'pi5>unoq:ble', 'pi5b>unoq:ble', 'pi5>pi5b:wifi', 'pi5>pi5b:ble', 'pi5b>pi5:ble'].map((id) => {
+    const [, tx, rx, kind] = /^(\w+)>(\w+):(\w+)$/.exec(id)!
+    return { id, tx, rx, kind, expected_hz: null, crosses_spot: tx === 'pi5b' || rx === 'pi5b' }
+  }),
+  zones: [{ id: 1, name: 'At the desk', centre_m: [0.4, 0.3], still_alert_s: 10 }],
+  router_spots: [
+    { id: 'S-home', xyz_m: [0.36, 0.8, 0.75] },
+    { id: 'S-W30', xyz_m: [0.06, 0.8, 0.75] },
+    { id: 'S-E30', xyz_m: [0.66, 0.8, 0.75] },
+  ],
+  tray_spots: [{ id: 'T1', xyz_m: [0.48, 0.8, 0.75] }],
+}

@@ -2,8 +2,9 @@
 // Contract frame: metres, origin at the layout's south-west corner, x east, y north, z up.
 // Scene frame (three.js): y up, the layout's rectangle centred on the origin, north towards -z.
 //
-// Two layouts read the same way: the 2 x 2 m square (four zones in quarters) and the desk (a 1.6 x 0.6 m strip in
-// front of a desk, split into two zones at zone_split_x_m). The built-in values below are the square, used only
+// Every layout reads the same way: the 2 x 2 m square (four zones in quarters), the desk (a strip in front of a
+// desk, split into two zones at zone_split_x_m), and the gate (a strip that is one spot: one zone, no split, with
+// a device across it from the desk). The file decides which; the built-in values below are the square, used only
 // when /nodes.json can't be read.
 
 export type Vec3 = [number, number, number]
@@ -13,8 +14,26 @@ export type NodeId = string
 export let SIZE_M: [number, number] = [2.0, 2.0]
 /** The strip a person stands in, [east, north] from the origin, or null on the square (the whole square). */
 export let STRIP_M: [number, number] | null = null
-/** Where the strip's two zones meet (x, metres), or null on the square. */
+/** Where the strip's two zones meet (x, metres), or null on the square and on a strip that is one spot. */
 export let ZONE_SPLIT_X_M: number | null = null
+/** frame.desk_edge_y_m, when the file gives it: where our desk begins (deskEdge). */
+let DESK_EDGE_Y_M: number | null = null
+/** links[].crosses_spot, for the links whose entry says: whether the link's path crosses where a person stands. */
+export const LINK_CROSSES: Record<string, boolean> = {}
+
+/**
+ * Where our desk begins: the y of its edge on the standing side, or null on the square. The file's own
+ * frame.desk_edge_y_m when it has one; else the nearest device behind the strip (devices stand at the edge);
+ * else the strip's north edge. On the desk layout that is the strip's north edge; on the gate the spot stops
+ * short of the desk.
+ */
+export function deskEdge(): number | null {
+  if (!STRIP_M) return null
+  if (DESK_EDGE_Y_M !== null) return DESK_EDGE_Y_M
+  const depth = STRIP_M[1]
+  const behind = Object.values(NODES).map((n) => n.xyz[1]).filter((y) => y >= depth - 0.01)
+  return behind.length ? Math.max(depth, Math.min(...behind)) : depth
+}
 
 export interface NodeInfo {
   id: NodeId
@@ -102,12 +121,13 @@ export function floorSize(): [number, number] {
 
 /**
  * Zone id from a contract floor point, 0 when it is outside every zone.
- * Strip: 1 + (x >= split) inside the strip. Square: 1 + (x >= half) + 2 * (y < half).
+ * Strip: 1 + (x >= split) inside the strip, or its one zone when it has no split. Square: 1 + (x >= half) +
+ * 2 * (y < half).
  */
 export function zoneAt(x: number, y: number): number {
-  if (STRIP_M && ZONE_SPLIT_X_M !== null) {
+  if (STRIP_M) {
     if (x < 0 || x > STRIP_M[0] || y < 0 || y > STRIP_M[1]) return 0
-    return 1 + (x >= ZONE_SPLIT_X_M ? 1 : 0)
+    return ZONE_SPLIT_X_M === null ? (ZONES[0]?.id ?? 0) : 1 + (x >= ZONE_SPLIT_X_M ? 1 : 0)
   }
   return 1 + (x >= SIZE_M[0] / 2 ? 1 : 0) + 2 * (y < SIZE_M[1] / 2 ? 1 : 0)
 }
@@ -115,8 +135,9 @@ export function zoneAt(x: number, y: number): number {
 /** A zone's floor rectangle [x0, y0, x1, y1] in contract metres, or null for 0 and unknown ids. */
 export function zoneRect(zone: number): [number, number, number, number] | null {
   if (!ZONES.some((z) => z.id === zone)) return null
-  if (STRIP_M && ZONE_SPLIT_X_M !== null) {
+  if (STRIP_M) {
     const [w, h] = STRIP_M
+    if (ZONE_SPLIT_X_M === null) return [0, 0, w, h] // one spot: the whole strip
     return zone === 1 ? [0, 0, ZONE_SPLIT_X_M, h] : [ZONE_SPLIT_X_M, 0, w, h]
   }
   const [w, h] = SIZE_M
@@ -133,21 +154,52 @@ export function zoneCenter(zone: number): [number, number] | null {
   return r ? [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2] : null
 }
 
+/** Whether a device stands across the spot from the desk (the gate's Pi B on its chair, south of the floor a
+ *  person stands on). The close view is then seen from the south-west (view.ts, sideOnDeg), so the person between
+ *  the two ends hides neither. */
+export function deviceAcross(): boolean {
+  return !!STRIP_M && Object.values(NODES).some((n) => n.xyz[1] < -0.01)
+}
+
+/** A zone's name as the room writes it: its number and name, or the name alone when the layout is one spot. */
+export function zoneWords(zone: number): string {
+  const info = ZONES.find((z) => z.id === zone)
+  return !info ? '' : ZONES.length === 1 ? info.name : `${info.id} ${info.name}`
+}
+
 /** Which way a zone faces out: east or west of the layout's middle, north or south of it. */
 export function zoneSide(zone: number): { east: boolean; north: boolean } {
   const [x, y] = zoneCenter(zone) ?? [0, 0]
   return { east: x > SIZE_M[0] / 2, north: y > SIZE_M[1] / 2 }
 }
 
-export type LabelSide = 'above' | 'right' | 'left' | 'below-right' | 'below-left'
+export type LabelSide = 'above' | 'above-left' | 'above-right' | 'right' | 'left' | 'below-right' | 'below-left'
 
 /** Which side of its head a node's name goes. On the square: outward at the east and west edges, above at the
- *  north edge (the UNO Q), else to the right. On the desk the names take no room beside the strip: a device on the
- *  desk has its name above it, and a beacon out over the aisle has it just below, reading inward from its stand
- *  (every link from it runs up toward the desk, and its stand runs down). */
+ *  north edge (the UNO Q), else to the right. On the desk the names take no room beside the strip and stay on the
+ *  side away from the person (see below). */
+/** Devices nearer than this share the room above them: their names would overlap. */
+const CLOSE_M = 0.25
+
 export function nodeLabelSide(id: NodeId): LabelSide {
   const [x, y] = NODES[id]?.xyz ?? [0, 0, 0]
-  if (STRIP_M) return y >= STRIP_M[1] - 0.01 ? 'above' : x < SIZE_M[0] / 2 ? 'below-right' : 'below-left'
+  if (STRIP_M) {
+    // Names never go between a device and the person: above a device on our desk. Two devices side by side (the
+    // board and the router) read outward from each other instead of landing on one another.
+    const beside = Object.values(NODES).find((n) => n.id !== id && Math.abs(n.xyz[1] - y) < CLOSE_M && Math.abs(n.xyz[0] - x) < CLOSE_M)
+    const west = !!beside && (x < beside.xyz[0] || (x === beside.xyz[0] && id < beside.id))
+    if (deviceAcross()) {
+      // Seen from the south-west, the person stands between the desk's devices (up and left of them on the
+      // screen) and the device across (down and right of them). Each name goes on its device's far side from the
+      // person: to the right of the one across, and to the left of the ones on the desk, the western of a pair
+      // level with its device and the eastern above its own.
+      if (y < 0) return 'right'
+      if (y >= STRIP_M[1] - 0.01) return west ? 'left' : 'above-left'
+    }
+    if (y >= STRIP_M[1] - 0.01) return !beside ? 'above' : west ? 'above-left' : 'above-right'
+    // A beacon at the strip's end, level with the person: just below it, reading inward from its stand.
+    return x < SIZE_M[0] / 2 ? 'below-right' : 'below-left'
+  }
   if (x <= 0.05) return 'left'
   if (x >= SIZE_M[0] - 0.05) return 'right'
   return y >= SIZE_M[1] - 0.05 ? 'above' : 'right'
@@ -159,6 +211,8 @@ export function nodeLabelSide(id: NodeId): LabelSide {
  *  room beside the strip. */
 export function alertWordAt(zone: number): [Vec3, 'west' | 'east' | 'south'] {
   const [x0, y0, x1, y1] = zoneRect(zone) ?? [0, 0, 0, 0]
+  // One spot seen from the south-west: under its near corner, clear of the person and of the device across.
+  if (STRIP_M && deviceAcross()) return [[x0 - 0.04, y0 - 0.04, 0], 'south']
   if (STRIP_M) return [[(x0 + x1) / 2, -0.06, 0], 'south']
   const { east, north } = zoneSide(zone)
   return [[east ? floorSize()[0] + 0.08 : -0.08, north ? y1 - 0.2 : y0 + 0.2, 0], east ? 'east' : 'west']
@@ -199,7 +253,8 @@ export function applyLayout(json: unknown): boolean {
   const strip = frame.strip_m === undefined || frame.strip_m === null ? null : frame.strip_m
   if (strip !== null && !isPair(strip, 0.1, 10)) return false
   const split = typeof frame.zone_split_x_m === 'number' ? frame.zone_split_x_m : null
-  if (strip && (split === null || split <= 0 || split >= strip[0])) return false
+  const edgeY = frame.desk_edge_y_m
+  const edge = strip && typeof edgeY === 'number' && edgeY >= strip[1] && edgeY <= size[1] ? edgeY : null
 
   const nodes: NodeInfo[] = []
   for (const n of j.nodes as Json[]) {
@@ -212,10 +267,12 @@ export function applyLayout(json: unknown): boolean {
   const ids = new Set(nodes.map((n) => n.id))
 
   const links: string[] = []
+  const crosses: Record<string, boolean> = {}
   for (const l of Array.isArray(j.links) ? (j.links as Json[]) : []) {
     const m = typeof l?.id === 'string' ? /^([a-z0-9]+)>([a-z0-9]+):([a-z0-9]+)$/.exec(l.id) : null
     if (!m || !ids.has(m[1]) || !ids.has(m[2])) return false
     links.push(l.id as string)
+    if (typeof l.crosses_spot === 'boolean') crosses[l.id as string] = l.crosses_spot
   }
   if (!links.length) return false
 
@@ -225,7 +282,10 @@ export function applyLayout(json: unknown): boolean {
     const c = z.centre_m
     zones.push({ id: z.id, name: z.name.trim(), centre: isPair(c, -10, 10) ? c : null })
   }
-  if (zones.length !== (strip ? 2 : 4)) return false
+  // A strip is one spot (one zone, no split) or two zones that meet at the split; the square has four.
+  const oneSpot = !!strip && zones.length === 1
+  if (strip && !oneSpot && (zones.length !== 2 || split === null || split <= 0 || split >= strip[0])) return false
+  if (!strip && zones.length !== 4) return false
 
   const spots = (Array.isArray(j.router_spots) ? (j.router_spots as Json[]) : []).filter(
     (r): r is { id: string; xyz_m: Vec3 } => typeof r?.id === 'string' && isVec3(r.xyz_m),
@@ -239,7 +299,10 @@ export function applyLayout(json: unknown): boolean {
 
   SIZE_M = [size[0], size[1]]
   STRIP_M = strip ? [strip[0], strip[1]] : null
-  ZONE_SPLIT_X_M = strip ? split : null
+  ZONE_SPLIT_X_M = strip && !oneSpot ? split : null
+  DESK_EDGE_Y_M = edge
+  for (const k of Object.keys(LINK_CROSSES)) delete LINK_CROSSES[k]
+  Object.assign(LINK_CROSSES, crosses)
   for (const k of Object.keys(NODES)) delete NODES[k]
   for (const n of nodes) NODES[n.id] = n
   replace(LINK_IDS, links)
