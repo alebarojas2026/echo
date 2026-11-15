@@ -87,7 +87,23 @@ def keeps(seed: str, para: str) -> bool:
     for side in ("left", "right"):
         if (side in s) != (side in p) and not (side == "right" and "right now" in s):
             return False
+    if not p.isascii():   # the board's box is for English; other languages are another test
+        return False
+    times = r"\d+|\b(?:since|hour|hours|minute|minutes|min|mins|today|day|now|ago|recently|lately|afternoon|noon)\b"
+    if set(re.findall(times, p)) - set(re.findall(times, s)):   # no time the seed didn't name
+        return False
     return 3 <= len(p) <= 200
+
+
+def refilter():
+    """Apply keeps() again to the saved paraphrases (python -m lab.ask_bench.modal_paraphrase)."""
+    seeds = {json.loads(l)["id"]: json.loads(l)["q"] for l in open(OUT / "questions.jsonl", encoding="utf-8")}
+    rows = [json.loads(l) for l in open(OUT / "paraphrases.jsonl", encoding="utf-8")]
+    kept = [r for r in rows if keeps(seeds[r["seed"]], r["q"])]
+    with open(OUT / "paraphrases.jsonl", "w", encoding="utf-8") as f:
+        for r in kept:
+            f.write(json.dumps(r) + "\n")
+    print(f"kept {len(kept)} of {len(rows)}")
 
 
 @app.local_entrypoint()
@@ -124,3 +140,7 @@ def main(n: int = 260, seed: int = 11):
         for r in out:
             f.write(json.dumps(r) + "\n")
     print(f"{res['version']}, {MODEL}: kept {len(out)}, dropped {dropped}")
+
+
+if __name__ == "__main__":
+    refilter()
