@@ -24,6 +24,9 @@ export const FLY_MS = 3000
 const FIRST_LOOK_MS = 1200
 /** On reset, how long the camera stays on the hall before flying back. */
 const RESET_HOLD_MS = 2000
+/** While the arrival screen waits (#552), the hall shot drifts east and west this far, about once a minute. */
+const DRIFT_M = 1.5
+const DRIFT_PERIOD_MS = 60_000
 const HALL_ELEV_DEG = 40
 /** The hall's floor plan fills a little more than the view, so empty corners don't shrink it. */
 const HALL_FILL = 0.8
@@ -75,6 +78,9 @@ export class Fly {
   private legs: Leg[] = []
   private from: Shot
   private elapsed = 0
+  /** The arrival screen is up ("Nobody is here."): rest on the hall, drifting, until it says found. */
+  private holding = false
+  private driftMs = 0
   private readonly reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
   constructor(
@@ -91,12 +97,31 @@ export class Fly {
     return roomShot(...this.view.size)
   }
 
-  /** The hall is known (its scan has loaded): show it, then fly down unless a framing is pinned. */
+  /** The hall is known (its scan has loaded): show it, then fly down unless a framing is pinned or the arrival
+   *  screen is waiting (then it rests on the hall until arrive()). */
   setHall(hall: Shot) {
     this.hall = hall
     if (this.pinned) return this.cut(this.pinned)
     this.cut('hall')
+    if (this.holding) return
     this.legs = this.reduced ? [{ to: 'square', waitMs: 0 }] : [{ to: 'square', waitMs: FIRST_LOOK_MS }]
+    this.begin()
+  }
+
+  /** The arrival screen is up (#552 "waiting"): rest on the whole hall, drifting very slowly, until arrive(). */
+  hold() {
+    this.holding = true
+    this.driftMs = 0
+    if (this.hall && !this.pinned) this.cut('hall')
+    this.view.requestRender()
+  }
+
+  /** Someone was found, or the arrival screen closed: fly from wherever the camera is down to the floor. */
+  arrive() {
+    if (!this.holding) return
+    this.holding = false
+    if (!this.hall || this.pinned) return
+    this.legs = [{ to: 'square', waitMs: 0 }]
     this.begin()
   }
 
@@ -150,7 +175,7 @@ export class Fly {
 
   private step(dt: number): boolean {
     const leg = this.legs[0]
-    if (!leg) return false
+    if (!leg) return this.drift(dt)
     this.elapsed += dt
     const u = (this.elapsed - leg.waitMs) / FLY_MS
     if (u <= 0) return true
@@ -161,6 +186,16 @@ export class Fly {
     this.from = this.shot
     this.elapsed = 0
     return this.legs.length > 0
+  }
+
+  /** While the arrival screen waits: the hall shot glides east and west, about once a minute, north up throughout.
+   *  Not when pinned or under reduced motion. Returns true while it drifts (the room keeps drawing). */
+  private drift(dt: number): boolean {
+    if (!this.holding || !this.hall || this.pinned || this.reduced) return false
+    this.driftMs += dt
+    const x = DRIFT_M * Math.sin((2 * Math.PI * this.driftMs) / DRIFT_PERIOD_MS)
+    this.show({ ...this.hall, target: this.hall.target.clone().add(new Vector3(x, 0, 0)) })
+    return true
   }
 }
 

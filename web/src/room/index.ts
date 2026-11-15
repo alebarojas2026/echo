@@ -50,6 +50,19 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   } else {
     void scan.then((s) => s && fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M)))
     feed.onEvent((event) => event.kind === 'reset' && fly.reset())
+    // The arrival screen (#552): while the HUD says "Nobody is here." the live hall shows under its words, dimmed
+    // and drifting; "found" (or "closed") lifts the dim and flies down to the floor. The HUD sends window event
+    // 'hud:arrival' {state: 'waiting' | 'found' | 'closed'} and keeps the latest on <html data-hud-arrival>, so a
+    // state set before the room was ready still counts. With neither, the room flies down on load as before.
+    const arrival = (state: unknown) => {
+      if (state !== 'waiting' && state !== 'found' && state !== 'closed') return
+      host.classList.toggle('room--arrival', state === 'waiting')
+      host.dataset.arrival = state
+      if (state === 'waiting') fly.hold()
+      else fly.arrive()
+    }
+    window.addEventListener('hud:arrival', (e) => arrival((e as CustomEvent<{ state?: string }>).detail?.state))
+    arrival(document.documentElement.dataset.hudArrival)
     document.addEventListener('keydown', (event) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
       if ((event.target as HTMLElement | null)?.closest?.('input,select,textarea,[contenteditable]')) return
