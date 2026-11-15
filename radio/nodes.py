@@ -9,9 +9,12 @@ whose tx is one of the optional hall beacons (H and J, issue #358), heard by any
 nodes.json; they are in HALL_LINKS. A scanner forwards the links in HEARD, which is both.
 """
 import json
+import os
 from pathlib import Path
 
-PATH = Path(__file__).with_name("nodes.json")
+# RADIO_SIGHT_NODES names another layout file, as it does for the brain (the tests pin one, so they don't
+# change with the room). Unset, it is radio/nodes.json.
+PATH = Path(os.environ.get("RADIO_SIGHT_NODES") or Path(__file__).with_name("nodes.json"))
 DOC = json.loads(PATH.read_text(encoding="utf-8"))
 
 # link id -> the link entry from nodes.json

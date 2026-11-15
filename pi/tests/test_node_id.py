@@ -83,4 +83,5 @@ def test_pi_check_still_reads_pi_a_status_line_with_pi_b_in_it(two_pis):
     line = radio_node.status_line({"east>pi5:ble": 200, "west>pi5:ble": 190, "pi5b>pi5:ble": 300}, 10.0, bus, 0,
                                   radio_node.heard_by("pi5"))
     m = check.STATUS.search(line)
-    assert m and (m["east"], m["west"], m["failed"]) == ("20.0", "19.0", "0")
+    assert m and m["failed"] == "0"
+    assert check.LINK_RATE.findall(m["rates"]) == [("east>pi5:ble", "20.0"), ("west>pi5:ble", "19.0"), ("pi5b>pi5:ble", "30.0")]
