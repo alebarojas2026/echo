@@ -29,6 +29,15 @@ The project currently uses these third-party packages. An entry marked `Not pinn
 
 As implementation dependencies land, this table should list every direct third-party library with its declared version, license, project link, and the Echo module that uses it. The checked-in manifest in each module remains the source of truth.
 
+## Typefaces
+
+The screens use two typefaces. Both files are served from the board itself, in `web/src/hud/fonts/`, each beside its licence text; no page asks an outside host for a font.
+
+| Typeface | Weights | License | Role | Used by | Project link |
+|---|---|---|---|---|---|
+| Poppins | 400, 500, 600 | SIL Open Font License 1.1 | All text | `web/` | [Poppins](https://fonts.google.com/specimen/Poppins) |
+| Tenor Sans | 400 | SIL Open Font License 1.1 | Titles | `web/` | [Tenor Sans](https://fonts.google.com/specimen/Tenor+Sans) |
+
 ## Research
 
 Echo is built on the physics behind radio tomographic imaging, on a single link: a body in the path of a wireless link weakens the received signal.

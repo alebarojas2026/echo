@@ -154,7 +154,7 @@ export function reserveBottom(px: number) {
 }
 const NAME_PX = 28 // room-label--node, and the no-movement word
 const LINE_PX = 31
-const CHAR_EM = 0.56 // Hanken Grotesk's average letter width at 600
+const CHAR_EM = 0.56 // the text face's average letter width at 600 (0.54 measured), with a little room
 const XRAY_CAPTION_PX = 520
 
 /** A point that must be on the canvas, with the words around it: pixels to its left, right, above and below. */

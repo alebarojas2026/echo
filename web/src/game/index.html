@@ -7,14 +7,14 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="../room/room.css">
     <style>
-      /* Colours come from the shared tokens in room.css (AGENTS.md Style); each one always has a word.
+      /* Colours and the two typefaces come from the shared tokens by way of room.css (AGENTS.md Style); each colour
+         always has a word.
          Everything a player reads is at least 28 px (1.75rem). */
-      @font-face { font-family: 'Hanken Grotesk'; src: url('../hud/fonts/hanken-grotesk.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
       * { box-sizing: border-box; }
       html, body { min-height: 100%; }
       body {
         margin: 0; background: var(--bg); color: var(--text);
-        font: 1.75rem/1.3 'Hanken Grotesk', system-ui, sans-serif;
+        font: 1.75rem/1.3 var(--font-text);
       }
       main {
         min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -24,13 +24,13 @@
       .status { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin: 0 0 2rem; }
       .badge {
         padding: .15rem .75rem; border: 2px solid var(--edge); border-radius: .4rem;
-        font-weight: 700; letter-spacing: .06em;
+        font-weight: 600; letter-spacing: .06em;
       }
       .status[data-kind='off'] .badge { color: var(--text-2); border-style: dashed; }
       .status[data-kind='fault'] .badge { color: var(--fault); border-color: var(--fault); }
       .status[data-kind='practice'] .badge { color: var(--text-2); }
       .cam { color: var(--text-2); }
-      h1 { margin: 0; font-size: clamp(3.5rem, 4.4vw, 5.25rem); font-weight: 600; line-height: 1.05; letter-spacing: -0.01em; text-wrap: balance; }
+      h1 { margin: 0; font-family: var(--font-title); font-size: clamp(3.5rem, 4.4vw, 5.25rem); font-weight: var(--title-weight); font-synthesis: none; line-height: 1.05; letter-spacing: -0.01em; text-wrap: balance; }
       .note { margin: 1rem 0 2.5rem; color: var(--text-2); min-height: 2.3rem; }
       .tally { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 0; }
       .count { padding: 1.25rem 1.5rem; background: var(--floor); border: 2px solid var(--edge); border-radius: .75rem; }
