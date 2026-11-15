@@ -3,12 +3,17 @@
     python3 -m radio.check                # on the board, from the repo, no sudo
     python3 -m radio.check --seconds 10   # a longer link capture
 
-One line per check, `ok` or `FAIL` with what to do, and exit 1 if anything failed. It prints no
+One line per check, `ok` or `FAIL` with what to do, then one last line for the board's whole
+radio side: `all ok (N links)` or how many checks failed (exit 1). The links are every link in
+radio/nodes.json, Pi B's too: they all reach the bus. Once the brain has a baseline
+(data/sessions/baseline.json), each link must reach 0.4 x the rate the baseline counted on it,
+the brain's own stale rule; before that, the gates' rates. It prints no
 BSSID, MAC or address other than the contract's (CONTRACTS.md section 2), so the output can go on
 an issue. The link check has the bus record a few seconds (radio.link_stats), so it's skipped
 while another recording is open: a capture would end it.
 """
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -100,7 +105,28 @@ def check_services(run=sh):
     return True, "services: " + ", ".join(UNITS) + " active"
 
 
-def check_links(seconds: float, capture=link_stats.capture, sessions=link_stats.SESSIONS, sleep=time.sleep):
+STALE_FRAC = 0.4  # CONTRACTS.md section 6: a link is stale when its rate is < 0.4 x expected_hz
+
+
+def baseline_rates(path) -> dict:
+    """{link: expected_hz} from the brain's data/sessions/baseline.json; {} when there's none yet."""
+    try:
+        links = json.loads(Path(path).read_text(encoding="utf-8"))["links"]
+        return {link: float(v["expected_hz"]) for link, v in links.items()
+                if isinstance(v, dict) and isinstance(v.get("expected_hz"), (int, float)) and v["expected_hz"] > 0}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+def floor_hz(link_id: str, expected: dict) -> float:
+    """The lowest healthy rate: 0.4 x what the baseline saw on this link (the brain's stale rule),
+    or the gate rate before there is a baseline."""
+    return STALE_FRAC * expected[link_id] if link_id in expected else gate_hz(link_id)
+
+
+def check_links(seconds: float, capture=link_stats.capture, sessions=link_stats.SESSIONS, sleep=time.sleep,
+                expected=None):
+    expected = baseline_rates(Path(sessions) / "baseline.json") if expected is None else expected
     busy = link_stats.open_recording(sessions)
     if busy:
         return False, f"links: not checked, the bus is recording {busy}; see journalctl -u radio-sight-bus"
@@ -119,12 +145,16 @@ def check_links(seconds: float, capture=link_stats.capture, sessions=link_stats.
     silent = [link for link in LINKS if link not in by_link]
     if silent:
         return False, f"links: nothing from {', '.join(silent)}" + (f" (flowing: {rates})" if rates else "")
-    slow = [f"{link} under {gate_hz(link):g}/s" for link in LINKS if len(by_link[link]) / seconds < gate_hz(link)]
+    slow = [link for link in LINKS if len(by_link[link]) / seconds < floor_hz(link, expected)]
     if slow:
         hint = (" (Wi-Fi: journalctl -u radio-sight-wifi-rssi for the ping)"
-                if any(LINKS[s.split(" ")[0]]["kind"] == "wifi" for s in slow) else "")
-        return False, f"links: {', '.join(slow)}, the gates' rates{hint}; {rates}"
-    return True, f"links: {rates}"
+                if any(LINKS[link]["kind"] == "wifi" for link in slow) else "")
+        stale = [f"{link} under {floor_hz(link, expected):.1f}/s" for link in slow if link in expected]
+        gate = [f"{link} under {gate_hz(link):g}/s" for link in slow if link not in expected]
+        said = ([f"{', '.join(stale)}, stale (0.4 x the baseline's rate)"] if stale else []) + \
+               ([f"{', '.join(gate)}, the gates' rates"] if gate else [])
+        return False, f"links: {'; '.join(said)}{hint}; {rates}"
+    return True, f"links: {rates}" + (" (judged against the baseline's rates)" if expected else "")
 
 
 def main(argv=None) -> None:
@@ -138,7 +168,10 @@ def main(argv=None) -> None:
                check_services(), check_links(args.seconds)]
     for ok, text in results:
         print(f"{'ok  ' if ok else 'FAIL'}  {text}")
-    if not all(ok for ok, _ in results):
+    failed = sum(not ok for ok, _ in results)
+    # The one line to read: the board's whole radio side, every link in radio/nodes.json.
+    print(f"all ok ({len(LINKS)} links)" if not failed else f"{failed} failed")
+    if failed:
         sys.exit(1)
 
 
