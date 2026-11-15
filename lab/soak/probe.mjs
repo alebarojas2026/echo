@@ -43,7 +43,10 @@ out({ kind: 'start', url, gl })
 
 const read = () => page.evaluate(() => {
   const q = (id) => document.querySelector(`[data-testid="${id}"]`)
-  const shown = (id) => { const el = q(id); return !!el && !el.hidden }
+  // Shown = some element with that test id is visible and says something (works for a hidden
+  // attribute and for a word that is set and cleared).
+  const shown = (id) => [...document.querySelectorAll(`[data-testid="${id}"]`)]
+    .some((el) => el.checkVisibility() && el.textContent.trim() !== '')
   const text = (id) => (q(id)?.textContent ?? null)
   const s = window.__soak
   return {

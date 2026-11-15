@@ -75,7 +75,7 @@ class Procs:
             "bus": [PY, "-m", "bus", "--host", "127.0.0.1", "--port", str(BUS), "--forward", f"127.0.0.1:{BRAIN_IN}",
                     "--sessions", str(out / "sessions")],
             "brain": [PY, "-m", "brain.main", "--bus-port", str(BRAIN_IN), "--ws-port", str(WS), "--ws-host", "127.0.0.1",
-                      "--mode-file", str(out / "label_mode")],
+                      "--mode-file", str(out / "label_mode"), "--sessions", str(out / "sessions")],
             "narrator": [PY, "-m", "narrator.narrate", "--llm", "http://127.0.0.1:9", "--bus", f"127.0.0.1:{BUS}"],
             "web": [PY, "board/serve.py", "--host", "127.0.0.1", "--port", str(WEB)],
             "probe": ["node", str(HERE / "probe.mjs"), f"http://127.0.0.1:{WEB}/?src=ws"] + ([chrome] if chrome else []),
@@ -321,7 +321,7 @@ def driver(run, ctx, mon, need):
         i += 1
 
 
-def chaos(run, ctx, mon, procs, proxy, need, every_s, record_min):
+def chaos(run, ctx, mon, procs, proxy, need, every_s, record_min, order=CHAOS):
     while ctx.training or need.is_set():
         time.sleep(1)
     rec_until = now() + record_min * 60
@@ -335,7 +335,7 @@ def chaos(run, ctx, mon, procs, proxy, need, every_s, record_min):
                 rec_until = None
             if run.stop.wait(1):
                 return
-        action = CHAOS[n % len(CHAOS)]
+        action = order[n % len(order)]
         ctx.chaos, t0 = action, now()
         rec = {"kind": "chaos", "action": action, "start": round(t0, 3), "path": ctx.path}
         if action == "packets":
@@ -344,7 +344,7 @@ def chaos(run, ctx, mon, procs, proxy, need, every_s, record_min):
             after = proxy(packets=[0, 0, 0])
             rec["proxy"] = {k: after.get(k, 0) - v for k, v in before.items()}
         elif action == "silence":
-            link = LINKS[(n // len(CHAOS)) % len(LINKS)]
+            link = LINKS[(n // len(order)) % len(LINKS)]
             proxy(silence=[link, 10])
             rec["link"] = link
             rec["blind_s"] = mon.wait(lambda s: link in s["health"]["blind"], 15)
@@ -363,10 +363,13 @@ def chaos(run, ctx, mon, procs, proxy, need, every_s, record_min):
             rec["restart_at"] = round(t1, 3)
             if action == "brain":
                 rec["state_back_s"] = mon.wait(lambda s: True, 60)
-                need.set()
-                while need.is_set() or ctx.training:
-                    time.sleep(1)
-                mon.wait(lambda s: s["pred"] is not None, 60)
+                # A brain that keeps its model across a restart predicts again on its own.
+                rec["retrained"] = mon.wait(lambda s: s["pred"] is not None, 30) is None
+                if rec["retrained"]:
+                    need.set()
+                    while need.is_set() or ctx.training:
+                        time.sleep(1)
+                    mon.wait(lambda s: s["pred"] is not None, 60)
                 rec["pred_back_s"] = round(now() - t1, 1)
             else:
                 rec["links_ok_s"] = mon.wait(lambda s: s["health"]["status"] == "ok" and len(s["links"]) == 6
@@ -392,25 +395,24 @@ def main():
     ap.add_argument("--out", default=str(HERE / "runs" / time.strftime("%Y%m%d-%H%M")))
     ap.add_argument("--chaos-every", type=float, default=150, help="seconds between faults")
     ap.add_argument("--record-min", type=float, default=8, help="minutes of one long demo recording")
+    ap.add_argument("--chaos", default=",".join(CHAOS), help="the faults, in the order they repeat")
     a = ap.parse_args()
     run, ctx = Run(a.out), Ctx()
     shells = sorted(glob.glob(os.path.expanduser("~/AppData/Local/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell.exe")))
     procs = Procs(run, shells[-1] if shells else None)
     above_normal(os.getpid())
-    proxy = ProxyCtl()
-    for name in ("bus", "brain", "narrator", "web", "proxy", "feeder"):
-        procs.start(name)
-    ctx.feeder = procs.procs["feeder"]
-    mon = Monitor(run, ctx)
-    procs.start("probe")
-    need = threading.Event()
-    need.set()
-    threads = [threading.Thread(target=driver, args=(run, ctx, mon, need), daemon=True),
-               threading.Thread(target=chaos, args=(run, ctx, mon, procs, proxy, need, a.chaos_every, a.record_min), daemon=True)]
-    for th in threads:
-        th.start()
+    proxy, need = ProxyCtl(), threading.Event()
     t_end, t_start = now() + a.hours * 3600, now()
-    try:
+    try:   # the finally stops whatever started, even if a later start fails
+        for name in ("bus", "brain", "narrator", "web", "proxy", "feeder"):
+            procs.start(name)
+        ctx.feeder = procs.procs["feeder"]
+        mon = Monitor(run, ctx)
+        procs.start("probe")
+        need.set()
+        for target, args in ((driver, (run, ctx, mon, need)),
+                             (chaos, (run, ctx, mon, procs, proxy, need, a.chaos_every, a.record_min, a.chaos.split(",")))):
+            threading.Thread(target=target, args=args, daemon=True).start()
         while now() < t_end:
             procs.sample()
             sizes = {p.name: p.stat().st_size for p in (run.out / "sessions").glob("*.jsonl")}
