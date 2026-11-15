@@ -376,6 +376,13 @@
   white-space: pre-line;
 }
 
+.room-align-guide {
+  margin: 8px 0;
+  white-space: pre-line;
+  font-size: 20px;
+  line-height: 1.3;
+}
+
 .room-align-keys,
 .room-align-status {
   color: var(--text-2);

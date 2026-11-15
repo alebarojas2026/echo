@@ -27,6 +27,11 @@ const order = [...new Set(desks.map((d) => d.wedge))].sort((a, b) => {
   return mid(a) - mid(b)
 })
 for (const d of desks) d.wedge = order.indexOf(d.wedge)
-const file = { centre_m: [+(-hall.centre[0]).toFixed(4), +hall.centre[1].toFixed(4)], desk_depth_m: +hall.desk_depth.toFixed(3), desks }
+const file = {
+  centre_m: [+(-hall.centre[0]).toFixed(4), +hall.centre[1].toFixed(4)],
+  desk_depth_m: +hall.desk_depth.toFixed(3),
+  desk_height_m: +hall.desk_height.toFixed(3),
+  desks,
+}
 writeFileSync(out, `${JSON.stringify(file)}\n`)
 console.log(`${desks.length} desks in ${new Set(desks.map((d) => d.row)).size} rows written`)
