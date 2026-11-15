@@ -275,3 +275,42 @@ def test_the_prompt_with_its_examples_fits_the_context():
 def test_replies_on_the_repos_layout_keep_to_section_10(store, question):
     reply = A.ask(question, store, never, now_ms=NOW)   # zones and links from radio/nodes.json
     assert check.errors(reply, "ask_reply") == [], reply
+
+
+def test_a_question_without_keywords_gives_the_model_3_s_and_then_the_list_at_once(store):
+    # On the board a pick can take longer than anybody waits at a screen. The model gets ASK_PICK_S
+    # (3 s unless set); with no pick by then the answer is the list of what can be asked, straight away.
+    import time
+    assert A.TIMEOUT_S == 3.0 and A.Picker().timeout_s == 3.0
+
+    def slow(messages, schema):
+        time.sleep(2)
+        return {"tool": "presence", "minutes": 5, "zone": 0, "link": "any"}
+    started = time.monotonic()
+    reply = A.ask("Kindly summarise the evening", store, slow, now_ms=NOW, pick_s=0.2)
+    assert time.monotonic() - started < 1.0
+    assert (reply["tool"], reply["picked_by"]) == (None, "rules") and "I can answer" in reply["answer"]
+    quick = A.ask("Kindly summarise the evening", store, lambda m, s: {"tool": "presence", "minutes": 5, "zone": 0, "link": "any"},
+                  now_ms=NOW, pick_s=0.2)
+    assert (quick["tool"], quick["picked_by"]) == ("presence", "llm")   # a pick that is back in time is used
+
+
+@pytest.mark.parametrize("question", ["what happened", "What just happened?", "tell me what happened",
+                                      "What happened in the last five minutes?", "was anyone here",
+                                      "Was anyone here in the last five minutes?"])
+def test_the_demos_questions_never_reach_the_model(store, question):
+    def model(messages, schema):
+        raise AssertionError("the model was asked")
+    reply = A.ask(question, store, model, now_ms=NOW)
+    assert reply["picked_by"] == "rules" and reply["tool"] in ("story", "presence")
+
+
+def test_the_pick_limit_can_be_set_on_the_board(monkeypatch):
+    import importlib
+    monkeypatch.setenv("ASK_PICK_S", "1.5")
+    try:
+        assert importlib.reload(A).TIMEOUT_S == 1.5
+    finally:
+        monkeypatch.delenv("ASK_PICK_S")
+        importlib.reload(A)
+    assert A.TIMEOUT_S == 3.0

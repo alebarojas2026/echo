@@ -13,9 +13,11 @@ for one sentence and sends a `narration` message to the bus (UDP 127.0.0.1:5600)
 sentence every 8 s, only for events up to 3 s old, at most 16 words. The 8 s gap runs from when a
 sentence starts being written, so a 6 s model still speaks every 8 s. While it writes or waits,
 it keeps the most important event, not the newest (alert, check-in and camera-off come first), and
-it never narrates `router_moved` or `advice`, which the screen already shows. When the model is slow
-(over 8 s), down, or says a banned word, the event's template sentence goes out instead, with
-`"source": "template"`.
+it never narrates `router_moved` or `advice`, which the screen already shows. The event's template
+sentence goes out at once, always, with `"source": "template"`. The model then gets 2 s
+(`NARRATE_MODEL_S` in the unit's environment) to word it better: a sentence that is back by then and
+passes the checks is sent as the same event's line (same `event_id`, `"source": "llm"`) and replaces
+the template on the screen. When the model is slower, down, or says a banned word, the template stands.
 
 On the board, llama-server takes a while to load the model after boot and answers "connection
 refused" or HTTP 503 until then; those events get their template sentence. The narrator warms the
@@ -109,7 +111,8 @@ bash narrator/gate.sh
 It warms the model once (the live narrator does the same when it starts), runs one fresh
 `alert_on` event through the narrator and prints the sentence, the time from event to
 narration, llama-server's memory, the CPU clock and temperature, and the cores each process
-sits on. Then PASS (a model sentence in 8 s or less) or FAIL with the reason. It uses
+sits on. Then PASS (a model sentence within the limit: run it as `NARRATE_MODEL_S=8 bash narrator/gate.sh`
+to time the model itself, since the live limit is 2 s) or FAIL with the reason. It uses
 /opt/rs/venv/bin/python; set `PY=...` to use another. Post the output on issue #53 and copy
 the numbers into the budget below.
 

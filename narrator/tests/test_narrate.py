@@ -54,7 +54,10 @@ def test_at_most_one_sentence_every_8_s():
     assert nar.step() is None               # inside the 8 s gap
     clock.t = NOW + 8000
     assert nar.step()["event_id"] == "e2"   # waited, still fresh
-    assert [m["seq"] for m in sent] == [1, 2]
+    # each event's line goes out twice at most: the template at once, then the model's wording in its place
+    assert [(m["event_id"], m["source"], m["seq"]) for m in sent] == [
+        ("e1", "template", 1), ("e1", "llm", 2), ("e2", "template", 3), ("e2", "llm", 4)]
+    assert sent[2]["t"] - sent[0]["t"] == 8000
 
 
 def test_event_that_goes_stale_during_the_gap_is_dropped():
@@ -66,7 +69,7 @@ def test_event_that_goes_stale_during_the_gap_is_dropped():
     nar.observe(event(t=clock.t, id="e2"))
     clock.t = NOW + 8000                     # gap over, but e2 is 7 s old
     assert nar.step() is None and nar.pending is None
-    assert [m["event_id"] for m in sent] == ["e1"]
+    assert {m["event_id"] for m in sent} == {"e1"}
 
 
 def test_newest_of_equally_important_events_wins_and_other_messages_are_ignored():
@@ -114,7 +117,7 @@ def test_model_duration_ignores_wall_clock_changes(jump_ms):
 
     def llm(messages):
         clock.t += jump_ms
-        return ENTER_2, "test-model"
+        return "Someone just stepped into zone 2.", "test-model"
 
     nar, sent = make(llm, clock=clock, monotonic=lambda: next(elapsed))
     msg = nar.narrate(event())
@@ -126,8 +129,8 @@ def test_model_duration_ignores_wall_clock_changes(jump_ms):
 def test_checkin_that_arrives_while_a_zone_change_waits_is_narrated():
     sent = play([at(0, "enter", "e1"), at(6.0, "zone_change", "e2"), at(7.0, "checkin", "e3")])
     assert [(m["event_id"], m["event_kind"]) for m in sent] == [("e1", "enter"), ("e3", "checkin")]
-    assert [m["t"] - NOW for m in sent] == [6000, 14000]   # written from 0 s and from 8 s
-    assert [m["gen_ms"] for m in sent] == [6000, 6000]
+    assert [m["t"] - NOW for m in sent] == [0, 8000]   # each template goes out as its slot opens, not 6 s later
+    assert [(m["source"], m["gen_ms"]) for m in sent] == [("template", 0), ("template", 0)]
 
 
 def test_minor_events_never_push_out_a_key_one():
@@ -179,7 +182,7 @@ def test_only_events_up_to_3_s_old(age_ms, narrated):
     nar, sent = make()
     nar.observe(e)
     assert (nar.step() is not None) == narrated
-    assert nar.pending is None and len(sent) == narrated
+    assert nar.pending is None and len(sent) == 2 * narrated   # the template, then the model's wording
 
 
 # ---------------------------------------------------------------- 16-word cap
@@ -252,9 +255,50 @@ def test_slow_model_falls_back_to_the_template():
         return "Someone just walked into zone 2.", "test-model"
 
     msg = one(slow, event(t=n.now_ms()), clock=n.now_ms, timeout_s=0.1)
-    assert (msg["source"], msg["text"]) == ("template", ENTER_2)
-    assert 100 <= msg["gen_ms"] < 900
-    assert n.Narrator(None, None).timeout_s == 8.0
+    assert (msg["source"], msg["text"], msg["gen_ms"]) == ("template", ENTER_2, 0)
+    assert n.Narrator(None, None).timeout_s == n.LLM_TIMEOUT_S == 2.0   # NARRATE_MODEL_S, 2 s unless set
+
+
+def test_the_template_line_is_sent_at_once_and_the_models_wording_may_replace_it_within_the_limit():
+    # On the board the model takes seconds. Nothing a judge reads waits on it: the template goes out
+    # first, always. A sentence from the model that is back in time is sent as the same event's line.
+    sent_at, started = [], time.monotonic()
+
+    def model(msgs):
+        time.sleep(0.3)
+        return "Someone just stepped into zone 2.", "test-model"
+    nar = n.Narrator(model, lambda m: sent_at.append((time.monotonic() - started, m)), clock=n.now_ms, timeout_s=1.0)
+    nar.observe(event(t=n.now_ms()))
+    last = nar.step()
+    (t0, first), (t1, second) = sent_at
+    assert t0 < 0.2 and (first["source"], first["text"], first["gen_ms"], first["model"]) == ("template", ENTER_2, 0, None)
+    assert t1 - t0 >= 0.2 and second is last and (second["source"], second["text"]) == ("llm", "Someone just stepped into zone 2.")
+    assert second["event_id"] == first["event_id"] and second["seq"] == first["seq"] + 1 and 250 <= second["gen_ms"] < 1000
+
+    # too slow: the template stands, and nothing more is sent for that event
+    sent = []
+    nar = n.Narrator(model, sent.append, clock=n.now_ms, timeout_s=0.05)
+    nar.observe(event(t=n.now_ms()))
+    assert nar.step() is sent[0] and [m["source"] for m in sent] == ["template"]
+    time.sleep(0.4)
+    assert len(sent) == 1
+
+    # a model that only says the template back changes nothing: one line
+    nar, sent = make(ENTER_2)
+    nar.observe(event())
+    nar.step()
+    assert [m["source"] for m in sent] == ["template"]
+
+
+def test_the_models_limit_can_be_set_on_the_board(monkeypatch):
+    import importlib
+    monkeypatch.setenv("NARRATE_MODEL_S", "0.75")
+    try:
+        assert importlib.reload(n).LLM_TIMEOUT_S == 0.75
+    finally:
+        monkeypatch.delenv("NARRATE_MODEL_S")
+        importlib.reload(n)
+    assert n.LLM_TIMEOUT_S == 2.0
 
 
 def test_unreachable_model_falls_back_to_the_template():
@@ -271,8 +315,10 @@ def test_narration_message_matches_the_contract():
     nar, sent = make()
     nar.observe(event(id="e123", src="sim"))
     msg = nar.step()
-    assert sent == [msg] and json.loads(json.dumps(msg)) == msg
-    assert msg == {"v": 2, "type": "narration", "t": NOW, "seq": 1, "src": "sim",
+    assert sent[-1] == msg and json.loads(json.dumps(msg)) == msg
+    assert sent[0] == {"v": 2, "type": "narration", "t": NOW, "seq": 1, "src": "sim", "text": ENTER_2,
+                       "event_id": "e123", "event_kind": "enter", "gen_ms": 0, "source": "template", "model": None}
+    assert msg == {"v": 2, "type": "narration", "t": NOW, "seq": 2, "src": "sim",
                    "text": "Someone just stepped into zone 2.", "event_id": "e123",
                    "event_kind": "enter", "gen_ms": 0, "source": "llm", "model": "test-model"}
 
@@ -307,7 +353,7 @@ def test_llama_client_asks_for_a_short_cool_reply(monkeypatch, finish, text):
     assert n.LlamaServer("http://127.0.0.1:8091")([]) == (text, "qwen")
     assert seen["url"] == "http://127.0.0.1:8091/v1/chat/completions"
     assert seen["body"]["max_tokens"] <= 48 and seen["body"]["temperature"] <= 0.3
-    assert seen["timeout"] == 8.0
+    assert seen["timeout"] == n.LLM_TIMEOUT_S == 2.0
 
 
 def test_prompt_keeps_a_fixed_prefix_and_puts_the_event_last():
@@ -327,5 +373,5 @@ def test_serve_narrates_events_from_a_fake_feed():
 
     nar, sent = make("Someone moved over to zone 4.", clock=n.now_ms)
     asyncio.run(n.serve(feed(), nar, poll_s=0.01))
-    assert [(m["event_id"], m["source"], m["text"]) for m in sent] == [
-        ("e2", "llm", "Someone moved over to zone 4.")]
+    assert [(m["event_id"], m["source"]) for m in sent] == [("e2", "template"), ("e2", "llm")]
+    assert sent[-1]["text"] == "Someone moved over to zone 4."
