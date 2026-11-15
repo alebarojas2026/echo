@@ -6,3 +6,5 @@
 {"v":2,"type":"cmd","cmd":"reset","args":{}}
 {"v":2,"type":"cmd","cmd":"baseline","args":{}}
 {"v":2,"type":"cmd","cmd":"baseline","args":{"keep_model":true}}
+{"v":2,"type":"cmd","cmd":"arm","args":{"on":true}}
+{"v":2,"type":"cmd","cmd":"arm","args":{"on":false}}
