@@ -11,7 +11,7 @@ def test_bench_brain_times_every_step_and_reaches_the_advisor():
     res = bench_brain.run(seconds=60, fast=True, walkers=1, out=(lines := []).append)
     assert res["ticks"] == 600 and set(res["steps"]) == set(bench_brain.STEPS) | {"tick"}
     assert all(0 <= s["p50"] <= s["p95"] <= s["max"] for s in res["steps"].values())
-    # A person, then the tray at T1: every part of the hot path gets real work.
+    # A person, then the tray at the layout's T1: every part of the hot path gets real work.
     assert res["pred"] > 500 and res["objects"] > 0 and res["advice"] > 0
     assert any(line.startswith("tick (all)") for line in lines)
 
@@ -21,7 +21,10 @@ class FakeLlama(BaseHTTPRequestHandler):
 
     def do_POST(self):
         FakeLlama.bodies.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
-        body = json.dumps({"choices": [{"message": {"content": "Someone stepped into zone 4."}}],
+        # The model's sentence: the first timed event's own facts, so its zone and its number are ones
+        # this layout has (a number that isn't in the facts would be thrown out as made up).
+        said = llm_time.narrate.template(*llm_time.EVENTS[0])
+        body = json.dumps({"choices": [{"message": {"content": said}}],
                            "timings": {"prompt_n": 31, "prompt_per_second": 80.5,
                                        "predicted_n": 9, "predicted_per_second": 9.25}}).encode()
         self.send_response(200)
@@ -44,6 +47,19 @@ def test_llm_time_sends_the_narrator_prompt_and_reads_the_timings():
     warm, sent = FakeLlama.bodies   # the warm-up goes first and isn't counted
     assert sent["cache_prompt"] and "alert_on" in sent["messages"][-1]["content"]
     assert [llm_time.verdict([dict(r, wall_ms=w)])[0] for w in (8000, 8001, None)] == [True, False, False]
+
+
+def test_llm_time_asks_about_zones_the_layout_has():
+    zones = llm_time.narrate.ZONES   # from radio/nodes.json
+    assert zones and all(info.get("zone", min(zones)) in zones for _, info in llm_time.EVENTS)
+    (kind, info), limits = llm_time.EVENTS[0], [limit for _, limit in zones.values() if limit]
+    assert kind == "alert_on" and zones[info["zone"]][1] == min(limits)
+    assert f"{min(limits)} seconds" in llm_time.narrate.template(kind, info)   # the limit is in the prompt
+    square = {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}
+    assert [i.get("zone") for _, i in llm_time.events(square)] == [4, 2, 3, None, 1]
+    strip = {1: ("Left", 10), 2: ("Right", 10)}
+    assert [i.get("zone") for _, i in llm_time.events(strip)] == [1, 2, 1, None, 1]
+    assert [i for _, i in llm_time.events({})] == [{}, {}, {}, {"node": "pi5"}, {}]
 
 
 def fake_board(root, busy, idle, llama_jiffies, temp_mc, khz):

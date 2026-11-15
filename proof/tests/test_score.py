@@ -15,6 +15,7 @@ def session(name="test", purpose="heldout", zone=0):
 
 class FakeReplay:
     train_sessions = {"train"}
+    train_walkers = {"training-walker"}
     train_s = 1.25
     base = {"east>pi5:ble": -50}
 

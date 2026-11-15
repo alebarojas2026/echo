@@ -72,3 +72,18 @@ def test_a_keep_model_baseline_that_cannot_start_is_given_up_too(caplog):
     assert after and not any(waiting for waiting, _ in after) and any(shown for _, shown in after)
     assert brain.model is model and brain.base == base
     assert sum("given up" in r.getMessage() for r in caplog.records) == 1
+
+
+def test_baseline_pressed_before_the_feed_starts_does_not_give_up_at_the_first_reading():
+    """On the feed clock (a recorded file) time is 0 until the first reading. The state loop
+    ticks in between; that tick must not start the 120 s at 0 (#598)."""
+    from brain.core import Brain
+    from brain.tests.simdata import sim_to_v2
+    brain = Brain()                                     # the feed clock, nothing heard yet
+    brain.on_cmd(cmd("baseline"))
+    brain.state()                                       # the 10 Hz loop, before any reading
+    brain.state()
+    for m in sim_to_v2("empty_room", seed=1):
+        brain.on_message(m)
+    assert brain.capture is None and len(brain.base) == 6     # it ran its 20 s and finished
+    assert "baseline_done" in [e["kind"] for e in brain.events]

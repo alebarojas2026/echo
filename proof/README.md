@@ -14,6 +14,15 @@ The earlier pair of dictionaries is also accepted. Never estimate them from held
 Declare held-out session purpose before capture. Each JSONL has exactly one v2
 meta record and bus-stamped `recv_t` on every message. Duplicate sessions,
 train/test overlap, wrong purposes and synthetic data are rejected.
+Held-out walker pseudonyms must also be present and absent from training.
+Different session IDs by the same walker do not make an independent evaluation.
+The replay adapter needs saved training-walker provenance or the complete original
+training metas supplied by this CLI. Unknown legacy metadata fails closed. Only
+independently confirmed no-person training recordings may omit a participant.
+Both walker counts are written beside the confusion table in
+`proof.confusion.json`; the existing zone.method records the training count and
+zone.walkers counts usable unseen walkers, without adding contract fields.
+Historical proof rows are not relabelled as independent.
 
 Training uses only the explicitly supplied training/object files. Each held-out
 session gets a fresh brain state machine and the trained model; radio and camera

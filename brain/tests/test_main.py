@@ -28,10 +28,15 @@ async def _scenario():
 
     async def play(path, seed=0, meta=None):
         msgs = sim_to_v2(path, seed=seed, meta=meta, t0=clock[0])
-        for i, m in enumerate(msgs):
+        brain = ports["brain"]
+        for m in msgs:
             feed.sendto(json.dumps(m).encode(), ("127.0.0.1", ports["udp"]))
-            if i % 2 == 0:   # give the loop a turn every 2 messages (and a real pause every 20),
-                await asyncio.sleep(0.001 if i % 20 == 0 else 0)   # so the brain's socket buffer never overflows
+            # Never run ahead of the brain: the loop reads one datagram a turn, so a feeder that sends
+            # faster builds a backlog in the socket buffer, which overflows now and then and drops a
+            # burst of readings (#598). Wait until the brain is within 0.3 s of feed time of this one.
+            waited = loop.time()
+            while brain.feed_t < m["recv_t"] - 300 and loop.time() - waited < 2:
+                await asyncio.sleep(0)
         clock[0] = msgs[-1]["recv_t"] + 100
         # Wait for the tail of it, with a deadline: a dropped datagram must not hang the test.
         nearly, deadline = msgs[-20]["recv_t"], loop.time() + 10

@@ -4,11 +4,11 @@ Radio Sight: safety and after-hours security for buildings, using the Wi-Fi that
 
 **The three things this project is about. Every screen, sentence and feature should serve one of them:**
 1. **Safety and security.** It knows someone is in a space, on which side, and whether they've been still too long, and it tells someone when a space that should be empty isn't (armed mode, intrusion, tamper).
-2. **Privacy.** No camera watches anyone. A camera teaches the radio for half a minute and is unplugged. No image is ever stored and nothing leaves the board: no cloud, no internet. It can't tell who someone is and doesn't try. Privacy is a selling point, not a footnote: show it and measure it ("0 images, 0 bytes out").
+2. **Privacy.** No camera watches anyone. A camera teaches the radio for half a minute and is unplugged. No image is ever stored and nothing is sent to the internet: no cloud, no account. The only screens are our own laptop and phone, on our own network (so say "nothing is sent to the internet", not "nothing leaves the board"). It can't tell who someone is and doesn't try. Privacy is a selling point, not a footnote: show it and measure it ("0 images, 0 bytes out").
 3. **Dead zones.** The same radio links that sense people also show where the Wi-Fi itself is weak or blocked. When something blocks a link, it says so, says where to move the router, and measures the gain after the move. Every building has Wi-Fi and every building has dead zones: this is the reason an owner installs it, and safety comes with it for free.
 
 - **Who it's for:** places where cameras can't go or aren't wanted (patient rooms, bathrooms, study rooms, offices after hours). It knows someone is in a space, where, and whether they've been still too long, and it tells someone when a space that should be empty isn't.
-- **What's new:** a camera teaches the radio in seconds, on the board, and is then unplugged. "Taught by a camera. Runs without one." Nothing leaves the board.
+- **What's new:** a camera teaches the radio in seconds, on the board, and is then unplugged. "Taught by a camera. Runs without one." Nothing is sent to the internet.
 - **Why the hardware makes sense:** a building already has Wi-Fi access points every 10-15 m. Our Pi stands in for one, the UNO Q (Qualcomm Dragonwing QRB2210) stands in for the chip inside it, and the beacons stand in for the other radios a building already has. Only the webcam is extra, and only for teaching.
 - **Two scales on one screen:** one space in detail (the sensing area at our desk) and the whole building in outline (the hall model with long "movement on this path" links).
 - Everything runs on the UNO Q. The Pi is the router and runs no model. The screen is any browser on our own network.
@@ -26,6 +26,7 @@ The direction above is new (Saturday evening). Priorities, in order:
 6. **The dead-zone beat is back on the hero path** (changed Saturday night): something blocks the router's link (the tray), the screen says a dead zone was found and where to move the router, the router is moved, and the measured gain shows. On the desk layout the router slides along the desk's back edge. Keep it to about 20 seconds. Not in the 3-minute demo (don't polish them): the crowd game and the recap. They stay working for the finalist round and questions.
 7. Lanes: advisor/ is Izet's; narrator/ and teacher/ are Alejandro's; radio/, pi/, board/, bus/ and mcu/ are worked by the lead's workers (Alexander is on hardware).
 8. **CI is down (the account's Actions limit), so a red check means nothing right now.** Until it's back, the merge gate is a local run: check out the PR merged with current main in a clean folder, run that lane's tests (pytest for the folder and `python -m pytest contracts`; for web: `npm ci && npx tsc --noEmit && npx vitest run && npx vite build`), and write the result in a PR comment ("CI unavailable; local: N passed"). Don't push empty commits to re-run CI.
+9. **Freeze (set Saturday 9:30 PM).** The real kit is running. From now on: no new features and no new feature issues; finish what is open, fix what the real hardware shows, and make what exists safe. Sunday 8:00 AM: last merge that touches the demo path (anything a judge sees or the board runs). Sunday 9:30 AM: the board is frozen on a tagged commit; after that only a rollback to the previous tag goes on it. Sunday 10:30 AM: Devpost is submitted. One person deploys to the board and a second checks it; every deploy ends with the device checks and a look at the screen page.
 
 ## Lanes (stay in yours)
 | Tag | Folders | Owner |
@@ -53,7 +54,7 @@ CONTRACTS.md, contracts/, AGENTS.md, CLAUDE.md and README.md are changed only by
    - open a PR with `Closes #<number>` in the body, under 600 lines;
    - don't wait for review; go back to step 1.
 5. If a task needs hardware or a person, comment exactly what's needed on the issue, then take the next one.
-6. No issues left with your tag? Add tests, then open a new issue with your tag for the most useful next step and do it.
+6. No issues left with your tag? Add tests for what exists, then stop and say so on issue #95. Don't open new feature issues (the freeze, "Right now" item 9).
 
 ## Style (every screen: room, HUD, game page)
 **The look (Ivan's pick): a pro, technical instrument, as clean as a Tesla car screen.** The 3D room is the hero. Very little text, each piece of it large and certain. Dark background. People are simple, faceless 3D figures.
