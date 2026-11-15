@@ -27,6 +27,7 @@ class Layout:
         # from Pi A to Pi B, which fell 15 to 21 dB with a person on the kit). The fake feed drops it that far.
         self.presence_line = (nodes.get("presence") or {}).get("line")
         self.nodes = {n["id"]: tuple(n["xyz_m"][:2]) for n in nodes["nodes"]}
+        self.node_names = {n["id"]: n.get("name") or n["id"] for n in nodes["nodes"]}
         self.links = [(l["tx"], l["rx"], l["kind"]) for l in nodes["links"]]
         self.router_spots = {s["id"]: tuple(s["xyz_m"][:2]) for s in nodes.get("router_spots") or []}
         self.zones = {int(z["id"]): z.get("still_alert_s") for z in nodes["zones"]}
@@ -102,6 +103,23 @@ class Layout:
         others = [n for n in self.nodes if n not in routers and n != "unoq"] or list(self.nodes)
         return max(others, key=lambda n: math.dist(self.nodes[n], board))
 
+    def presence_ends(self):
+        """(tx, rx) of the presence line, or None on a layout without one."""
+        if not self.presence_line:
+            return None
+        tx, _, rest = self.presence_line.partition(">")
+        return tx, rest.partition(":")[0]
+
+    def in_the_line(self) -> tuple:
+        """Where a thing left "in the line" stands ({"on": "line"} in a path): the middle of the presence
+        line, or on a layout without one the tray spot, on the router's link."""
+        ends = self.presence_ends()
+        if not ends and self.tray:
+            return self.tray
+        ends = ends or self.links[0][:2]   # no tray spot either: the middle of the layout's first link
+        (ax, ay), (bx, by) = self.nodes[ends[0]], self.nodes[ends[1]]
+        return (round((ax + bx) / 2, 3), round((ay + by) / 2, 3))
+
     def area_width(self) -> float:
         return (self.strip_m or self.size_m)[0]
 
@@ -133,7 +151,8 @@ class Layout:
         an object {"spot": "T1"} sits on that tray spot, {"near": node, "inset_m": d} next to the
         node, d metres in from it along x. Points and objects already in metres are kept.
         An outage {"node": "prop"}, or an object {"near": "prop"}, is at the device this layout
-        unplugs (prop_node)."""
+        unplugs (prop_node). An object {"on": "line"} stands in the line the dead-zone advice is about
+        (in_the_line)."""
         out = dict(path)
         if path.get("person"):
             out["person"] = [self._waypoint(p) for p in path["person"]]
@@ -176,6 +195,9 @@ class Layout:
         o = dict(o)
         if "spot" in o:
             o["x"], o["y"] = self.spots[o.pop("spot")]
+        elif o.get("on") == "line":
+            del o["on"]
+            o["x"], o["y"] = self.in_the_line()
         elif "near" in o:
             near = o.pop("near")
             x, y = self.nodes[self.prop_node() if near == "prop" else near]

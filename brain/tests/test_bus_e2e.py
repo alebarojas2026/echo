@@ -4,6 +4,7 @@ Slow (about 35 s): the baseline is 20 s of wall-clock time, because the bus stam
 """
 import asyncio
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -11,6 +12,7 @@ import time
 from pathlib import Path
 
 from websockets.asyncio.client import connect
+from websockets.exceptions import InvalidHandshake
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -39,8 +41,11 @@ def test_record_and_train_through_the_real_bus(tmp_path):
              start_brain("brain.log")]
 
     def feed(*args):
+        # The fake feed reads RADIO_SIGHT_NODES too, and this folder's tests pin it to their own square.
+        # The brain here is started on radio/nodes.json, so the feed is told the same file.
+        env = {**os.environ, "RADIO_SIGHT_NODES": str(REPO / "radio" / "nodes.json")}
         return subprocess.Popen([sys.executable, "-m", "sim.send", *args, "--host", "127.0.0.1",
-                                 "--port", str(bus_port)], cwd=REPO, stdout=subprocess.DEVNULL)
+                                 "--port", str(bus_port)], cwd=REPO, stdout=subprocess.DEVNULL, env=env)
 
     async def screen():
         end = time.monotonic() + 30
@@ -48,7 +53,7 @@ def test_record_and_train_through_the_real_bus(tmp_path):
             try:
                 ws = await connect(f"ws://127.0.0.1:{ws_port}/ws")
                 break
-            except OSError:
+            except (OSError, InvalidHandshake):   # not listening yet, or the port answered and hung up
                 assert time.monotonic() < end, "brain WebSocket never came up"
                 await asyncio.sleep(0.2)
 
@@ -89,7 +94,7 @@ def test_record_and_train_through_the_real_bus(tmp_path):
             try:
                 ws = await connect(f"ws://127.0.0.1:{ws_port}/ws")
                 break
-            except OSError:
+            except (OSError, InvalidHandshake):   # not listening yet, or the port answered and hung up
                 assert time.monotonic() < end, "the restarted brain never came up"
                 await asyncio.sleep(0.2)
         first = json.loads(await ws.recv())

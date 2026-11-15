@@ -1,0 +1,20 @@
+{
+  "name": "thing_left",
+  "about": "Nobody is there. Something is left standing in the line the dead-zone advice is about for 30 s (on a layout with a presence line: the middle of that line), then taken away.",
+  "duration_s": 60,
+  "person": [
+    {
+      "t": 0,
+      "x": null
+    }
+  ],
+  "objects": [
+    {
+      "on": "line",
+      "drop_db": 5.0,
+      "width_m": 0.25,
+      "t_on": 10,
+      "t_off": 40
+    }
+  ]
+}

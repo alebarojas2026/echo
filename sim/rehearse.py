@@ -253,7 +253,10 @@ def spot_script():
     and on; train while the recording is open), unplug (the camera is pulled and the radio still knows they
     are there), still (they stand until the no-movement alert), then armed: they leave, the space is armed,
     somebody walks straight through (passed by), somebody steps on and stays (intrusion), and with nobody
-    there a device is unplugged for 8 s (tamper, cleared when it is back). Disarmed at the end.
+    there a device is unplugged for 8 s (tamper, cleared when it is back). On a layout with a presence line,
+    still armed: something is left standing in that line for 30 s (an object, never a person or an intrusion,
+    and advice that names the line and no spot to move the router to), then taken away (the measured gain).
+    Disarmed at the end.
     Nothing here names a side: there is one zone and the beats are about somebody being there or not."""
     spot = min(LAYOUT.zones)
     assert len(LAYOUT.zones) == 1 and LAYOUT.zones[spot], "the one-spot rehearsal needs a layout with one zone that has a still_alert_s"
@@ -263,6 +266,10 @@ def spot_script():
     leave = still_from + limit + 6
     arm, through, back, gone = leave + 4, leave + 8, leave + 16, leave + 26
     unplug, plug, finish = gone + 3, gone + 11, gone + 19
+    line = LAYOUT.presence_line
+    thing_on, thing_off = finish - 2, finish + 28          # with a presence line: a thing left in it for 30 s
+    if line:
+        finish = thing_off + 14
     prop = LAYOUT.prop_node()
     here = lambda t, dx=0.0: {"t": t, "x": round(x + dx, 3), "y": y}          # noqa: E731
     away = lambda t: {"t": t, **WEST_EDGE(spot)}                               # noqa: E731
@@ -278,6 +285,9 @@ def spot_script():
             "outages": [{"node": prop, "t_on": unplug, "t_off": plug}],
             "camera": [{"t": 0, "state": "on"}, {"t": cam_off, "state": "off"}],
             "router": [{"t": 0, "spot": "S-home"}]}
+    if line:
+        tx, ty = LAYOUT.in_the_line()
+        path["objects"] = [{"x": tx, "y": ty, "drop_db": 5.0, "t_on": thing_on, "t_off": thing_off}]
     commands = [(teach, "label_mode", {"mode": "person"}),
                 (teach, "record_start", {"session": LESSON, "purpose": "train", "walker": "judge"}),
                 (train, "train", {}), (stop, "record_stop", {}), (stop, "label_mode", {"mode": "off"}),
@@ -318,6 +328,21 @@ def spot_script():
         ("disarmed", finish - 4, finish, "event", event("disarmed")),
     ]
     beats.append(("no intrusion from the walk through", through, back - 0.2, "no event", event("intrusion")))
+    if line:
+        disarmed = beats.pop(-2)
+        beats += [
+            ("thing left in the line: an object, nobody there", thing_on, thing_on + 10, "state",
+             lambda s: pred(s, present=False, kind="object", zone=0)),
+            ("thing: advice about the line, and no spot to move the router to", thing_on, thing_on + 10, "state",
+             lambda s: bool(s["advice"]) and s["advice"]["link"] == line and s["advice"]["to_spot"] is None
+             and s["advice"]["move_m"] == [0, 0] and "router" not in s["advice"]["text"].lower()),
+            ("thing taken away: the gain is measured", thing_off, thing_off + 10, "event",
+             lambda e: e["kind"] == "advice_result" and e["info"]["link"] == line
+             and e["info"]["after_dbm"] - e["info"]["before_dbm"] >= 3),
+            disarmed,
+            ("the thing is never somebody: no enter, no intrusion", thing_on, finish, "no event",
+             lambda e: e["kind"] in ("enter", "intrusion", "passed_by")),
+        ]
     return path, commands, beats
 
 
