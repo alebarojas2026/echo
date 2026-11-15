@@ -1,8 +1,8 @@
 # Echo
 
-**A witness that never watches. It knows when someone is in a space, keeps a record nobody can edit, and tells you what happened. No camera, no microphone, nothing sent to the internet.**
+**Echo senses whether someone is standing at one spot from the strength of a Wi-Fi signal, and keeps a sealed, signed record of it on an Arduino UNO Q. It can't see you, it can't be edited, and it still tells you exactly what happened. No camera, no microphone, nothing sent to the internet.**
 
-Some places need a record of who was there and when, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. Echo does it with the Wi-Fi signal alone.
+Some places need a record of when someone was there, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. Echo does it with the Wi-Fi signal alone.
 
 - **It senses a person by radio.** Two small computers sit a metre apart. A body between them weakens the Wi-Fi signal, and from that one line the board knows someone arrived, how long they stayed, whether they are standing still or moving, and when they left. Armed, it raises an alert; it notices when one of its own devices is unplugged.
 - **It seals what it sensed.** Every record is chained to the one before it, so a changed record breaks every seal after it and the board can name the record.

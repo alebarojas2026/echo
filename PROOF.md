@@ -2,6 +2,8 @@
 
 Every number shown on screen or in the pitch has a row here: what was measured, how, on how many people or sessions, when, and on which commit.
 
+The rows in this first table marked `__` or pending belong to an earlier design (a camera labelling the radio data, zones along a desk, advice about a router) and were not measured. What was measured for Echo as it is, one spot sensed by one Wi-Fi line, is in the sections below.
+
 | Number | Value | Method | N | Date | Commit |
 |---|---|---|---|---|---|
 | Radio vs camera zone agreement | __ | Held-out sessions with the camera labeling and the model predicting from radio only. Compare predictions to labels using the zones in radio/nodes.json, including empty. Report agreement, its interval, the confusion matrix and the measured baseline; this makes no claim about sides the active layout does not define. | __ | __ | __ |
