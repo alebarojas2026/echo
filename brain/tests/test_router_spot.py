@@ -2,7 +2,7 @@
 from brain.core import Brain
 from brain.tests.simdata import sim_to_v2
 from brain.tests.test_core import cmd
-from contracts.check import errors
+from brain.tests.simdata import errors
 
 
 def test_router_moved_to_an_unknown_spot_is_ignored_and_state_stays_valid():

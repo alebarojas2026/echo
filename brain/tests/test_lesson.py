@@ -1,5 +1,6 @@
 """The live lesson: train on an open recording, keep fitting while the camera is on, score the
 radio against the camera, and carry on when the camera goes (brain/lesson.py)."""
+from brain.tests.simdata import errors as simdata_errors
 import pytest
 
 from brain.core import Brain
@@ -113,7 +114,7 @@ def test_train_during_the_recording_starts_a_lesson_that_keeps_fitting_and_survi
     first, first_windows = s["model"]["ver"], s["model"]["windows"]
     lesson = s["model"]["training"]["lesson"]
     assert lesson["of"] == LAST_N and 0 <= lesson["agree"] <= LAST_N and lesson["fitting"] is False
-    assert s["model"]["training"]["sessions"] == ["lesson1"] and check.errors(s) == []
+    assert s["model"]["training"]["sessions"] == ["lesson1"] and simdata_errors(s) == []
 
     states = []
     feed.play("zone_tour", seed=6, states=states)        # the recording is still open, the camera still on
@@ -133,7 +134,7 @@ def test_train_during_the_recording_starts_a_lesson_that_keeps_fitting_and_survi
     final = after[-1]["model"]["ver"]
     feed.play("zone_tour", seed=8, states=states)
     assert states[-1][1]["model"]["ver"] == final        # and no more fits after it
-    assert all(check.errors(st) == [] for _, st in states[::25])
+    assert all(simdata_errors(st) == [] for _, st in states[::25])
 
 
 def test_record_stop_ends_the_lesson_with_a_last_fit():
