@@ -1,6 +1,6 @@
 import { Box3, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
-import { FLY_MS, Fly, hallShot, mixShot, pinnedFraming, wideness } from './fly'
+import { FIRST_LOOK_MS, FLY_MS, Fly, cutaway, hallShot, mixShot, pinnedFraming, wideness } from './fly'
 import { roomShot, type RoomView, type Shot } from './view'
 
 /** Just enough of RoomView for the fly: it records the shots and lets the test run frames. */
@@ -66,6 +66,17 @@ describe('flying between shots', () => {
   })
 })
 
+describe('the see-through row', () => {
+  it('stays solid until the camera is nearly down, then opens smoothly: never a slot seen from far away', () => {
+    expect(cutaway(1)).toBe(0)
+    expect(cutaway(0.5)).toBe(0)
+    expect(cutaway(0.3)).toBe(0)
+    expect(cutaway(0.15)).toBeCloseTo(0.5)
+    expect(cutaway(0)).toBe(1)
+    for (let w = 0; w < 0.3; w += 0.01) expect(cutaway(w)).toBeGreaterThan(cutaway(w + 0.01))
+  })
+})
+
 describe('the fly', () => {
   const hall = hallShot(HALL, 12)
   const square = roomShot().radiusM
@@ -76,8 +87,9 @@ describe('the fly', () => {
     fly.setHall(hall)
     expect(view.shot.radiusM).toBeCloseTo(hall.radiusM)
     expect(view.host.dataset.view).toBe('hall')
-    view.run(1000)
+    view.run(FIRST_LOOK_MS - 100)
     expect(fly.wide).toBe(1) // still taking it in
+    expect(FIRST_LOOK_MS + FLY_MS).toBe(3000) // from the whole hall to the desk in 3 s
     view.run(1200 + FLY_MS)
     expect(view.shot.radiusM).toBeCloseTo(square)
     expect(view.host.dataset.view).toBe('square')

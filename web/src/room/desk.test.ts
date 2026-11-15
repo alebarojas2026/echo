@@ -8,7 +8,7 @@ import { FIGURE_HEIGHT_M } from './figure'
 import { LINK_IDS, NODES, SIZE_M, alertWordAt, applyLayout, nodeLabelSide, toScene, type Vec3 } from './frame'
 import { DESK_LAYOUT } from './layouts.fixture'
 import { clearBox, ghostBox } from './scan'
-import { DESK_TOP_M, standBase } from './stage'
+import { DESK_TOP_M, standBase, standOn } from './stage'
 import { FOV_DEG, deskAnchors, fitCamera, inSituShot, roomShot } from './view'
 import { xrayGeometry } from './xray'
 
@@ -199,5 +199,26 @@ describe('the desk inside the hall model', () => {
         expect(y + a.down).toBeLessThan(h - 71)
       }
     }
+  })
+})
+
+describe('devices wherever nodes.json puts them, inside a model of the room', () => {
+  // A room model's surfaces, as heights under a point: our desk north of the strip, the next row's desk a third
+  // of a metre behind it, the floor a little under ours everywhere else.
+  const under = (_x: number, y: number) => (y >= 0.6 ? 0.72 : y <= -0.33 && y >= -0.93 ? 0.72 : -0.03)
+
+  it('stands a device on our desk, on the next row’s desk, or free on the floor, by what is under it', () => {
+    expect(standOn([0.8, 1.1, 1.0], under)).toEqual([0.8, 1.1, 0.72])
+    expect(standOn([0.8, -0.6, 1.05], under)).toEqual([0.8, -0.6, 0.72])
+    expect(standOn([0.3, -0.15, 1.1], under)).toEqual([0.3, -0.15, -0.03])
+  })
+
+  it('stands a device on a desk’s very edge on the desk, not on the floor beside it', () => {
+    expect(standOn([1.1, 0.58, 1.0], under)[2]).toBe(0.72)
+  })
+
+  it('never stands a device on something above it, and uses our floor where the model has nothing', () => {
+    expect(standOn([0.8, 1.0, 0.5], under)[2]).toBe(0)
+    expect(standOn([0.8, 0.3, 1.0], () => null)).toEqual([0.8, 0.3, 0])
   })
 })

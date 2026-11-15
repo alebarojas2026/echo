@@ -152,7 +152,7 @@ export interface Anchor {
 
 const wordsPx = (text: string) => text.length * CHAR_EM * NAME_PX
 
-export function deskAnchors(personM = FIGURE_HEIGHT_M): Anchor[] {
+export function deskAnchors(personM = FIGURE_HEIGHT_M, width = 1280): Anchor[] {
   const [sw, sh] = STRIP_M ?? SIZE_M
   const [fw, fh] = SIZE_M
   const out: Anchor[] = []
@@ -169,7 +169,12 @@ export function deskAnchors(personM = FIGURE_HEIGHT_M): Anchor[] {
     else if (side === 'below-left') add(n.xyz, w + 10, 8, 8, tall)
     else add(n.xyz, w / 2, w / 2, tall, 8)
   }
-  for (const z of ZONES) add(alertWordAt(z.id)[0], wordsPx('No movement') / 2, wordsPx('No movement') / 2, 0, LINE_PX)
+  // Under each zone, in the aisle: its name (room-label--zone's size on this canvas), then the no-movement word.
+  const zonePx = Math.max(32, 48 * Math.min(1, width / 1280))
+  for (const z of ZONES) {
+    const half = Math.max(wordsPx('No movement'), `${z.id} ${z.name}`.length * CHAR_EM * zonePx) / 2
+    add(alertWordAt(z.id)[0], half, half, 0, zonePx + 10 + LINE_PX)
+  }
   add([0, -0.36, 0], 0, XRAY_CAPTION_PX, LINE_PX / 2, LINE_PX / 2) // xray.ts's caption, read from the strip's west end
   return out
 }
@@ -232,7 +237,7 @@ export function fitShot(anchors: readonly Anchor[], width: number, height: numbe
 
 /** The desk's framing for this canvas. */
 export function deskShot(width = 1280, height = 1080): Shot {
-  return fitShot(deskAnchors(), width, height, DESK_ELEV_DEG)
+  return fitShot(deskAnchors(FIGURE_HEIGHT_M, width), width, height, DESK_ELEV_DEG)
 }
 
 // Inside the hall model, the desk's close view is in situ: the person at true size at our desk, with the real desk
@@ -248,7 +253,7 @@ const SITU_MIN_RADIUS_M = 1.7
 
 /** The close view inside the hall, for the desk layout. */
 export function inSituShot(width = 1280, height = 1080): Shot {
-  const shot = fitShot(deskAnchors(PERSON_M), width, height, SITU_ELEV_DEG)
+  const shot = fitShot(deskAnchors(PERSON_M, width), width, height, SITU_ELEV_DEG)
   return { ...shot, radiusM: Math.max(shot.radiusM, SITU_MIN_RADIUS_M * Math.min(1, width / 1280)) }
 }
 
@@ -460,6 +465,7 @@ const RANKS: [string, number][] = [
   ['room-label--alert', 3],
   ['room-label--wave', 3],
   ['room-label--hall', 3],
+  ['room-label--ourdesk', 2],
   ['room-label--spot', 2],
   ['room-label--beam', 2],
   ['room-label--zone', 1],

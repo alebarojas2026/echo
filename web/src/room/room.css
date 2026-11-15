@@ -92,6 +92,11 @@
   translate: -100% -50%;
 }
 
+/* On the desk: just outside the strip on the aisle side, centred under its zone. */
+.room-label--zone-south {
+  translate: -50% 0;
+}
+
 .room-label--zone-set {
   color: var(--person);
 }
@@ -129,6 +134,16 @@
 }
 
 /* "Movement on this path": person amber, at node-label size, readable from the wide hall framing. */
+/* The whole hall: where we are, above the person's column. */
+.room-label--ourdesk {
+  translate: -50% -100%;
+  padding: 4px 10px;
+  background: var(--floor);
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 600;
+}
+
 .room-label--hall {
   translate: -50% -50%;
   padding: 4px 10px;
@@ -210,9 +225,9 @@
   translate: -100% -50%;
 }
 
-/* On the desk: in the aisle, centred under its zone. */
+/* On the desk: in the aisle, centred under its zone's name (one line of the zone names' size, and a gap). */
 .room-label--alert-south {
-  translate: -50% 0;
+  translate: -50% calc(max(32px, 48px * var(--room-k, 1)) + 10px);
 }
 
 .room-label--caption {
