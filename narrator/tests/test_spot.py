@@ -142,3 +142,60 @@ def test_object_narration_requires_no_person_and_the_configured_crossing_wifi(li
                  "links": [{"id": link, "status": "ok", "drop_db": 12}]})
     nar.observe({"type": "event", "t": 10_000, "kind": "object_on", "id": "o1", "info": {}})
     assert (nar.due(10_000) is not None) is allowed
+
+
+def _state(t, here):
+    pred = {"present": True, "kind": "person", "zone": 1, "motion": "still"} if here else {"present": False, "kind": "none", "zone": None}
+    return {"v": 2, "type": "state", "t": t, "src": "live", "pred": pred, "cam": "off"}
+
+
+def _event(t, kind, id):
+    return {"v": 2, "type": "event", "t": t, "seq": 1, "src": "live", "id": id, "kind": kind, "info": {"zone": 1}}
+
+
+def _spot_narrator():
+    clock, sent = [10_000], []
+    nar = n.Narrator(lambda messages: (messages[-1]["content"].split("Facts: ")[1], "fake"), sent.append, clock=lambda: clock[0])
+    return nar, sent, clock
+
+
+def test_a_leaving_is_not_said_once_they_are_back_on_the_spot():
+    # Seen on the kit: "Someone just stepped away from the desk." under "Someone is here, standing still".
+    # The leaving waited its turn (one sentence every 8 s) and was said after they had stepped back on.
+    nar, sent, clock = _spot_narrator()
+    nar.observe(_state(10_000, True)); nar.observe(_event(10_000, "enter", "e1")); nar.step()
+    clock[0] = 15_500
+    nar.observe(_state(15_500, False)); nar.observe(_event(15_500, "exit", "e2"))
+    assert nar.step() is None                                  # inside the 8 s
+    clock[0] = 18_000
+    nar.observe(_state(18_000, True))                          # back on the spot before the leaving was said
+    assert nar.step() is None and nar.pending is None          # so it is never said
+    assert [m["event_id"] for m in sent] == ["e1"]
+
+
+def test_an_arrival_is_not_said_once_they_have_gone_again():
+    nar, sent, clock = _spot_narrator()
+    nar.observe(_state(10_000, True)); nar.observe(_event(10_000, "enter", "e1"))
+    clock[0] = 10_400
+    nar.observe(_state(10_400, False))                         # gone before the sentence's turn
+    assert nar.step() is None and nar.pending is None and sent == []
+
+
+def test_a_line_that_now_says_the_opposite_is_put_right_at_the_next_turn_however_old_the_event():
+    nar, sent, clock = _spot_narrator()
+    nar.observe(_state(10_000, True)); nar.observe(_event(10_000, "enter", "e1")); nar.step()
+    clock[0] = 18_000
+    nar.observe(_state(18_000, False)); nar.observe(_event(18_000, "exit", "e2")); nar.step()
+    assert [m["event_kind"] for m in sent] == ["enter", "exit"]
+    clock[0] = 19_000
+    nar.observe(_state(19_000, True)); nar.observe(_event(19_000, "enter", "e3"))    # the line now says "stepped away"
+    clock[0] = 25_900
+    nar.observe(_state(25_900, True))
+    assert nar.step() is None                                  # still inside the 8 s after the last sentence
+    clock[0] = 26_000
+    nar.observe(_state(26_000, True))
+    msg = nar.step()                                           # 7 s old, and said: the screen must not go on saying they left
+    assert msg["event_id"] == "e3" and "desk" in msg["text"] and "away" not in msg["text"]
+    clock[0] = 40_000
+    nar.observe(_state(40_000, True)); nar.observe(_event(36_000, "zone_change", "e4"))
+    assert nar.step() is None                                  # nothing to put right: an old event is dropped as before
