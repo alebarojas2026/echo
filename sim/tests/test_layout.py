@@ -2,6 +2,7 @@
 import pytest
 
 from sim import fake, layout, state
+from sim.tests.conftest import load
 
 square = pytest.mark.skipif(layout.LAYOUT.strip_m is not None, reason="radio/nodes.json is the desk strip")
 
@@ -58,11 +59,29 @@ def test_zone_relative_paths_resolve_on_each_layout():
     assert [(p.get("x"), p.get("y")) for p in strip["person"]] == [(None, None), (-0.4, 0.3), (0.0, 0.3), (1.3, 0.3), (0.5, 0.5)]
     assert [(o["x"], o["y"]) for o in strip["objects"]] == [(0.86, 1.0), (1.45, 0.25)]
     assert layout.Layout(STRIP).zone_of(-0.4, 0.3) == 0                       # past the end: nobody in the area
-    square = layout.LAYOUT.resolve({"person": [{"t": 0, "zone": 3, "edge": "west"}, {"t": 1, "zone": 4}],
-                                    "objects": [{"near": "east", "drop_db": 6}]})
-    if layout.LAYOUT.strip_m is None:   # main's square: the points the old paths wrote in metres
-        assert [(p["x"], p["y"]) for p in square["person"]] == [(0.0, 0.5), (1.5, 0.5)]
-        assert (square["objects"][0]["x"], square["objects"][0]["y"]) == (1.85, 1.0)
+    square = load("square").resolve({"person": [{"t": 0, "zone": 3, "edge": "west"}, {"t": 1, "zone": 4}],
+                                      "objects": [{"near": "east", "drop_db": 6}]})
+    # the square: the points the old paths wrote in metres
+    assert [(p["x"], p["y"]) for p in square["person"]] == [(0.0, 0.5), (1.5, 0.5)]
+    assert (square["objects"][0]["x"], square["objects"][0]["y"]) == (1.85, 1.0)
+
+
+def test_zone_parts_name_the_same_moments_on_each_layout():
+    sq, st = load("square"), load("strip")
+    assert [sq.zone(f"tour{i}") for i in range(1, 6)] == [3, 4, 2, 1, 3]
+    assert [st.zone(f"tour{i}") for i in range(1, 6)] == [1, 2, 1, 2, 1]   # fewer zones: the tour goes round again
+    assert (sq.zone("still"), sq.zone("calm"), st.zone("still"), st.zone("calm"), sq.zone(2)) == (4, 3, 1, 2, 2)
+    walk_in = {"person": [{"t": 0, "zone": "tour1", "outside": "near"}, {"t": 1, "zone": "tour4", "edge": "near"}]}
+    assert [(p["x"], p["y"]) for p in sq.resolve(walk_in)["person"]] == [(-0.4, 0.5), (0.0, 1.5)]
+    assert [(p["x"], p["y"]) for p in st.resolve(walk_in)["person"]] == [(-0.4, 0.3), (1.6, 0.3)]
+    with pytest.raises(ValueError):
+        sq.zone("somewhere")
+
+
+def test_the_router_goes_to_the_spot_the_tray_blocks_least():
+    path = {"objects": [{"spot": "T1", "drop_db": 10}], "router": [{"t": 0, "spot": "S-home"}, {"t": 5, "spot": "clear"}]}
+    assert [r["spot"] for r in load("square").resolve(path)["router"]] == ["S-home", "S-W30"]   # a tie: west first
+    assert [r["spot"] for r in load("strip").resolve(path)["router"]] == ["S-home", "S-E30"]
 
 
 def test_someone_past_the_end_is_not_present():

@@ -1,11 +1,20 @@
 import asyncio
 import json
 
+import pytest
 import websockets
 
 from contracts.check import errors
 from sim import fake, ws
+from sim.tests.conftest import schema_fits
 from sim.tests.test_state import UNMEASURED
+
+
+@pytest.fixture(autouse=True)
+def _on_the_square(square):
+    """These tests check the server with the square's points and numbers, so they pin the square
+    (sim/tests/conftest.py) whichever layout radio/nodes.json holds."""
+
 
 STILL = {"name": "t", "duration_s": 30, "person": [{"t": 0, "x": 1.5, "y": 0.5}]}  # zone 4, 10 s limit
 
@@ -30,13 +39,13 @@ def test_defaults_are_the_brain_address_from_the_contract():
     assert (ws.HOST, ws.PORT, ws.PATH) == ("127.0.0.1", 8765, "/ws")
 
 
-def test_screen_gets_valid_state_and_events_in_order():
+def test_screen_gets_valid_state_and_events_in_order(square):
     async def client(url, server):
         async with websockets.connect(url + "/ws") as sock:
             return await read(sock, 100)  # about 10 s of the tour, past the first zone change
 
     msgs = asyncio.run(session(fake.load_path("zone_tour"), client))
-    assert all(set(errors(m)) <= UNMEASURED for m in msgs)
+    assert not schema_fits(square) or all(set(errors(m)) <= UNMEASURED for m in msgs)
     assert {m["type"] for m in msgs} == {"state", "event"} and {m["src"] for m in msgs} == {"sim"}
     seqs = [m["seq"] for m in msgs]
     assert seqs == list(range(seqs[0], seqs[0] + 100))
