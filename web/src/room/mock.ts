@@ -22,8 +22,13 @@ import { HALL_BEACONS, HOME_SPOT, LINK_IDS, SIZE_M, STRIP_M, TRAY_SPOTS, ZONES, 
 //   power   the tour, with the East beacon switched off for 6 s in every 16 (see powerOff)
 //   demo    the whole demo on a 90 s loop, in the planned running order (see demo.ts)
 
-export type MockScenario =
-  | 'tour' | 'still' | 'checkin' | 'camera' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall' | 'demo' | 'power'
+const SCENARIOS = ['tour', 'still', 'checkin', 'camera', 'between', 'object', 'blind', 'empty', 'waiting', 'stall', 'demo', 'power'] as const
+export type MockScenario = (typeof SCENARIOS)[number]
+
+/** The scenario ?mock= names; anything else (?mock=1, or no name) is the tour. */
+export function mockScenario(name: string | null): MockScenario {
+  return (SCENARIOS as readonly string[]).includes(name ?? '') ? (name as MockScenario) : 'tour'
+}
 
 /** ?mock=power: someone walks the tour while the East beacon is switched off for 6 s in every 16. Its links go
  *  stale, then blind after 3 s (SENSOR BLIND), and the beacon fades to "not heard" until it is back. Hall beacon
@@ -62,11 +67,19 @@ function wifiLink(): string {
   return LINK_IDS.find((id) => id.startsWith(`${routerId()}>`) && id.endsWith(':wifi')) ?? LINK_IDS[0]
 }
 
+/** A point in the one spot, a quarter of its width east (1) or west (-1) of its middle. */
+function spotStep(d: number): [number, number] {
+  const [x, y] = zoneCenter(ZONES[0].id)!
+  return [x + (d * floorSize()[0]) / 4, y]
+}
+
 /** The tour's stops: each zone's centre, anticlockwise around the floor from the north-east. */
 function tourStops(): { xy: [number, number]; angle: number }[] {
   const [fw, fh] = floorSize()
   const at = (xy: [number, number]) => (Math.atan2(xy[1] - fh / 2, xy[0] - fw / 2) - Math.PI / 4 + 4 * Math.PI) % (2 * Math.PI)
-  return ZONES.map((z) => zoneCenter(z.id)!).map((xy) => ({ xy, angle: at(xy) })).sort((a, b) => a.angle - b.angle)
+  // One spot: there is nowhere else to walk to, so the stops are a step either side of its middle.
+  const stops = ZONES.length === 1 ? [spotStep(-1), spotStep(1)] : ZONES.map((z) => zoneCenter(z.id)!)
+  return stops.map((xy) => ({ xy, angle: at(xy) })).sort((a, b) => a.angle - b.angle)
 }
 
 /** The person's floor point at time t in the tour, and whether they're walking. With three or more zones they
@@ -178,7 +191,8 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
   // Still and check-in stand in the alert zone's middle; "between" stands just past the line between the last two
   // zones (the square's 3 and 4, the desk's Left and Right).
   const middle = zoneCenter(alertZone())!
-  const prev = zoneCenter(ZONES[ZONES.length - 2].id)!
+  // (One spot has no line to stand on: "between" is then a step off its middle.)
+  const prev = ZONES.length > 1 ? zoneCenter(ZONES[ZONES.length - 2].id)! : spotStep(-1)
   const between: [number, number] = [(middle[0] + prev[0]) / 2 + 0.06, (middle[1] + prev[1]) / 2 + 0.05]
   const standing: Partial<Record<MockScenario, [number, number]>> = { still: middle, checkin: middle, between }
   const walking = scenario === 'tour' || scenario === 'camera' || scenario === 'power'

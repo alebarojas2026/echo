@@ -6,7 +6,7 @@ export type ScreenState = {
   t: number
   seq: number
   src: FeedSource
-  cam: 'on' | 'off' | 'stalled'
+  cam: 'on' | 'off' | 'stalled' | 'unknown'
   router: string
   health: { status: 'ok' | 'degraded' | 'blind' }
   pred: {
@@ -28,6 +28,8 @@ type Score = { correct: number | null; total: number | null }
 export type Proof = {
   zone: Score | null
   person_vs_object: Score | null
+  /** Somebody there or nobody, per second on held-out cycles; always_empty_correct is the always-"nobody" score on the same seconds (#656). */
+  presence?: { correct: number | null; total: number | null; always_empty_correct: number | null; cycles: number | null; method: string | null } | null
   train_s: number | null
   ms_per_decision: { p50: number | null; p95: number | null } | null
   watts: { radio_only: number | null } | null
@@ -37,7 +39,7 @@ export type Proof = {
 }
 
 const sourceLabels = { live: 'LIVE', sim: 'FAKE', replay: 'REPLAY' }
-const cameraLabels = { on: 'CAMERA ON', off: 'CAMERA OFF', stalled: 'CAMERA STALLED' }
+const cameraLabels = { on: 'CAMERA ON', off: 'CAMERA OFF', stalled: 'CAMERA STALLED', unknown: 'CAMERA UNKNOWN' }
 const alertLabels = { none: '', counting: 'Monitoring stillness', check_on: 'No-movement alert' }
 
 function agreement(score: Score | null | undefined) {

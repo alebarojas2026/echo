@@ -11,7 +11,7 @@ from board.tests.shell import BASH
 REPO = Path(__file__).resolve().parents[2]
 BOARD_UNITS = {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan",
                "radio-sight-camwatch", "radio-sight-brain", "radio-sight-serve",
-               "radio-sight-llm", "radio-sight-narrate"}
+               "radio-sight-llm", "radio-sight-narrate", "radio-sight-store", "radio-sight-privacy", "radio-sight-clock"}
 NEEDS_PI = {"radio-sight-wifi-rssi", "radio-sight-hci-scan"}
 
 
@@ -41,7 +41,7 @@ def repo(tmp_path):
     (r / "board").mkdir(parents=True)
     shutil.copy(REPO / "board" / "deploy.sh", r / "board" / "deploy.sh")
     shutil.copytree(REPO / "board" / "units", r / "board" / "units")
-    for path in ("board/serve.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
+    for path in ("board/serve.py", "board/layout.py", "board/privacy-ports.nft", "board/privacy.py", "board/privacy.nft", "board/clock.py", "store/__init__.py", "agent/endpoints.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
                  "teacher/camwatch.py", "brain/main.py", "advisor/advice.py", "narrator/narrate.py",
                  "pi/radio_node.py", "web/src/main.ts", "docs/notes.md"):
         write(r, path, "# v1\n")
@@ -57,7 +57,10 @@ def repo(tmp_path):
 def deploy(repo, *args, role="board", ok=True, **env_extra):
     unit_dir = (repo.parent / "units").as_posix()
     env = {k: v for k, v in os.environ.items() if k != "PYTHON"}
-    env.update(ROLE=role, UNIT_DIR=unit_dir, SYSTEMCTL="echo systemctl", SUDO="", **env_extra)
+    # The quiet step looks for real unit files; by default the test machine's are never touched.
+    quiet = {"QUIET_UNIT_DIRS": (repo.parent / "no-systemd").as_posix(),
+             "QUIET_STATE": (repo.parent / "quieted-units").as_posix()}
+    env.update(ROLE=role, UNIT_DIR=unit_dir, SYSTEMCTL="echo systemctl", SUDO="", **{**quiet, **env_extra})
     r = subprocess.run([BASH, "board/deploy.sh", *args], cwd=repo, env=env, capture_output=True, text=True)
     assert (r.returncode == 0) == ok, r.stdout + r.stderr
     return calls(r.stdout, "restart"), r.stdout + r.stderr
@@ -92,9 +95,46 @@ def test_units_run_as_root_only_where_the_contract_says(repo):
     deploy(repo, "v1")
     units = repo.parent / "units"
     roots = {u.stem for u in units.glob("*.service") if "User=root" in u.read_text()}
-    assert roots == {"radio-sight-hci-scan"}
+    assert roots == {"radio-sight-hci-scan", "radio-sight-clock"}
     assert all("Restart=always" in (units / f"{u}.service").read_text()
                for u in BOARD_UNITS - {"radio-sight-llm"})
+
+
+def test_the_store_follows_the_brain_as_the_clone_owner(repo):
+    deploy(repo, "v1")
+    lines = (repo.parent / "units" / "radio-sight-store.service").read_text().splitlines()
+    assert "After=radio-sight-brain.service" in lines and "Restart=always" in lines
+    assert any(l.startswith("ExecStart=") and l.endswith(" -m store") for l in lines)
+    assert any(l.startswith("User=") and l != "User=root" for l in lines)
+
+
+def test_privacy_meter_gets_only_the_counter_privilege(repo):
+    deploy(repo, "v1")
+    lines = (repo.parent / "units" / "radio-sight-privacy.service").read_text().splitlines()
+    assert any(l.startswith("User=") and l != "User=root" for l in lines)
+    assert "AmbientCapabilities=CAP_NET_ADMIN" in lines and "CapabilityBoundingSet=CAP_NET_ADMIN" in lines
+    assert "NoNewPrivileges=yes" in lines
+    pre = [l for l in lines if l.startswith("ExecStartPre=")]
+    assert len(pre) == 2 and all(p.startswith("ExecStartPre=-+/usr/sbin/nft -f /") for p in pre)
+    assert pre[0].endswith("/repo/board/privacy.nft") and pre[1].endswith("/repo/board/privacy-ports.nft")
+
+
+def test_the_clock_helper_acts_for_the_clone_owner(repo):
+    deploy(repo, "v1")
+    lines = (repo.parent / "units" / "radio-sight-clock.service").read_text().splitlines()
+    exec_line = next(l for l in lines if l.startswith("ExecStart="))
+    assert " -m board.clock helper --user " in exec_line and "@USER@" not in exec_line
+    assert "RuntimeDirectory=radio-sight-clock" in lines
+
+
+def test_the_brain_reads_the_placed_positions_written_before_it_starts(repo):
+    deploy(repo, "v1")
+    lines = (repo.parent / "units" / "radio-sight-brain.service").read_text().splitlines()
+    env = [l for l in lines if l.startswith("Environment=RADIO_SIGHT_NODES=")]
+    assert len(env) == 1 and env[0].endswith("/repo/data/nodes.local.json")
+    pre = [l for l in lines if l.startswith("ExecStartPre=")]
+    assert len(pre) == 1 and pre[0].endswith(" -m board.layout write-nodes")
+    assert lines.index(pre[0]) < next(i for i, l in enumerate(lines) if l.startswith("ExecStart="))
 
 
 def test_same_ref_restarts_nothing(repo):
@@ -109,6 +149,13 @@ def test_same_ref_restarts_nothing(repo):
     ("radio/nodes.json", {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan", "radio-sight-brain"}),
     ("advisor/advice.py", {"radio-sight-brain"}),
     ("board/serve.py", {"radio-sight-serve"}),
+    ("board/layout.py", {"radio-sight-serve", "radio-sight-brain"}),
+    ("store/__init__.py", {"radio-sight-store", "radio-sight-serve"}),
+    ("agent/endpoints.py", {"radio-sight-serve"}),
+    ("board/privacy.py", {"radio-sight-serve", "radio-sight-privacy"}),
+    ("board/privacy.nft", {"radio-sight-privacy"}),
+    ("board/privacy-ports.nft", {"radio-sight-privacy"}),
+    ("board/clock.py", {"radio-sight-serve", "radio-sight-clock"}),
     ("narrator/narrate.py", {"radio-sight-narrate"}),
     ("narrator/llm.service", {"radio-sight-llm", "radio-sight-narrate"}),
     ("teacher/camwatch.py", {"radio-sight-camwatch"}),
@@ -133,6 +180,32 @@ def test_changed_unit_file_is_reinstalled_and_restarted(repo):
     restarted, out = deploy(repo, sha)
     assert restarted == {"radio-sight-serve"} and "systemctl daemon-reload" in out
     assert "RestartSec=5" in (repo.parent / "units" / "radio-sight-serve.service").read_text()
+
+
+def test_quiet_stops_what_calls_out_and_online_starts_exactly_that_again(repo):
+    system = repo.parent / "systemd"
+    system.mkdir()
+    for unit in ("systemd-timesyncd.service", "apt-daily.timer", "something-else.service"):
+        (system / unit).write_text("[Unit]\n")
+    state = repo.parent / "quieted-units"
+    _, out = deploy(repo, "v1", QUIET_UNIT_DIRS=system.as_posix())
+    assert calls(out, "disable") == {"systemd-timesyncd", "apt-daily.timer"}
+    assert state.read_text().split() == ["systemd-timesyncd.service", "apt-daily.timer"]
+    assert "quiet: stopped systemd-timesyncd.service apt-daily.timer" in out
+    _, out = deploy(repo, "v1", "--online", QUIET_UNIT_DIRS=system.as_posix())
+    assert {"systemd-timesyncd", "apt-daily.timer"} <= calls(out, "enable")
+    assert calls(out, "disable") == set() and not state.exists()
+    assert "online: started again: systemd-timesyncd.service apt-daily.timer" in out
+    _, out = deploy(repo, "v1", "--online", QUIET_UNIT_DIRS=system.as_posix())
+    assert "nothing was quieted" in out
+
+
+def test_the_pi_is_never_quieted(repo):
+    system = repo.parent / "systemd"
+    system.mkdir()
+    (system / "systemd-timesyncd.service").write_text("[Unit]\n")
+    _, out = deploy(repo, "v1", role="pi", QUIET_UNIT_DIRS=system.as_posix())
+    assert "quiet:" not in out and calls(out, "disable") == set()
 
 
 def test_pi_gets_only_the_radio_node(repo):

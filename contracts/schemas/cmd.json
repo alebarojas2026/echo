@@ -5,7 +5,7 @@
   "$ref": "common.json#/$defs/fields",
   "properties": {
     "type": {"const": "cmd"},
-    "cmd": {"enum": ["train", "baseline", "reset_alert", "reset", "record_start", "record_stop", "label_mode", "router_moved", "router_home", "relearn", "truth"]},
+    "cmd": {"enum": ["train", "baseline", "reset_alert", "reset", "record_start", "record_stop", "label_mode", "router_moved", "router_home", "relearn", "truth", "arm"]},
     "args": {"type": "object"}
   },
   "required": ["v", "type", "cmd", "args"],
@@ -20,7 +20,11 @@
      "then": {"properties": {"args": {"properties": {"spot": {"$ref": "common.json#/$defs/router_spot"}}, "required": ["spot"], "additionalProperties": false}}}},
     {"if": {"properties": {"cmd": {"const": "truth"}}, "required": ["cmd"]},
      "then": {"properties": {"args": {"properties": {"zone": {"$ref": "common.json#/$defs/zone"}}, "required": ["zone"], "additionalProperties": false}}}},
-    {"if": {"properties": {"cmd": {"enum": ["train", "baseline", "reset_alert", "reset", "record_stop", "router_home", "relearn"]}}, "required": ["cmd"]},
+    {"if": {"properties": {"cmd": {"const": "arm"}}, "required": ["cmd"]},
+     "then": {"properties": {"args": {"properties": {"on": {"type": "boolean"}}, "required": ["on"], "additionalProperties": false}}}},
+    {"if": {"properties": {"cmd": {"const": "baseline"}}, "required": ["cmd"]},
+     "then": {"properties": {"args": {"properties": {"keep_model": {"type": "boolean"}}, "additionalProperties": false}}}},
+    {"if": {"properties": {"cmd": {"enum": ["train", "reset_alert", "reset", "record_stop", "router_home", "relearn"]}}, "required": ["cmd"]},
      "then": {"properties": {"args": {"maxProperties": 0}}}}
   ]
 }

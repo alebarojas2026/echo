@@ -52,8 +52,8 @@ Any beacon, antenna, phone, cable, or node placement change needs Alexander. Sta
 
 The camera supplies setup labels only. It saves no image or video.
 
-- Before baseline or training, reconnect or restart the camera path and wait for `cam-status` to report `on`.
-- During baseline, keep label mode `off` and keep the square clear.
+- Before training, reconnect or restart the camera path and wait for `cam-status` to report `on`.
+- A baseline may run with the camera unplugged. Keep label mode `off` and keep the sensing strip and desk clear.
 - After successful training, camera `off` is expected for the radio-only demo. Continue if the radio feed is live and healthy.
 - If the camera moved, redo the camera calibration before collecting labels again.
 
@@ -62,13 +62,39 @@ The public proof is that sensing continues after the camera is unplugged. Radio 
 ## Baseline or training will not complete
 
 1. Put the router at `S-home` and confirm every required link is healthy.
-2. For baseline, confirm label mode is `off` and keep the square clear of people and movable objects.
-3. If a person enters or health stops being `ok`, clear the square, fix the failed link, and restart the baseline.
-4. For training, confirm the camera is `on`, the person is inside the calibrated square, and the label mode matches the session purpose.
+2. For baseline, confirm label mode is `off` and keep the sensing strip and desk clear of people and movable objects.
+3. If a person enters or health stops being `ok`, clear the strip, fix the failed link, and restart the baseline.
+4. For training, confirm the camera is `on`, the person is inside the calibrated strip, and the label mode matches the session purpose.
 5. Drop any window with no label or a clipped label. Do not treat it as training evidence.
 6. Wait for `baseline_done` before training and for `trained` before judging predictions.
 
 After moving into the presentation room, place the final tape, redo the camera calibration, baseline, and training there. Build-room calibration is not presentation evidence.
+
+## Pi B's links are all stale
+
+Pi B has no cable. Its radio readers send through Pi A's hotspot, so this failure may leave the screen up while health says `degraded`.
+
+1. Ask Alexander to confirm Pi B is powered and joined to Pi A's hotspot.
+2. On Pi B, run `python -m pi.check` and confirm the board bus at `192.168.77.2:5600` is reachable.
+3. Confirm Pi A's hotspot-to-Ethernet forwarding is active.
+4. Restart Pi B's Wi-Fi and Bluetooth readers only after that path works.
+
+Do not record Pi B's DHCP address. If only Pi B's received links are stale, health is degraded rather than blind and the other listeners continue.
+
+## One strip link is weak
+
+A single weak strip link often means a cardboard arm or its beacon was knocked.
+
+1. Read the weak link and identify its east or west endpoint from `radio/nodes.json`.
+2. Ask Alexander to secure the arm and restore the beacon to its measured position at `1.0 m` antenna height.
+3. Keep everyone out of the strip and start `baseline {keep_model: true}`.
+4. Wait for the `20 s` baseline to finish and confirm all twelve core links update again.
+
+The keep-model baseline can run with the camera unplugged. Use it only for the same layout set down again; plain `baseline {}` means a new place and drops the trained model.
+
+## The model is gone after a baseline
+
+A plain `baseline {}` intentionally starts a new place, invalidates the older recordings, and drops the model. Train again for a genuinely new place. For a bumped arm or the same desk layout set down again, restore the positions first and use `baseline {keep_model: true}` so only the baseline changes.
 
 ## Predictions disappear after moving the router
 

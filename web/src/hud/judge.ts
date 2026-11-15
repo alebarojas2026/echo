@@ -1,3 +1,5 @@
+import { boardNow } from './board-time'
+import { boardAskClient, makeMockAskClient } from './ask-client'
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import { routerWords } from './router-words'
@@ -10,9 +12,11 @@ import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
 import { fetchProof } from '../room/hud-host'
 import type { Proof } from './state'
+import { presenceTile } from './proof-visibility'
 import { judgeMoment } from './judge-moment'
 import { mountReplay } from './replay'
 import { recordsClient } from './records'
+import { holdAdvice } from './dead-zone'
 
 type Panel = { update(state: StateMsg | null, stale: boolean): void; dispose?(): void }
 type PanelModule = { mountPanel(root: HTMLElement): Panel }
@@ -43,11 +47,13 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     value.dataset.testid = id
     debug.append(value)
   }
-  const proofLabels = { 'zone-score': 'Zone agreement', 'person-object-score': 'Person / object', 'train-seconds': 'Train time', 'ms-per-decision': 'Per decision', watts: 'Watts', 'bytes-out': 'Bytes out', 'images-stored': 'Images stored', 'models-count': 'Models' }
+  const proofLabels = { 'presence-score': 'Presence', 'zone-score': 'Zone agreement', 'person-object-score': 'Person / object', 'train-seconds': 'Train time', 'ms-per-decision': 'Per decision', watts: 'Watts', 'bytes-out': 'Bytes out', 'images-stored': 'Images stored', 'models-count': 'Models' }
   const metrics = root.querySelector('footer dl')!
   for (const [id, label] of Object.entries(proofLabels)) {
     const item = document.createElement('div')
     item.innerHTML = `<dt>${label}</dt><dd data-testid="${id}">__</dd>`
+    // The presence score never stands alone (#656): what always saying "nobody" would score sits under it.
+    if (id === 'presence-score') { item.className = 'proof-wide'; item.insertAdjacentHTML('beforeend', '<dd class="proof-note" data-testid="presence-baseline" hidden></dd>') }
     metrics.append(item)
   }
   updateProofVisibility(root)
@@ -65,14 +71,18 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     if (event.key === 'Escape') operator.hidden = true
   }
   document.addEventListener('keydown', key)
-  const disposeAsk = mountAskRoom(root.querySelector('header')!, undefined, replay ? span => void replay.start(span) : undefined)
+  const now = () => boardNow(live?.current() ?? null)
+  const ask = live?.source === 'ws' ? boardAskClient : makeMockAskClient(now)
+  const disposeAsk = mountAskRoom(root.querySelector('header')!, ask, replay ? span => void replay.start(span) : undefined)
   const disposeArrival = mountArrival(root, live, operator)
+  let offReplayClock: (() => void) | undefined
   if (replay) {
     const last = document.createElement('button')
     last.type = 'button'
     last.dataset.testid = 'replay-last'
     last.textContent = 'Replay the last 2 minutes'
-    last.onclick = () => { operator.hidden = true; void replay.start({ from_t: Date.now() - 120_000, to_t: Date.now() }) }
+    offReplayClock = live?.subscribe(() => { last.disabled = now() === null })
+    last.onclick = () => { const end = now(); if (end === null) return; operator.hidden = true; void replay.start({ from_t: end - 120_000, to_t: end }) }
     operator.querySelector('.operator-controls')!.before(last)
   }
   let disposed = false
@@ -82,11 +92,13 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     lastState = state
     lastStale = stale
     if (feed?.source === 'mock') state = alignMockState(state)
+    state = holdAdvice(state)
     const [headline, detail] = judgeMoment(state, stale)
-    headlineText.set(headline)
+    // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
+    headlineText.set(headline, !!(state as { replay?: unknown } | null)?.replay)
     set('judge-detail', detail)
     set('source-badge', state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO')
-    if (!Object.keys(extraPanels).some(path => path.includes('camera'))) set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] : '')
+    if (!Object.keys(extraPanels).some(path => path.includes('camera'))) set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] ?? 'Camera status unknown' : '')
     set('narrator-text', !stale ? state?.narration?.text ?? '' : '')
     field('narrator-text').hidden = !field('narrator-text').textContent
     set('pred-zone', state?.pred?.zone ? String(state.pred.zone) : '__')
@@ -110,13 +122,16 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const refresh = async () => {
     const proof = await fetchProof() as Proof | null
     if (disposed) return
-    const values = [score(proof?.zone), score(proof?.person_vs_object), number(proof?.train_s, ' s'), number(proof?.ms_per_decision?.p50, ' ms'), number(proof?.watts?.radio_only), number(proof?.bytes_out), number(proof?.images_stored), number(proof?.models_on_board)]
+    const presence = presenceTile(proof?.presence)
+    const values = [presence.score, score(proof?.zone), score(proof?.person_vs_object), number(proof?.train_s, ' s'), number(proof?.ms_per_decision?.p50, ' ms'), number(proof?.watts?.radio_only), number(proof?.bytes_out), number(proof?.images_stored), number(proof?.models_on_board)]
     Object.keys(proofLabels).forEach((id, index) => set(id, values[index]))
+    set('presence-baseline', presence.baseline)
+    field('presence-baseline').hidden = !presence.baseline
     updateProofVisibility(root)
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 

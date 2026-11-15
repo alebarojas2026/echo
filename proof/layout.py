@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-# Today's square has no centre_m in its zones; these are its centres.
+# Historical square fixtures have no centre_m in their zones.
 SQUARE_CENTRES = {1: (0.5, 1.5), 2: (1.5, 1.5), 3: (0.5, 0.5), 4: (1.5, 0.5)}
 
 
@@ -23,6 +23,11 @@ def load(path=None):
 def is_strip(doc):
     """The desk layout: a strip in front of a desk, split into zones along x."""
     return "strip_m" in doc["frame"]
+
+
+def is_spot(doc):
+    """One zone, and a strip with no split: the strip is the one spot a person stands on."""
+    return is_strip(doc) and len(doc["zones"]) == 1 and doc["frame"].get("zone_split_x_m") is None
 
 
 def zones(doc):
@@ -43,6 +48,8 @@ def zone_at(doc, x, y):
         width, depth = doc["frame"]["strip_m"]
         if not (0 <= x <= width and 0 <= y < depth):
             return 0
+        if is_spot(doc):
+            return int(doc["zones"][0]["id"])
         split = float(doc["frame"]["zone_split_x_m"])
         return 1 + (x >= split)
     width, depth = doc["frame"]["size_m"]
@@ -63,9 +70,17 @@ def link_midpoints(doc):
 
 
 def link_zones(doc):
-    """{link id: zone} for the links whose midpoint lies in a zone (the threshold baseline)."""
+    """{link id: zone} for the links whose midpoint lies in a zone (the threshold baseline).
+
+    On one spot, a file that marks its links with crosses_spot decides it instead: the marked links
+    are the spot's, whatever their midpoints.
+    """
+    if is_spot(doc) and any("crosses_spot" in link for link in doc["links"]):
+        return {link["id"]: int(doc["zones"][0]["id"]) for link in doc["links"] if link.get("crosses_spot")}
     out = {}
+    enabled = {link["id"] for link in doc["links"] if link.get("classifier",True) is not False}
     for link, (x, y) in link_midpoints(doc).items():
+        if link not in enabled: continue
         zone = zone_at(doc, x, y)
         if zone:
             out[link] = zone

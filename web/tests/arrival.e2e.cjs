@@ -92,7 +92,7 @@ async function overHall(page, options = {}) {
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'))
   await page.goto('/tests/arrival-harness.html')
   await expect.poll(() => page.evaluate(() => !!window.arrival)).toBe(true)
-  await page.evaluate(() => { window.phases = []; addEventListener('hud:arrival', event => window.phases.push(event.detail.state)) })
+  await page.evaluate(() => { window.phases = []; window.cuts = []; addEventListener('hud:arrival', event => { window.phases.push(event.detail.state); if (event.detail.cut) window.cuts.push(event.detail.cut) }) })
   await page.clock.runFor(300)
 }
 const phase = page => page.evaluate(() => document.documentElement.dataset.hudArrival)
@@ -146,7 +146,23 @@ test('armed waits over the room, and an intrusion goes straight to the floor in 
   expect(await phase(page)).toBe('closed')
   await expect(page.locator('.hud-arrival')).toBeVisible()
   await expect(page.locator('.hud-arrival')).toHaveCSS('opacity', '1')
+  // The room is told to jump to the floor, not to fly (#552): the same closed state, with cut.
+  expect(await page.evaluate(() => [document.documentElement.dataset.hudArrivalCut, window.cuts])).toEqual(['1', [true]])
   await capture(page, '1920-over-hall-intrusion')
+  await page.evaluate(() => { window.arrival.event('disarmed'); window.arrival.update('empty') })
+  await page.clock.runFor(300)
+  expect(await page.evaluate(() => [document.documentElement.dataset.hudArrival, document.documentElement.dataset.hudArrivalCut])).toEqual(['waiting', undefined])
+})
+test('a replay moves the card aside and it comes back afterwards', async ({ page }) => {
+  await overHall(page)
+  await expect(page.getByTestId('arrival-title')).toHaveText('Nobody is here.')
+  await page.evaluate(() => { document.documentElement.dataset.hudReplay = 'on' })
+  await expect(page.locator('.hud-arrival')).toBeHidden()
+  expect(await phase(page)).toBe('closed')
+  expect(await page.locator('#hud').evaluate(el => el.inert)).toBe(false)
+  await page.evaluate(() => { document.documentElement.dataset.hudReplay = '' })
+  await expect(page.locator('.hud-arrival')).toBeVisible()
+  expect(await phase(page)).toBe('waiting')
 })
 test('reduced motion still hands over, and the operator can skip the card', async ({ page }) => {
   await overHall(page, { reduced: true })
@@ -194,6 +210,9 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     const line = page.getByTestId('arrival-passed')
     await page.evaluate(() => window.arrival.update('empty', { armed: true }))
     await page.clock.runFor(1000)
+    // The headline's own text-in runs on the real clock: let it finish before its place is read.
+    const settled = () => page.evaluate(() => Promise.all(document.getAnimations().filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => null))))
+    await settled()
     const top = (await title.boundingBox()).y
     // Someone appears while armed: the card waits for the board to say which it was.
     await page.evaluate(() => window.arrival.update('still', { armed: true }))
@@ -207,6 +226,7 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await expect(line).toHaveText(/^Someone passed by (on the (left|right)|in the bathroom)$/)
     await expect(line).toHaveCSS('color', 'rgb(154, 163, 173)')
     await expect(line).toHaveCSS('font-size', '28px')
+    await settled()
     expect((await title.boundingBox()).y).toBe(top) // nothing moved to make room for it
     await capture(page, `${width}-passed-by`)
     await page.clock.runFor(4500)

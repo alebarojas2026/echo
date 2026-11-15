@@ -1,4 +1,6 @@
-# Room scans ship inside web/dist (push-web.sh), never in git: they are pictures of a real room. Their
-# alignment (room.json, saved by ?align=1) is made on site for that scan, so it stays out of git too.
+# The hall model (hall-hi.glb, hall-lo.glb) is a rebuilt model of the lecture hall: plain shapes and flat
+# colours, no photographs. It is in git with permission, with its default alignment (room.json) and the list of
+# desks (hall-desks.json). Raw room scans are pictures of a real room and stay out of git.
 *.glb
-room.json
+!hall-hi.glb
+!hall-lo.glb

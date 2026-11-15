@@ -26,12 +26,14 @@ from brain import features as F
 from brain import layout
 from brain import settings as S
 from brain.alert import Armed, Tamper, Watch
+from brain.hall import Hall
 from brain.health import Health
 from brain.lesson import Lesson
 from brain.train import Model
 from brain.xray import Xray
 
 BASELINE_MS = 20_000
+PASSER_PAUSE_MS = 3_000   # somebody in the camera's view but outside the layout pauses a capture this long at most
 BASELINE_GIVE_UP_MS = 120_000   # a baseline asked for by hand that still can't start after this long is dropped
 HOME = "S-home"
 NODES_JSON = layout.NODES_JSON   # radio/nodes.json
@@ -46,8 +48,11 @@ AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
 HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable (Pi B): their readings ride the sensing Wi-Fi
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
 TRAIN_PURPOSES = ("train", "object")
+TRAIN_KEEP = 8           # a fit reads the newest this-many recordings of each kind (person, empty, object):
+                         # room for 3+ walkers with two walks each, and a bound on an afternoon of lessons
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
-SILENT_MS = 3_000        # a keep-model baseline restarts only for a link with no reading for this long
+GONE_READINGS = 8        # a link is gone, not just slow, once silent for this many readings at its own rate
+SILENT_MS = 3_000        # a baseline restarts only for a link with no reading for this long
 LABEL_MODES = ("person", "object", "off")
 CAM_STATES = ("on", "off", "stalled")
 
@@ -148,8 +153,17 @@ class Brain:
         # quiet when that link is blocked on purpose: they show stale or blind in their own rows
         # but never blind the sensor (desk layout, Pi B).
         over_hotspot = [k for k in links if ends.get(k, _ends(k))[1] in HOTSPOT_RECEIVERS]
-        self.health = Health.from_nodes(nodes, classifier_links=[k for k in links if k not in over_hotspot])
-        self.xray = Xray.from_nodes(nodes)
+        # Section 3: a link with "classifier": false is too thin to classify on. It is read, listed in
+        # state.links, judged stale or blind in its own row and counted for tamper like any other,
+        # but it is no feature, never blinds the sensor, never holds up a baseline, and the x-ray,
+        # objects, the check-in and the advice don't look at it.
+        thin = {link["id"] for link in nodes["links"] if link.get("classifier") is False}
+        self.model_links = tuple(k for k in links if k not in thin)
+        self.health = Health.from_nodes(
+            nodes, classifier_links=[k for k in self.model_links if k not in over_hotspot])
+        self.xray = Xray.from_nodes(dict(nodes, links=[k for k in nodes["links"] if k["id"] not in thin]))
+        self.router_links = [k for k in self.router_links if k not in thin]   # the 3 s check after router_home
+        self.hall = Hall.from_nodes(nodes)    # optional long links (brain/hall.py); none unless nodes.json lists them
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led, self.settings)
         # after hours: a person who appears and is still there armed.hold_s later is an intrusion
         self.armed = Armed(self.settings, S.hold_s(nodes))
@@ -162,6 +176,7 @@ class Brain:
         self._last_seen: Dict[str, int] = {}  # link -> recv_t of its last reading
         self._last_dbm: Dict[str, float] = {} # link -> the last dbm we sent (or its last reading)
         self._health_ok = True
+        self._quiet: List[str] = []           # links that can blind the sensor and are stale right now
         self.nodes = nodes
         self._recent: Dict[str, deque] = {link: deque() for link in links}   # (recv_t, dbm), last 10 s
         self.advice: Optional[dict] = None
@@ -190,6 +205,7 @@ class Brain:
         self._base_log: List[dict] = []       # every baseline of this run, when nothing is written to disk
         self.place_t: Optional[int] = None    # when the operator's last baseline finished: "this place"
         self.expected_hz: Dict[str, float] = {}
+        self.quiet_db: Dict[str, float] = {}  # link -> the std of its 0.5 s means over the baseline capture
         self.windower: Optional[F.Windower] = None
         self.window: Optional[dict] = None
         self.capture: Optional[dict] = None   # a running baseline capture
@@ -212,8 +228,10 @@ class Brain:
         self._seq = 0       # one counter for everything we send to the screens (section 4)
         self._cmd_seq = 0   # and one for the commands we pass to the bus, a separate socket
         self._event_n = 0
+        self._scanned: Dict[str, tuple] = {}   # session files read and not taken: name -> (mtime, size, place)
         self._load_baseline()
         self._load_model()
+        self._load_armed()
 
     def now(self) -> int:
         return self._clock() if self._clock else self.feed_t
@@ -222,6 +240,9 @@ class Brain:
 
     def on_message(self, msg: dict) -> None:
         """One message forwarded by the bus (it carries recv_t)."""
+        if self.hall.take(msg):
+            self._hall_heard(msg)   # tamper counts a hall beacon once it has been heard since arming
+            return   # a hall link's reading: nothing below ever sees it
         t, kind = msg.get("recv_t"), msg.get("type")
         if t is None:
             return
@@ -230,10 +251,8 @@ class Brain:
         if kind == "label" and not _is_label(msg):
             return   # a zone or a count that isn't a number: the windows would choke on it
         self.feed_t = max(self.feed_t, int(t))
-        if kind == "rssi" and self._hall_nodes and isinstance(msg.get("link"), str):
-            tx = _ends(msg["link"])[0]
-            if tx in self._hall_nodes and msg["link"] not in self.links:
-                self._hall_seen.setdefault(tx, {})[msg["link"]] = int(t)
+        if kind == "rssi":
+            self._hall_heard(msg)
         if kind == "rssi":
             # state.src mirrors the radio feed. The camera and the bus's meta say "live"
             # even over a sim feed, and must not flip the screen's badge to LIVE.
@@ -265,7 +284,8 @@ class Brain:
             elif msg.get("link") in self.links:
                 link, dbm = msg["link"], float(msg["dbm"])
                 self.health.add(link, t, dbm)
-                self.watch.on_rssi(msg)
+                if link in self.model_links:
+                    self.watch.on_rssi(msg)
                 self._heard.add(link)
                 self._last_seen[link] = t
                 self._last_dbm.setdefault(link, dbm)
@@ -275,12 +295,22 @@ class Brain:
                     recent.popleft()
                 if link in self.base:
                     self.xray.add(link, t, self.base[link] - dbm)
-                if self.capture and self.capture["start"] is not None:
+                if self.capture and self.capture["start"] is not None and self.capture["paused"] is None:
                     self.capture["messages"].append(msg)
             if self.windower:
                 for window in self.windower.push(msg):
                     self.window = window
         self._tick()
+
+    def _hall_heard(self, msg: dict) -> None:
+        """Remember when a hall beacon's link was last heard, for tamper. Nothing else uses it."""
+        link, t = msg.get("link"), msg.get("recv_t")
+        if not (self._hall_nodes and isinstance(link, str) and isinstance(t, (int, float))
+                and _is_reading(msg.get("dbm"))):
+            return
+        tx = _ends(link)[0]
+        if tx in self._hall_nodes and link not in self.links:
+            self._hall_seen.setdefault(tx, {})[link] = int(t)
 
     def on_cmd(self, msg: dict) -> None:
         """One command from the screen. Every command also goes to the bus, which records it."""
@@ -300,14 +330,39 @@ class Brain:
         baseline {keep_model: true} = the same layout set down again (another desk, a knocked
         beacon): only the baseline is new. The model was taught on drops from a baseline, so
         it carries over, and the recordings keep the baseline they were made on."""
+        new_place = args.get("keep_model") is not True
+        if self.capture and self.capture["by_hand"] and self.capture["new_place"] == new_place:
+            return   # a double tap, or two operator pages: the capture already running carries on (#649)
         self._cmd_label_mode({"mode": "off"})
-        self._start_capture(new_place=args.get("keep_model") is not True, by_hand=True)
+        self._start_capture(new_place=new_place, by_hand=True)
+
+    def _newest_recordings(self) -> List[dict]:
+        """The recordings a fit reads: the newest TRAIN_KEEP of each kind, not all of them.
+
+        Every judge's lesson leaves one more train recording in this place, and a fit read them
+        all, so fits (and the 30 s lesson) grew all afternoon (#611). Kinds are kept apart so a
+        run of lessons can't push out the empty-room or the tray recordings: walks with a walker,
+        train recordings without one (the empty room), and object recordings. The files stay on
+        disk; a new place still starts from none.
+        """
+        kinds: Dict[str, List[dict]] = {"person": [], "empty": [], "object": []}
+        for s in self.sessions.values():
+            meta = s["meta"]
+            if meta.get("purpose") == "object":
+                kinds["object"].append(s)
+            elif meta.get("purpose") == "train":
+                kinds["person" if str(meta.get("walker") or "").strip() else "empty"].append(s)
+        keep = []
+        for group in kinds.values():
+            group.sort(key=lambda s: s["meta"].get("recv_t") or 0)
+            keep += group[-TRAIN_KEEP:]
+        return sorted(keep, key=lambda s: s["meta"].get("recv_t") or 0)
 
     def _cmd_train(self, args):
         if self.training or not self.base:
             return
         self._find_sessions()
-        sessions = [dict(s) for s in self.sessions.values() if s["meta"].get("purpose") in TRAIN_PURPOSES]
+        sessions = [dict(s) for s in self._newest_recordings()]
         teaching = self._open_train_session()   # a train recording still open: fit from it as far as it has got
         if teaching:
             sessions.append(teaching)
@@ -317,7 +372,7 @@ class Brain:
         self.training = {"started_t": self.now(), "progress": None,
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
-        history, links, zones = self._baselines(), self.links, self.zone_ids
+        history, links, zones = self._baselines(), self.model_links, self.zone_ids
         motion_links = self.settings.motion_links
 
         def fit():   # may run on another thread: touches nothing of ours
@@ -362,7 +417,34 @@ class Brain:
         """arm {on: true|false}: "this space should be empty now"."""
         on = args.get("on")
         if isinstance(on, bool) and self.armed.arm(on):
+            self._save_armed(on)
             self.emit("armed" if on else "disarmed", {})
+
+    def _save_armed(self, on: bool) -> None:
+        """data/sessions/armed.json, so a crash or a redeploy doesn't quietly disarm the space.
+        Written through a temporary file; a failed write is logged and never stops the arm."""
+        if not self.sessions_dir:
+            return
+        try:
+            self.sessions_dir.mkdir(parents=True, exist_ok=True)
+            tmp = self.sessions_dir / "armed.json.tmp"
+            tmp.write_text(json.dumps({"on": on, "t": self.now()}) + "\n", encoding="utf-8")
+            os.replace(tmp, self.sessions_dir / "armed.json")
+        except OSError as e:
+            logging.getLogger("brain").warning("could not save armed.json: %s", e)
+
+    def _load_armed(self) -> None:
+        """Arm again after a restart, and say so with a second armed event: the store, the narrator
+        and the report see the restart. A missing, cut-off or unreadable file means not armed."""
+        if not self.sessions_dir:
+            return
+        try:
+            doc = json.loads((self.sessions_dir / "armed.json").read_text(encoding="utf-8"))
+            on = doc["on"] is True
+        except (OSError, ValueError, KeyError, TypeError):
+            return
+        if on and self.armed.arm(True):
+            self.emit("armed", {})
 
     def _cmd_reset_alert(self, args):
         self.watch.reset_alert()
@@ -422,14 +504,24 @@ class Brain:
             if name in self.sessions or name == self.want_session or "." in name:   # x.states.jsonl, x.events.jsonl
                 continue
             try:
-                if path.stat().st_mtime * 1000 < self.place_t:
+                stat = path.stat()
+                if stat.st_mtime * 1000 < self.place_t:
                     continue
             except OSError:
+                continue
+            # A file that was read and isn't a train or object recording of this place (demo
+            # recordings pile up all afternoon) is not read again until it changes. This runs on
+            # the live loop at every fit, every 15 s during a lesson (#648).
+            stamp = (stat.st_mtime_ns, stat.st_size, self.place_t)
+            if self._scanned.get(name) == stamp:
                 continue
             meta = last_meta(path)
             if meta and meta.get("session") == name and meta.get("purpose") in TRAIN_PURPOSES \
                     and isinstance(meta.get("recv_t"), (int, float)) and meta["recv_t"] >= self.place_t:
                 self.sessions[name] = {"meta": meta, "messages": None, "path": path}
+                self._scanned.pop(name, None)
+            else:
+                self._scanned[name] = stamp
 
     def _save_model(self) -> None:
         """data/sessions/model.pkl, so a restarted brain predicts without a new walk."""
@@ -445,6 +537,8 @@ class Brain:
         tmp = self.sessions_dir / "model.pkl.tmp"
         with open(tmp, "wb") as f:
             pickle.dump({"ver": self.model.ver, "base": self.model.base, "place_t": self.place_t,
+                         "train_sessions": self.model.train_sessions,
+                         "train_walkers": self.model.train_walkers,   # None = unknown
                          "model": self.model}, f)
         os.replace(tmp, self.sessions_dir / "model.pkl")   # never a half-written file
 
@@ -461,7 +555,7 @@ class Brain:
             with open(self.sessions_dir / "model.pkl", "rb") as f:
                 doc = pickle.load(f)
             model, ver = doc["model"], str(doc["ver"])
-            want = F.feature_names(self.links)
+            want = F.feature_names(self.model_links)
             if getattr(model, "features", None) != want or getattr(model, "classes", None) != [0] + self.zone_ids:
                 logging.getLogger("brain").warning(
                     "model.pkl was trained on other features or zones (%d features, first %s) than this layout "
@@ -531,12 +625,17 @@ class Brain:
         for link in self.links:
             if link in self.router_links:   # the router as tx or rx; "pi5b" is another node
                 m = self._median(link, start)
-                if m is None or abs(m - self.base[link]) > SETTLE_DB:
+                if m is None or abs(m - self.base[link]) > self._settle_db(link):
                     self.recalibrating, self._old_base = True, dict(self.base)
                     self._cmd_label_mode({"mode": "off"})
                     self._start_capture(new_place=False, by_hand=False)
                     self.emit("recalibrating", {"link": link})
                     return
+
+    def _settle_db(self, link: str) -> float:
+        """How far a link may sit from its base and still count as back: 1 dB, or
+        settings.settle_x_quiet x its own quiet level when that is more."""
+        return max(SETTLE_DB, self.settings.settle_x_quiet * self.quiet_db.get(link, 0.0))
 
     def _update_advice(self, now, xray: dict, links: List[dict]) -> None:
         if self.router == HOME:
@@ -579,30 +678,71 @@ class Brain:
         except KeyError:
             pass                         # not a spot in nodes.json
 
-    def _set_baseline(self, base: Dict[str, float], expected_hz: Dict[str, float]) -> None:
-        self.base, self.expected_hz = dict(base), dict(expected_hz)
-        self.windower, self.window = F.Windower(self.base, self.links), None
+    def _set_baseline(self, base: Dict[str, float], expected_hz: Dict[str, float],
+                      quiet_db: Optional[Dict[str, float]] = None) -> None:
+        self.base, self.expected_hz, self.quiet_db = dict(base), dict(expected_hz), dict(quiet_db or {})
+        # The fixed dB numbers give way to a link's own quiet level where a setting says so
+        # (brain/settings.py).
+        s = self.settings
+        self.health.set_quiet(self.quiet_db, s.steady_x_quiet)
+        self.watch.checkin_rule.other_db_of = {k: s.checkin_x_quiet * q for k, q in self.quiet_db.items()}
+        self.windower, self.window = F.Windower(self.base, self.model_links), None
         self.health.set_base(self.base)
         self.health.set_expected(self.expected_hz)
         self.xray.reset()
 
     def _save_baseline(self, now) -> None:
-        """Section 6: data/sessions/baseline.json, for proof/ and for a brain restart."""
+        """Section 6: data/sessions/baseline.json, for proof/ and for a brain restart.
+
+        A write that fails (a full disk) is logged and nothing more: the baseline is in use
+        either way, and baseline_done must still be sent."""
         if not self.sessions_dir:
             return
+        try:
+            self._write_baseline(now)
+        except OSError as e:
+            logging.getLogger("brain").warning(
+                "could not save the baseline (it is in use, but a restart won't have it): %s", e)
+
+    def _write_baseline(self, now) -> None:
         session = self.open_session["meta"].get("session") if self.open_session else None
+        # quiet_db goes into the file only when a setting uses it (they do by default, #734): with the
+        # three factors at 0 the file is the older contract's, key for key.
+        s = self.settings
+        keep_quiet = bool(s.steady_x_quiet or s.checkin_x_quiet or s.settle_x_quiet)
         doc = {"t": now, "session": session,
-               "links": {link: {"base_dbm": self.base[link], "expected_hz": self.expected_hz[link]}
+               "links": {link: {"base_dbm": self.base[link], "expected_hz": self.expected_hz[link],
+                                **({"quiet_db": round(self.quiet_db[link], 2)}
+                                   if keep_quiet and link in self.quiet_db else {})}
                          for link in self.base}}
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
-        (self.sessions_dir / "baseline.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+        # place.json: when this place began (the last baseline asked for by hand). proof/ and a
+        # restart use recordings from then on only. An automatic baseline leaves it alone.
+        # It goes first: a restart that finds the new baseline with the old place would load a
+        # model taught somewhere else; the other way round it only starts untrained.
+        self._replace("place.json", json.dumps({"t": self.place_t}) + "\n")
+        self._replace("baseline.json", json.dumps(doc, indent=1) + "\n")
         # Every baseline is also kept in baselines.jsonl, so a recording can be read against
         # the baseline it was made on, also after a restart.
         with open(self.sessions_dir / "baselines.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps({"t": now, "base": self.base}) + "\n")
-        # place.json: when this place began (the last baseline asked for by hand). proof/ and a
-        # restart use recordings from then on only. An automatic baseline leaves it alone.
-        (self.sessions_dir / "place.json").write_text(json.dumps({"t": self.place_t}) + "\n", encoding="utf-8")
+
+    def _replace(self, name: str, text: str) -> None:
+        """Write a file of ours whole or not at all: a temporary file, flushed to the disk, then
+        renamed over the old one (as model.pkl is). Power pulled mid-write leaves the old file."""
+        tmp = self.sessions_dir / f"{name}.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(text)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self.sessions_dir / name)
+        except OSError:
+            try:
+                tmp.unlink()        # a failed write (a full disk) leaves no half file behind
+            except OSError:
+                pass
+            raise
 
     def _baselines(self) -> List[dict]:
         """Every baseline taken so far, oldest first: [{"t", "base"}] (baselines.jsonl, or just
@@ -630,10 +770,12 @@ class Brain:
             links = doc["links"]
             base = {k: float(v["base_dbm"]) for k, v in links.items() if k in self.links}
             expected = {k: float(v["expected_hz"]) for k, v in links.items() if k in self.links}
+            quiet = {k: float(v["quiet_db"]) for k, v in links.items()
+                     if k in self.links and isinstance(v.get("quiet_db"), (int, float))}   # a file from before has none
         except (OSError, ValueError, KeyError, TypeError):
             return   # no file, or not one of ours: start without a baseline
         if base:
-            self._set_baseline(base, expected)
+            self._set_baseline(base, expected, quiet)
             self.place_t = self._read_place(doc.get("t"))
 
     def _read_place(self, baseline_t) -> Optional[int]:
@@ -656,8 +798,10 @@ class Brain:
         asked = self.capture["asked"] if self.capture else None   # set on the first tick: the clock may not have started
         if new_place is None:
             new_place = bool(self.capture and self.capture["new_place"])
+        # clean_ms: capture time so far with every condition holding. paused: since when a passer-by
+        # has been in the camera's view. last: the previous clean tick.
         self.capture = {"start": None, "messages": [], "new_place": new_place, "asked": asked,
-                        "by_hand": by_hand}
+                        "by_hand": by_hand, "clean_ms": 0, "paused": None, "last": None}
 
     def _new_place(self, now) -> None:
         """The operator's baseline finished: nothing learned before it is used from here on.
@@ -690,45 +834,70 @@ class Brain:
             return "the camera sees somebody"
         if self.label_mode != "off":
             return f"label mode is {self.label_mode}, not off"
-        # baseline {keep_model: true} is the same layout set down at a new desk, in a hall full of
-        # phones: only a link silent for 3 s, or health blind, holds it up. A stale link does not.
-        lenient = bool(self.capture and self.capture["by_hand"] and not self.capture["new_place"])
-        gap = SILENT_MS if lenient else LINK_FRESH_MS
-        quiet = [link for link in self.links if now - self._last_seen.get(link, -10**15) > gap]
+        # Measured on the kit (#634): Bluetooth links give 7 to 13 readings a second, one of them 1.7,
+        # and unevenly. A link that slow goes a full second without a reading every few seconds, and
+        # reads "stale" by chance, so 1 s of silence or any not-ok health restarted the 20 s for ever.
+        # Every kind of baseline now waits only for a link silent for 3 s (the blind rule's and
+        # tamper's silence) or for health blind.
+        quiet = [link for link in self.model_links if now - self._last_seen.get(link, -10**15) > SILENT_MS]
         if quiet:
-            return f"no readings in the last {gap // 1000} s from " + ", ".join(quiet) if lenient else \
-                "no readings in the last second from " + ", ".join(quiet)
-        if self.health.blind or (not self._health_ok and not lenient):
-            return "link health is blind" if lenient else "link health is not ok"
+            return f"no readings in the last {SILENT_MS // 1000} s from " + ", ".join(quiet)
+        if self.health.blind:
+            return "link health is blind"
         return None
+
+    def _passer_pause(self, now, wait) -> bool:
+        """True while a running capture is only held up by somebody in the camera's view who is not
+        in the layout (present false): a passer-by in the aisle. Their readings are left out and the
+        20 s carry on afterwards. Somebody inside the layout, or in view for over PASSER_PAUSE_MS,
+        starts the 20 s again, as does any other broken condition."""
+        c = self.capture
+        if c["start"] is None or wait != "the camera sees somebody" or (self.label or {}).get("present"):
+            return False
+        if c["paused"] is None:
+            c["paused"], c["last"] = now, None
+        return now - c["paused"] <= PASSER_PAUSE_MS
+
+    def _capture_clean_ms(self, now) -> int:
+        """Capture time so far, not counting the pauses."""
+        c = self.capture
+        if c["last"] is not None:
+            c["clean_ms"] += now - c["last"]
+        c["paused"], c["last"] = None, now
+        return c["clean_ms"]
 
     def _tick(self):
         now = self.now()
         if self.capture:
             wait = self._capture_wait(now)
-            if self.capture["asked"] is None:
+            if self.capture["asked"] is None and now > 0:
+                # On the feed clock time is 0 until the first reading. A state tick before it must
+                # not start the 120 s there, or the first reading (epoch ms) gives up at once (#598).
                 self.capture["asked"] = now
             if wait != self._wait_said:             # said once per reason, not on every message
                 self._wait_said = wait
                 log = logging.getLogger("brain")
                 log.warning("baseline is waiting: %s", wait) if wait else log.info("baseline: capturing 20 s")
-            if wait and self.capture["by_hand"] and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS:
+            if (wait and self.capture["by_hand"] and self.capture["asked"] is not None
+                    and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS):
                 # Pressed by mistake in front of an audience, or the room never cleared: without
                 # this pred stays hidden for ever. The old baseline and the model are untouched.
                 logging.getLogger("brain").warning(
                     "baseline given up after %d s (%s); press Baseline again when the square is clear",
                     BASELINE_GIVE_UP_MS // 1000, wait)
                 self.capture, self._wait_said = None, ()
+            elif wait and self._passer_pause(now, wait):
+                pass                                # somebody walks past the camera: hold, don't start again
             elif wait:
                 self._start_capture()               # a condition broke: the 20 s start again
             elif self.capture["start"] is None:
-                self.capture["start"] = now
-            elif now - self.capture["start"] >= BASELINE_MS:
+                self.capture["start"] = self.capture["last"] = now
+            elif self._capture_clean_ms(now) >= BASELINE_MS:
                 msgs, new_place, self.capture = self.capture["messages"], self.capture["new_place"], None
                 self._wait_said = ()
                 expected = {link: round(sum(1 for m in msgs if m["link"] == link) / (BASELINE_MS / 1000), 1)
                             for link in self.links}
-                self._set_baseline(F.baseline(msgs), expected)
+                self._set_baseline(F.baseline(msgs), expected, F.quiet(msgs))
                 self._base_log.append({"t": now, "base": dict(self.base)})
                 if new_place or self.place_t is None:
                     self._new_place(now)
@@ -738,8 +907,9 @@ class Brain:
                     self.recalibrating = False
                     moved = {link: abs(self.base[link] - old) for link, old in self._old_base.items()
                              if link in self.base}
-                    worst = max(moved, key=moved.get, default=None)
-                    if worst and moved[worst] > SETTLE_DB:
+                    over = {link: by - self._settle_db(link) for link, by in moved.items()}   # past its own limit
+                    worst = max(over, key=over.get, default=None)
+                    if worst and over[worst] > 0:
                         self.emit("drift", {"link": worst})   # the screen offers relearn
         self._check_settle(now)
         self._decide(now)
@@ -763,6 +933,16 @@ class Brain:
             return
         if not self._fresh:
             return
+        unheard = [] if self._raw["present"] else self._unheard(now)
+        if unheard:
+            # "Nobody" from a window in which a link the sensor needs has no reading says nothing:
+            # a link with no readings counts as sitting on its baseline, which is what an empty
+            # area looks like (#650). A decision that somebody is there still goes out.
+            if self._gone(now, unheard) and self.pred is not None:
+                self.pred = None                 # unknown, as for blind, until the link is back
+                self.watch.on_pred(now, None)
+                self.armed.on_pred(None)
+            return                               # otherwise the last decision stands (under 2 s)
         self._fresh = False
         pred = dict(self._raw)
         self.watch.on_pred(self.window["end"], pred)
@@ -775,6 +955,21 @@ class Brain:
             self.emit("intrusion", {"zone": intruder})
         for zone in self.armed.pop_passed():   # appeared while armed and gone before the hold was over
             self.emit("passed_by", {"zone": zone})
+
+    def _unheard(self, now) -> List[str]:
+        """The links that can blind the sensor and have no reading in the last window (1 s),
+        though the baseline heard them."""
+        return [k for k in self.health.classifier_links
+                if self.expected_hz.get(k) and now - self._last_seen.get(k, -10**15) > F.WINDOW_MS]
+
+    def _gone(self, now, unheard) -> bool:
+        """True when one of them is stale as well, and has been silent for longer than chance
+        allows at its own rate: GONE_READINGS readings' worth, and never under the 1 s window.
+        (A healthy link at 5 or 6 readings a second has a 1 s gap about once a minute, and a
+        2 s stretch with too few readings about as often; neither may blink "unknown".)"""
+        return any(k in self._quiet
+                   and now - self._last_seen[k] > max(F.WINDOW_MS, GONE_READINGS * 1000 / self.expected_hz[k])
+                   for k in unheard)
 
     def _announce(self, zone: int) -> None:
         """enter, exit and zone_change, once the new zone has held for settings.zone_hold decisions.
@@ -827,7 +1022,7 @@ class Brain:
         if not (self.model and self.window and self.pred):
             return {}
         raw = {}
-        for i, link in enumerate(self.links):
+        for i, link in enumerate(self.model_links):
             drop = (self.window["links"].get(link) or {}).get("drop_db") or 0.0
             raw[link] = float(self.model._link_weight[i]) * abs(drop)
         top = max(raw.values()) or 1.0
@@ -836,10 +1031,19 @@ class Brain:
     def state(self) -> dict:
         now = self.now()
         self._tick()
-        # A baseline asked for by hand measures the rates again; the old ones don't judge it.
+        # A baseline asked for by hand, with or without keep_model, measures the rates again; the
+        # old ones don't judge it. (The same layout at another desk can have a slower link: judged
+        # against its old rate it went stale, then blind, and blind held up the very capture that
+        # would have measured the new rate.)
         health = self.health.update(now, self.raw_kind, self.router == HOME, self.capture is not None,
-                                    rates_known=not (self.capture and self.capture["new_place"]))
+                                    rates_known=not (self.capture and self.capture["by_hand"]))
         self._health_ok = health["health"]["status"] == "ok"
+        self._quiet = [row["id"] for row in health["links"]
+                       if row["status"] != "ok" and row["id"] in self.health.classifier_links]
+        if self.pred is not None and not self.pred["present"] and self._gone(now, self._unheard(now)):
+            self.pred = None                     # a link the sensor needs has gone quiet: not "nobody"
+            self.watch.on_pred(now, None)
+            self.armed.on_pred(None)
         if self.health.blind and self.pred is not None:
             self.pred = None
             self.watch.on_pred(now, None)
@@ -855,7 +1059,7 @@ class Brain:
         weights = self._why_weights()
         links = [self._link_row(row, weights) for row in health["links"]
                  if row["id"] in self._heard]   # a link is listed once it has a reading
-        self._update_advice(now, xray, links)
+        self._update_advice(now, xray, [row for row in links if row["id"] in self.model_links])
         cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
         if cam != self._said_cam and cam in ("on", "off", "stalled"):
             self._said_cam = cam
@@ -884,4 +1088,4 @@ class Brain:
             # Section 5: a missing "armed" means false. Sent only while armed until state.json
             # knows the field (#440); a state that never arms is byte for byte what it was.
             state["armed"] = True
-        return state
+        return self.hall.add_to(state, now)

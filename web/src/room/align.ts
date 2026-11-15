@@ -1,5 +1,8 @@
 import type { Material, Object3D } from 'three'
+import { GAPS, GAP_WORDS, deskFit, deskName, loadDesks, modelPoint, nearestSpot, placementGuide, slideDesk, stepDesk, type DeskSpot, type DeskStep, type HallDesks } from './desks'
 import type { HallBeacons } from './devices'
+import { NODES, SIZE_M, STRIP_M, toScene, type Vec3, deskEdge } from './frame'
+import { PlacementGuide } from './guide'
 import { DEFAULT_CUT_M, type Scan, type ScanFit } from './scan'
 import type { Stage } from './stage'
 import { roomShot, topShot, type RoomView } from './view'
@@ -14,6 +17,18 @@ import { roomShot, topShot, type RoomView } from './view'
 //   PgUp / PgDn  raise / lower the model: 2 cm (Shift: one 0.156 m riser), for a square on a tier
 //   V       straight-down view, or back to the normal one
 //   S       save room.json
+// On the desk layout, when the build has the hall's desks (desks.ts), the strip snaps to a real desk, on that
+// desk's tier, so nothing is lined up by eye:
+//   D       stand at the nearest desk
+//   I / K   the next row toward the front / up the tiers
+//   J / L   the next block west / east
+//   U / O   along the desk, west / east: 10 cm (Shift: 50 cm)
+//   G       which side of our desk people stand on: behind it, in front of it, or at the row's end
+// At a desk the panel also says where each device goes on the furniture that is there (desks.ts, placementGuide),
+// and the 3D view shows each place as a faint box (guide.ts):
+//   Tab     picks the next device's place (Esc lets go); arrows move it 5 cm (Shift 20 cm), PgUp / PgDn raise and
+//           lower it
+//   S       saves the places with the alignment: from then on the devices are drawn there
 // Hall beacons (devices.ts): Tab picks the next heard one (or a click on it); while one is picked the arrows move
 // it on the floor (10 cm, Shift 1 m) and it can be dragged, from the "new beacon" tray too; Esc lets go. S saves
 // their positions into radio/nodes.json as well.
@@ -86,28 +101,36 @@ function drawOnTop(root: Object3D, skip: Object3D) {
 }
 
 /** The body of the board's POST /layout (#532): the alignment and, when there are any, the hall beacons. */
-export function layoutBody(fit: ScanFit, beacons: { node: string; xyz_m: unknown }[] | undefined): string {
+export function layoutBody(fit: ScanFit, beacons: { node: string; xyz_m: unknown }[] | undefined, nodes?: { id: string; xyz_m: Vec3 }[]): string {
   // floor_m goes only when the square is on a tier (non-zero): the board's /layout takes the four alignment keys,
   // so a desk on the front floor saves there as it always did.
   const { floor_m, ...flat } = tidyFit(fit)
   const room = floor_m ? { ...flat, floor_m } : flat
-  return JSON.stringify(beacons?.length ? { room, hall_beacons: beacons } : { room })
+  // The devices' places go as `nodes` (board issue #721) only when a placement is being saved.
+  return JSON.stringify({ room, ...(beacons?.length ? { hall_beacons: beacons } : {}), ...(nodes?.length ? { nodes } : {}) })
 }
 
 /** Saves the alignment and the hall beacons' spots where the page is served from: under `vite` into the repo's
  *  room.json and radio/nodes.json; on the board through its POST /layout, kept on the board; anywhere else, or if
  *  that fails, room.json downloads. */
-async function saveAll(fit: ScanFit, beacons: HallBeacons | undefined): Promise<string> {
+async function saveAll(fit: ScanFit, beacons: HallBeacons | undefined, places?: { id: string; xyz_m: Vec3 }[]): Promise<string> {
   const json = `${JSON.stringify(tidyFit(fit), null, 2)}\n`
   const post = (url: string, body: string) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body })
   try {
     if (import.meta.env.DEV) {
       const room = await post('/__room-scan', json)
       const hall = beacons ? await post('/__hall-beacons', JSON.stringify(beacons.positions())) : null
-      if (room.ok) return `Saved to web/public/models/room.json${hall?.ok ? ' and the beacons to radio/nodes.json' : ''}. board/push-web.sh takes it to the board.`
+      const devices = places?.length ? await post('/__nodes', JSON.stringify(places)) : null
+      const also = [hall?.ok && 'the beacons', devices?.ok && 'the devices\u2019 places'].filter(Boolean).join(' and ')
+      if (room.ok) return `Saved to web/public/models/room.json${also ? `, and ${also} to radio/nodes.json` : ''}.${devices?.ok ? ' Reload to see the devices there.' : ''} board/push-web.sh takes it to the board.`
     } else {
-      const res = await post('/layout', layoutBody(fit, beacons?.positions()))
-      if (res.ok) return 'Saved on the board. A reload keeps it.'
+      const res = await post('/layout', layoutBody(fit, beacons?.positions(), places))
+      if (res.ok) return `Saved on the board${places?.length ? ', with the devices\u2019 places' : ''}. A reload keeps it.`
+      if (places?.length) {
+        // A board from before it kept device places (#721): the alignment still saves.
+        const again = await post('/layout', layoutBody(fit, beacons?.positions()))
+        if (again.ok) return 'Saved the alignment on the board. The devices\u2019 places were NOT kept: this board does not take them yet.'
+      }
     }
   } catch {
     // fall through to the download
@@ -124,9 +147,10 @@ async function saveAll(fit: ScanFit, beacons: HallBeacons | undefined): Promise<
 export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beacons?: HallBeacons) {
   const panel = document.createElement('div')
   panel.className = 'room-align'
-  panel.innerHTML = '<h2>Align the scan</h2><p class="room-align-fit"></p><p class="room-align-beacon"></p><p class="room-align-keys"></p><p class="room-align-status"></p><pre hidden></pre>'
+  panel.innerHTML = '<h2>Align the scan</h2><p class="room-align-fit"></p><p class="room-align-beacon"></p><p class="room-align-guide" hidden></p><p class="room-align-keys"></p><p class="room-align-status"></p><pre hidden></pre>'
   document.body.append(panel) // over the panels' rail, outside the room's stacking context
   const [fitLine, beaconLine, keys, status, pre] = ['.room-align-fit', '.room-align-beacon', '.room-align-keys', '.room-align-status', 'pre'].map((q) => panel.querySelector<HTMLElement>(q)!)
+  const guide = panel.querySelector<HTMLElement>('.room-align-guide')!
   view.host.dataset.align = scan ? 'on' : 'no-scan'
   if (!scan) {
     fitLine.textContent = 'No scan loaded.'
@@ -136,7 +160,67 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
 
   keys.innerHTML = 'Arrows move · Q E turn · + − scale<br>[ ] cut height · PgUp PgDn floor<br>Shift for big steps<br>Tab picks a beacon · Esc lets go<br>V view from above · S save'
   fitLine.textContent = describeFit(scan.fit)
+  // Nothing saved yet: say that this desk is only where the page starts, and how to make the real one stick.
+  if (scan.defaultDesk) status.textContent = `Not saved: ${scan.defaultDesk} is only the default. Step to your desk (D, I K, J L, U O), then S saves it.`
   beacons?.startEditing(() => (beaconLine.textContent = beacons.describe()))
+  // Desk snapping: only on the desk layout, and only when the build knows the hall's desks.
+  let hall: HallDesks | null = null
+  let spot: DeskSpot | null = null
+  if (STRIP_M) {
+    void loadDesks().then((h) => {
+      hall = h
+      if (h) keys.innerHTML += '<br>D nearest desk · I K rows · J L blocks · U O along it<br>G gap behind, in front or at the row end<br>Tab picks a device\u2019s place · arrows, PgUp PgDn move it'
+    })
+  }
+  const marks = new PlacementGuide(view)
+  /** The guide's lines in the panel, as the 3D view shows them now. */
+  const sayGuide = () => {
+    guide.hidden = !marks.shown
+    guide.textContent = ['Where the devices go (left and right as you stand in the spot, facing our desk):', ...marks.lines()].join('\n')
+  }
+  const here = (h: HallDesks): DeskSpot => {
+    if (spot) return spot
+    const [sw, sh] = STRIP_M ?? SIZE_M
+    const [x, , z] = toScene([sw / 2, sh, 0]) // the middle of the strip's desk edge
+    const base = nearestSpot(h, modelPoint([x, z], scan.fit, scan.box))
+    // Which side of that desk the saved alignment has the gap on: the one whose own alignment is nearest to it.
+    const now = tidyFit(scan.fit)
+    const off = (gap: (typeof GAPS)[number]) => {
+      const f = deskFit(h, { ...base, gap }, scan.box, now.cut_m)
+      const turn = Math.abs(((f.yaw_deg - now.yaw_deg + 540) % 360) - 180)
+      return Math.hypot(f.offset_m[0] - now.offset_m[0], f.offset_m[1] - now.offset_m[1]) + turn / 20
+    }
+    return { ...base, gap: [...GAPS].sort((a, b) => off(a) - off(b))[0] }
+  }
+  /** Stands the strip at a desk spot. Returns false when there is none (no desk that way). */
+  const standAt = (next: DeskSpot | null): boolean => {
+    if (!hall || !next) return false
+    spot = next
+    const fit = deskFit(hall, next, scan.box, tidyFit(scan.fit).cut_m)
+    scan.apply(fit)
+    fitLine.textContent = `${describeFit(fit)}\n${deskName(next.desk)}, ${GAP_WORDS[next.gap ?? 'behind']}`
+    // Where each device goes at this desk, in words. Left and right as you stand in the spot, facing our desk.
+    // Our desk's edge is where the layout says the desk begins: the strip's north edge, or past it (the gate).
+    const places = placementGuide(hall, next, Object.values(NODES), [(STRIP_M ?? SIZE_M)[0], deskEdge() ?? (STRIP_M ?? SIZE_M)[1]])
+    marks.show(places)
+    sayGuide()
+    view.host.dataset.placement = JSON.stringify(places.map((p) => [p.id, ...p.xyz]))
+    status.textContent = ''
+    return true
+  }
+  const deskKey = (key: string, shift: boolean): boolean => {
+    if (!hall) return false
+    const k = key.toLowerCase()
+    const step: Record<string, DeskStep> = { i: 'north', k: 'south', j: 'west', l: 'east' }
+    if (k === 'd') return standAt(here(hall))
+    if (k === 'g') {
+      const at = here(hall)
+      return standAt({ ...at, gap: GAPS[(GAPS.indexOf(at.gap ?? 'behind') + 1) % GAPS.length] })
+    }
+    if (step[k]) return standAt(stepDesk(hall, here(hall), step[k])) || true // no desk that way: stay
+    if (k === 'u' || k === 'o') return standAt(slideDesk(here(hall), (k === 'o' ? 1 : -1) * (shift ? 0.5 : 0.1)))
+    return false
+  }
   drawOnTop(stage.group, stage.drawnRoom)
   view.requestRender()
   let top = false
@@ -153,7 +237,17 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
       pre.textContent = json
       pre.hidden = false
       status.textContent = 'Saving…'
-      void saveAll(scan.fit, beacons).then((said) => (status.textContent = said))
+      // Only the devices moved by hand: the guide's own suggestions are never saved as anyone's place.
+      void saveAll(scan.fit, beacons, marks.shown ? marks.moved() : undefined).then((said) => (status.textContent = said))
+    } else if (key === 'Tab' && marks.shown) {
+      marks.cycle()
+      sayGuide()
+    } else if (key === 'Escape' && marks.selected) {
+      marks.release()
+      sayGuide()
+    } else if (marks.selected && marks.nudge(key, event.shiftKey)) {
+      sayGuide()
+      view.host.dataset.placement = JSON.stringify(marks.positions().map((p) => [p.id, ...p.xyz_m]))
     } else if (key === 'Tab' && beacons) {
       beacons.cycle()
     } else if (key === 'Escape' && beacons?.selected) {
@@ -162,9 +256,14 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
       const step = event.shiftKey ? 1 : 0.1
       const [dx, dy] = { ArrowRight: [step, 0], ArrowLeft: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[key] ?? [0, 0]
       beacons.nudge(dx, dy)
+    } else if (deskKey(key, event.shiftKey)) {
+      // handled: the strip stands at a desk
     } else {
       const fit = nudge(scan.fit, key, event.shiftKey)
       if (!fit) return
+      spot = null // moved by hand: no longer at a desk
+      marks.hide()
+      sayGuide()
       scan.apply(fit)
       fitLine.textContent = describeFit(fit)
       status.textContent = ''

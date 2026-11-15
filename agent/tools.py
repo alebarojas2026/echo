@@ -12,8 +12,23 @@ def clock(t_ms: int) -> str:
     return time.strftime("%H:%M:%S", time.localtime(t_ms / 1000))
 
 
+def _last(minutes) -> str:
+    return "the last minute" if minutes == 1 else f"the last {minutes} minutes"
+
+
+def place(name: str, only: bool):
+    """How an answer says a zone by its name alone, or None when it has no such words. A name that is already a
+    place ("At the desk") is said as it is; the only zone in the layout with any other name is just "here"."""
+    words = name.strip()
+    if words.split(" ")[0].lower() in ("at", "by", "in", "on"):
+        return words[0].lower() + words[1:]
+    return "here" if only else None
+
+
 def _where(zone, zones) -> str:
-    return f"in {zones[zone]}" if zone in zones else "here"
+    if zone not in zones:
+        return "here"
+    return place(zones[zone], len(zones) == 1) or f"in {zones[zone]}"
 
 
 def _spans(rows: list, zones: dict) -> list:
@@ -51,17 +66,17 @@ def presence(store, now_ms, zones, minutes=10, zone=None, **_):
     """was anyone here (or in one zone) in the last N minutes"""
     rows = _window(store, now_ms, minutes)
     if not rows:
-        return {"answer": f"I have no records for the last {minutes} minutes.", "rows": []}
+        return {"answer": f"I have no records for {_last(minutes)}.", "rows": []}
     spans = _spans([r for r in rows if _person(r, zone)], zones)
     unknown, note = _unknown(rows)
     summary = {"row": "summary", "seconds_with_someone": sum(s["seconds"] for s in spans),
                "seconds_without_prediction": unknown, "seconds_saved": len(rows)}
     if not spans:
-        return {"answer": f"No. Nobody was seen {_where(zone, zones)} in the last {minutes} minutes.{note}",
+        return {"answer": f"No. Nobody was seen {_where(zone, zones)} in {_last(minutes)}.{note}",
                 "rows": [summary]}
     last = spans[-1]
-    return {"answer": f"Yes. Someone was {_where(zone, zones)} for {summary['seconds_with_someone']} s of the last "
-                      f"{minutes} minutes, most recently {_where(last['zone'], zones)} from {last['from']} to "
+    return {"answer": f"Yes. Someone was {_where(zone, zones)} for {summary['seconds_with_someone']} s of "
+                      f"{_last(minutes)}, most recently {_where(last['zone'], zones)} from {last['from']} to "
                       f"{last['to']}.{note}", "rows": [summary] + spans,
             "span": _span(last["from_t"], last["to_t"], now_ms, 5000, 5000)}
 
@@ -71,7 +86,7 @@ def still_spans(store, now_ms, zones, minutes=10, **_):
     rows = [r for r in _window(store, now_ms, minutes) if _person(r) and r["motion"] == "still"]
     spans = _spans(rows, zones)
     if not spans:
-        return {"answer": f"I have no record of someone staying still in the last {minutes} minutes.", "rows": []}
+        return {"answer": f"I have no record of someone staying still in {_last(minutes)}.", "rows": []}
     longest = max(spans, key=lambda s: s["seconds"])
     return {"answer": f"The longest time without movement was {longest['seconds']} s {_where(longest['zone'], zones)}, "
                       f"from {longest['from']} to {longest['to']}.", "rows": spans,
@@ -89,12 +104,12 @@ def alerts(store, now_ms, zones, minutes=10, **_):
     rows = _event_rows(store, now_ms, minutes, ("alert_on", "alert_off", "checkin"), zones)
     on = [r for r in rows if r["kind"] == "alert_on"]
     if not on:
-        return {"answer": f"No no-movement alert was raised in the last {minutes} minutes.", "rows": rows}
+        return {"answer": f"No no-movement alert was raised in {_last(minutes)}.", "rows": rows}
     last = on[-1]
     after = [r for r in rows[rows.index(last):] if r["kind"] == "alert_off"]
     cleared = f" and it cleared at {after[0]['at']}" if after else " and it has not cleared"
     summary = {"row": "summary", "alerts": len(on)}
-    return {"answer": f"No-movement alerts in the last {minutes} minutes: {len(on)}. The last one was "
+    return {"answer": f"No-movement alerts in {_last(minutes)}: {len(on)}. The last one was "
                       f"{_where(last.get('zone'), zones)} at {last['at']}{cleared}.", "rows": [summary] + rows,
             "span": _span(last["t"], after[0]["t"] if after else last["t"], now_ms, 20_000, 10_000)}
 
@@ -106,11 +121,11 @@ def intrusions(store, now_ms, zones, minutes=10, **_):
     latest = store.latest()
     armed = "armed" if latest and latest["armed"] else "not armed"
     if not hits:
-        return {"answer": f"No intrusion alert in the last {minutes} minutes. The space is {armed} now.", "rows": rows}
+        return {"answer": f"No intrusion alert in {_last(minutes)}. The space is {armed} now.", "rows": rows}
     last = hits[-1]
     place = _where(last.get("zone"), zones) if "zone" in last else f"on the path {last.get('link')}"
     summary = {"row": "summary", "intrusion_alerts": len(hits)}
-    return {"answer": f"Intrusion alerts in the last {minutes} minutes: {len(hits)}. The last one was {place} at "
+    return {"answer": f"Intrusion alerts in {_last(minutes)}: {len(hits)}. The last one was {place} at "
                       f"{last['at']}. The space is {armed} now.", "rows": [summary] + rows,
             "span": _span(last["t"], last["t"], now_ms, 10_000, 30_000)}
 
@@ -126,10 +141,10 @@ def link_history(store, now_ms, zones, minutes=10, link=None, **_):
             rows.append({"link": i, "min_dbm": min(dbm), "median_dbm": round(statistics.median(dbm), 1),
                          "max_dbm": max(dbm), "seconds_blind": sum(i in r["blind"] for r in seconds)})
     if not rows:
-        return {"answer": f"I have no readings for {link or 'any link'} in the last {minutes} minutes.", "rows": []}
+        return {"answer": f"I have no readings for {link or 'any link'} in {_last(minutes)}.", "rows": []}
     text = " ".join(f"{r['link']} read {r['min_dbm']} to {r['max_dbm']} dBm (median {r['median_dbm']}) and was "
                     f"blind for {r['seconds_blind']} s." for r in rows)
-    return {"answer": f"In the last {minutes} minutes: {text}", "rows": rows}
+    return {"answer": f"In {_last(minutes)}: {text}", "rows": rows}
 
 
 def explain_advice(store, now_ms, zones, **_):

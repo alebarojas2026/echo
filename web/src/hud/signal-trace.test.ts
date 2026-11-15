@@ -10,14 +10,24 @@ beforeAll(() => { expect(applyLayout(desk)).toBe(true) })
 const link = (id: string, drop_db: number | null, status = 'ok'): LinkState => ({ id, dbm: -60, base_dbm: drop_db === null ? null : -55, drop_db, rate_hz: 9, expected_hz: 9.5, status, why: 0 })
 
 test('the desk layout gives one side per zone, from the links that cross its floor', () => {
-  const sides = signalSides()
+  const sides = signalSides(desk)
   expect(sides.map((side) => side.name)).toEqual(['Left', 'Right'])
   expect(sides[0].links.sort()).toEqual(['west>pi5:ble', 'west>pi5b:ble', 'west>unoq:ble'])
   expect(sides[1].links.sort()).toEqual(['east>pi5:ble', 'east>pi5b:ble', 'east>unoq:ble'])
 })
 
+test('only Bluetooth lines join a side, also when a Wi-Fi link crosses the floor', () => {
+  // The same desk with one more link: the west beacon's place to the board, as Wi-Fi.
+  const withWifi = { ...desk, links: [...desk.links, { id: 'west>unoq:wifi', tx: 'west', rx: 'unoq', kind: 'wifi', expected_hz: null }] }
+  expect(applyLayout(withWifi)).toBe(true)
+  const links = signalSides().flatMap((side) => side.links)
+  expect(links).toContain('west>unoq:ble')
+  expect(links.filter((id) => !id.endsWith(':ble'))).toEqual([])
+  expect(applyLayout(desk)).toBe(true)
+})
+
 test('a side reads its deepest fresh link, and nothing when none is fresh', () => {
-  const [left] = signalSides()
+  const [left] = signalSides(desk)
   expect(sideDrop(left, [link('west>unoq:ble', 2.5), link('west>pi5:ble', 6.1), link('east>unoq:ble', 9)])).toBe(6.1)
   expect(sideDrop(left, [link('west>unoq:ble', 2.5), link('west>pi5:ble', 6.1, 'stale')])).toBe(2.5)
   expect(sideDrop(left, [link('west>unoq:ble', 2.5, 'blind'), link('west>pi5:ble', null)])).toBeNull()
@@ -25,7 +35,7 @@ test('a side reads its deepest fresh link, and nothing when none is fresh', () =
 })
 
 test('says why there is no trace', () => {
-  const sides = signalSides()
+  const sides = signalSides(desk)
   const state = mockState('empty', 1, 0)
   expect(traceStatus(state, false, sides)).toBe('ok')
   expect(traceStatus(state, true, sides)).toBe('no-data')
@@ -36,7 +46,7 @@ test('says why there is no trace', () => {
 
 test('one sample per message, coloured by the side the person is on', () => {
   const history = new SignalHistory()
-  history.refreshSides()
+  history.refreshSides(desk)
   const state: StateMsg = { ...mockState('still', 7, 2000), t: 1000 }
   history.push(state, 100)
   history.push({ ...state }, 110)

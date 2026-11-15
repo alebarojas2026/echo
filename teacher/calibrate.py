@@ -1,10 +1,12 @@
 """Click measured SW, SE, NE, NW floor corners; save numbers only.
 
 With --desk nothing is clicked: the webcam sits on the desk facing the strip and the teacher tells
-left from right by where the person's box is across the frame (teacher/DESK.md).
+left from right by where the person's box is across the frame (teacher/DESK.md). On a layout with
+one zone it only tells somebody from nobody.
 
 The corners are those of the area a person stands in, from radio/nodes.json: the 2 x 2 m square
-(frame.size_m), or on the desk layout the strip (frame.strip_m, split at frame.zone_split_x_m).
+(frame.size_m), or on the desk layout the strip (frame.strip_m, split at frame.zone_split_x_m), or
+the one spot (frame.strip_m with no split and one zone).
 """
 
 import argparse
@@ -20,8 +22,14 @@ DESK_DEAD_BAND = 0.08   # half the band around the split line where a label is d
 
 
 def area_from_nodes(nodes):
-    """(area_m, zone_split_m) from a parsed nodes.json: the strip when the frame has one, else the square."""
+    """(area_m, zone_split_m) from a parsed nodes.json: the strip when the frame has one, else the square.
+    A strip with no split line is one spot, one zone: zone_split_m is then [None, None]."""
     frame = nodes.get("frame") or {}
+    if frame.get("strip_m") and frame.get("zone_split_x_m") is None:
+        if len(nodes.get("zones") or [None]) != 1:
+            raise ValueError("a strip with no frame.zone_split_x_m is one spot: nodes.json must list exactly one zone")
+        w, h = frame["strip_m"]
+        return [w, h], [None, None]
     if frame.get("strip_m") and frame.get("zone_split_x_m") is not None:
         w, h = frame["strip_m"]
         return [w, h], [frame["zone_split_x_m"], None]
@@ -41,6 +49,15 @@ def desk_config(nodes, cam_x_m=None, view_m=None, dead_band=DESK_DEAD_BAND, mirr
         raise ValueError("the desk view needs the two-zone strip: frame.strip_m and frame.zone_split_x_m in nodes.json")
     (w, h), split_x = area, split[0]
     view_m = w if view_m is None else view_m
+    if split_x is None:
+        # One spot: somebody or nobody. No line across the frame, so no split and no dead band.
+        cam_x_m = w / 2 if cam_x_m is None else cam_x_m
+        if not (view_m > 0 and 0 <= cam_x_m <= w):
+            raise ValueError("the camera must be on the strip, and view_m positive")
+        config = {"view": "desk", "mirror": bool(mirror), "side_edge": side_edge, "view_m": view_m,
+                  "zones": [zone_in(area_of({"area_m": [w, h], "zone_split_m": [None, None]}), w / 2, h / 2)]}
+        DeskView(config, [1, 1])
+        return config
     cam_x_m = split_x if cam_x_m is None else cam_x_m
     if not (0 < split_x < w and view_m > 0 and 0 <= cam_x_m <= w):
         raise ValueError("the split line and the camera must be on the strip, and view_m positive")
@@ -210,7 +227,7 @@ def main():
     parser.add_argument("--nodes", type=Path, default=NODES, help="radio/nodes.json, for the area's size and zones")
     parser.add_argument("--side-m", type=float, default=None, help="a square of this side instead of nodes.json")
     parser.add_argument("--output", type=Path, default=Path(__file__).with_name("calib.json"))
-    parser.add_argument("--desk", action="store_true", help="the desk view: no clicking, left / right from the box alone")
+    parser.add_argument("--desk", action="store_true", help="the desk view: no clicking, left / right (or just somebody, on one zone) from the box alone")
     parser.add_argument("--cam-x-m", type=float, default=None, help="desk: where the camera sits along the strip (default: on the split line)")
     parser.add_argument("--view-m", type=float, default=None, help="desk: metres of strip the frame spans where people stand (default: all of it)")
     parser.add_argument("--dead-band", type=float, default=DESK_DEAD_BAND, help="desk: half the dropped band around the split, as a share of the frame width")
@@ -237,8 +254,11 @@ def main():
         config = desk_config(json.loads(args.nodes.read_text(encoding="utf-8")), args.cam_x_m, args.view_m,
                              args.dead_band, not args.no_mirror, "keep" if args.keep_side_edge else "clipped")
         args.output.write_text(json.dumps(config, indent=2, allow_nan=False) + "\n")
-        print(f"Saved the desk view to {args.output}: split at {config['split']} of the frame width, "
-              f"zone {config['zones'][0]} on the {'right' if config['mirror'] else 'left'} of the frame")
+        if len(config["zones"]) == 1:
+            print(f"Saved the desk view to {args.output}: one zone ({config['zones'][0]}), somebody or nobody, no side")
+        else:
+            print(f"Saved the desk view to {args.output}: split at {config['split']} of the frame width, "
+                  f"zone {config['zones'][0]} on the {'right' if config['mirror'] else 'left'} of the frame")
         print("Not ready for a lesson yet: with the teacher app running, run `python -m teacher.calibrate --near "
               "--heartbeat <shared-directory>/heartbeat.json` (desk edge, then one step back).")
         return

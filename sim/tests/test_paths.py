@@ -3,7 +3,7 @@ import pytest
 from sim import fake
 
 NAMES = ["zone_tour", "stand_still", "empty_room", "metal_object",
-         "wave_checkin", "tray_t1", "router_move", "dropped_link", "camera_unplug", "clipped_feet", "demo", "still_flicker", "tray_removed", "arrival", "tamper"]
+         "wave_checkin", "tray_t1", "router_move", "dropped_link", "camera_unplug", "clipped_feet", "demo", "still_flicker", "tray_removed", "arrival", "tamper", "passed_by", "step_in", "aisle"]
 
 
 def labels(name):
@@ -50,7 +50,7 @@ def test_stand_still_is_still_for_15_seconds(each_layout):
     assert each_layout.zones[each_layout.still_zone()] == 10
 
 
-@pytest.mark.parametrize("name", ["empty_room", "metal_object", "tray_t1", "router_move"])
+@pytest.mark.parametrize("name", ["empty_room", "metal_object", "tray_t1", "router_move", "aisle"])
 def test_nobody_home(name, each_layout):
     assert not any(e["present"] or e["motion"] for e in labels(name))
     assert {e["zone"] for e in labels(name)} == {0}

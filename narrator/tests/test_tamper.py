@@ -127,11 +127,11 @@ def test_a_replay_on_the_screen_changes_nothing_for_live_narration(layout):
 
 def test_the_fake_brain_says_the_same_sentences():
     from sim import fake, state
-    texts = {}
+    texts, node = {}, None
     brain = state.Brain(fake.load_path("tamper"))
     for m in state.run(fake.load_path("tamper"), brain=brain):
         if m["type"] == "event" and m["kind"] in ("tamper", "tamper_cleared"):
-            texts[m["kind"]] = brain.narration["text"]
-    assert texts == {"tamper": n.template("tamper", {"node": "east"}),
-                     "tamper_cleared": n.template("tamper_cleared", {"node": "east"})}
+            texts[m["kind"]], node = brain.narration["text"], m["info"]["node"]   # whichever device the layout's path unplugs
+    assert texts == {"tamper": n.template("tamper", {"node": node}),
+                     "tamper_cleared": n.template("tamper_cleared", {"node": node})}
     assert texts["tamper"].endswith("went quiet while the space was armed.")

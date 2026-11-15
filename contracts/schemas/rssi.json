@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/rssi.json",
-  "$comment": "Section 4. Link id = <tx>><rx>:<kind>, so tx, rx and kind must agree with link.",
+  "$comment": "Section 4. Link id = <tx>><rx>:<kind>, so tx, rx and kind must agree with link. A hall link (section 3) is sent the same way.",
   "$ref": "common.json#/$defs/envelope",
   "properties": {
     "type": {"const": "rssi"},
-    "link": {"$ref": "common.json#/$defs/link"},
+    "link": {"anyOf": [{"$ref": "common.json#/$defs/link"}, {"$ref": "common.json#/$defs/hall_link"}]},
     "kind": {"enum": ["wifi", "ble"]},
-    "tx": {"$ref": "common.json#/$defs/node"},
+    "tx": {"anyOf": [{"$ref": "common.json#/$defs/node"}, {"$ref": "common.json#/$defs/hall_node"}]},
     "rx": {"$ref": "common.json#/$defs/node"},
     "dbm": {"type": "number"}
   },
@@ -19,6 +19,18 @@
     {"if": {"properties": {"link": {"const": "east>unoq:ble"}}}, "then": {"properties": {"tx": {"const": "east"}, "rx": {"const": "unoq"}, "kind": {"const": "ble"}}}},
     {"if": {"properties": {"link": {"const": "west>unoq:ble"}}}, "then": {"properties": {"tx": {"const": "west"}, "rx": {"const": "unoq"}, "kind": {"const": "ble"}}}},
     {"if": {"properties": {"link": {"const": "east>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "east"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}},
-    {"if": {"properties": {"link": {"const": "west>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "west"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}}
+    {"if": {"properties": {"link": {"const": "west>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "west"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "pi5b>unoq:ble"}}}, "then": {"properties": {"tx": {"const": "pi5b"}, "rx": {"const": "unoq"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "pi5>pi5b:wifi"}}}, "then": {"properties": {"tx": {"const": "pi5"}, "rx": {"const": "pi5b"}, "kind": {"const": "wifi"}}}},
+    {"if": {"properties": {"link": {"const": "pi5>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "pi5"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "east>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "east"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "west>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "west"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "pi5b>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "pi5b"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "h>unoq:ble"}}}, "then": {"properties": {"tx": {"const": "h"}, "rx": {"const": "unoq"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "j>unoq:ble"}}}, "then": {"properties": {"tx": {"const": "j"}, "rx": {"const": "unoq"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "h>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "h"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "j>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "j"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "h>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "h"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "j>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "j"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}}
   ]
 }

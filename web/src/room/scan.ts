@@ -1,4 +1,5 @@
-import { Box3, Color, Group, Mesh, ShaderMaterial, Texture, type Object3D } from 'three'
+import { Box3, Color, Group, Mesh, ShaderMaterial, Texture, Vector3, type Object3D } from 'three'
+import { deskEdge, floorSize, toScene } from './frame'
 import { FLOOR, WALL_SHADE } from './palette'
 import type { Quality, RoomView } from './view'
 
@@ -17,6 +18,15 @@ export interface Scan {
   apply(fit: ScanFit): void
   /** The scan's box in the scene, as placed now. */
   bounds(): Box3
+  /** The cutaway in front of the strip (ghostBox): 0 solid, 1 fully see-through. */
+  ghost(amount: number): void
+  /** The height (scene y) of the model's highest surface at or below `top` under the scene point (x, z): a desk
+   *  top, a chair, the floor. Null when the model has nothing there. What the clear box leaves out doesn't count. */
+  under(x: number, z: number, top: number): number | null
+  /** The model's own box, in its own metres, before any alignment. */
+  box: { min: number[]; max: number[] }
+  /** The desk it stands at only because nothing was saved yet (desks.ts), named for the operator; else unset. */
+  defaultDesk?: string
 }
 
 export type ScanSource = {
@@ -96,28 +106,88 @@ export function placeScan(min: [number, number, number], max: [number, number, n
   }
 }
 
+/** The room-space box kept clear of the model: anything of it standing in the floor a person walks (the hall's
+ *  chairs behind our desk) is left out, so the person never stands inside furniture. The floor area from
+ *  nodes.json, a little wider east and west and toward the aisle, from just above the floor to above head
+ *  height; it stops 1 cm short of where the desk begins (the floor's north edge, or past it when the spot stops
+ *  short of the desk). */
+export function clearBox(): Box3 {
+  const [fw, fh] = floorSize()
+  const a = new Vector3(...toScene([-CLEAR_SIDE_M, (deskEdge() ?? fh) - 0.01, CLEAR_FLOOR_M]))
+  const b = new Vector3(...toScene([fw + CLEAR_SIDE_M, -CLEAR_BACK_M, CLEAR_TOP_M]))
+  return new Box3().setFromPoints([a, b])
+}
+const CLEAR_SIDE_M = 0.3
+const CLEAR_BACK_M = 0.3
+const CLEAR_FLOOR_M = 0.0 // the model's floor is 3 cm lower (placeScan), so it stays
+const CLEAR_TOP_M = 1.35
+
+/**
+ * The span of the model between the close view's camera and the strip: on the desk, the next row's desk run and
+ * its chairs, just behind the person. In the close view it is drawn see-through (a cutaway), so the strip's
+ * floor and the person's legs show through it. South of the floor area from 1 cm off its edge back to just short
+ * of the row after; GHOST_SIDE_M past the floor's east and west ends, where it fades back to solid over
+ * GHOST_FADE_M. Above the floor only.
+ */
+export function ghostBox(): Box3 {
+  const [fw] = floorSize()
+  const a = new Vector3(...toScene([-GHOST_SIDE_M, -0.005, CLEAR_FLOOR_M]))
+  const b = new Vector3(...toScene([fw + GHOST_SIDE_M, -GHOST_BACK_M, GHOST_TOP_M]))
+  return new Box3().setFromPoints([a, b])
+}
+const GHOST_SIDE_M = 1.5
+const GHOST_FADE_M = 0.6
+const GHOST_BACK_M = 1.75
+const GHOST_TOP_M = 2.0
+/** How much of a fully see-through surface still shows. */
+const GHOST_ALPHA = 0.12
+
+/** Uniforms every material of one scan shares, so the cut, the lift and the cutaway change them all at once. */
+interface Shared {
+  cut: { value: number }
+  lift: { value: number }
+  clear: Box3
+  ghost: Box3
+  /** 0 solid, 1 the cutaway fully see-through. */
+  ghostOn: { value: number }
+}
+
 /**
  * With `colored`, the model's own vertex colours (shading baked in). Without, floors take the floor colour and
- * walls a shade lighter, darkened a little by which way they face. Both cut away everything above `cut`.
+ * walls a shade lighter, darkened a little by which way they face. Both cut away everything above `cut` and leave
+ * out the clear box. The 'solid' pass draws everything outside the cutaway; the 'ghost' pass draws only the
+ * cutaway, see-through, after everything else.
  */
-function scanMaterial(cut: { value: number }, colored: boolean, lift = 1): ShaderMaterial {
+function scanMaterial(shared: Shared, colored: boolean, pass: 'solid' | 'ghost'): ShaderMaterial {
   return new ShaderMaterial({
     vertexColors: colored, // three defines USE_COLOR (and USE_COLOR_ALPHA for RGBA) and declares `color`
+    defines: pass === 'ghost' ? { GHOST_PASS: '' } : {},
+    transparent: pass === 'ghost',
+    // Both passes write depth: the see-through one draws its triangles in no particular order, and without depth
+    // a far face (a desk's dark inside) could land on a near one, which showed as a dark slot while it faded.
+    depthWrite: true,
     uniforms: {
       uFloor: { value: new Color(FLOOR) },
       uWall: { value: new Color(0x23272d) },
       uShade: { value: new Color(WALL_SHADE) },
-      uCut: cut,
-      uLift: { value: lift },
+      uCut: shared.cut,
+      uLift: shared.lift,
+      uClearMin: { value: shared.clear.min },
+      uClearMax: { value: shared.clear.max },
+      uGhostMin: { value: shared.ghost.min },
+      uGhostMax: { value: shared.ghost.max },
+      uGhostFade: { value: GHOST_FADE_M },
+      uGhostAlpha: { value: GHOST_ALPHA },
+      uGhostOn: shared.ghostOn,
     },
     vertexShader: /* glsl */ `
       #include <color_pars_vertex>
       varying vec3 vNormal;
-      varying float vHeight;
+      varying vec3 vWorld;
       void main() {
         #include <color_vertex>
         vec4 world = modelMatrix * vec4(position, 1.0);
-        vHeight = world.y;
+        vWorld = world.xyz;
         vNormal = mat3(modelMatrix) * normal;
         gl_Position = projectionMatrix * viewMatrix * world;
       }`,
@@ -128,10 +198,30 @@ function scanMaterial(cut: { value: number }, colored: boolean, lift = 1): Shade
       uniform vec3 uShade;
       uniform float uCut;
       uniform float uLift;
+      uniform vec3 uClearMin;
+      uniform vec3 uClearMax;
+      uniform vec3 uGhostMin;
+      uniform vec3 uGhostMax;
+      uniform float uGhostFade;
+      uniform float uGhostAlpha;
+      uniform float uGhostOn;
       varying vec3 vNormal;
-      varying float vHeight;
+      varying vec3 vWorld;
+      // 0 outside the cutaway, rising to 1 over uGhostFade from its east and west ends, times how far it is on.
+      float ghostAt() {
+        if (any(lessThan(vWorld, uGhostMin)) || any(greaterThan(vWorld, uGhostMax))) return 0.0;
+        float ends = min(vWorld.x - uGhostMin.x, uGhostMax.x - vWorld.x);
+        return uGhostOn * smoothstep(0.0, uGhostFade, ends);
+      }
       void main() {
-        if (vHeight > uCut) discard;
+        if (vWorld.y > uCut) discard;
+        if (all(greaterThan(vWorld, uClearMin)) && all(lessThan(vWorld, uClearMax))) discard;
+        float ghost = ghostAt();
+        #ifdef GHOST_PASS
+          if (ghost <= 0.001) discard;
+        #else
+          if (ghost > 0.001) discard;
+        #endif
         #ifdef USE_COLOR
           vec3 base = vColor.rgb * uLift; // glTF vertex colours are linear, like the rest of the scene
         #else
@@ -140,7 +230,11 @@ function scanMaterial(cut: { value: number }, colored: boolean, lift = 1): Shade
           vec3 base = mix(uWall, uFloor, up);
           base = mix(base, uShade, 0.22 * (1.0 - up) * (0.4 + 0.6 * abs(n.x)));
         #endif
-        gl_FragColor = vec4(base, 1.0);
+        #ifdef GHOST_PASS
+          gl_FragColor = vec4(base, mix(1.0, uGhostAlpha, ghost));
+        #else
+          gl_FragColor = vec4(base, 1.0);
+        #endif
         #include <colorspace_fragment>
       }`,
     polygonOffset: true,
@@ -152,24 +246,81 @@ function scanMaterial(cut: { value: number }, colored: boolean, lift = 1): Shade
 /** Triangles each GPU draws comfortably: the Pi measured at 1080p, a laptop with room to spare. */
 const TRIANGLE_BUDGET: Record<Quality, number> = { pi: 150_000, hi: 400_000 }
 
-/** Puts our material on every mesh (coloured where it has vertex colours) and drops textures. Returns the triangle count. */
-function flatten(root: Object3D, cut: { value: number }, lift = 1): number {
-  const flat = scanMaterial(cut, false)
-  const colored = scanMaterial(cut, true, lift)
+/** Puts our material on every mesh (coloured where it has vertex colours) and drops textures, and gives each mesh a
+ *  hidden see-through twin for the cutaway. Returns the triangle count and the twins. */
+function flatten(root: Object3D, shared: Shared): { triangles: number; twins: Mesh[]; solids: Mesh[] } {
+  const solid = { flat: scanMaterial(shared, false, 'solid'), colored: scanMaterial(shared, true, 'solid') }
+  const ghost = { flat: scanMaterial(shared, false, 'ghost'), colored: scanMaterial(shared, true, 'ghost') }
   let triangles = 0
-  root.traverse((obj) => {
-    if (!(obj instanceof Mesh)) return
+  const meshes: Mesh[] = []
+  root.traverse((obj) => obj instanceof Mesh && meshes.push(obj))
+  const twins = meshes.map((obj) => {
     const old = Array.isArray(obj.material) ? obj.material : [obj.material]
     for (const m of old) {
       for (const value of Object.values(m)) if (value instanceof Texture) value.dispose()
       m.dispose()
     }
     if (!obj.geometry.getAttribute('normal')) obj.geometry.computeVertexNormals()
-    obj.material = obj.geometry.getAttribute('color') ? colored : flat
+    const kind = obj.geometry.getAttribute('color') ? 'colored' : 'flat'
+    obj.material = solid[kind]
     const index = obj.geometry.getIndex()
     triangles += (index ? index.count : obj.geometry.getAttribute('position').count) / 3
+    // Drawn after everything else, so the strip, the links and the person behind it show through.
+    const twin = new Mesh(obj.geometry, ghost[kind])
+    twin.renderOrder = 40
+    twin.visible = false
+    obj.add(twin)
+    return twin
   })
-  return triangles
+  return { triangles, twins, solids: meshes }
+}
+
+/** How far around the layout's middle under() looks for what a device stands on. */
+const NEAR_M = 4
+
+/** The triangles of the placed model within NEAR_M (east and north) of the scene's middle, nine numbers each
+ *  (three corners, scene coordinates). One pass over the model; a few thousand of its triangles are left. */
+function nearTriangles(solids: readonly Mesh[], holder: Object3D): Float32Array {
+  holder.updateMatrixWorld(true)
+  const out: number[] = []
+  const v = [new Vector3(), new Vector3(), new Vector3()]
+  for (const mesh of solids) {
+    const pos = mesh.geometry.getAttribute('position')
+    const index = mesh.geometry.getIndex()
+    const count = index ? index.count : pos.count
+    for (let i = 0; i < count; i += 3) {
+      for (let k = 0; k < 3; k++) v[k].fromBufferAttribute(pos, index ? index.getX(i + k) : i + k).applyMatrix4(mesh.matrixWorld)
+      if (Math.min(v[0].x, v[1].x, v[2].x) > NEAR_M || Math.max(v[0].x, v[1].x, v[2].x) < -NEAR_M) continue
+      if (Math.min(v[0].z, v[1].z, v[2].z) > NEAR_M || Math.max(v[0].z, v[1].z, v[2].z) < -NEAR_M) continue
+      for (const p of v) out.push(p.x, p.y, p.z)
+    }
+  }
+  return new Float32Array(out)
+}
+
+/**
+ * The highest surface among `tris` (nearTriangles) straight under the scene point (x, z), at or below `top`, as a
+ * scene height; null when none is there. Points of the surface inside `skip` (what the clear box leaves out of the
+ * drawing) don't count.
+ */
+export function surfaceUnder(tris: Float32Array, x: number, z: number, top: number, skip?: Box3): number | null {
+  let best: number | null = null
+  const at = new Vector3()
+  for (let i = 0; i < tris.length; i += 9) {
+    const [ax, ay, az, bx, by, bz, cx, cy, cz] = [tris[i], tris[i + 1], tris[i + 2], tris[i + 3], tris[i + 4], tris[i + 5], tris[i + 6], tris[i + 7], tris[i + 8]]
+    if (x < Math.min(ax, bx, cx) || x > Math.max(ax, bx, cx) || z < Math.min(az, bz, cz) || z > Math.max(az, bz, cz)) continue
+    // Barycentric weights of (x, z) in the triangle seen from above; a triangle on edge has no area there.
+    const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz)
+    if (Math.abs(d) < 1e-9) continue
+    const u = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d
+    const w = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d
+    if (u < 0 || w < 0 || u + w > 1) continue
+    const y = u * ay + w * by + (1 - u - w) * cy
+    if (y > top + 1e-3 || (best !== null && y <= best)) continue
+    if (skip?.containsPoint(at.set(x, y, z))) continue
+    best = y
+  }
+  return best
 }
 
 /** ?lift=1.2 brightens the hall model's own colours (a projector washes dark tones out); 1 when not set. Only
@@ -195,7 +346,10 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
     const gltf = await loader.loadAsync(url)
     const box = new Box3().setFromObject(gltf.scene)
     const cut = { value: DEFAULT_CUT_M }
-    const triangles = flatten(gltf.scene, cut, hallLift(params))
+    const shared: Shared = { cut, lift: { value: hallLift(params) }, clear: clearBox(), ghost: ghostBox(), ghostOn: { value: 0 } }
+    const { triangles, twins, solids } = flatten(gltf.scene, shared)
+    // The model's triangles near the layout, in scene coordinates, for under(): gathered once per placement.
+    let near: Float32Array | null = null
     if (triangles > TRIANGLE_BUDGET[quality]) {
       console.warn(
         `room scan: ${Math.round(triangles)} triangles, over the ${quality} budget of ${TRIANGLE_BUDGET[quality]}. ` +
@@ -209,6 +363,7 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
       fit: source.fit,
       apply(fit) {
         handle.fit = fit
+        near = null
         const p = placeScan(box.min.toArray(), box.max.toArray(), fit)
         gltf.scene.position.set(...p.inner)
         holder.scale.setScalar(p.scale)
@@ -218,6 +373,18 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
         view.requestRender()
       },
       bounds: () => new Box3().setFromObject(holder),
+      ghost(amount) {
+        const a = Math.min(1, Math.max(0, amount))
+        if (a === shared.ghostOn.value) return
+        shared.ghostOn.value = a
+        for (const t of twins) t.visible = a > 0 // no second pass while nothing is see-through
+        view.requestRender()
+      },
+      box: { min: box.min.toArray(), max: box.max.toArray() },
+      under(x, z, top) {
+        near ??= nearTriangles(solids, holder)
+        return surfaceUnder(near, x, z, top, shared.clear)
+      },
     }
     handle.apply(source.fit)
     drawnRoom.visible = false

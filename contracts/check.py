@@ -3,6 +3,7 @@
     python -m contracts.check session.jsonl            # one message per line
     python -m sim.fake zone_tour --fast | python -m contracts.check -
     python -m contracts.check proof.json               # a .json file is checked as proof.json
+    python -m contracts.check --as ask_reply replies.jsonl   # a web server body (ask_question, ask_reply, history, report, layout) or nodes
 
 Prints file:line and the error for every bad line and exits 1 if any line fails.
 A jump in a producer's seq (lost messages) is a warning, not a failure.
@@ -18,7 +19,9 @@ from referencing import Registry, Resource
 
 SCHEMAS = Path(__file__).parent / "schemas"
 SHOW = 50  # print at most this many failures and warnings per file
-NODES = {"unoq": (1.0, 2.0), "pi5": (1.0, 0.0), "east": (2.0, 1.0), "west": (0.0, 1.0)}  # section 3, metres
+LAYOUT = json.loads((Path(__file__).parent.parent / "radio" / "nodes.json").read_text(encoding="utf-8"))  # section 3
+NODES = {n["id"]: tuple(n["xyz_m"][:2]) for n in LAYOUT["nodes"]}  # metres
+ROUTER_SPOTS = {s["id"]: tuple(s["xyz_m"][:2]) for s in LAYOUT["router_spots"]}
 NEAR_M = 0.5
 
 
@@ -29,7 +32,11 @@ def _load():
 
 
 VALIDATORS = _load()
-TYPES = sorted(set(VALIDATORS) - {"proof"})
+# proof.json (section 7), the optional parts of radio/nodes.json (section 3) and the bodies of the board's web
+# server: /layout (section 2), POST /ask, GET /history and GET /report (section 10)
+NOT_MESSAGES = {"proof", "ask_question", "ask_reply", "history", "report", "layout", "nodes", "privacy", "clock", "clock_set"}
+HISTORY_MAX_MS = 30 * 60 * 1000
+TYPES = sorted(set(VALIDATORS) - NOT_MESSAGES)
 
 
 def errors(msg, schema=None):
@@ -44,14 +51,41 @@ def errors(msg, schema=None):
         x = msg["xray"] or {"w": 0, "h": 0, "moving_db": [], "static_db": []}
         out += [f"$.xray.{k}: has {len(x[k])} cells, w*h is {x['w'] * x['h']}"
                 for k in ("moving_db", "static_db") if len(x[k]) != x["w"] * x["h"]]
+        lesson = (msg["model"]["training"] or {}).get("lesson")
+        if lesson and lesson["agree"] > lesson["of"]:
+            out.append(f"$.model.training.lesson.agree: {lesson['agree']} of {lesson['of']}")
         things = [(f"$.objects[{i}]", o) for i, o in enumerate(msg["objects"])] + [("$.advice", msg["advice"])]
-        out += [err for where, thing in things if thing for err in _near(where, thing)]
+        nodes = {**NODES, "pi5": ROUTER_SPOTS[msg["router"]]}  # the router sits at its current spot
+        out += [err for where, thing in things if thing for err in _near(where, thing, nodes)]
+    if schema in ("ask_reply", "history", "report") and not out:
+        out += _stretch(msg, schema)
     return out
 
 
-def _near(where, thing):
+def _stretch(msg, schema):
+    """Section 10: a stretch of time runs forwards; a history is at most 30 minutes, oldest row first."""
+    if schema == "report":
+        end = msg["armed_to_t"]
+        return [] if end is None or msg["armed_from_t"] <= end else [f"$.armed_to_t: {end} is before armed_from_t"]
+    span, where = (msg, "$") if schema == "history" else (msg.get("span"), "$.span")
+    if not span:
+        return []
+    if span["from_t"] > span["to_t"]:
+        return [f"{where}.to_t: {span['to_t']} is before from_t"]
+    if schema != "history":
+        return []
+    out = [f"$.to_t: more than 30 minutes after from_t"] if span["to_t"] - span["from_t"] > HISTORY_MAX_MS else []
+    times = [row["t"] for row in msg["rows"]]
+    if times != sorted(set(times)):
+        out.append("$.rows: not oldest first, or one second twice")
+    if times and not (span["from_t"] <= times[0] and times[-1] <= span["to_t"]):
+        out.append("$.rows: a row outside from_t..to_t")
+    return out
+
+
+def _near(where, thing, nodes=NODES):
     """near names the closest node within 0.5 m of xy_m, or null if none is that close (1 cm slack for rounding)."""
-    dist = {n: math.dist(xy, thing["xy_m"]) for n, xy in NODES.items()}
+    dist = {n: math.dist(xy, thing["xy_m"]) for n, xy in nodes.items()}
     best = min(dist, key=dist.get)
     want = best if dist[best] <= NEAR_M else None
     if thing["near"] == want or (abs(dist[best] - NEAR_M) <= 0.01 and thing["near"] in (best, None)):
@@ -91,12 +125,14 @@ def check_lines(lines, schema=None):
     return count, failures, warnings
 
 
-def check_file(path):
-    """Check one file ("-" is stdin), print what is wrong and return True if it passes."""
+def check_file(path, schema=None):
+    """Check one file ("-" is stdin), print what is wrong and return True if it passes.
+
+    schema None = each line by its type; a .json file is always one proof.json."""
     name = "<stdin>" if path == "-" else path
     with sys.stdin if path == "-" else open(path, encoding="utf-8") as f:
         whole = path.endswith(".json")
-        count, failures, warnings = check_lines([f.read()] if whole else f, "proof" if whole else None)
+        count, failures, warnings = check_lines([f.read()] if whole else f, "proof" if whole else schema)
     for no, text in failures[:SHOW] + [(no, "warning: " + w) for no, w in warnings[:SHOW]]:
         print(f"{name}:{no}: {text}")
     hidden = max(0, len(failures) - SHOW) + max(0, len(warnings) - SHOW)
@@ -109,7 +145,10 @@ def check_file(path):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m contracts.check", description=__doc__.splitlines()[0])
     ap.add_argument("files", nargs="+", help="JSON-lines files, - for stdin; a .json file is checked as proof.json")
-    return 0 if all([check_file(f) for f in ap.parse_args(argv).files]) else 1
+    ap.add_argument("--as", dest="schema", choices=sorted(NOT_MESSAGES - {"proof"}), default=None,
+                    help="check every line as this shape instead of by its type")
+    args = ap.parse_args(argv)
+    return 0 if all([check_file(f, args.schema) for f in args.files]) else 1
 
 
 if __name__ == "__main__":

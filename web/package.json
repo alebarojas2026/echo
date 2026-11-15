@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "scan:prep": "node src/room/tools/prep-scan.mjs"
+    "scan:prep": "node src/room/tools/prep-scan.mjs",
+    "scan:desks": "node src/room/tools/hall-desks.mjs"
   },
   "dependencies": {
     "three": "^0.187.0"

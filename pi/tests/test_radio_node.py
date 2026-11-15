@@ -270,19 +270,107 @@ def test_controller_down_or_gone_exits_nonzero_for_systemd(monkeypatch, fake):
     assert "Is Bluetooth on?" in str(stopped.value.code)
 
 
-def test_controller_that_refuses_20_ms_gets_100_ms(capsys):
-    class Pre50(FakeController):  # a controller that keeps Core 4.x's 100 ms floor
-        def send(self, packet):
-            self.status[LE_SET_ADV_PARAMS] = 0x12 if packet == build_adv_params_cmd() else 0
-            super().send(packet)
+class Floors(FakeController):
+    """A controller that answers 0x12 to LE Set Advertising Parameters below a floor per advertising type.
 
-    fake = Pre50(events=[fixture("legacy_report_east")])
-    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=lambda: fake.drained, log=lambda line: None)
-    params = [struct.unpack_from("<H", p, 4)[0] for p in fake.sent
-              if struct.unpack_from("<H", p, 1)[0] == LE_SET_ADV_PARAMS]
-    assert params == [0x0020, 0x00A0]
+    floors: {type byte: lowest interval it takes, in 0.625 ms units, or None for never}. A type not
+    listed takes anything.
+    """
+
+    def __init__(self, floors=None, **kw):
+        super().__init__(**kw)
+        self.floors = floors or {}
+
+    def send(self, packet):
+        if struct.unpack_from("<H", packet, 1)[0] == LE_SET_ADV_PARAMS:
+            interval, kind = struct.unpack_from("<H", packet, 4)[0], packet[8]
+            floor = self.floors.get(kind, 0)
+            self.status[LE_SET_ADV_PARAMS] = 0x12 if floor is None or interval < floor else 0
+        super().send(packet)
+
+    @property
+    def adverts(self):
+        """(interval in ms, advertising type) of every LE Set Advertising Parameters sent."""
+        return [(struct.unpack_from("<H", p, 4)[0] * 0.625, p[8]) for p in self.sent
+                if struct.unpack_from("<H", p, 1)[0] == LE_SET_ADV_PARAMS]
+
+
+CONN, SCAN, NONCONN = 0x00, 0x02, 0x03
+PI_B = {CONN: 0x20, SCAN: 0xA0, NONCONN: 0xA0}    # the 4.x rule: 100 ms for scannable and non-connectable
+
+
+def test_a_controller_that_takes_anything_gets_connectable_20_ms():
+    fake = Floors(events=[fixture("legacy_report_east")])
+    lines = []
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=lambda: fake.drained, log=lines.append)
+    assert fake.adverts == [(20, CONN)]   # nothing can beat 20 ms, so no other type is tried
     assert fake.sent.count(ADV_ON) == 1
-    assert "advertising every 100 ms instead" in capsys.readouterr().err
+    assert "[pi.radio_node] beacon S: advertising every 20 ms, connectable (ADV_IND); refused: nothing; " \
+           "anything that connects is dropped at once" in lines
+
+
+def test_the_4x_rule_keeps_connectable_20_ms_and_tries_nothing_slower():
+    fake = Floors(PI_B, events=[fixture("legacy_report_east")])
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=lambda: fake.drained, log=lambda line: None)
+    assert fake.adverts == [(20, CONN)]
+
+
+@pytest.mark.parametrize("floors, tried, kept, refused", [
+    # connectable from 30 ms, scannable from 20 ms: scannable wins, and the controller is left on it
+    ({CONN: 0x30, SCAN: 0x20}, [(20, CONN), (30, CONN), (20, SCAN)], (20, SCAN), "connectable 20 ms"),
+    # connectable from 40, the others never: 40 ms connectable
+    ({CONN: 0x40, SCAN: None, NONCONN: None},
+     [(20, CONN), (30, CONN), (40, CONN), (20, SCAN), (30, SCAN), (20, NONCONN), (30, NONCONN)],
+     (40, CONN), "connectable 20, 30 ms; scannable 20, 30 ms; non-connectable 20, 30 ms"),
+    # connectable never, scannable from 50, non-connectable from 30: non-connectable 30, then set back to it
+    ({CONN: None, SCAN: 0x50, NONCONN: 0x30},
+     [(20, CONN), (30, CONN), (40, CONN), (50, CONN), (60, CONN), (80, CONN), (100, CONN),
+      (20, SCAN), (30, SCAN), (40, SCAN), (50, SCAN), (20, NONCONN), (30, NONCONN)],
+     (30, NONCONN), "connectable 20, 30, 40, 50, 60, 80, 100 ms; scannable 20, 30, 40 ms; non-connectable 20 ms"),
+    # a tie goes to the earlier type: scannable 30 = connectable 30, so connectable is set again
+    ({CONN: 0x30, SCAN: 0x30, NONCONN: 0x30},
+     [(20, CONN), (30, CONN), (20, SCAN), (20, NONCONN)], (30, CONN),
+     "connectable 20 ms; scannable 20 ms; non-connectable 20 ms"),
+], ids=["scannable-wins", "connectable-40", "non-connectable-30", "tie"])
+def test_the_ladder_keeps_the_fastest_type_and_interval(floors, tried, kept, refused):
+    fake = Floors(floors)   # in 0.625 ms units: 0x20 = 20 ms, 0x30 = 30 ms, 0x40 = 40 ms, 0x50 = 50 ms
+    lines = []
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=lambda: True, log=lines.append)
+    sent = fake.adverts
+    assert sent[:len(tried)] == tried
+    assert sent[-1] == kept                       # the controller holds what was kept
+    told = [line for line in lines if "advertising every" in line]
+    names = {CONN: "connectable (ADV_IND)", SCAN: "scannable (ADV_SCAN_IND)", NONCONN: "non-connectable (ADV_NONCONN_IND)"}
+    assert told[0].startswith(f"[pi.radio_node] beacon S: advertising every {kept[0]:g} ms, {names[kept[1]]}; "
+                              f"refused: {refused}")
+
+
+def test_a_controller_that_refuses_below_100_ms_gets_100_ms():
+    fake = Floors({CONN: 0xA0, SCAN: 0xA0, NONCONN: 0xA0}, events=[fixture("legacy_report_east")])
+    lines = []
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=lambda: fake.drained, log=lines.append)
+    assert fake.adverts[-1] == (100, CONN)
+    assert [a for a in fake.adverts if a[1] != CONN] == [(s, k) for k in (SCAN, NONCONN) for s in (20, 30, 40, 50, 60, 80)]
+    assert any("advertising every 100 ms, connectable (ADV_IND)" in line for line in lines)
+
+
+def test_one_type_by_hand_walks_only_that_type():
+    fake = Floors({NONCONN: 0xA0})
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=lambda: True, log=lambda line: None,
+        adv_mode="non-connectable")
+    assert fake.adverts == [(ms, NONCONN) for ms in (20, 30, 40, 50, 60, 80, 100)]
+
+
+def test_one_type_refused_everywhere_falls_back_to_the_others():
+    fake = Floors({SCAN: None})
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=lambda: True, log=lambda line: None, adv_mode="scannable")
+    assert fake.adverts[-1] == (20, CONN)
+
+
+def test_everything_refused_is_an_error_for_systemd():
+    fake = Floors({CONN: None, SCAN: None, NONCONN: None})
+    with pytest.raises(hci.HciError, match="every advertising type was refused"):
+        run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=lambda: True, log=lambda line: None)
 
 
 @pytest.mark.parametrize("value, dev", [("0", 0), ("hci0", 0), ("1", 1), ("hci1", 1), (" hci0 ", 0)])
@@ -325,3 +413,40 @@ def test_timed_run_prints_the_summary(monkeypatch, capsys):
     assert list(rows) == list(radio_node.PI_LINKS)
     assert rows["east>pi5:ble"][1] == "1" and rows["east>pi5:ble"][-1] == "-61.0"
     assert rows["west>pi5:ble"][1] == "1" and rows["west>pi5:ble"][-1] == "-70.0"
+
+
+def test_status_line_says_which_beacon_and_the_interval_the_controller_took(monkeypatch):
+    monkeypatch.setattr(radio_node, "QUIET_S", 1000.0)
+    fake = FakeController(events=[fixture("legacy_report_east")] * 4)
+    lines = []
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=loops(10), clock=Clock(1.0), log=lines.append)
+    status = [line for line in lines if "/s" in line]
+    assert status and status[0].endswith("; set up again 0x since start; beacon S every 20 ms, connectable")
+
+
+def test_status_line_shows_100_ms_when_the_controller_refuses_below_it(monkeypatch):
+    monkeypatch.setattr(radio_node, "QUIET_S", 1000.0)
+    fake = Floors({CONN: 0xA0, SCAN: 0xA0, NONCONN: 0xA0}, events=[fixture("legacy_report_east")] * 4)
+    lines = []
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=loops(10), clock=Clock(1.0), log=lines.append)
+    assert any(line.endswith("beacon S every 100 ms, connectable") for line in lines if "/s" in line)
+
+
+def test_no_scan_advertises_only_and_never_sets_up_again_for_silence():
+    fake = FakeController()
+    lines = []
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=loops(30), clock=Clock(1.0), log=lines.append, scan=False)
+    assert fake.sent.count(ADV_ON) == 1                       # silence is expected: no setup again
+    assert hci.command_packet(*hci.scan_enable(False, True)) not in fake.sent   # the scan is never turned on
+    assert not any("no adverts" in line for line in lines)
+    assert any(line.endswith("beacon S every 20 ms, connectable, not scanning") for line in lines if "set up again" in line)
+
+
+def test_no_scan_flag_reaches_the_run(monkeypatch):
+    got = {}
+    monkeypatch.setattr(radio_node, "open_controller", lambda dev: hci.Hci(FakeController()))
+    monkeypatch.setattr(radio_node, "run", lambda dev, **kw: got.update(kw))
+    radio_node.main(["--no-scan"])
+    assert got["scan"] is False
+    radio_node.main([])
+    assert got["scan"] is True

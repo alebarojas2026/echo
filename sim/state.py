@@ -38,6 +38,8 @@ JUMP_DB, STEADY_DB = 6.0, 0.8        # section 6: the jump rule, and what counts
 MOVING_RUN, RECENT = 5, 10           # section 6: the still timer is judged on smoothed decisions
 OBJECT_GONE_S = 1.0                  # section 6: a removed object's link comes down after about 1 s
 NEAR_M = 0.5   # section 5: near is the closest node within this distance, else null
+HALL_RATE_S, HALL_MIN_READINGS = 2.0, 4          # hall links (issue #358): rate window, and fewer readings = stale
+HALL_ON_AFTER_S, HALL_FADE_S = 0.5, 3.0          # movement shows 0.5 s into a walk and fades out 3 s after it
 WIFI = "pi5>unoq:wifi"
 IDLE_ALERT = {"state": "none", "zone": None, "still_s": 0, "limit_s": None}
 SENTENCES = {   # template narration, one short sentence per event kind
@@ -53,7 +55,8 @@ SENTENCES = {   # template narration, one short sentence per event kind
     "cam_on": "The camera is on.", "cam_stalled": "The camera has stalled.", "cam_off": "The camera is off.",
 }
 ARMED_SENTENCES = {"armed": "Armed: this space should be empty now.", "disarmed": "Disarmed.",
-                   "intrusion": "Someone is here while armed, in zone {zone}."}
+                   "intrusion": "Someone is here while armed, in zone {zone}.",
+                   "passed_by": "Someone passed by."}
 TAMPER_KINDS = ("tamper", "tamper_cleared")   # worded by the narrator's own template, with the device's name
 TAMPER_SILENT_S, TAMPER_CLEAR_S = 3.0, 2.0   # section 6, Tamper (issue #533), as in brain/alert.py
 NO_NODE = {"object_on": "Something new is sitting in the room.", "object_off": "The new object is gone."}
@@ -98,14 +101,18 @@ class Brain:
                        "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
         self.armed, self.intruded = False, False   # section 6, Armed: the space should be empty
+        self.appeared = None   # (decisions since, zone) while an appearance waits out armed.hold_s
         self.heard, self.tamper, self.node_back = {}, [], {}   # link -> its last reading; nodes silent while armed
         self.commands_done = 0   # how many of the path's own commands (path["commands"]) have run
         self.fits = 0    # fits of a scripted lesson so far (path["lesson"])
         self.demo = []   # every event since the last reset, for the recap
+        # optional hall links (issue #358): their readings are kept apart from the core links'
+        self.hall = {fake.link_id(tx, rx, "ble"): deque() for tx, rx in fake.hall_links(path)}
 
     def see(self, event: dict) -> None:
         if event["type"] == "rssi":
-            self.readings[event["link"]].append((event["t"], event["dbm"]))
+            q = self.hall.get(event["link"])
+            (self.readings[event["link"]] if q is None else q).append((event["t"], event["dbm"]))
             self.heard[event["link"]] = event["t"]
 
     def command(self, msg: dict) -> None:
@@ -132,7 +139,7 @@ class Brain:
 
     def _arm(self, t: float, on: bool) -> None:
         if on != self.armed:
-            self.armed, self.intruded = on, False
+            self.armed, self.intruded, self.appeared = on, False, None
             self._event(t, "armed" if on else "disarmed")
             self._tamper(t)   # disarming clears every listed node; arming with one already silent raises it at once
 
@@ -166,16 +173,30 @@ class Brain:
                 self._event(t, "tamper_cleared", node=node)
 
     def _intrusion(self, t: float, pred) -> None:
-        """Section 6: while armed, one intrusion each time a person appears (person holds the majority
-        of the last 10 decisions, after it didn't). Never while blind or with no prediction."""
+        """Section 6, Armed (wording in issue #584): a person appears when person holds the majority
+        of the last 10 decisions, after it didn't. Still there armed.hold_s later (nodes.json, 3 s):
+        one intrusion. Gone first: a passed_by instead. Never while blind or with no prediction, and
+        that time doesn't count as time spent there."""
         person = sum(k == "person" for k, _, _ in self.recent) > len(self.recent) / 2
         if not self.armed or pred is None:
             return
+        hold = round(LAYOUT.hold_s * 10)   # in decisions, 10 a second, as the real brain counts it
         if person and not self.intruded:
             self.intruded = True
-            self._event(t, "intrusion", zone=self.anchor[1] or None)
+            if hold <= 0:
+                self._event(t, "intrusion", zone=self.anchor[1] or None)
+            else:
+                self.appeared = (0, self.anchor[1] or None)
         elif not person:
-            self.intruded = False
+            if self.appeared:
+                self._event(t, "passed_by", zone=self.appeared[1])
+            self.intruded, self.appeared = False, None
+        elif self.appeared:
+            waited = self.appeared[0] + 1
+            self.appeared = (waited, self.appeared[1])
+            if waited >= hold:
+                self._event(t, "intrusion", zone=self.anchor[1] or self.appeared[1])
+                self.appeared = None
 
     def _ms(self, t: float) -> int:
         return self.start_ms + round(t * 1000)
@@ -213,6 +234,28 @@ class Brain:
                         "status": ("blind" if link in self.blind and rx != "pi5b" else
                                    "stale" if link in self.stale_since or link in self.blind else "ok"),
                         "why": 0.0})
+        return out
+
+    def _hall(self, t: float) -> list:
+        """The `hall` rows, read from the script like everything else here: movement while a walk
+        is on the link, fading out over the 3 s after it; stale when under 4 readings in 2 s."""
+        hall, out = self.path["hall"], []
+        for tx, rx in fake.hall_links(self.path):
+            q = self.hall[fake.link_id(tx, rx, "ble")]
+            if not q:
+                continue   # a hall link is listed once it has a reading
+            n = sum(1 for at, _ in q if at > t - HALL_RATE_S)
+            level = 0.0
+            for w in hall.get("walks") or []:
+                if w.get("tx", tx) == tx and w.get("rx", rx) == rx:
+                    since = t - w["t_off"]
+                    if t >= w["t_on"] + HALL_ON_AFTER_S and since < HALL_FADE_S:
+                        level = max(level, min(1.0, 1.0 - (since - 1.0) / (HALL_FADE_S - 1.0)))
+            stale = n < HALL_MIN_READINGS
+            activity = 0.0 if stale else round(level, 2)
+            out.append({"id": fake.link_id(tx, rx, "ble"), "tx": tx, "rx": rx,
+                        "xy_m": [float(v) for v in hall["beacons"][tx][:2]], "activity": activity,
+                        "moving": activity >= 0.5, "rate_hz": round(n / HALL_RATE_S, 1), "stale": stale})
         return out
 
     def _steady(self, link: str, since: float, t: float) -> bool:
@@ -389,6 +432,7 @@ class Brain:
         self._diff(t, {"present": bool(pos), "zone": zone, "alert": alert["state"], "cam": cam, "spot": spot,
                        "blind": set(blind), "objects": {tuple(o["xy_m"]): o["near"] for o in objects},
                        "baseline": baseline, "trained": trained}, pred is not None)
+        hall = {"hall": self._hall(t)} if self.hall else {}   # no hall block in the path: no hall key at all
         return {"type": "state", "t": t, "cam": cam, "router": spot, "links": links, "health": health,
                 "pred": pred, "objects": objects, "xray": xray, "alert": alert, "checkin": self.checkin,
                 "advice": dict(self.advice) if self.advice else None, "narration": self.narration,
@@ -399,7 +443,8 @@ class Brain:
                           "training": self._lesson(t, cam)},
                 "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None},
                 **({"armed": True} if self.armed else {}),   # section 5: missing means false
-                **({"tamper": list(self.tamper)} if self.tamper else {})}   # only while a node is listed
+                **({"tamper": list(self.tamper)} if self.tamper else {}),   # only while a node is listed
+                **hall}
 
     def _lesson(self, t: float, cam: str):
         """model.training for a path with a scripted lesson (sim/lesson.py): null outside the lesson;
@@ -490,6 +535,9 @@ def run(path: dict, rate: float = 15.0, seed: int = 0, state_hz: float = 10.0, s
     yield from due(0.0)   # the first state goes out before any reading has arrived
     last = 0.0
     for event in fake.simulate(path, rate=rate, seed=seed):
+        if event.get("link") in brain.hall:   # a hall reading rides along: it never moves the core's timing
+            brain.see(event)
+            continue
         if event["t"] > last:
             yield from due(last)
             last = event["t"]

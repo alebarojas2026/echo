@@ -95,6 +95,50 @@ Optional extras, all timed in seconds from the start:
 | `jumps` | `[{"link": "east>unoq:ble", "db": 9, "t_on": 5, "t_off": 12}]` | A link's level shifts by `db` with nothing in the room to explain it (`wobble_db` makes it unsteady) |
 | `flickers` | `[{"t_on": 7.0, "t_off": 7.3}]` | Fake brain only: its decision says moving for that long while the person stands still |
 
+## Hall links (optional; CONTRACTS.md sections 3, 5 and 6)
+
+Two beacons far outside the layout, `h` and `j`, as tripwires: for each long link the screen says
+whether there is movement along that path. A hall link is a hall beacon heard by a receiver
+(`h>unoq:ble`, `j>pi5:ble`, ...). A path gets them with a `hall` block; a path without one gives
+exactly the output it always gave.
+
+```json
+"hall": {
+  "beacons": {"h": [3.0, 19.0], "j": [-14.0, 6.0]},
+  "walks": [{"tx": "h", "t_on": 35, "t_off": 38}, {"tx": "h", "rx": "unoq", "t_on": 77, "t_off": 80}]
+}
+```
+
+- `beacons`: where each one is, in the layout's frame (metres; far outside it).
+- `walks`: somebody walks along a beacon's path between `t_on` and `t_off`. With `rx` only that
+  receiver's link sees it; without, all of that beacon's links do. `drop_db` (default 8) is how deep the dip gets.
+- `sent_hz` (default 25) and `heard` (default 0.3): each beacon sends that many adverts a second
+  and a receiver hears that share of them, at uneven moments and far weaker than the core links.
+- `outages` with `"node": "j"` silence a hall beacon like any other node.
+
+`sim.fake` and `sim.send` then also send the hall links' `rssi` (their own random stream, so the
+core links' readings don't change). The fake brain (`sim.state`, `sim.ws`) adds `hall` to state:
+
+```json
+"hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[3.0,19.0],"activity":1.0,"moving":true,"rate_hz":6.5,"stale":false}]
+```
+
+Like the rest of the fake brain it reads the answer from the script: `moving` while a walk is on the
+link and for about 2 s after it, `stale` (with activity 0 and moving false) while the link has
+fewer than 4 readings in 2 s. The real rule is in brain/hall.py.
+
+The ready-made path is `hall/hall_walk` (90 s; it lives in `sim/paths/hall/`): quiet for 35 s, a
+walk along h's path at 35 s, along j's at 47 s, j silent from 59 s to 69 s (stale), and at 77 s a
+walk that only `h>unoq:ble` sees. A person stands in the sensing area the whole time. The first walk
+comes that late because the real brain needs about 25 s of a link before it knows its quiet level.
+
+```
+python -m sim.ws hall/hall_walk --loop       # the screen, with no board and no brain
+python -m sim.send hall/hall_walk --loop     # through the real bus and brain
+```
+
+Both feeds pass `contracts.check`: the hall `rssi` lines and the `hall` field are in the schemas.
+
 ## Tests
 
 ```
@@ -121,6 +165,8 @@ Use the short name: `python -m sim.fake zone_tour`.
 | `demo` | The whole demo in order, for the fake brain (see below) | 64 s |
 | `still_flicker` | Stand still in zone 4 with one 0.3 s moving flicker; the alert must still fire at 10 s | 18 s |
 | `tamper` | Nobody there. Armed at 3 s (the path sends the cmd itself); the east beacon is unplugged from 10 s to 20 s: `tamper` at 13 s, `tamper_cleared` at 22 s; disarmed at 36 s | 40 s |
+| `passed_by` | Nobody there. Armed at 3 s; at 10 s someone crosses the area in 1.5 s without stopping: `passed_by` once they are gone, no `intrusion`; disarmed at 21 s | 24 s |
+| `step_in` | Nobody there. Armed at 3 s; at 10 s someone steps in and stands for 6 s: one `intrusion` about 3.5 s after stepping in; disarmed at 21 s | 24 s |
 | `tray_removed` | Person in zone 2 throughout; tray at T1 from 5 s to 14 s, gone from the picture about 1 s later | 20 s |
 | `lesson` | The live lesson (built from the layout in `sim/lesson.py`, no file): someone steps left and right, desk-view labels with no foot point, the camera unplugged at 45 s. The fake brain shows `model.training.lesson` ("learning: 6 of 10", then 8) from 25 s until the camera goes | 66 s |
 
@@ -195,8 +241,8 @@ Every connected screen gets the same messages at real speed. `cmd` messages from
 read: `reset_alert` clears the alert, `reset` also clears the still timer, check-in and advice,
 sends the `reset` event and shows the narrator's template recap of the demo since the last reset,
 `arm {on: true|false}` arms or disarms (section 6, Armed: `state.armed`, the `armed`,
-`disarmed` and `intrusion` events, one intrusion each time a person appears while armed; reset
-disarms), and the rest are accepted and ignored. The `arrival` path is the hero arrival: nobody,
+`disarmed`, `intrusion` and `passed_by` events: an appearance still there `armed.hold_s` later
+(nodes.json, 3 s) is one intrusion, one that is gone first is a `passed_by`; reset disarms), and the rest are accepted and ignored. The `arrival` path is the hero arrival: nobody,
 then someone steps in on the left, crosses right and stands still. The `tamper` path is tamper while armed
 (section 6, Tamper; wording in issue #533): `python -m sim.ws tamper --loop` arms by itself (a path's
 `"commands": [{"t", "cmd", "args"}]` are run by the fake brain at their times), then east goes silent: the event

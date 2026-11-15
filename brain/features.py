@@ -25,6 +25,7 @@ from collections import Counter, deque
 from typing import Dict, Iterable, Iterator, List, Optional
 
 WINDOW_MS = 1000
+CLOCK_JUMP_MS = 5000   # recv_t this far ahead of, or behind, the windows: start them again
 HOP_MS = 100
 
 # Section 6 object rule: a link drops >= 3 dB for >= 2 s with std < 0.8 dB.
@@ -46,6 +47,21 @@ def baseline(messages: Iterable[dict]) -> Dict[str, float]:
         if m.get("type") == "rssi":
             by_link.setdefault(m["link"], []).append(float(m["dbm"]))
     return {link: statistics.median(v) for link, v in by_link.items()}
+
+
+def quiet(messages: Iterable[dict]) -> Dict[str, float]:
+    """Per-link quiet level over a baseline capture: the std of the link's 0.5 s means, in dB
+    ({link: quiet_db}). What "steady" and "moved" are measured against on a noisy link. A link
+    with fewer than two such means is left out."""
+    by_link: Dict[str, Dict[int, List[float]]] = {}
+    start = None
+    for m in messages:
+        if m.get("type") == "rssi":
+            start = m["recv_t"] if start is None else start
+            bins = by_link.setdefault(m["link"], {})
+            bins.setdefault((m["recv_t"] - start) // STEADY_BIN_MS, []).append(float(m["dbm"]))
+    return {link: statistics.pstdev(sum(v) / len(v) for v in bins.values())
+            for link, bins in by_link.items() if len(bins) >= 2}
 
 
 def link_stats(dbms: List[float], base_dbm: Optional[float]) -> dict:
@@ -144,6 +160,7 @@ class Windower:
         self._rssi: deque = deque()   # (recv_t, link, dbm)
         self._labels: deque = deque()  # (recv_t, label message)
         self._next_end: Optional[int] = None
+        self.restarts = 0   # times the windows were started again after a clock jump or a long gap
 
     def push(self, msg: dict) -> List[dict]:
         t = msg.get("recv_t")
@@ -155,6 +172,15 @@ class Windower:
             # First window closes one full window after the first message,
             # rounded up to the 100 ms grid.
             self._next_end = -(-(t + WINDOW_MS) // HOP_MS) * HOP_MS
+        elif t - self._next_end > CLOCK_JUMP_MS or self._next_end - WINDOW_MS - t > CLOCK_JUMP_MS:
+            # The clock jumped (NTP reaching a time source after boot, a date set by hand), or the
+            # feed was silent for a long while. Stepping through the gap one 100 ms window at a time
+            # blocked the loop and built every window (36,000 for an hour); a jump back closed no
+            # window at all until the clock caught up. Start the windows again from here (#615).
+            self._rssi.clear()
+            self._labels.clear()
+            self._next_end = -(-(t + WINDOW_MS) // HOP_MS) * HOP_MS
+            self.restarts += 1
         done = []
         while t >= self._next_end:
             end, self._next_end = self._next_end, self._next_end + HOP_MS   # moved on first: a window that

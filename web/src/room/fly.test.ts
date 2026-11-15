@@ -1,6 +1,6 @@
 import { Box3, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
-import { FLY_MS, Fly, hallShot, mixShot, pinnedFraming, wideness } from './fly'
+import { FIRST_LOOK_MS, FLY_MS, Fly, HALL_CAPTION, cutaway, hallShot, hallWordsAlpha, mixShot, pinnedFraming, wideness } from './fly'
 import { roomShot, type RoomView, type Shot } from './view'
 
 /** Just enough of RoomView for the fly: it records the shots and lets the test run frames. */
@@ -66,6 +66,71 @@ describe('flying between shots', () => {
   })
 })
 
+describe('the hall view\u2019s caption', () => {
+  it('says the hall is a model built from a scan and that the board draws only the live marks', () => {
+    expect([...HALL_CAPTION]).toEqual(['Hall model built from a scan, not by the board.', 'The board draws the live marks.'])
+    // Nothing about when it was made: it was built during the event, so "before the event" would not be true.
+    expect(HALL_CAPTION.join(' ')).not.toMatch(/before/i)
+  })
+
+  it('shows in the hall view, fades with the fly, and is gone in the desk view', () => {
+    expect(hallWordsAlpha(1)).toBe(1)
+    expect(hallWordsAlpha(0.75)).toBeCloseTo(0.5)
+    expect(hallWordsAlpha(0.5)).toBe(0)
+    expect(hallWordsAlpha(0)).toBe(0)
+  })
+})
+
+describe('room kept free at the bottom of the close view', () => {
+  const hall = hallShot(HALL, 12)
+  it('glides to the lifted framing when a bar covers the room\u2019s bottom, and back when it goes', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    let lift = 0
+    // A close framing that depends on the room kept free, as the desk's fitted shots do.
+    fly.setClose((w, h) => ({ ...roomShot(w, h), target: roomShot(w, h).target.clone().add(new Vector3(0, 0, lift)) }))
+    fly.setHall(hall)
+    view.run(FIRST_LOOK_MS + FLY_MS + 100)
+    expect(fly.wide).toBe(0)
+    const before = view.shot.target.clone()
+    lift = 0.4
+    const from = view.shots.length
+    fly.refit()
+    view.run(FLY_MS + 100)
+    expect(view.shot.target.z - before.z).toBeCloseTo(0.4)
+    const steps = view.shots.slice(from).map((s, i, all) => (i ? s.target.distanceTo(all[i - 1].target) : 0))
+    expect(Math.max(...steps)).toBeLessThan(0.02) // a glide, never a jump
+    expect(fly.wide).toBe(0)
+    expect(view.host.dataset.view).toBe('square')
+    lift = 0
+    fly.refit()
+    view.run(FLY_MS + 100)
+    expect(view.shot.target.distanceTo(before)).toBeLessThan(1e-6)
+  })
+
+  it('does nothing while the camera is on the hall: it lands on the new framing when it comes down', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.hold()
+    fly.setHall(hall)
+    view.run(500)
+    fly.refit()
+    view.run(FLY_MS + 100)
+    expect(fly.wide).toBe(1)
+  })
+})
+
+describe('the see-through row', () => {
+  it('stays solid until the camera is nearly down, then opens smoothly: never a slot seen from far away', () => {
+    expect(cutaway(1)).toBe(0)
+    expect(cutaway(0.5)).toBe(0)
+    expect(cutaway(0.3)).toBe(0)
+    expect(cutaway(0.15)).toBeCloseTo(0.5)
+    expect(cutaway(0)).toBe(1)
+    for (let w = 0; w < 0.3; w += 0.01) expect(cutaway(w)).toBeGreaterThan(cutaway(w + 0.01))
+  })
+})
+
 describe('the fly', () => {
   const hall = hallShot(HALL, 12)
   const square = roomShot().radiusM
@@ -76,11 +141,43 @@ describe('the fly', () => {
     fly.setHall(hall)
     expect(view.shot.radiusM).toBeCloseTo(hall.radiusM)
     expect(view.host.dataset.view).toBe('hall')
-    view.run(1000)
+    view.run(FIRST_LOOK_MS - 100)
     expect(fly.wide).toBe(1) // still taking it in
+    expect(FIRST_LOOK_MS + FLY_MS).toBe(3000) // from the whole hall to the desk in 3 s
     view.run(1200 + FLY_MS)
     expect(view.shot.radiusM).toBeCloseTo(square)
     expect(view.host.dataset.view).toBe('square')
+  })
+
+  it('lands exactly: on a laptop\'s canvas too, the view says square and nothing of the hall stays faded in', () => {
+    const sizes: [number, number][] = []
+    for (let w = 640; w <= 1600; w += 61) for (let h = 600; h <= 1200; h += 97) sizes.push([w, h])
+    for (const size of sizes) {
+      const view = fakeView()
+      view.size = size
+      const fly = new Fly(view as unknown as RoomView, null, () => {})
+      fly.setHall(hall)
+      view.run(1200 + FLY_MS + 100)
+      expect(fly.wide).toBe(0)
+      expect(view.host.dataset.view).toBe('square')
+    }
+  })
+
+  it('lands on the close framing it is given (in situ inside the hall) and follows the canvas from then on', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    const situ = (w: number): Shot => ({ elevDeg: 45, target: new Vector3(0, 0.8, 0.3), radiusM: 1.7 * Math.min(1, w / 1280) })
+    fly.setClose(situ)
+    fly.setHall(hall)
+    view.run(1200 + FLY_MS + 100)
+    expect(view.shot).toEqual(situ(1280))
+    expect(fly.wide).toBe(0)
+    view.size = [800, 900]
+    fly.toggle()
+    view.run(FLY_MS + 100)
+    fly.toggle()
+    view.run(FLY_MS + 100)
+    expect(view.shot.radiusM).toBeCloseTo(situ(800).radiusM)
   })
 
   it('never jumps: every frame of the fly is a small step from the one before', () => {
@@ -149,6 +246,48 @@ describe('the fly', () => {
     view.run(FLY_MS + 100)
     expect(fly.wide).toBe(0)
     expect(view.host.dataset.view).toBe('square')
+  })
+
+  it('stays at the desk when the hall model loads after someone was found, and keeps the hall for later', () => {
+    for (const close of [roomShot, (w: number, h: number) => ({ ...roomShot(w, h), elevDeg: 45, target: roomShot(w, h).target.clone().add(new Vector3(0.2, 0.3, 0)) })]) {
+      const view = fakeView()
+      const wides: number[] = []
+      const fly = new Fly(view as unknown as RoomView, null, (w) => wides.push(w))
+      fly.hold() // the arrival screen, before the model is in
+      fly.arrive() // found: the camera is at the desk
+      view.run(3000)
+      fly.setClose(close)
+      const before = view.shots.length
+      fly.setHall(hall) // the model arrives seconds into the visit
+      view.run(FLY_MS + 100)
+      expect(Math.max(0, ...wides)).toBeLessThan(0.05) // never out to the hall
+      const shots = view.shots.slice(before)
+      expect(shots.every((s) => s.radiusM < hall.radiusM / 2)).toBe(true)
+      const steps = shots.slice(1).map((s, i) => s.target.distanceTo(shots[i].target))
+      expect(Math.max(0, ...steps)).toBeLessThan(0.05) // and to the new close framing by a glide, not a jump
+      expect(view.shot.target.distanceTo(close(...view.size).target)).toBeLessThan(1e-6)
+      expect(fly.wide).toBe(0)
+      expect(view.host.dataset.view).toBe('square')
+      fly.reset() // the hall was kept: between judges the camera still goes out to it
+      view.run(FLY_MS + 100)
+      expect(fly.wide).toBe(1)
+    }
+  })
+
+  it('still shows the hall first when the model loads while the arrival screen waits or was never up', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.arrive() // nothing was waiting (the page's first call, with no arrival state yet)
+    fly.setHall(hall)
+    expect(fly.wide).toBe(1)
+    const next = fakeView()
+    const again = new Fly(next as unknown as RoomView, null, () => {})
+    again.hold()
+    again.arrive()
+    again.hold() // the person left before the model was in: waiting again
+    again.setHall(hall)
+    next.run(FIRST_LOOK_MS + FLY_MS + 100)
+    expect(again.wide).toBe(1)
   })
 
   it('goes back to the hall when waiting starts again, and ignores found when nothing was waiting', () => {

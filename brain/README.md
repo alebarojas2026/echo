@@ -27,6 +27,8 @@ Nothing in the brain names a node, a link or a zone of its own, except the two l
 - The x-ray grid: with `frame.strip_m` (the desk layout) cells of 0.125 m over `frame.size_m` plus 0.2 m each side (16 x 12 for 1.6 x 1.1 m); without it the square's 10 x 10. The zone of a point follows the same switch (`1 + (x >= zone_split_x_m)` inside the strip and 0 off it, or the square's four). `sim/layout.py` does the same.
 - The router is the node with the `router` role. "A pi5 link" (the 3 s check after `router_home`) is a link with that node as tx or rx, by the parsed ends: `pi5b` is another node.
 - Links whose receiver has no cable (`pi5b`: its readings ride the sensing hotspot, which the demo blocks on purpose) are judged like any link and show stale or blind in their own rows, and health is then degraded; but they never make health blind, never appear in `health.blind`, never hide `pred` and never pause the alert.
+- A link with `"classifier": false` in the file (too thin to classify on) is still read, listed in `state.links`, judged stale or blind in its own row and counted for tamper. It is no feature (`Brain.model_links` is the rest, in file order), never makes health blind, is not waited for by a baseline, and the x-ray, objects, the check-in and the advice don't look at it. Switching one on or off changes the feature vector, so train again.
+- A link whose baseline counted under 4 readings a second shows stale but is never blind by rate.
 - A model file remembers its feature names and zones, so one from another layout is refused at start with a line in the log.
 - `RADIO_SIGHT_NODES=<file>` makes the brain read another layout file. The tests in brain/tests pin their own (the 2 x 2 m square, `brain/tests/square_nodes.json`, with their own copies of the sim paths), so they don't change when the room does; `brain/tests/test_layout.py` runs the loop on the desk layout and on whatever radio/nodes.json holds.
 
@@ -60,7 +62,7 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 
 | cmd | What the brain does |
 |---|---|
-| `baseline` | Sets label mode off and captures 20 s. With the camera off there is nobody to ask and the operator keeps the area empty; with it on, it must see nobody. The 20 s start again whenever a section 6 condition breaks: the camera is on and its labels stop or it sees anybody, label mode is turned on, health is not ok, or a link goes quiet for 1 s. If it still can't start 120 s after the command (with or without `keep_model`), it is given up (logged; the old baseline and the model stay, `pred` comes back), so a Baseline pressed by mistake during a demo doesn't hide `pred` for good. Then it writes `data/sessions/baseline.json` and sends `baseline_done`. `baseline {keep_model: true}` is the same layout set down again (another desk, a knocked beacon): only the baseline is new, the model and the recordings stay. In a hall full of phones it must be able to finish, so only a link silent for 3 s, or health blind, starts its 20 s again (a stale link or a 1 s gap does not), and each recording keeps the baseline it was made on (`data/sessions/baselines.jsonl`). The model's features are all drops and spreads against the baseline, never levels in dBm, which is why it carries over. Without `keep_model`: **A baseline asked for by hand means a new place**: when it finishes, the model is dropped (`pred` is null and `model.trained` false until the next `train`) and recordings made before it are never trained on again. Their files stay in `data/sessions`. The time is kept in `data/sessions/place.json`. |
+| `baseline` | Sets label mode off and captures 20 s. With the camera off there is nobody to ask and the operator keeps the area empty; with it on, it must see nobody. The 20 s start again whenever a section 6 condition breaks: the camera is on and its labels stop or it sees anybody, label mode is turned on, health is not ok, or a link goes quiet for 1 s. If it still can't start 120 s after the command (with or without `keep_model`), it is given up (logged; the old baseline and the model stay, `pred` comes back), so a Baseline pressed by mistake during a demo doesn't hide `pred` for good. Then it writes `data/sessions/baseline.json` and sends `baseline_done`. `baseline {keep_model: true}` is the same layout set down again (another desk, a knocked beacon): only the baseline is new, the model and the recordings stay. In a hall full of phones it must be able to finish, so only a link silent for 3 s, or health blind, starts its 20 s again (a stale link or a 1 s gap does not). Like a plain baseline it measures the rates afresh: a link that reports more slowly at this desk than where the old baseline was taken is not called stale or blind for it while the capture runs. Each recording keeps the baseline it was made on (`data/sessions/baselines.jsonl`). The model's features are all drops and spreads against the baseline, never levels in dBm, which is why it carries over. Without `keep_model`: **A baseline asked for by hand means a new place**: when it finishes, the model is dropped (`pred` is null and `model.trained` false until the next `train`) and recordings made before it are never trained on again. Their files stay in `data/sessions`. The time is kept in `data/sessions/place.json`. |
 | `record_start`, `record_stop` | Sends a `recording` event. The bus records. The brain keeps its own copy of the session from the bus's `meta` message until `record_stop`. |
 | `train` | Trains on the kept sessions with purpose `train` or `object`, off the loop. Then `trained`. |
 | `relearn` | Drops the model and trains again, from this place's recordings only. |
@@ -162,3 +164,49 @@ How the sessions are walked decides what the model can learn. These steps come f
 3. Step out of view each time before counting. Windows with anybody in frame, and the 2 s after, are left out of training.
 
 In the demo, put the tray back on the same T1 mark. The model recognises it only near where it was recorded.
+
+## Hall links (`brain/hall.py`, optional)
+
+Two spare beacons far from the square (letters H and J, 10-25 m away) make long links. A hall link
+is any link whose tx is one of them, one per receiver in radio/nodes.json that hears it
+(`h>unoq:ble`, `j>pi5:ble`, ...). For each one the brain says whether there is
+movement along that path. It never says who, where along the path, or how many. The wording is
+proposed in issue #358; until it lands in CONTRACTS.md, state carries `hall` only once a hall link
+has been heard, and is otherwise exactly what it was.
+
+```jsonc
+"hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[x, y],"activity":0.0-1.0,"moving":false,"rate_hz":n,"stale":false}]
+```
+
+- A body moving near or across a radio path makes the signal change from reading to reading. Per
+  link, `spread_db` is the std of its 0.5 s means over the last 3 s.
+- Each link is compared with its own quiet level: the 20th percentile of that spread over the last
+  5 minutes (20 samples at least, never under 0.5 dB). No baseline capture, nothing learned.
+- `activity` = (spread / quiet - 2) / 4, held to 0-1. `moving` turns on at 0.5 and off after 1 s
+  under 0.25.
+- `stale` = fewer than 4 of the six 0.5 s bins hold a reading (the readings stopped, or are too
+  few to judge); it clears after 3 s. A stale link has activity 0 and moving false. On a link near
+  the receiver's limit a body in the path can stop the readings altogether: that shows as stale,
+  never as "no movement".
+- `busy` (wording in issue #584): a row has it only when radio/nodes.json gives that link an empty-hall quiet level, `"hall": {"links": [{"id": "h>unoq:ble", "empty_quiet_db": 0.6}]}`. While the link's current quiet level is above twice that, the path is busy: `busy` is true and `moving` is false, because in a hall that is full all the time "four times quiet" means nothing. No `busy` in a row = that link is not calibrated.
+- `xy_m` is the far beacon's spot from the `hall` section of radio/nodes.json, or null until it is
+  measured.
+
+The core links (the ones listed in nodes.json) never see any of it: `Brain.on_message` hands a hall reading to `Hall.take` and
+returns, so features, health, the x-ray, the alert, the check-in, advice and the recordings held
+for training are the same with and without hall beacons (brain/tests/test_hall.py compares every
+state of a whole demo run). Every entry point of the module catches its own errors.
+
+The thresholds are first values, and the tests use synthetic links. How far a link reaches in a
+full hall, and how a real crossing looks, have to be measured there (issue #95).
+
+## Which links see a person (`brain/linkrank.py`)
+
+For placing the devices, before any baseline or model. Record a few 20 s blocks, empty and with one person standing in the area, and it ranks every link by how far the person moves it against how far the same link moves between two empty blocks.
+
+```
+python -m brain.linkrank --capture 20 empty left empty right empty     # records the blocks through the bus, Enter starts each
+python -m brain.linkrank empty=s1 left=s2 empty=s3 right=s4 empty=s5   # blocks already in data/sessions (ids or paths)
+```
+
+Each link gets `clear`, `weak` or `no signal`, and the last lines say which links carry the detection and whether left can be told from right. Only the standard library.

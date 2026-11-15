@@ -4,11 +4,11 @@ Radio Sight: safety and after-hours security for buildings, using the Wi-Fi that
 
 **The three things this project is about. Every screen, sentence and feature should serve one of them:**
 1. **Safety and security.** It knows someone is in a space, on which side, and whether they've been still too long, and it tells someone when a space that should be empty isn't (armed mode, intrusion, tamper).
-2. **Privacy.** No camera watches anyone. A camera teaches the radio for half a minute and is unplugged. No image is ever stored and nothing leaves the board: no cloud, no internet. It can't tell who someone is and doesn't try. Privacy is a selling point, not a footnote: show it and measure it ("0 images, 0 bytes out").
+2. **Privacy.** No camera watches anyone. A camera teaches the radio for half a minute and is unplugged. No image is ever stored and nothing is sent to the internet: no cloud, no account. The only screens are our own laptop and phone, on our own network (so say "nothing is sent to the internet", not "nothing leaves the board"). It can't tell who someone is and doesn't try. Privacy is a selling point, not a footnote: show it and measure it ("0 images, 0 bytes out").
 3. **Dead zones.** The same radio links that sense people also show where the Wi-Fi itself is weak or blocked. When something blocks a link, it says so, says where to move the router, and measures the gain after the move. Every building has Wi-Fi and every building has dead zones: this is the reason an owner installs it, and safety comes with it for free.
 
 - **Who it's for:** places where cameras can't go or aren't wanted (patient rooms, bathrooms, study rooms, offices after hours). It knows someone is in a space, where, and whether they've been still too long, and it tells someone when a space that should be empty isn't.
-- **What's new:** a camera teaches the radio in seconds, on the board, and is then unplugged. "Taught by a camera. Runs without one." Nothing leaves the board.
+- **What's new:** a camera teaches the radio in seconds, on the board, and is then unplugged. "Taught by a camera. Runs without one." Nothing is sent to the internet.
 - **Why the hardware makes sense:** a building already has Wi-Fi access points every 10-15 m. Our Pi stands in for one, the UNO Q (Qualcomm Dragonwing QRB2210) stands in for the chip inside it, and the beacons stand in for the other radios a building already has. Only the webcam is extra, and only for teaching.
 - **Two scales on one screen:** one space in detail (the sensing area at our desk) and the whole building in outline (the hall model with long "movement on this path" links).
 - Everything runs on the UNO Q. The Pi is the router and runs no model. The screen is any browser on our own network.
@@ -16,16 +16,24 @@ Radio Sight: safety and after-hours security for buildings, using the Wi-Fi that
 **Re-read this file every time you pull. It changes during the event, and the "Right now" section is how the team lead redirects everyone.**
 
 ## Right now
+**The kit as it really is (set Saturday midnight, from tonight's tests on the real hardware; this overrides anything below or in older issues that says otherwise):**
+- **One spot, not Left and Right.** Three devices: the board (UNO Q) and Pi A side by side on the team's desk (they share the hub, about 8 cm apart), and Pi B across a gap of 85 to 100 cm, roughly at desk height (the heights do not have to match). A person standing in the gap is the thing we sense. The system says someone is here, whether they are moving or still, and raises the alerts. It does not say which side.
+- **The main sensor is the Wi-Fi line across the gap (measured Sunday 12 AM, logged on #95):** Pi A to Pi B over Wi-Fi (`pi5>pi5b:wifi`) falls 15 to 21 dB every time someone steps on the spot, arrives 25 times a second, and never dipped more than 0.9 dB empty. That is a 14 dB margin. The Bluetooth line Pi B to the board falls 4.5 to 11 dB every time but dips up to 4.8 dB empty (a 1 dB margin): it is a second opinion, never the only vote. Pi B to Pi A over Bluetooth is unreliable: draw it, don't decide on it. This replaces the earlier "Wi-Fi is not a people sensor": that was true only while Pi A stood off to the side. Pi A must sit beside the board for this to hold.
+- **No ESP32 beacons in the demo** (their lines never reacted to a person in seven runs) and no far hall beacons. The Wi-Fi line between Pi A and the board is 8 cm long and nothing can block it: the dead-zone story is the same Wi-Fi line across the gap (something left standing in it weakens the Wi-Fi to Pi B, and the screen says by how much).
+- So: never write "left", "right", "five nodes", "twelve links" or "beacons E and W" as facts in code, docs or on screen. Everything comes from `radio/nodes.json`, which is moving to a three-device, one-zone layout (`radio/layouts/gate.json`, in progress). Code must work with whatever that file holds.
+- Real rates and noise: the Wi-Fi line arrives 25 times a second and wobbles under 1 dB; the Bluetooth lines arrive 2 to 10 times a second and wobble 2 to 5 dB with nobody there. Rules and screens must hold at those numbers, and any line marked `crosses_spot` in the layout file is drawn and used whatever radio it is.
+
 The direction above is new (Saturday evening). Priorities, in order:
 1. **Real measurements beat everything.** Nothing has run on the real hardware yet. Anything that helps tonight's hardware tests pass and puts measured numbers in PROOF.md comes first.
 2. **The hero path:** a judge steps up and is found ("Found you. 0 cameras."); the camera teaches the radio on the judge in about 30 s; the camera is unplugged and it still follows them, even standing still; armed mode raises an intrusion alert on the phone page; the judge asks the room a question and the board answers from its own records. Issues titled "Hero: ..." are this path and come before other issues in your lane.
    Added Saturday night, same priority (issues titled "Wow: ..."; wording to build against is in contract issue #533): a tamper alert when a device is unplugged while armed (#534), a replay of what the room recorded, from the board's records (#535, #537), a live signal trace that dips when someone steps in (#536), and an incident report after an armed stretch (#535, #537).
 3. Work from GitHub issues with your tag, using the loop below. Don't wait for a person. Fix review comments on your open PRs before starting new work.
-4. **Layout:** take node positions, links and zones from radio/nodes.json, never from constants in code. The layout is moving from the 2 x 2 m square to a strip in front of a desk (draft PR #415).
+4. **Layout:** take node positions, links and zones from radio/nodes.json, never from constants in code. The layout is the desk strip (CONTRACTS.md section 3, v2.1): issues titled "Desk layout: ..." move your lane onto it.
 5. **Hands-on hardware is Alexander's and Ivan's laptop session's** (issue #95). When a task needs the real devices, comment `needs Alexander:` on the issue with exact commands and what to look for, then take your next issue.
 6. **The dead-zone beat is back on the hero path** (changed Saturday night): something blocks the router's link (the tray), the screen says a dead zone was found and where to move the router, the router is moved, and the measured gain shows. On the desk layout the router slides along the desk's back edge. Keep it to about 20 seconds. Not in the 3-minute demo (don't polish them): the crowd game and the recap. They stay working for the finalist round and questions.
 7. Lanes: advisor/ is Izet's; narrator/ and teacher/ are Alejandro's; radio/, pi/, board/, bus/ and mcu/ are worked by the lead's workers (Alexander is on hardware).
 8. **CI is down (the account's Actions limit), so a red check means nothing right now.** Until it's back, the merge gate is a local run: check out the PR merged with current main in a clean folder, run that lane's tests (pytest for the folder and `python -m pytest contracts`; for web: `npm ci && npx tsc --noEmit && npx vitest run && npx vite build`), and write the result in a PR comment ("CI unavailable; local: N passed"). Don't push empty commits to re-run CI.
+9. **Freeze (set Saturday 9:30 PM).** The real kit is running. From now on: no new features and no new feature issues; finish what is open, fix what the real hardware shows, and make what exists safe. Sunday 8:00 AM: last merge that touches the demo path (anything a judge sees or the board runs). Sunday 9:30 AM: the board is frozen on a tagged commit; after that only a rollback to the previous tag goes on it. Sunday 10:30 AM: Devpost is submitted. One person deploys to the board and a second checks it; every deploy ends with the device checks and a look at the screen page.
 
 ## Lanes (stay in yours)
 | Tag | Folders | Owner |
@@ -53,7 +61,7 @@ CONTRACTS.md, contracts/, AGENTS.md, CLAUDE.md and README.md are changed only by
    - open a PR with `Closes #<number>` in the body, under 600 lines;
    - don't wait for review; go back to step 1.
 5. If a task needs hardware or a person, comment exactly what's needed on the issue, then take the next one.
-6. No issues left with your tag? Add tests, then open a new issue with your tag for the most useful next step and do it.
+6. No issues left with your tag? Add tests for what exists, then stop and say so on issue #95. Don't open new feature issues (the freeze, "Right now" item 9).
 
 ## Style (every screen: room, HUD, game page)
 **The look (Ivan's pick): a pro, technical instrument, as clean as a Tesla car screen.** The 3D room is the hero. Very little text, each piece of it large and certain. Dark background. People are simple, faceless 3D figures.
@@ -84,7 +92,7 @@ Motion: calm and meaningful, opacity and transform only.
 - **Open every PR against main.** Never base a PR on another PR's branch: when that branch merges and is deleted, your PR closes. If you need unmerged work, wait for it to merge, or build against main with a small stub.
 - **No images or video, ever.** Never write a camera frame to disk. Never commit image or video files (test screenshots in web/tests/ are the only exception).
 - **No secrets or device identifiers in the repo.** No passwords, keys, MAC addresses, BSSIDs, personal device names, or IP addresses other than the ones in CONTRACTS.md. Local values go in `.env` (gitignored).
-- **No invented numbers.** Every number on screen or in docs is measured and has a PROOF.md row. Until then, show `__`.
+- **No invented numbers.** Every number on screen or in docs is measured and has a PROOF.md row. Until then it is left off the judge-facing screen (its proof tile isn't drawn), and shown as `__` anywhere it has to appear (PROOF.md, proof.json's null, the docs).
 - **Commit and PR text are plain and human.** No Co-authored-by lines, no "Generated with", no session links, and no tool or AI names in commits, PR titles or bodies, branch names or code comments.
 - **Words:**
   - say "no-movement alert", never "fall detection";
@@ -115,5 +123,10 @@ Motion: calm and meaningful, opacity and transform only.
   - The Pi (192.168.77.1) and the board's hub (192.168.77.2) are joined by ONE Ethernet cable. It carries the Pi's Bluetooth readings and the page data, so they never depend on the Wi-Fi link we block on purpose in the demo.
   - The demo screen is a laptop's browser (no monitor, no Pi kiosk, no switch). The laptop joins the Pi's hotspot and opens http://192.168.77.2:8080/?src=ws ; the Pi forwards it to the board over the cable. Only light traffic may use the hotspot while the model runs: never copy files or bundles over it during a demo or a recording (it can starve the sensing link and show SENSOR BLIND).
   - The board has no internet once it is on the hotspot. Install things before it joins.
+- **The desk layout (CONTRACTS.md section 3, radio/nodes.json):**
+  - The sensing area is a 1.6 x 0.6 m strip of the aisle against our desk, with two zones, Left and Right. A person steps up to the desk to be in it.
+  - Five nodes, every antenna 1.0 m up: the board, Pi A (the router, `pi5`) and Pi B (a second listener, `pi5b`) each on a 25 cm box on the desk, and the west and east ESP32 beacons on the tips of two cardboard arms that reach out over the aisle at the strip's ends. Twelve links: two Wi-Fi, ten Bluetooth.
+  - Pi B has no cable. It joins Pi A's hotspot and sends its readings to 192.168.77.2:5600 through Pi A. Its links can make health degraded, never blind.
+  - The arms get knocked: tape them down, and take a new baseline that keeps the model (`baseline {keep_model: true}`) after any bump.
 - **No tape until the presentation hour.** During the build, the layout is measured and marked with loose markers. In the presentation room it gets taped, and the calibration, the 20 s baseline and the training are redone there. Never write instructions that assume tape is already on the floor.
 - **Phones as beacons:** they top out at about 10 adverts a second. ESP32s can go faster.

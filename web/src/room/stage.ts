@@ -11,7 +11,10 @@ import {
   PlaneGeometry,
   Vector3,
 } from 'three'
-import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, type NodeId, type Vec3 } from './frame'
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
+import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, alertWordAt, deskEdge, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, zoneWords, type NodeId, type Vec3 } from './frame'
 import type { Hearing } from './heard'
 import { fade, Glide3 } from './motion'
 import { EDGE, FAULT, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
@@ -104,20 +107,23 @@ function buildShell(): { room: Group; square: Group } {
     [[0, fh, 0], [0, 0, 0]],
   ]
   for (const [a, b] of edges) strip(a, b, 0.014, SQUARE)
-  if (STRIP_M && ZONE_SPLIT_X_M !== null) {
-    strip([ZONE_SPLIT_X_M, 0, 0], [ZONE_SPLIT_X_M, fh, 0], 0.007, EDGE) // one line between the strip's two zones
+  if (STRIP_M) {
+    // One line between the strip's two zones; none across a strip that is one spot.
+    if (ZONE_SPLIT_X_M !== null) strip([ZONE_SPLIT_X_M, 0, 0], [ZONE_SPLIT_X_M, fh, 0], 0.007, EDGE)
   } else {
     strip([fw / 2, 0, 0], [fw / 2, fh, 0], 0.007, EDGE)
     strip([0, fh / 2, 0], [fw, fh / 2, 0], 0.007, EDGE)
   }
   sq.add(new Mesh(shadedGeometry(lines), new MeshBasicMaterial({ vertexColors: true })))
 
-  // The desk behind the strip: a plain top from the strip's back edge to the layout's, at desk height.
-  if (STRIP_M) {
-    const depth = SIZE_M[1] - STRIP_M[1]
-    const [dx, , dz] = toScene([SIZE_M[0] / 2, STRIP_M[1] + depth / 2, 0])
+  // The desk behind the strip: a plain top from its edge (deskEdge) to the layout's back, at desk height.
+  const edge = deskEdge()
+  if (edge !== null && SIZE_M[1] > edge) {
+    const depth = SIZE_M[1] - edge
+    const [dx, , dz] = toScene([SIZE_M[0] / 2, edge + depth / 2, 0])
     const top: Part = { geom: new BoxGeometry(SIZE_M[0], 0.03, depth), light: mix(FLOOR, EDGE, 0.5), dark: mix(FLOOR, WALL_SHADE, 0.6), at: at(dx, DESK_TOP_M - 0.015, dz) }
-    sq.add(new Mesh(shadedGeometry([top]), new MeshBasicMaterial({ vertexColors: true })))
+    // With the drawn floor and walls: a loaded hall has its own desk, and our devices stand on that one.
+    g.add(new Mesh(shadedGeometry([top]), new MeshBasicMaterial({ vertexColors: true })))
   }
   return { room: g, square: sq }
 }
@@ -130,23 +136,80 @@ function outline(pts: Vec3[]): Vec3[] {
 const HEAD_M = 0.08
 const ZONE_IN_X = 0.1 // zone names start (west zones) or end (east zones) this far in from the side
 
-/**
- * Where a node's stand meets something: the floor on the square; on the desk layout the desk top for a node on
- * the desk, or the desk's edge for a beacon on an arm over the aisle (the arm runs level to its tip).
- */
-export function standBase([x, y, z]: Vec3): Vec3 {
-  if (!STRIP_M) return [x, y, 0]
-  return y >= STRIP_M[1] - 0.01 ? [x, y, DESK_TOP_M] : [x, STRIP_M[1], z]
+/** Where a node's stand meets something: the desk top for a device on the desk, else the floor. (An arm out from
+ *  the desk's edge read as a stray line from the camera's side; a post to the floor reads as a stand.) */
+export function standBase([x, y]: Vec3): Vec3 {
+  const edge = deskEdge()
+  return edge !== null && y >= edge - 0.01 ? [x, y, DESK_TOP_M] : [x, y, 0]
 }
+
+/** The table drawn under a device across the spot: its top's size, and the heights it is drawn for. */
+const TABLE_W_M = 0.5
+const TABLE_D_M = 0.3
+const TABLE_MIN_M = 0.25
+const TABLE_MAX_M = 1.3
+
+/**
+ * Whether a device stands on a table of its own: across the spot from the desk (south of the floor a person
+ * stands on, where nobody stands), with room under it for one (`base` is what is under it, from standBase or
+ * standOn). Its height is whatever the file says: the two ends of the gate are each on the edge of their own
+ * table and need not be level. A device on our desk, on the next row's desk in the hall, or on a post at the
+ * strip's end, is not.
+ */
+export function onTable(p: Vec3, base: Vec3): boolean {
+  const up = p[2] - base[2]
+  return STRIP_M !== null && p[1] < -0.01 && up >= TABLE_MIN_M && up <= TABLE_MAX_M
+}
+
+/** A plain table with the device on the middle of its near edge (the spot's side), its top just under the
+ *  device `up` metres above the ground. Scene units, the ground under the device at the origin. */
+export function tableGeometry(up: number): BufferGeometry {
+  const light = mix(EDGE, SQUARE, 0.35)
+  const dark = mix(FLOOR, EDGE, 0.7)
+  const top = up - HEAD_M / 2
+  const back = TABLE_D_M / 2 - 0.05 // the table reaches away from the spot (south, +z in the scene)
+  const x = TABLE_W_M / 2 - 0.03
+  const z = TABLE_D_M / 2 - 0.03
+  return shadedGeometry([
+    { geom: new BoxGeometry(TABLE_W_M, 0.04, TABLE_D_M), light, dark, at: at(0, top - 0.02, back) },
+    ...[[-x, -z], [x, -z], [-x, z], [x, z]].map(([lx, lz]) => ({ geom: new BoxGeometry(0.03, top - 0.04, 0.03), light, dark, at: at(lx, (top - 0.04) / 2, back + lz) })),
+  ])
+}
+
+/** How far around its middle a device rests on things: its stand runs to the highest surface within this of it,
+ *  so a device on a desk's very edge stands on the desk, not on the floor beside it. */
+const FOOT_M = 0.05
+
+/**
+ * Where a device's stand starts when a model of the room says what is under it (the hall): on the highest thing
+ * within its footprint at or below it (our desk, the next row's desk, a chair), else on the floor under it,
+ * free-standing. `under(x, y, z)` is the model's surface height (contract z) under a contract point, or null.
+ * Whatever nodes.json says, a device is drawn where it is; nothing assumes it is on our desk.
+ */
+export function standOn([x, y, z]: Vec3, under: (x: number, y: number, z: number) => number | null): Vec3 {
+  let top: number | null = null
+  for (const [dx, dy] of [[0, 0], [FOOT_M, 0], [-FOOT_M, 0], [0, FOOT_M], [0, -FOOT_M]]) {
+    const h = under(x + dx, y + dy, z)
+    if (h !== null && h <= z && (top === null || h > top)) top = h
+  }
+  return [x, y, top ?? 0]
+}
+
+/** Stands are drawn in the devices' own colour, fainter than the head, and wide enough to read on a desk top. */
+const STAND_ALPHA = 0.45
+const STAND_PX = 2
 
 interface NodeMesh {
   id: NodeId
   head: Mesh<BoxGeometry, MeshBasicMaterial>
-  post: LineSegments<BufferGeometry, LineBasicMaterial>
+  post: LineSegments2
   label: HTMLElement
   /** 0..1 as drawn, and where it is heading: 1 heard, LOST_ALPHA heard before but quiet now, 0 never heard. */
   alpha: number
   alphaTo: number
+  /** The table under it, when it stands on one of its own (onTable), and how high above the ground it is. */
+  table: Mesh<BufferGeometry, MeshBasicMaterial> | null
+  tableUp: number
 }
 
 /** How faint a device that has gone quiet is drawn, beside its name and "not heard". */
@@ -174,22 +237,25 @@ export class Stage {
     for (const z of ZONES) {
       const [x0, y0, x1, y1] = zoneRect(z.id)!
       const { east, north } = zoneSide(z.id)
-      const at = v3([east ? x1 - inX : x0 + inX, north ? y1 - inY : y0 + inY, 0])
-      this.zoneLabels.set(z.id, view.addLabel(`${z.id} ${z.name}`, at, `room-label--zone${east ? ' room-label--zone-east' : ''}`))
+      // On the desk the person stands in the middle of a zone 0.6 m deep, on top of any name inside it: the name
+      // goes just outside the strip on the aisle side, under its zone (where alertWordAt puts the alert's word).
+      const at = STRIP_M ? v3(alertWordAt(z.id)[0]) : v3([east ? x1 - inX : x0 + inX, north ? y1 - inY : y0 + inY, 0])
+      const side = STRIP_M ? ' room-label--zone-south' : east ? ' room-label--zone-east' : ''
+      this.zoneLabels.set(z.id, view.addLabel(zoneWords(z.id), at, `room-label--zone${side}`))
     }
 
     // Devices are live (heard.ts): each starts unseen and fades in once the board hears it.
     const headGeom = new BoxGeometry(HEAD_M, HEAD_M, HEAD_M)
     for (const info of Object.values(NODES)) {
       const head = new Mesh(headGeom, new MeshBasicMaterial({ color: TEXT, transparent: true, opacity: 0 }))
-      const postGeom = new BufferGeometry()
-      postGeom.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3))
-      const post = new LineSegments(postGeom, new LineBasicMaterial({ color: EDGE, transparent: true, opacity: 0 }))
+      const postMat = new LineMaterial({ color: TEXT, linewidth: STAND_PX, transparent: true, opacity: 0 })
+      const post = new LineSegments2(new LineSegmentsGeometry(), postMat)
+      view.onResize((w, h) => postMat.resolution.set(w, h))
       head.visible = post.visible = false
       this.group.add(head, post)
       const label = view.addLabel(info.name, new Vector3(), `room-label--node room-label--${nodeLabelSide(info.id)}`)
       label.hidden = true
-      this.nodes.push({ id: info.id, head, post, label, alpha: 0, alphaTo: 0 })
+      this.nodes.push({ id: info.id, head, post, label, alpha: 0, alphaTo: 0, table: null, tableUp: 0 })
     }
     this.putNodes()
     view.addAnimator((dt) => this.fadeNodes(dt))
@@ -207,20 +273,59 @@ export class Stage {
     this.view.requestRender()
   }
 
+  /** The room model's surface height under a contract point, when there is a model (setGround). */
+  private ground: ((x: number, y: number, z: number) => number | null) | null = null
+
+  /** A model of the room is there (or was moved): the stands run to what it really has under each device. */
+  setGround(under: ((x: number, y: number, z: number) => number | null) | null) {
+    this.ground = under
+    this.stood.clear()
+    this.putNodes()
+  }
+
+  /** Looking down through the model costs a pass over its triangles: once per device and 5 cm spot, not per frame
+   *  (the router glides). */
+  private readonly stood = new Map<string, Vec3>()
+
+  private standFor(id: string, p: Vec3): Vec3 {
+    if (!this.ground) return standBase(p)
+    const key = `${id}:${p.map((v) => Math.round(v * 20)).join(',')}`
+    let base = this.stood.get(key)
+    if (!base) this.stood.set(key, (base = standOn(p, this.ground)))
+    return [p[0], p[1], base[2]]
+  }
+
   private putNodes() {
     const router = routerId()
     for (const n of this.nodes) {
       const p = n.id === router ? this.routerGlide.now() : nodePosition(n.id, null)
       const top = v3(p)
       n.head.position.copy(top)
-      // The stand: a line from the floor, the desk top, or the desk's edge (an arm) up to the head.
-      const base = v3(standBase(p))
-      const stand = n.post.geometry.getAttribute('position') as Float32BufferAttribute
-      stand.set([base.x, base.y, base.z, top.x, top.y, top.z])
-      stand.needsUpdate = true
-      n.post.geometry.computeBoundingSphere()
+      // Two devices closer than their cubes are wide (the board and Pi A side by side) are drawn smaller, so they
+      // read as two.
+      const crowded = this.nodes.some((o) => o !== n && Math.hypot(...nodePosition(o.id, null).map((v, i) => v - p[i])) < HEAD_M * 1.5)
+      n.head.scale.setScalar(crowded ? 0.7 : 1)
+      // The stand: a post up to the head from what is under it in the room's model, else from the drawn desk top
+      // or the floor.
+      const base = this.standFor(n.id, p)
+      // A device across the spot is on the edge of a table of its own, at whatever height it stands.
+      const up = onTable(p, base) ? Math.round((p[2] - base[2]) * 100) / 100 : 0
+      if (up !== n.tableUp) {
+        if (n.table) {
+          this.group.remove(n.table)
+          n.table.geometry.dispose()
+        }
+        n.table = up ? new Mesh(tableGeometry(up), new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: n.alpha })) : null
+        if (n.table) this.group.add(n.table)
+        n.tableUp = up
+      }
+      if (n.table) {
+        n.table.position.copy(v3(base))
+        n.table.visible = n.alpha > 0
+      }
+      n.post.geometry.setPositions([...v3(up ? [p[0], p[1], p[2] - HEAD_M / 2] : base).toArray(), ...top.toArray()])
       // Each label hangs off the cube's face on its side, so the cube never sits on its own label.
-      const [dx, dz] = { above: [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0] }[nodeLabelSide(n.id)]
+      const [dx, dz] = { above: [0, HEAD_M / 2], 'above-left': [0, HEAD_M / 2], 'above-right': [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0], 'below-right': [0, -HEAD_M / 2], 'below-left': [0, -HEAD_M / 2] }[nodeLabelSide(n.id)]
       this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))
     }
     this.view.requestRender()
@@ -264,8 +369,13 @@ export class Stage {
     for (const n of this.nodes) {
       n.alpha = fade(n.alpha, n.alphaTo, dt)
       busy ||= n.alpha !== n.alphaTo
-      n.head.material.opacity = n.post.material.opacity = n.alpha
+      n.head.material.opacity = n.alpha
+      n.post.material.opacity = n.alpha * STAND_ALPHA
       n.head.visible = n.post.visible = n.alpha > 0
+      if (n.table) {
+        n.table.material.opacity = n.alpha
+        n.table.visible = n.alpha > 0
+      }
       // The name stays readable on a quiet device: "not heard" is the point of showing it at all.
       n.label.style.opacity = String(n.alphaTo === LOST_ALPHA ? Math.min(1, n.alpha / LOST_ALPHA) : n.alpha)
       n.label.hidden = n.alpha === 0 && n.alphaTo === 0

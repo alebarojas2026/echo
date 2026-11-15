@@ -1,6 +1,8 @@
-import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
-import { NODES, SIZE_M, ZONES, alertWordAt, nodeLabelSide, toScene } from './frame'
+import { Box3, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
+import { FIGURE_HEIGHT_M } from './figure'
+import { NODES, SIZE_M, STRIP_M, ZONES, alertWordAt, deviceAcross, nodeLabelSide, toScene, zoneWords, type Vec3 } from './frame'
 import { BG } from './palette'
+import { DESK_TOP_M } from './stage'
 
 // Owns the renderer, the camera and the frame loop. Frames are drawn only when something changed
 // or an animation is still settling, so an idle room costs nothing on the Pi.
@@ -74,6 +76,9 @@ export const FOV_DEG = 20
  *  radius of the sphere around that point it must fit in view. */
 export interface Shot {
   elevDeg: number
+  /** How far round to the east of due south the camera stands, in degrees (negative: to the west). 0 or absent:
+   *  due south, north straight up the screen. */
+  azimDeg?: number
   target: Vector3
   radiusM: number
 }
@@ -102,11 +107,13 @@ function layoutScale(): number {
 }
 
 /**
- * The room's normal framing, scaled to nodes.json's layout (the 2 m square, or the 1.6 x 1.1 m desk). On a narrow canvas (a laptop, beside the panels'
- * rail) it backs off just enough that the words beside the square stay on the canvas; on the 1920 x 1080
- * screen's 1280 x 1080 canvas they already fit, so it doesn't change there.
+ * The room's normal framing. The square's is scaled to nodes.json's size; on a narrow canvas (a laptop, beside
+ * the panels' rail) it backs off just enough that the words beside the square stay on the canvas, and on the
+ * 1920 x 1080 screen's 1280 x 1080 canvas they already fit, so it doesn't change there. The desk's is fitted to
+ * what is on the desk (deskShot).
  */
 export function roomShot(width = 1280, height = 1080): Shot {
+  if (STRIP_M) return deskShot(width, height)
   const scale = layoutScale()
   const shot = { elevDeg: ELEV_DEG, target: TARGET_M.clone().multiplyScalar(scale), radiusM: FIT_RADIUS_M * scale }
   const room = width / 2 - SIDE_WORDS_PX
@@ -124,6 +131,166 @@ export function roomShot(width = 1280, height = 1080): Shot {
   return shot
 }
 
+// The desk (#415) is framed on what is on it rather than scaled from the square: a little higher up, so a person
+// in the strip covers less of the desk behind them, and fitted to the strip, the desk top, a person's head anywhere
+// in the strip, the five devices with their names above them and the words in the aisle, then centred on the
+// canvas. Every point comes from nodes.json; the pixel sizes are the words' as drawn (room.css).
+const DESK_ELEV_DEG = 58
+const EDGE_PX = 24
+/** Below the layout: the legend's row in the canvas's bottom corner. */
+const BOTTOM_PX = 72
+/** More room kept free above the legend's row, for a bar the panels lay over the room's bottom (reserveBottom). */
+let bottomExtraPx = 0
+
+/**
+ * Keeps `px` more of the canvas's bottom clear of the close view (0 gives it back). The replay's bar lies over
+ * the bottom of the room while a replay plays; without this it covers the floor the person stands on and the
+ * spot's name. The fly glides to the new framing (Fly.refit).
+ */
+export function reserveBottom(px: number) {
+  bottomExtraPx = Math.max(0, px)
+}
+const NAME_PX = 28 // room-label--node, and the no-movement word
+const LINE_PX = 31
+const CHAR_EM = 0.56 // Hanken Grotesk's average letter width at 600
+const XRAY_CAPTION_PX = 520
+
+/** A point that must be on the canvas, with the words around it: pixels to its left, right, above and below. */
+export interface Anchor {
+  at: Vector3
+  left: number
+  right: number
+  up: number
+  down: number
+}
+
+const wordsPx = (text: string) => text.length * CHAR_EM * NAME_PX
+
+export function deskAnchors(personM = FIGURE_HEIGHT_M, width = 1280): Anchor[] {
+  const [sw, sh] = STRIP_M ?? SIZE_M
+  const [fw, fh] = SIZE_M
+  const out: Anchor[] = []
+  const add = (p: Vec3, left = 0, right = 0, up = 0, down = 0) => out.push({ at: new Vector3(...toScene(p)), left, right, up, down })
+  for (const p of [[0, 0, 0], [sw, 0, 0], [0, sh, 0], [sw, sh, 0], [0, fh, DESK_TOP_M], [fw, fh, DESK_TOP_M]] as Vec3[]) add(p)
+  for (const x of [0.15, sw - 0.15]) for (const y of [0.1, sh - 0.1]) add([x, y, personM])
+  // A name sits 12 px above its device's head, centred, or just below it reading inward; two lines when it says
+  // "not heard".
+  const tall = 12 + 2 * LINE_PX
+  for (const n of Object.values(NODES)) {
+    const w = wordsPx(n.name)
+    const side = nodeLabelSide(n.id)
+    if (side === 'below-right') add(n.xyz, 8, w + 10, 8, tall)
+    else if (side === 'below-left') add(n.xyz, w + 10, 8, 8, tall)
+    else if (side === 'above-left') add(n.xyz, w, 8, tall, 8)
+    else if (side === 'above-right') add(n.xyz, 8, w, tall, 8)
+    else if (side === 'left') add(n.xyz, w + 16, 8, LINE_PX, LINE_PX)
+    else if (side === 'right') add(n.xyz, 8, w + 16, LINE_PX, LINE_PX)
+    else add(n.xyz, w / 2, w / 2, tall, 8)
+  }
+  // Under each zone, in the aisle: its name (room-label--zone's size on this canvas), then the no-movement word.
+  const zonePx = Math.max(32, 48 * Math.min(1, width / 1280))
+  for (const z of ZONES) {
+    const half = Math.max(wordsPx('No movement'), zoneWords(z.id).length * CHAR_EM * zonePx) / 2
+    add(alertWordAt(z.id)[0], half, half, 0, zonePx + 10 + LINE_PX)
+  }
+  // xray.ts's caption, read from the strip's west end. Not with a device across the spot: its chair stands there,
+  // and the caption is not drawn (index.ts).
+  if (!deviceAcross()) add([0, -0.36, 0], 0, XRAY_CAPTION_PX, LINE_PX / 2, LINE_PX / 2)
+  return out
+}
+
+type AxisItem = [at: number, below: number, above: number]
+
+/** Where values `at`, zoomed by `s`, reach with their words: [lowest, highest]. */
+function reach(items: readonly AxisItem[], s: number): [number, number] {
+  return [Math.min(...items.map(([u, below]) => s * u - below)), Math.max(...items.map(([u, , above]) => s * u + above))]
+}
+
+/** The largest zoom at which the values with their words fit in `span` pixels. */
+function fitAxis(items: readonly AxisItem[], span: number): number {
+  let lo = 0.01
+  let hi = 100
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2
+    const [b, t] = reach(items, mid)
+    if (t - b <= span) lo = mid
+    else hi = mid
+  }
+  return lo
+}
+
+/** The shot at `elevDeg` that shows every anchor with its words, as large as fits, centred in the canvas less
+ *  its edges (and the legend's row at the bottom). */
+export function fitShot(anchors: readonly Anchor[], width: number, height: number, elevDeg: number, azimDeg = 0): Shot {
+  const box = new Box3().setFromPoints(anchors.map((a) => a.at))
+  const shot: Shot = { elevDeg, ...(azimDeg ? { azimDeg } : {}), target: box.getCenter(new Vector3()), radiusM: Math.max(0.1, box.getSize(new Vector3()).length() / 2) }
+  const cam = new PerspectiveCamera(FOV_DEG, 1, 0.1, 100)
+  const p = new Vector3()
+  const right = new Vector3()
+  const up = new Vector3()
+  // The view is nearly orthographic (20 degree lens), so a few rounds of "move by the offset, zoom by the ratio"
+  // settle it.
+  for (let round = 0; round < 8; round++) {
+    fitCamera(cam, width, height, shot)
+    const px = anchors.map((a) => {
+      p.copy(a.at).project(cam)
+      return { x: (p.x * width) / 2, y: (p.y * height) / 2, a }
+    })
+    const xs = px.map((q): AxisItem => [q.x, q.a.left, q.a.right])
+    const ys = px.map((q): AxisItem => [q.y, q.a.down, q.a.up])
+    const bottom = BOTTOM_PX + bottomExtraPx
+    const s = Math.min(fitAxis(xs, width - 2 * EDGE_PX), fitAxis(ys, height - EDGE_PX - bottom))
+    // Zoomed by s about the canvas middle, the content's middle moves to the free band's middle (the band sits a
+    // little above the canvas's middle, clear of the legend's row): how far that is in today's pixels.
+    const [x0, x1] = reach(xs, s)
+    const [y0, y1] = reach(ys, s)
+    const dx = (x0 + x1) / 2 / s
+    const dy = ((y0 + y1) / 2 - (bottom - EDGE_PX) / 2) / s
+    const perPx = (2 * cam.position.distanceTo(shot.target) * Math.tan((cam.fov * Math.PI) / 360)) / height
+    right.setFromMatrixColumn(cam.matrixWorld, 0)
+    up.setFromMatrixColumn(cam.matrixWorld, 1)
+    shot.target.addScaledVector(right, dx * perPx).addScaledVector(up, dy * perPx)
+    shot.radiusM /= s
+    if (Math.abs(s - 1) < 1e-3 && Math.hypot(dx, dy) < 0.5) break
+  }
+  return shot
+}
+
+/** How far round the close view's camera stands when a device is across the spot from the desk. */
+const SIDE_ON_DEG = -50
+
+/**
+ * The close view's turn. Seen from due south, a person standing between a device across the spot and the devices
+ * on the desk is in one line with them and the camera: the figure hides the desk's devices, and the device across
+ * hides the figure's legs. So when the layout has a device across the spot (the gate), the camera stands round to
+ * one side and all three read apart. Any other layout is seen from due south, as before.
+ */
+export function sideOnDeg(): number {
+  return deviceAcross() ? SIDE_ON_DEG : 0
+}
+
+/** The desk's framing for this canvas. */
+export function deskShot(width = 1280, height = 1080): Shot {
+  return fitShot(deskAnchors(FIGURE_HEIGHT_M, width), width, height, DESK_ELEV_DEG, sideOnDeg())
+}
+
+// Inside the hall model, the desk's close view is in situ: the person at true size at our desk, with the real desk
+// run, its chairs and the neighbouring rows around them. Seen from behind the person (up the tiers), north up,
+// 45 degrees up. The next row's desk stands 0.75 m high a third of a metre behind the strip; from this angle it
+// would hide the strip's floor and the person's legs, so that span is drawn see-through (scan.ts, ghostBox).
+// Fitted like the desk's own view (every word on the canvas), but on the 1280 px canvas never tighter than
+// SITU_MIN_RADIUS_M, so the rows around stay in view; a narrower canvas keeps the same share of its width for them
+// (the words would crowd otherwise).
+const SITU_ELEV_DEG = 45
+const PERSON_M = 1.7
+const SITU_MIN_RADIUS_M = 1.7
+
+/** The close view inside the hall, for the desk layout. */
+export function inSituShot(width = 1280, height = 1080): Shot {
+  const shot = fitShot(deskAnchors(PERSON_M, width), width, height, SITU_ELEV_DEG, sideOnDeg())
+  return { ...shot, radiusM: Math.max(shot.radiusM, SITU_MIN_RADIUS_M * Math.min(1, width / 1280)) }
+}
+
 /** Straight down on the square, north up: for lining a scan up by eye (align mode). */
 export function topShot(): Shot {
   // 89.5 rather than 90 keeps "north up" well defined for lookAt.
@@ -137,7 +304,8 @@ export function fitCamera(camera: PerspectiveCamera, width: number, height: numb
   const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect)
   const elev = (shot.elevDeg * Math.PI) / 180
   const dist = shot.radiusM / Math.sin(Math.min(vfov, hfov) / 2)
-  camera.position.set(0, Math.sin(elev), Math.cos(elev)).multiplyScalar(dist).add(shot.target)
+  const azim = ((shot.azimDeg ?? 0) * Math.PI) / 180
+  camera.position.set(Math.sin(azim) * Math.cos(elev), Math.sin(elev), Math.cos(azim) * Math.cos(elev)).multiplyScalar(dist).add(shot.target)
   camera.lookAt(shot.target)
   // Depth range to suit the distance: about 8 m for the square, about 100 m for the whole hall.
   camera.near = Math.max(0.05, dist / 100)
@@ -149,6 +317,7 @@ export function fitCamera(camera: PerspectiveCamera, width: number, height: numb
 export class RoomView {
   readonly renderer: WebGLRenderer
   readonly scene = new Scene()
+  readonly figures = new Scene()
   readonly camera = new PerspectiveCamera(FOV_DEG, 1, 0.1, 60)
   readonly labelLayer: HTMLElement
   readonly wideLayer: HTMLElement
@@ -259,6 +428,14 @@ export class RoomView {
     let busy = false
     for (const step of this.animators) busy = step(dt) || busy
     this.renderer.render(this.scene, this.camera)
+    if (this.figures.children.some(figure => figure.visible)) {
+      // The person stays in front of room strokes, with its own depth buffer for solid shading and fades.
+      const autoClear = this.renderer.autoClear
+      this.renderer.autoClear = false
+      this.renderer.clearDepth()
+      this.renderer.render(this.figures, this.camera)
+      this.renderer.autoClear = autoClear
+    }
     if (this.labelsDirty) this.placeLabels()
     this.declutter()
     if (busy) this.requestRender()
@@ -276,21 +453,40 @@ export class RoomView {
     }
   }
 
-  /**
-   * Where two words overlap (on a laptop's smaller canvas the scene shrinks but words stay at least 28 px), the
-   * less important one steps back until there is room again. Nothing overlaps on the 1920 x 1080 screen, so
-   * there nothing ever steps back.
-   */
+  /** Current posed silhouettes projected to screen bounds, including room for a label's edge. */
+  private figureBoxes() {
+    const canvas = this.renderer.domElement.getBoundingClientRect()
+    const box = new Box3(), point = new Vector3()
+    return this.figures.children.filter(figure => figure.visible).flatMap(figure => {
+      box.setFromObject(figure, true)
+      if (box.isEmpty()) return []
+      let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity
+      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+        point.set(x, y, z).project(this.camera)
+        const px = canvas.left + (point.x + 1) * canvas.width / 2
+        const py = canvas.top + (1 - point.y) * canvas.height / 2
+        left = Math.min(left, px); right = Math.max(right, px)
+        top = Math.min(top, py); bottom = Math.max(bottom, py)
+      }
+      return [{ left: left - 8, top: top - 8, right: right + 8, bottom: bottom + 8 }]
+    })
+  }
+
+  /** Labels yield to the figure first, then to higher-priority labels. */
   private declutter() {
     const shown = this.labels.filter(({ el }) => !el.hidden && el.textContent)
     const boxes = shown.map(({ el }) => el.getBoundingClientRect())
     const ranks = shown.map(({ el }) => labelRank(el))
-    const yielding = new Set<HTMLElement>()
+    const figures = this.figureBoxes()
+    const blocked = new Set(shown.filter((_, i) => figures.some(figure => intersects(boxes[i], figure))).map(({ el }) => el))
+    const yielding = new Set(blocked)
     for (let i = 0; i < shown.length; i++) {
+      if (blocked.has(shown[i].el)) continue
       for (let j = i + 1; j < shown.length; j++) {
+        if (blocked.has(shown[j].el)) continue
         const a = boxes[i]
         const b = boxes[j]
-        if (ranks[i] === ranks[j] || a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top) continue
+        if (ranks[i] === ranks[j] || !intersects(a, b)) continue
         yielding.add(ranks[i] < ranks[j] ? shown[i].el : shown[j].el)
       }
     }
@@ -304,6 +500,7 @@ const RANKS: [string, number][] = [
   ['room-label--alert', 3],
   ['room-label--wave', 3],
   ['room-label--hall', 3],
+  ['room-label--ourdesk', 2],
   ['room-label--spot', 2],
   ['room-label--beam', 2],
   ['room-label--zone', 1],
@@ -311,4 +508,9 @@ const RANKS: [string, number][] = [
 
 function labelRank(el: HTMLElement): number {
   return Math.max(0, ...RANKS.filter(([cls]) => el.classList.contains(cls)).map(([, rank]) => rank))
+}
+
+type ScreenBox = { left: number; top: number; right: number; bottom: number }
+function intersects(a: ScreenBox, b: ScreenBox) {
+  return a.right > b.left && b.right > a.left && a.bottom > b.top && b.bottom > a.top
 }

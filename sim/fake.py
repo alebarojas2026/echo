@@ -39,6 +39,17 @@ PERSON_DROP_DB = 8.0   # peak drop when a person stands on the link line
 PERSON_WIDTH_M = LAYOUT.width_m   # how fast the drop fades with distance from the line (sim/layout.py)
 PERSON_BODY_M = LAYOUT.body_m     # the full drop within this distance of the line
 MOVING_SPEED = 0.25    # m/s over 1 s, contract section 6
+# People outside the area (a path's "passers" and "neighbours"). A body walking near a link also
+# shakes it a little without standing on it (multipath): a guess for the fake feed, not measured.
+SCATTER_DB, SCATTER_M = 2.0, 0.5   # rms shake next to a link, and how fast it fades with distance
+ARM_DROP_DB, ARM_WIDTH_M = 2.0, 0.1   # an arm tip reaching over the edge blocks a little
+PASS_FROM_M = 1.5      # passers-by start and finish this far past the ends
+
+# Optional hall links (issue #358): far beacons heard a few times a second, at uneven moments.
+HALL_SENT_HZ = 25.0                # adverts a second a hall beacon sends
+HALL_HEARD = 0.3                   # the share of them a receiver hears
+HALL_CHANNEL_DB = (-1.5, 0.0, 1.0) # an advert is heard on one of three channels, each at its own level
+HALL_NOISE_DB = 0.7
 
 
 def link_id(tx: str, rx: str, kind: str) -> str:
@@ -118,10 +129,86 @@ def is_moving(waypoints: list, t: float, window_s: float = 1.0) -> bool:
     return bool(ahead) and math.dist(now, ahead) / 0.1 > MOVING_SPEED
 
 
+def receivers() -> list:
+    """The nodes that receive, in the order LINKS first names them."""
+    return list(dict.fromkeys(rx for _, rx, _ in LINKS))
+
+
+def hall_links(path: dict) -> list:
+    """(tx, rx) of every hall link of a path: each hall beacon heard by each receiver. [] with no "hall"."""
+    beacons = (path.get("hall") or {}).get("beacons") or {}
+    return [(tx, rx) for rx in receivers() for tx in beacons]
+
+
+def hall_walk(walk: dict, tx: str, rx: str, t: float) -> bool:
+    """True while somebody walks along this hall link. A walk with no "tx" or "rx" is on all of them."""
+    return active(walk, t) and walk.get("tx", tx) == tx and walk.get("rx", rx) == rx
+
+
+def hall_events(path: dict, seed: int = 0) -> list:
+    """rssi events of the path's hall links, in time order. They use their own random stream, so a
+    path gives the same core readings with and without a "hall" block.
+
+    Each beacon sends about `sent_hz` adverts a second and a receiver hears a share `heard` of them,
+    on one of three channels that sit at different levels. During a walk the level dips (deepest in
+    the middle of the walk) and flutters. Outages silence a hall beacon like any other node.
+    """
+    hall = path.get("hall") or {}
+    rng = random.Random(f"hall-{seed}")
+    every, heard = 1.0 / hall.get("sent_hz", HALL_SENT_HZ), hall.get("heard", HALL_HEARD)
+    out = []
+    for tx, rx in hall_links(path):
+        link, t = link_id(tx, rx, "ble"), rng.uniform(0.0, every)
+        while t < path["duration_s"]:
+            silent = any(active(o, t) and (o.get("link") == link or o.get("node") in (tx, rx))
+                         for o in path.get("outages") or [])
+            if not silent and rng.random() < heard:
+                spot = ROUTER_SPOTS[latest(path.get("router"), t, "spot", "S-home")] if rx == "pi5" else NODES[rx]
+                dbm = (REF_DBM["ble"] - 20.0 * math.log10(math.dist(hall["beacons"][tx], spot))
+                       + rng.choice(HALL_CHANNEL_DB) + rng.gauss(0.0, HALL_NOISE_DB))
+                for w in hall.get("walks") or []:
+                    if hall_walk(w, tx, rx, t):
+                        mid, half = (w["t_on"] + w["t_off"]) / 2, (w["t_off"] - w["t_on"]) / 2
+                        dbm -= (w.get("drop_db", PERSON_DROP_DB) * max(0.0, 1.0 - abs(t - mid) / half)
+                                * max(0.0, 1.0 + rng.gauss(0.0, 0.3)))
+                out.append({"type": "rssi", "t": round(t, 3), "link": link, "kind": "ble",
+                            "tx": tx, "rx": rx, "dbm": round(dbm)})
+            t += every + rng.uniform(0.0, 0.010)
+    return sorted(out, key=lambda e: e["t"])
+
+
+def bystanders(path: dict, t: float) -> list:
+    """People outside the area at time t, as [(x, y, moving, arm)]: arm is the (x, y) of an arm tip
+    reaching towards the area, or None.
+
+    "passers": [{"t_on", "from": "west" | "east", "lane_m", "speed_mps", "reach_m"}] walk past on
+    the aisle side (y < 0), lane_m from the edge, from PASS_FROM_M past one end to as far past the
+    other; reach_m > lane_m puts an arm tip over the edge while their feet stay outside.
+    "neighbours": [{"end": "west" | "east", "past_m", "t_on", "t_off"}] stand still beyond an end,
+    level with the middle of the area."""
+    w, h = LAYOUT.strip_m or LAYOUT.size_m
+    out = []
+    for p in path.get("passers") or []:
+        walked = (t - p["t_on"]) * p.get("speed_mps", 1.0)
+        if not 0 <= walked <= w + 2 * PASS_FROM_M:
+            continue
+        x = -PASS_FROM_M + walked if p.get("from", "west") == "west" else w + PASS_FROM_M - walked
+        y = -p.get("lane_m", 0.3)
+        reach = p.get("reach_m", 0.0)
+        out.append((x, y, True, (x, y + reach) if reach else None))
+    for n in path.get("neighbours") or []:
+        if active(n, t):
+            past = n.get("past_m", 1.0)
+            out.append((-past if n.get("end") == "west" else w + past, h / 2, False, None))
+    return out
+
+
 def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
              seed: int = 0, noise_db: float = 1.0):
     """Yield internal events (see wire.py) for a scripted path, in time order."""
     rng = random.Random(seed)
+    hall, h = hall_events(path, seed), 0
+    aisle = random.Random(f"aisle-{seed}")   # its own draws, so a path without bystanders is unchanged
     waypoints = path.get("person") or []
     label_every = max(1, round(rate / label_rate))
     meta = {"session": "sim-" + path.get("name", "path"), "purpose": "demo", "walker": "sim"}
@@ -132,9 +219,13 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
     desk, split = path.get("teacher") == "desk", LAYOUT.split_x_m if LAYOUT.strip_m else SIZE / 2
     for i in range(int(path["duration_s"] * rate)):
         t = round(i / rate, 3)
+        while h < len(hall) and hall[h]["t"] <= t:   # hall readings come at their own uneven moments
+            yield hall[h]
+            h += 1
         pos = position(waypoints, t)
         moving = is_moving(waypoints, t)
         nodes = {**NODES, "pi5": ROUTER_SPOTS[latest(path.get("router"), t, "spot", "S-home")]}
+        others = bystanders(path, t)
         for tx, rx, kind in LINKS:
             link = link_id(tx, rx, kind)
             if any(active(o, t) and (o.get("link") == link or o.get("node") in (tx, rx))
@@ -157,6 +248,14 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
                 if moving:  # a moving body makes the drop flutter
                     d *= max(0.0, 1.0 + rng.gauss(0.0, 0.25))
                 dbm -= d
+            for x, y, walking, arm in others:   # someone outside: blocks only if close, shakes when walking
+                d = person_drop((x, y), nodes[tx], nodes[rx])
+                if walking:
+                    d *= max(0.0, 1.0 + aisle.gauss(0.0, 0.25))
+                    d -= aisle.gauss(0.0, SCATTER_DB * math.exp(-((dist_to_link((x, y), nodes[tx], nodes[rx]) / SCATTER_M) ** 2)))
+                if arm:
+                    d += drop(arm, nodes[tx], nodes[rx], ARM_DROP_DB, ARM_WIDTH_M)
+                dbm -= d
             yield {"type": "rssi", "t": t, "link": link,
                    "kind": kind, "tx": tx, "rx": rx, "dbm": round(dbm)}
         cam = latest(path.get("camera"), t, "state", "on")
@@ -167,7 +266,7 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
                                   or (desk and abs(pos[0] - split) < path.get("dead_band_m", 0.0)))
             yield {"type": "label", "t": t, "frame": i // label_every,
                    "mode": path.get("label_mode", "person"),
-                   "persons_in_frame": int(pos is not None), "present": inside,
+                   "persons_in_frame": int(pos is not None) + len(others), "present": inside,
                    "zone": None if clipped else zone_of(*pos) if inside else 0,
                    "foot_m": [round(pos[0], 2), round(pos[1], 2)] if inside and not clipped and not desk else None,
                    "motion": ("moving" if moving else "still") if inside and not clipped else None,

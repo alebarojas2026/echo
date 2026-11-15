@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Pred } from './contract'
 import { turn } from './figure'
-import { ghostFloor, ghostSpots, objectTagAt } from './ghost'
+import { GONE_HOLD_MS, ghostFloor, ghostSpots, holdsPose, objectTagAt } from './ghost'
 
 const pred = (over: Partial<Pred>): Pred => ({
   present: true, kind: 'person', zone: 2, zone_set: [2], probs: [0.02, 0.08, 0.81, 0.07, 0.02],
@@ -58,5 +58,20 @@ describe('object tags', () => {
     expect(objectTagAt([1.0, 0.2])).toEqual([1.0, 0.5, 0.08]) // the tray by the router
     expect(objectTagAt([0.4, 1.25])[1]).toBeCloseTo(1.55)
     expect(objectTagAt([0.4, 1.6])[1]).toBeCloseTo(1.3)
+  })
+})
+
+describe('a dropped reading', () => {
+  it('does not make the figure leave: the pose holds for a few readings, then lets go', () => {
+    expect(GONE_HOLD_MS).toBeGreaterThanOrEqual(300) // at ten states a second, three in a row may go missing
+    expect(GONE_HOLD_MS).toBeLessThanOrEqual(500) // and someone who really leaves is gone within half a second
+    expect(holdsPose(1000, 1100)).toBe(true)
+    expect(holdsPose(1000, 1000 + GONE_HOLD_MS - 1)).toBe(true)
+    expect(holdsPose(1000, 1000 + GONE_HOLD_MS)).toBe(false)
+  })
+
+  it('never holds a figure that was not there, or across a clock that ran backwards (live to replay)', () => {
+    expect(holdsPose(null, 1000)).toBe(false)
+    expect(holdsPose(5000, 1000)).toBe(false)
   })
 })

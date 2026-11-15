@@ -15,3 +15,13 @@ def square(monkeypatch):
     monkeypatch.setenv("RADIO_SIGHT_NODES", str(path))
     monkeypatch.setattr(score, "LAYOUT", layout.load(path))
     return layout.load(path)
+
+
+@pytest.fixture
+def gate(monkeypatch):
+    """Pin the gate layout (one spot, three devices, six links): this folder's copy of radio/layouts/gate.json."""
+    from proof import layout, score
+    path = FIXTURES / "gate-nodes.json"
+    monkeypatch.setenv("RADIO_SIGHT_NODES", str(path))
+    monkeypatch.setattr(score, "LAYOUT", layout.load(path))
+    return layout.load(path)

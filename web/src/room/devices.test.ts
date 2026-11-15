@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { HallLink } from './contract'
 import { hallHeard, trayText } from './devices'
 import { HALL_BEACONS, applyLayout } from './frame'
-import { cleanPositions, setHallBeaconPositions } from './hallfile'
+import { cleanNodePositions, cleanPositions, setHallBeaconPositions, setNodePositions } from './hallfile'
 import { DESK_LAYOUT } from './layouts.fixture'
 import { mockState } from './mock'
 
@@ -67,5 +67,56 @@ describe('hall beacons', () => {
     expect([...hallHeard(mockState('power', 1, 1000).hall)]).toEqual(['h'])
     expect([...hallHeard(mockState('power', 1, 5000).hall)]).toEqual(['h', 'j'])
     expect(mockState('power', 1, 5000).hall!.every((r) => r.xy_m === null)).toBe(true)
+  })
+})
+
+describe('saving where the devices were placed', () => {
+  // The lines of radio/nodes.json that matter here, one object a line as the file has them.
+  const NODES_FILE = `{
+  "nodes": [
+    {"id": "unoq", "name": "Board", "xyz_m": [1.1, 0.6, 1.0], "roles": ["receiver"]},
+    {"id": "pi5", "name": "Pi A", "xyz_m": [0.8, 1.1, 1.0], "roles": ["router", "beacon", "receiver"]},
+    {"id": "pi5b", "name": "Pi B", "xyz_m": [0.5, 0.6, 1.0], "roles": ["beacon", "receiver"]}
+  ],
+  "router_spots": [
+    {"id": "S-home", "xyz_m": [0.8, 1.1, 1.0]},
+    {"id": "S-W30", "xyz_m": [0.5, 1.1, 1.0]}
+  ],
+  "tray_spots": [
+    {"id": "T1", "xyz_m": [0.86, 1.0, 1.0]}
+  ],
+  "beacons": {"payloads": [{"node": "pi5", "id": "S", "data_hex": "FFFF525353"}]},
+  "hall": {"beacons": [{"node": "h", "id": "H", "data_hex": "FFFF525348", "xyz_m": null}]}
+}
+`
+
+  it('changes only the placed devices\u2019 xyz_m, one line each, and the file still parses', () => {
+    const saved = setNodePositions(NODES_FILE, [{ id: 'pi5b', xyz_m: [0.8, -0.38, 0.94] }])
+    expect(saved).toContain('{"id": "pi5b", "name": "Pi B", "xyz_m": [0.8, -0.38, 0.94], "roles": ["beacon", "receiver"]}')
+    const changed = saved.split('\n').filter((line, i) => line !== NODES_FILE.split('\n')[i])
+    expect(changed).toHaveLength(1)
+    expect(JSON.parse(saved).nodes[2].xyz_m).toEqual([0.8, -0.38, 0.94])
+  })
+
+  it('moves the router\u2019s spots and the tray with the router, so S-home is where the router is', () => {
+    const saved = JSON.parse(setNodePositions(NODES_FILE, [{ id: 'pi5', xyz_m: [0.76, 0.68, 0.8] }]))
+    expect(saved.nodes[1].xyz_m).toEqual([0.76, 0.68, 0.8])
+    expect(saved.router_spots).toEqual([{ id: 'S-home', xyz_m: [0.76, 0.68, 0.8] }, { id: 'S-W30', xyz_m: [0.46, 0.68, 0.8] }])
+    expect(saved.tray_spots[0].xyz_m).toEqual([0.82, 0.58, 0.8])
+    expect(saved.hall.beacons[0].xyz_m).toBeNull() // nothing else is touched
+    expect(saved.beacons.payloads[0]).toEqual({ node: 'pi5', id: 'S', data_hex: 'FFFF525353' })
+  })
+
+  it('leaves out a device the file does not have', () => {
+    expect(setNodePositions(NODES_FILE, [{ id: 'east', xyz_m: [1, 1, 1] }])).toBe(NODES_FILE)
+  })
+
+  it('takes only well-formed positions', () => {
+    expect(cleanNodePositions([{ id: 'pi5b', xyz_m: [0.8, -0.38, 0.94] }])).toHaveLength(1)
+    expect(cleanNodePositions([{ id: 'S-home', xyz_m: [0, 0, 1] }])).toBeNull()
+    expect(cleanNodePositions([{ id: 'pi5b', xyz_m: [0, 0, 4] }])).toBeNull()
+    expect(cleanNodePositions([{ id: 'pi5b', xyz_m: [0, 9, 1] }])).toBeNull()
+    expect(cleanNodePositions([{ id: 'pi5b', xyz_m: [0, 0] }])).toBeNull()
+    expect(cleanNodePositions({})).toBeNull()
   })
 })

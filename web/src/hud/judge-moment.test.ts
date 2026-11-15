@@ -15,7 +15,9 @@ test('desk headlines use configured sides and preserve distinct unavailable stat
   }
   state.pred!.zone_set = desk.zones.map(z => z.id)
   expect(judgeMoment(state, false, desk)).toEqual(['Between two zones', 'Left or Right'])
-  for (const [scenario, heading] of [['empty', 'Nobody is here'], ['object', 'An object, not a person'], ['blind', 'Sensor blind']] as const) expect(judgeMoment(mockState(scenario, 0, 1000), false, desk)[0]).toBe(heading)
+  for (const [scenario, heading] of [['empty', 'Nobody is here'], ['object', 'Dead zone found'], ['blind', 'Sensor blind']] as const) expect(judgeMoment(mockState(scenario, 0, 1000), false, desk)[0]).toBe(heading)
+  // An object the board has no advice about (the first seconds, or one away from the router's link) is just an object.
+  expect(judgeMoment({ ...mockState('object', 0, 1000), advice: null }, false, desk)[0]).toBe('An object, not a person')
   expect(judgeMoment(null, true, desk)[0]).toBe('No data')
   state.pred = null
   state.model!.trained = false

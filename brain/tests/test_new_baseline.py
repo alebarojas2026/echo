@@ -173,9 +173,10 @@ def test_a_keep_model_baseline_finishes_with_30_percent_of_the_readings_lost_in_
     assert done is not None and done <= 25 and brain.model is model       # stale links don't hold it up
     assert all(abs(brain.base[k] - model.base[k]) <= 1.5 for k in brain.base)   # and the baseline is a sound one
 
-    brain.on_cmd(cmd("baseline"))                         # a new place keeps the strict rule: a 1 s gap starts it again
+    brain.on_cmd(cmd("baseline"))                         # a new place waits for the same things now (#634)
     done, feed.t = lossy_capture(brain, feed.t, 60, bursts)
-    assert done is None and brain.capture is not None and brain.model is model
+    assert done is not None and done <= 25 and brain.capture is None
+    assert brain.model is None                            # and it is still a new place: the old model is dropped
 
 
 def test_a_keep_model_baseline_still_restarts_for_a_link_silent_3_s():
@@ -184,3 +185,26 @@ def test_a_keep_model_baseline_still_restarts_for_a_link_silent_3_s():
     unplugged = lambda link, ms: link == "east>unoq:ble" and 5000 <= ms < 9500   # noqa: E731
     done, feed.t = lossy_capture(brain, feed.t, 60, unplugged)
     assert done is not None and 28 <= done <= 36          # the 20 s started again once the link was back
+
+
+def test_a_keep_model_baseline_finishes_with_a_link_slower_here_than_at_the_last_desk():
+    """The taught baseline had this link at 15 readings a second; here it gives about 1.7, at uneven
+    moments. Judged against the old rate it would be stale, then blind, and never finish (#634)."""
+    import random
+    brain, feed = taught()
+    model = brain.model
+    rng, slow, next_ok = random.Random(5), "west>pi5:ble", [0.0]
+
+    def thin(link, ms):
+        if link != slow:
+            return False
+        if ms < next_ok[0]:
+            return True
+        next_ok[0] = ms + rng.expovariate(1.7) * 1000
+        return False
+
+    brain.on_cmd(cmd("baseline", keep_model=True))
+    done, feed.t = lossy_capture(brain, feed.t, 60, thin)
+    assert done is not None and done <= 45                 # one fresh start at most
+    assert 1.0 <= brain.expected_hz[slow] <= 2.5           # the capture measured that link's own rate
+    assert brain.model is model

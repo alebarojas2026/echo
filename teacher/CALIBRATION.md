@@ -12,7 +12,8 @@ or Escape to cancel. The view remains in memory. The only output is
 pixel-to-floor homography. The area to click comes from `radio/nodes.json`. The
 layout is moving to the desk layout: the strip a person stands in, in front of the
 desk (`frame.strip_m`, split into two zones, Left and Right, at
-`frame.zone_split_x_m`). The 2 x 2 m square with four zones is the old layout, and
+`frame.zone_split_x_m`). A file with `frame.strip_m`, no `frame.zone_split_x_m` and one zone
+is one spot: the whole strip is that zone, and the label says somebody or nobody. The 2 x 2 m square with four zones is the old layout, and
 is what a `nodes.json` without `strip_m` still gives. The tool prints which area
 before the window opens. The strip's NE and NW corners are on the desk's judge
 edge. `--side-m 1.5` overrides it with a 1.5 m square.

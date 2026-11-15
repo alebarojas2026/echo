@@ -21,7 +21,7 @@ INVALID = [
     "$.text",                       # more than 16 words
     "$.text",                       # a recap of 50 words, more than 45
     "$.model",                      # llm sentence without a model
-    "$.pred.probs",                 # 4 probs, not 5
+    "$.pred.probs",                 # 5 probs, the old four-zone shape: it is [empty, z1, z2] now
     "w*h is 25",                    # xray size does not match w x h
     "$.links",                      # links is [] before readings, never null
     "$.links[0].dbm",               # a listed link always has a reading
@@ -32,11 +32,41 @@ INVALID = [
     "$.pred.motion",                # nobody there but motion set
     "$.pred.zone",                  # nobody there but zone 3
     "$.pred.zone_set",              # nobody there but zone_set [3]
-    "$.objects[0].near",            # east is 1 m away
+    "$.objects[0].near",            # east is 0.8 m away
     "$.advice.before_dbm",           # shown before the router moves, so already measured
     "$.kind",                       # unknown event kind
     "$.args.mode",
     "unknown type 'ping'",
+    "$.zone",                       # zone 3: the desk layout has zones 1 and 2 only
+    "$.rx",                         # pi5>pi5b:wifi is heard by pi5b, not by the board
+    "$.alert.zone",                 # an alert in zone 4
+    "$.objects[0].near",            # the old tray spot: on the desk layout the board is the closest node, not pi5
+    "$.pred.why[0]",                # a hall link is never a core link
+    "$.args.keep_model",            # keep_model is true or false
+    "$.link",                       # a hall beacon heard by east, which is not a receiver
+    "$.tx",                         # the link says beacon h, tx says j
+    "$.hall[0].activity",           # activity is 0-1
+    "$.hall[0].moving",             # a stale hall link is never moving
+    "$.hall[0].id",                 # a core link in the hall list
+    "$.armed",                      # armed is true or false
+    "'on' is a required property",   # arm says on or off
+    "$.info",                       # an intrusion names a zone or a hall link
+    "$.info",                       # an intrusion is never in zone 0
+    "$.model.training.lesson.of",   # the learning signal counts 10 decisions at most
+    "7 of 5",                       # more agreeing decisions than decisions
+    "'fitting' is a required property",   # a lesson says whether a fit is running
+    "$.model.training",             # a lesson without the fit block around it
+    "'node' is a required property",   # a tamper names its node
+    "$.info.node",                  # no such node
+    "$.info.node",                  # a hall beacon is a node only for tamper
+    "$.tamper[1]",                  # no such node
+    "$.tamper",                     # tamper is a list of nodes
+    "$.tamper",                     # a node is listed once
+    "'zone' is a required property",   # a passed_by names its zone
+    "$.info.zone",                  # nobody passes by in zone 0
+    "$.hall[0].moving",             # a busy path never says moving
+    "$.hall[0].busy",               # a stale path is not busy
+    "$.hall[0].busy",               # busy is true or false
     "bad JSON",
 ]
 
@@ -67,6 +97,21 @@ def test_each_invalid_line_fails_for_its_reason():
 def test_proof():
     assert check.check_lines([read("valid_proof.json")], "proof")[1] == []
     assert "$.zone.correct" in check.check_lines([read("invalid_proof.json")], "proof")[1][0][1]
+
+
+def test_proof_security_is_optional_and_names_real_links():
+    proof = json.loads(read("valid_proof.json"))
+    assert proof["security"]["detection"]["within_s"] == 2
+    del proof["security"]                                       # the whole object may be missing
+    assert check.check_lines([json.dumps(proof)], "proof")[1] == []
+    errors = check.check_lines([read("invalid_proof_security.json")], "proof")[1]
+    assert "$.security.fewer_devices[0].links[0]" in errors[0][1]   # not a link in nodes.json
+
+
+def test_not_sure_where_is_every_zone_in_zone_set():
+    not_sure = [json.loads(line)["pred"] for line in read("valid_state.jsonl").splitlines()]
+    not_sure = [p for p in not_sure if p and len(p["zone_set"]) > 1]
+    assert not_sure and all(p["present"] and p["zone_set"] == [1, 2] and p["zone"] in (1, 2) for p in not_sure)
 
 
 def rssi(seq, rx="pi5"):

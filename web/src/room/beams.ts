@@ -3,7 +3,7 @@ import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import type { LinkState, StateMsg } from './contract'
-import { HOME_SPOT, LINK_IDS, floorSize, nodePosition, parseLinkId, routerId, type NodeId, type Vec3 } from './frame'
+import { HOME_SPOT, LINK_CROSSES, LINK_IDS, floorSize, nodePosition, parseLinkId, routerId, type NodeId, type Vec3 } from './frame'
 import type { Mirror } from './mirror'
 import { follow, Glide3, Held, TAU } from './motion'
 import { ACTION, FAULT, LINK, PERSON } from './palette'
@@ -11,7 +11,10 @@ import { v3 } from './stage'
 import type { RoomView } from './view'
 
 // One thin neutral line per radio link (contract section 3), drawn between the node heads.
-// It dims as drop_db rises, turns amber (the person's colour) when the link is in pred.why, and breaks into dashes when blind.
+// It dims as drop_db rises, turns amber (the person's colour) when the link is in pred.why and is itself dropping
+// (explains, below), and breaks into dashes when blind.
+// A link whose straight path never passes over the floor a person stands on (on the desk layout, one between two
+// devices on the desk) is drawn faint while nothing is happening on it: the links a person can cut read first.
 
 export interface BeamLook {
   status: string // ok | stale | blind | missing
@@ -22,8 +25,61 @@ export interface BeamLook {
 }
 
 const FULL_DROP_DB = 12 // at this drop a link is as dim as it gets
+/** How strong a link that never passes over the floor is drawn, next to one that does, while it explains nothing. */
+const OFF_FLOOR = 0.3
 
-export function beamLook(link: LinkState | undefined, why: boolean, blind: ReadonlySet<string>): BeamLook {
+/** Whether the straight line from a to b passes over the floor a person can be in (floorSize, from nodes.json),
+ *  not just along its edge. On the square every link does; on the desk, a link between two desk devices doesn't. */
+export function overFloor(a: Vec3, b: Vec3): boolean {
+  const [fw, fh] = floorSize()
+  const inset = 0.01
+  for (let i = 0; i <= 64; i++) {
+    const x = a[0] + ((b[0] - a[0]) * i) / 64
+    const y = a[1] + ((b[1] - a[1]) * i) / 64
+    if (x > inset && x < fw - inset && y > inset && y < fh - inset) return true
+  }
+  return false
+}
+
+/** A link is dropping at this much under its baseline: the contract's own number (section 6, the router advice). */
+export const DROPPING_DB = 3
+
+/**
+ * The drop at which a listed link lights, as a setting: ?amber_db=<dB> on the page's address, else 3 dB. On the
+ * real kit the weakest step-on drops a line by about 3 dB and an empty spot stays within 2, so the number sits
+ * close to both; it is a setting so it can follow whatever level the brain settles on for "present" without a
+ * new build. Kept between 1 and 20 dB.
+ */
+export function amberDb(params: URLSearchParams): number {
+  const v = Number(params.get('amber_db'))
+  return params.get('amber_db') !== null && v >= 1 && v <= 20 ? v : DROPPING_DB
+}
+
+/**
+ * Whether a link is one the person's body is cutting right now: listed in pred.why, and its own drop_db at `bar`
+ * (3 dB unless set) or more. pred.why names the brain's top links whether or not they moved, so on its own it would light a line that
+ * sits at its baseline. A null drop (before the baseline) is not a drop.
+ */
+export function explains(link: LinkState | undefined, inWhy: boolean, bar = DROPPING_DB): boolean {
+  return inWhy && (link?.drop_db ?? 0) >= bar
+}
+
+/**
+ * Whether a link is the layout's main sensing line: a Wi-Fi link the file marks as crossing the spot. Measured on
+ * the kit (#789), the Wi-Fi line across the gap falls 15 to 21 dB when someone steps in and is the one the brain
+ * decides by; the Bluetooth lines are the second opinion. It is drawn boldest. A file that marks nothing (the
+ * desk layout) has no main line.
+ */
+export function mainLine(id: string): boolean {
+  return LINK_CROSSES[id] === true && parseLinkId(id)?.kind === 'wifi'
+}
+
+/** How wide a link is drawn (px): its look's width, and 2 px more for the main line, at rest and lit alike. */
+export function lineWidth(look: BeamLook, main: boolean): number {
+  return look.width + (main ? 2 : 0)
+}
+
+export function beamLook(link: LinkState | undefined, why: boolean, blind: ReadonlySet<string>, onFloor = true): BeamLook {
   const status = !link ? 'missing' : blind.has(link.id) ? 'blind' : link.status
   const broken = status === 'blind' || status === 'missing'
   const drop = Math.max(0, link?.drop_db ?? 0)
@@ -33,10 +89,13 @@ export function beamLook(link: LinkState | undefined, why: boolean, blind: Reado
     broken,
     why: why && !broken,
     // A link that explains the prediction stays readable however far it has dropped.
-    opacity: broken ? 0.6 : status === 'stale' ? lit * 0.6 : why ? Math.max(lit, 0.8) : lit,
+    opacity: broken ? 0.6 : why ? Math.max(lit, 0.8) : (status === 'stale' ? lit * 0.6 : lit) * (onFloor ? 1 : OFF_FLOOR),
     width: why && !broken ? 5 : 3, // 1.5 px is half an arcminute from 3 m; 3 px is the least that reads
   }
 }
+
+export const WHY_ON_MS = 300
+export const WHY_OFF_MS = 500
 
 const LINK_C = new Color(LINK)
 const BROKEN_C = new Color(FAULT)
@@ -51,8 +110,11 @@ interface Beam {
   look: BeamLook
   amber: number // 0..1, eased toward the person colour
   green: number // 0..1, eased toward the check-in colour
-  /** In pred.why, as shown: lights after 300 ms in the list, lets go after 800 ms out of it. */
+  /** Explains the prediction, as shown: lights after 300 ms of it, lets go after 500 ms without. A real Bluetooth
+   *  link wobbles a few dB with nobody there, so one at the 3 dB line would otherwise flicker. */
   why: Held<boolean>
+  /** Its straight path passes over the floor a person stands on (overFloor). */
+  onFloor: boolean
 }
 
 /** The two nodes a link joins, in a fixed order, so twin links (wifi and ble) share one key. */
@@ -94,7 +156,7 @@ export class Beams {
   /** The link that just carried a wave check-in, drawn green and wide while the wave shows. */
   private waveLink: string | null = null
 
-  constructor(private readonly view: RoomView, private readonly mirror: Mirror) {
+  constructor(private readonly view: RoomView, private readonly mirror: Mirror, private readonly amberAt = DROPPING_DB) {
     for (const id of LINK_IDS) {
       const mat = new LineMaterial({ color: LINK, linewidth: 3, transparent: true, dashSize: 0.08, gapSize: 0.09 })
       const line = new Line2(new LineGeometry(), mat)
@@ -106,7 +168,7 @@ export class Beams {
         this.pairLabels.set(pair, label)
       }
       this.beams.push({ id, pair, line, mat, look: beamLook(undefined, false, new Set()), amber: 0, green: 0,
-        why: new Held<boolean>(false, (on) => (on ? 300 : 800)) })
+        why: new Held<boolean>(false, (on) => (on ? WHY_ON_MS : WHY_OFF_MS)), onFloor: true })
     }
     const [fw, fh] = floorSize()
     this.waiting = view.addLabel('Waiting for radio readings', v3([fw / 2, fh / 2, 0]), 'room-label--caption')
@@ -137,7 +199,7 @@ export class Beams {
     const brokenPairs = new Set<string>()
     for (const b of this.beams) {
       const link = state.links.find((l) => l.id === b.id)
-      b.look = beamLook(link, b.why.update(why.has(b.id), nowMs), blind)
+      b.look = beamLook(link, b.why.update(explains(link, why.has(b.id), this.amberAt), nowMs), blind, b.onFloor)
       if (b.mat.dashed !== b.look.broken) b.mat.dashed = b.look.broken
       if (b.look.broken) brokenPairs.add(b.pair)
       const drop = link?.drop_db
@@ -163,6 +225,8 @@ export class Beams {
       const parts = parseLinkId(b.id)!
       const a = at(parts.tx)
       const z = at(parts.rx)
+      // The file says so itself when it can (crosses_spot); else it is worked out from where the two devices stand.
+      b.onFloor = LINK_CROSSES[b.id] ?? overFloor(a, z)
       const shift = shifts.get(b.id) ?? 0
       const [ax, ay, az] = offset(a, z, shift)
       const [zx, zy, zz] = offset(z, a, -shift)
@@ -193,7 +257,7 @@ export class Beams {
       const { mat, look } = b
       mat.opacity += (look.opacity - mat.opacity) * kData
       const wave = b.id === this.waveLink && !look.broken
-      const width = wave ? 7 : look.width
+      const width = wave ? 7 : lineWidth(look, mainLine(b.id))
       mat.linewidth += (width - mat.linewidth) * k
       b.amber += ((look.why ? 1 : 0) - b.amber) * k
       b.green += ((wave ? 1 : 0) - b.green) * k

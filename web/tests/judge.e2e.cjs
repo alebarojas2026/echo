@@ -5,7 +5,7 @@ const path = require('node:path')
 const shots = process.env.HUD_SCREENSHOTS
 for (const [scene, title, time] of [
   ['still', layoutFixture.still, 7200], ['alert', layoutFixture.still, 11000],
-  ['object', 'An object, not a person', 1000], ['blind', 'Sensor blind', 1000],
+  ['object', 'Dead zone found', 1000], ['blind', 'Sensor blind', 1000],
   ['empty', 'Nobody is here', 1000],
 ]) {
   test(scene + ' judge screenshot', async ({ page }) => {
@@ -50,7 +50,8 @@ test('headline cases use the real mock state', async ({ page }) => {
   const headlines = await page.evaluate(async () => {
     const { judgeMoment } = await import('/src/hud/judge-moment.ts')
     const { mockState } = await import('/src/hud/mock-layout.ts')
-    return ['still', 'object', 'empty', 'blind'].map(name => judgeMoment(mockState(name, 0, 7000), false)[0])
+    const object = { ...mockState('object', 0, 7000), advice: null }
+    return [...['still', 'object', 'empty', 'blind'].map(name => judgeMoment(mockState(name, 0, 7000), false)[0]), judgeMoment(object, false)[0]]
   })
-  expect(headlines).toEqual([layoutFixture.still, 'An object, not a person', 'Nobody is here', 'Sensor blind'])
+  expect(headlines).toEqual([layoutFixture.still, 'Dead zone found', 'Nobody is here', 'Sensor blind', 'An object, not a person'])
 })

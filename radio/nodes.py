@@ -3,11 +3,18 @@
     from radio.nodes import LINKS, BEACONS
     LINKS["east>unoq:ble"]          # {"tx": "east", "rx": "unoq", "kind": "ble", ...}
     BEACONS[b"\\xff\\xffRSE"]         # "east"
+
+LINKS is the core links, the ones listed in nodes.json, and nothing else. A hall link is any link
+whose tx is one of the optional hall beacons (H and J, issue #358), heard by any receiver in
+nodes.json; they are in HALL_LINKS. A scanner forwards the links in HEARD, which is both.
 """
 import json
+import os
 from pathlib import Path
 
-PATH = Path(__file__).with_name("nodes.json")
+# RADIO_SIGHT_NODES names another layout file, as it does for the brain (the tests pin one, so they don't
+# change with the room). Unset, it is radio/nodes.json.
+PATH = Path(os.environ.get("RADIO_SIGHT_NODES") or Path(__file__).with_name("nodes.json"))
 DOC = json.loads(PATH.read_text(encoding="utf-8"))
 
 # link id -> the link entry from nodes.json
@@ -20,3 +27,12 @@ BEACONS = {bytes.fromhex(p["data_hex"]): p["node"] for p in DOC["beacons"]["payl
 # The nodes that listen (a scanner runs on each), and those that also advertise (the Pis).
 RECEIVERS = [node["id"] for node in DOC["nodes"] if "receiver" in node["roles"]]
 PIS = [node["id"] for node in DOC["nodes"] if "receiver" in node["roles"] and "beacon" in node["roles"]]
+
+# The optional "hall" section of nodes.json; all of this is empty when the section is missing.
+HALL_BEACONS = {bytes.fromhex(p["data_hex"]): p["node"] for p in (DOC.get("hall") or {}).get("beacons", [])}
+HALL_LINKS = {f"{tx}>{rx}:ble": {"id": f"{tx}>{rx}:ble", "tx": tx, "rx": rx, "kind": "ble"}
+              for rx in RECEIVERS for tx in HALL_BEACONS.values()}
+BEACONS.update(HALL_BEACONS)
+
+# Every link a scanner forwards to the bus.
+HEARD = {**LINKS, **HALL_LINKS}

@@ -11,6 +11,9 @@ Rules (section 6):
   jump rule is off while the router is off S-home or a baseline is running.
 - health is blind when any classifier link is blind. A blind link clears
   after 3 s ok.
+- A link whose baseline counted under 4 readings a second is never blind by rate: it shows
+  stale while it reads under 0.4 x expected_hz, and that is all. (At 1.6 a second a link
+  has fewer than two readings in 2 s about one time in six with nothing wrong.)
 status is "degraded" when some link is stale or blind but health isn't blind.
 """
 from collections import deque
@@ -24,6 +27,7 @@ STALE_FRAC = 0.4
 MEDIAN_WINDOW_S = 1.0
 JUMP_DB = 6.0
 BLIND_AFTER_S = 3.0
+BLIND_RATE_MIN_HZ = 4.0   # a link slower than this at the baseline is never blind by rate
 CLEAR_AFTER_S = 3.0
 EPS_S = 1e-6           # float slack on the timers
 STEADY_S = 5.0         # a steady drop is judged over up to this long (the x-ray's static test)
@@ -37,6 +41,7 @@ class _Link:
         self.id = link_id
         self.expected_hz = expected_hz
         self.base_dbm = base_dbm
+        self.steady_db = STEADY_STD_DB   # raised to a multiple of the link's own quiet level when that is set
         self.readings = deque()      # (t_s, dbm), last RATE_WINDOW_S only
         self.trail = deque()         # (t_s, dbm), last STEADY_S, for the steady-drop test
         self.blind = False
@@ -66,7 +71,8 @@ class _Link:
         self.ok_since = (self.ok_since if self.ok_since is not None else now) if ok else None
 
         if not self.blind:
-            if self.stale_since is not None and now - self.stale_since >= BLIND_AFTER_S - EPS_S:
+            if (self.stale_since is not None and now - self.stale_since >= BLIND_AFTER_S - EPS_S
+                    and self.expected_hz >= BLIND_RATE_MIN_HZ):
                 self.blind, self.reason = True, "rate"
             elif jump and now - self.jump_since >= BLIND_AFTER_S - EPS_S:
                 self.blind, self.reason = True, "jump"
@@ -99,7 +105,7 @@ class _Link:
         for t, d in pts:
             bins.setdefault(int((t - t0) // STEADY_BIN_S), []).append(d)
         means = [sum(v) / len(v) for v in bins.values()]
-        return len(means) >= 2 and float(np.std(means)) < STEADY_STD_DB
+        return len(means) >= 2 and float(np.std(means)) < self.steady_db
 
 
 class Health:
@@ -139,6 +145,14 @@ class Health:
         for k, v in expected_hz.items():
             if k in self.links:
                 self.links[k].expected_hz = None if v is None else float(v)
+
+    def set_quiet(self, quiet_db, factor):
+        """{link: the std of its 0.5 s means with nobody there}, after a baseline. A drop on a
+        link is then steady under 0.8 dB or under factor x its quiet level, whichever is larger
+        (settings.steady_x_quiet; 0 = 0.8 dB alone)."""
+        for k, lk in self.links.items():
+            q = quiet_db.get(k)
+            lk.steady_db = max(STEADY_STD_DB, factor * q) if q is not None and factor else STEADY_STD_DB
 
     def add(self, link, t_ms, dbm):
         lk = self.links.get(link)

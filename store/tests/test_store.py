@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import pytest
 
@@ -78,3 +79,51 @@ def test_fill_from_the_simulated_demo_ends_at_the_given_time():
     rows = s.seconds()
     assert rows[-1]["t"] == T0 and {r["src"] for r in rows} == {"sim"}
     json.dumps(rows)   # every column is plain JSON
+
+
+class FullDisk:
+    """A store whose disk is full for the first `full` rows (issue #529)."""
+
+    def __init__(self, full):
+        self.full, self.rows = full, []
+
+    def add(self, msg):
+        if self.full:
+            self.full -= 1
+            raise sqlite3.OperationalError("database or disk is full")
+        self.rows.append(msg)
+        return True
+
+
+def test_a_full_disk_drops_rows_and_keeps_going_then_writes_again():
+    from store.__main__ import Keeper
+    said, now = [], [0.0]
+    keeper = Keeper(FullDisk(full=5), clock=lambda: now[0], log=said.append)
+    for i in range(5):
+        now[0] = i * 20.0          # five rows over 80 s, all while the disk is full
+        assert keeper.keep(json.dumps(event(T0 + i, "enter", id=f"e{i}"))) is False
+    assert keeper.dropped == 5 and len(said) == 2            # said at 0 s and again at 60 s, not five times
+    assert "can't write" in said[0] and "database or disk is full" in said[0]
+    assert keeper.keep(json.dumps(event(T0 + 9, "exit", id="e9"))) is True   # room again: it writes
+    assert [r["id"] for r in keeper.store.rows] == ["e9"]
+
+
+def test_a_message_that_cant_be_read_is_skipped():
+    from store.__main__ import Keeper
+    keeper = Keeper(FullDisk(full=0), log=lambda text: None)
+    assert keeper.keep("{not json") is False and keeper.dropped == 0
+
+
+def test_the_real_store_writes_again_after_a_write_error(tmp_path, monkeypatch):
+    s = Store(str(tmp_path / "store.db"))
+    from store.__main__ import Keeper
+    keeper = Keeper(s, log=lambda text: None)
+    assert keeper.keep(json.dumps(event(T0, "enter", id="e1")))
+    real = s.add
+
+    def full(msg):
+        raise sqlite3.OperationalError("disk I/O error")
+    monkeypatch.setattr(s, "add", full)
+    assert keeper.keep(json.dumps(event(T0 + 1, "exit", id="e2"))) is False
+    monkeypatch.setattr(s, "add", real)
+    assert keeper.keep(json.dumps(event(T0 + 2, "exit", id="e3")))

@@ -44,10 +44,11 @@ COUNTED = ("intrusion", "passed_by", "alert_on", "alert_off", "enter", "exit", "
 def replay(brain: Brain, messages: Iterable[dict], armed: bool = False) -> dict:
     """Feed messages (with recv_t, oldest first) to a brain that has a baseline and a model.
     Returns the counts. The brain is used as it is: arm it, or not, with `armed`."""
+    # Armed mode is kept on disk now, so a brain on a work folder used before may come up armed:
+    # set it both ways, every run.
+    brain.on_cmd({"v": 2, "type": "cmd", "cmd": "arm", "args": {"on": bool(armed)}})
     brain.pop_events()
     before = dict(brain.watch.resets)
-    if armed:
-        brain.on_cmd({"v": 2, "type": "cmd", "cmd": "arm", "args": {"on": True}})
     events: List[dict] = []
     first = last = next_state = None
     decisions = present = hidden = 0
@@ -113,7 +114,7 @@ def prepared(sessions_dir, settings: Optional[S.Settings] = None, train: Optiona
                 raise SystemExit(f"{path}: no recording with a meta line")
             sessions.append({"meta": meta, "messages": read_session(path, meta.get("recv_t")),
                              "base": base_at(history, meta.get("recv_t"))})
-        brain.model = Model(brain.base, ver="replay", links=brain.links, zones=brain.zone_ids,
+        brain.model = Model(brain.base, ver="replay", links=brain.model_links, zones=brain.zone_ids,
                             motion_links=brain.settings.motion_links).fit(sessions)
     if brain.model is None:
         raise SystemExit(f"no model: {src} has no model.pkl for this baseline and layout; name recordings with --train")
@@ -131,9 +132,9 @@ def parse_set(pairs: List[str]) -> dict:
             out[name] = None if value in ("", "null", "all") else [k for k in value.split(",") if k]
         else:
             try:
-                out[name] = int(value)
+                out[name] = float(value) if name.endswith("_x_quiet") else int(value)
             except ValueError:
-                raise SystemExit(f"--set {name}: {value!r} is not a whole number")
+                raise SystemExit(f"--set {name}: {value!r} is not a {'number' if name.endswith('_x_quiet') else 'whole number'}")
     return out
 
 

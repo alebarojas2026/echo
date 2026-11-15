@@ -19,6 +19,12 @@ export const FOUND_AFTER_MS = 1500
 /** "Someone passed by" stays this long. */
 export const PASSED_BY_MS = 5000
 
+/** Under "Found you.": "0 cameras" only when the camera is known to be unplugged (#651). When the camera watcher
+ *  has gone quiet the board says unknown, and the card says only what is true either way: "By radio." */
+export function foundLine(cam: string): string {
+  return cam === 'off' ? '0 cameras' : cam === 'on' ? 'Camera teaching' : cam === 'stalled' ? 'Camera stalled' : 'By radio.'
+}
+
 export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTMLElement) {
   const view = document.createElement('section')
   view.className = 'hud-arrival'
@@ -48,18 +54,25 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   let hold: ReturnType<typeof setTimeout> | undefined
   let fade: Animation[] | undefined
   let phase: ArrivalPhase | undefined
+  let phaseCut = false
   let presentSince: number | null = null
   let presentTimer: ReturnType<typeof setTimeout> | undefined
   let passedBy = ''
   let passedTimer: ReturnType<typeof setTimeout> | undefined
   const seen = new Set<string>()
   const cancelHold = () => { clearTimeout(hold); hold = undefined; fade?.forEach(animation => animation.cancel()); fade = undefined }
-  const announce = (next: ArrivalPhase) => {
-    if (next === phase) return
+  // cut: an intrusion goes straight to the floor, so the room should jump there instead of flying (#552).
+  const announce = (next: ArrivalPhase, cut = false) => {
+    if (next === phase && cut === phaseCut) return
     phase = next
+    phaseCut = cut
     document.documentElement.dataset.hudArrival = next
-    window.dispatchEvent(new CustomEvent('hud:arrival', { detail: { state: next } }))
+    if (cut) document.documentElement.dataset.hudArrivalCut = '1'
+    else delete document.documentElement.dataset.hudArrivalCut
+    window.dispatchEvent(new CustomEvent('hud:arrival', { detail: cut ? { state: next, cut: true } : { state: next } }))
   }
+  // A replay plays on the main screen (#537): the card steps aside for it and comes back when it is over.
+  const replaying = () => document.documentElement.dataset.hudReplay === 'on'
   const close = () => {
     // The panels come in where the words went out, the way every text change on this screen does.
     if (!view.hidden && !matchMedia('(prefers-reduced-motion: reduce)').matches) host.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, delay: 40, fill: 'backwards' })
@@ -68,9 +81,9 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     host.removeAttribute('aria-hidden')
     announce('closed')
   }
-  const show = (heading: string, line: string, fault = false, next: ArrivalPhase = 'waiting') => {
-    view.hidden = !operator.hidden
-    announce(view.hidden ? 'closed' : next)
+  const show = (heading: string, line: string, fault = false, next: ArrivalPhase = 'waiting', cut = false) => {
+    view.hidden = !operator.hidden || replaying()
+    announce(view.hidden ? 'closed' : next, cut)
     host.inert = !view.hidden
     host.setAttribute('aria-hidden', String(!view.hidden))
     view.dataset.tone = fault ? 'fault' : ''
@@ -88,6 +101,8 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     source.textContent = state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO'
     if (!state || stale) { cancelHold(); show('No data', 'Waiting for the room signal.'); return }
     if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', 'A radio link stopped.'); return }
+    // Once the visitor has been found, a dead zone (advice, the router moved) is the main screen's moment.
+    if (complete && !state.armed && (state.advice || state.router !== 'S-home')) { cancelHold(); close(); return }
     if (!state.pred || state.router !== 'S-home') {
       cancelHold()
       const [heading, line] = judgeMoment(state, false)
@@ -98,7 +113,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
       cancelHold()
       // Only the board's intrusion event raises the alarm: it has waited to see the person stay (#584).
       // An intrusion goes straight to the floor: the words stay, in the fault colour, over the room as it is now.
-      show(intrusion ? 'Someone is here.' : 'Armed.', !state.pred ? 'Waiting for a room prediction.' : 'This space should be empty.', intrusion, intrusion ? 'closed' : 'waiting')
+      show(intrusion ? 'Someone is here.' : 'Armed.', !state.pred ? 'Waiting for a room prediction.' : 'This space should be empty.', intrusion, intrusion ? 'closed' : 'waiting', intrusion)
       return
     }
     if (complete) { close(); return }
@@ -106,7 +121,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     if (here && waited < FOUND_AFTER_MS && !hold) presentTimer ??= setTimeout(() => { presentTimer = undefined; render() }, FOUND_AFTER_MS - waited)
     if (here && (waited >= FOUND_AFTER_MS || hold)) {
       // The words hold, then the card fades as the room flies from the hall down to the floor.
-      show('Found you.', state.cam === 'off' ? '0 cameras' : state.cam === 'on' ? 'Camera teaching' : 'Camera stalled', false, fade ? 'found' : 'waiting')
+      show('Found you.', foundLine(state.cam), false, fade ? 'found' : 'waiting')
       if (!hold) hold = setTimeout(() => {
         if (view.hidden) return
         announce('found')
@@ -154,6 +169,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   })
   const visibility = new MutationObserver(render)
   visibility.observe(operator, { attributes: true, attributeFilter: ['hidden'] })
+  visibility.observe(document.documentElement, { attributes: true, attributeFilter: ['data-hud-replay'] })
   render()
   return () => { cancelHold(); clearTimeout(presentTimer); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
 }

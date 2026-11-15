@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import nodesJson from '../../../radio/nodes.json'
 import * as frame from './frame'
+import { loadLayout } from './layout'
 import { DESK_LAYOUT } from './layouts.fixture'
 
 // applyLayout changes module state, so the cases run in order on one copy of frame.ts. They pass whichever
@@ -15,7 +16,8 @@ describe('layout from nodes.json', () => {
     expect(frame.applyLayout({ ...real, nodes: real.nodes.filter((n) => n.id !== 'unoq') })).toBe(false) // links name a missing node
     expect(frame.applyLayout({ ...real, frame: { size_m: [0] } })).toBe(false)
     expect(frame.applyLayout({ ...DESK_LAYOUT, frame: { ...DESK_LAYOUT.frame, zone_split_x_m: 2 } })).toBe(false)
-    expect(frame.applyLayout({ ...DESK_LAYOUT, zones: DESK_LAYOUT.zones.slice(1) })).toBe(false)
+    expect(frame.applyLayout({ ...DESK_LAYOUT, zones: [] })).toBe(false)
+    expect(frame.applyLayout({ ...DESK_LAYOUT, zones: [...DESK_LAYOUT.zones, { ...DESK_LAYOUT.zones[0], id: 3 }] })).toBe(false)
     expect(frame.SIZE_M).toEqual([2, 2]) // still the built-in square
     expect(frame.spotName('S-W30')).toBe('30 cm W')
   })
@@ -49,7 +51,7 @@ describe('layout from nodes.json', () => {
     // the layout's centre is the scene's origin
     expect(frame.toScene([0.8, 0.55, 0])).toEqual([0, 0, 0])
     expect(frame.nodePosition('pi5', 'S-W30')).toEqual([0.5, 1.1, 1])
-    expect(frame.nodeLabelSide('west')).toBe('left')
+    expect(frame.nodeLabelSide('west')).toBe('below-right')
     expect(frame.nodeLabelSide('pi5')).toBe('above')
     expect(frame.TRAY_SPOTS[0]).toEqual([0.86, 1.0, 1.0])
   })
@@ -61,12 +63,29 @@ describe('layout from nodes.json', () => {
     expect(frame.nodePosition('pi5b', 'S-home')).toEqual([0.4, 0.7, 1.0])
   })
 
+  it('moves the router’s spots and the tray with the router when the file moves the router alone', () => {
+    // A placement saved in align mode changes the devices' xyz_m, not the spots.
+    const moved = structuredClone(DESK_LAYOUT)
+    moved.nodes[1].xyz_m = [0.76, 0.68, 0.8] // Pi A, the router: 4 cm west, 42 cm south, 20 cm lower
+    expect(frame.applyLayout(moved)).toBe(true)
+    expect(frame.nodePosition('pi5', 'S-home')).toEqual([0.76, 0.68, 0.8])
+    const west = frame.nodePosition('pi5', 'S-W30')
+    expect(west[0]).toBeCloseTo(0.46)
+    expect(west[1]).toBeCloseTo(0.68)
+    expect(frame.TRAY_SPOTS[0][0]).toBeCloseTo(0.82)
+    expect(frame.TRAY_SPOTS[0][2]).toBeCloseTo(0.8)
+    // and a file where they agree is left exactly as it is
+    expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)
+    expect(frame.nodePosition('pi5', 'S-W30')).toEqual([0.5, 1.1, 1])
+  })
+
   it('follows a 1.5 m square and gate-7 router spots without a rebuild', () => {
     const s = 0.75
     const small = {
       ...square,
       frame: { size_m: [1.5, 1.5] },
-      nodes: square.nodes.map((n) => ({ ...n, xyz_m: [n.xyz_m[0] * s, n.xyz_m[1] * s, 1.0] })),
+      // the router stands on its home spot, as in any real file
+      nodes: square.nodes.map((n) => ({ ...n, xyz_m: n.id === 'pi5' ? [0.75, 0, 1] : [n.xyz_m[0] * s, n.xyz_m[1] * s, 1.0] })),
       router_spots: [
         { id: 'S-home', xyz_m: [0.75, 0, 1] },
         { id: 'S-W20', xyz_m: [0.55, 0, 1] },
@@ -89,5 +108,42 @@ describe('layout from nodes.json', () => {
     expect(frame.spotName('S-W20')).toBe('20 cm W')
     expect(frame.spotName('S-home')).toBe('home')
     expect(frame.ZONES.find((z) => z.id === 2)!.name).toBe('Desk')
+  })
+})
+
+describe('when /nodes.json cannot be read', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  const reply = (status: number, body: unknown) => () => Promise.resolve({ ok: status === 200, json: () => Promise.resolve(body) })
+  /** Some other layout on screen first, so the fallback is seen to replace it. */
+  const other = () => {
+    const moved = structuredClone(DESK_LAYOUT)
+    moved.frame.strip_m = [1.2, 0.6]
+    moved.frame.zone_split_x_m = 0.6
+    moved.nodes[2].name = 'Elsewhere'
+    return frame.applyLayout(moved)
+  }
+
+  it('uses the file when it is served', async () => {
+    vi.stubGlobal('fetch', reply(200, real))
+    expect(await loadLayout('/nodes.json', 50, DESK_LAYOUT)).toBe('nodes.json')
+    expect(frame.LINK_IDS).toEqual(real.links.map((l) => l.id))
+  })
+
+  it('falls back to the layout the page was built with, not the old square: offline, not found, or malformed', async () => {
+    for (const fetch of [() => Promise.reject(new Error('offline')), reply(404, null), reply(200, { v: 2, nodes: 'none' })]) {
+      expect(other()).toBe(true)
+      vi.stubGlobal('fetch', fetch)
+      expect(await loadLayout('/nodes.json', 50, DESK_LAYOUT)).toBe('contract')
+      expect(frame.STRIP_M).toEqual([1.6, 0.6])
+      expect(frame.NODES.pi5b.name).toBe('Pi B')
+    }
+  })
+
+  it('carries radio/nodes.json in the build as that fallback', async () => {
+    expect(__BUILD_LAYOUT__).toEqual(nodesJson)
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')))
+    expect(other()).toBe(true)
+    expect(await loadLayout()).toBe('contract')
+    expect(frame.LINK_IDS).toEqual(real.links.map((l) => l.id))
   })
 })

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -32,11 +33,16 @@ def box_size(text):
 
 
 def desk_view(config, detector_size, env=None):
-    """The desk view (left / right from the box alone) for a config with "view": "desk"."""
+    """The desk view (left / right from the box alone, or just somebody on one zone) for a config with "view": "desk"."""
     config = dict(config)
+    one_zone = isinstance(config.get("zones"), list) and len(config["zones"]) == 1
     for name, key in DESK_ENV.items():
         text = (os.environ if env is None else env).get(name, "").strip()
         if not text:
+            continue
+        if one_zone and key in ("split", "dead_band"):
+            # One zone has no line across the frame: a value left over from the two-zone desk must not stop the app.
+            logging.getLogger(__name__).warning("%s is ignored: this desk view has one zone, so no split line", name)
             continue
         if key == "side_edge":
             config[key] = text

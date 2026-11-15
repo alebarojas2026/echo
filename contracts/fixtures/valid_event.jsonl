@@ -1,2 +1,10 @@
 {"v":2,"type":"event","t":1763149512200,"seq":120,"src":"live","id":"e123","kind":"enter","info":{"zone":2}}
 {"v":2,"type":"event","t":1763149512300,"seq":121,"src":"live","id":"e124","kind":"recording","info":{"on":true,"session":"s12"}}
+{"v":2,"type":"event","t":1763149512200,"seq":122,"src":"live","id":"e125","kind":"armed","info":{}}
+{"v":2,"type":"event","t":1763149512200,"seq":123,"src":"live","id":"e126","kind":"intrusion","info":{"zone":1}}
+{"v":2,"type":"event","t":1763149512200,"seq":124,"src":"live","id":"e127","kind":"intrusion","info":{"link":"j>pi5:ble"}}
+{"v":2,"type":"event","t":1763149512200,"seq":125,"src":"live","id":"e128","kind":"disarmed","info":{}}
+{"v":2,"type":"event","t":1763149512200,"src":"live","seq":126,"id":"e129","kind":"tamper","info":{"node":"east"}}
+{"v":2,"type":"event","t":1763149512200,"src":"live","seq":127,"id":"e130","kind":"tamper","info":{"node":"h"}}
+{"v":2,"type":"event","t":1763149512200,"src":"live","seq":128,"id":"e131","kind":"tamper_cleared","info":{"node":"east"}}
+{"v":2,"type":"event","t":1763149512200,"src":"live","seq":129,"id":"e132","kind":"passed_by","info":{"zone":1}}

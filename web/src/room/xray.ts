@@ -1,14 +1,49 @@
-import { Color, DataTexture, LinearFilter, Mesh, PlaneGeometry, RGFormat, ShaderMaterial, UnsignedByteType } from 'three'
+import { BufferGeometry, Color, DataTexture, Float32BufferAttribute, LinearFilter, Mesh, RGFormat, ShaderMaterial, UnsignedByteType } from 'three'
 import type { Xray } from './contract'
+import { SIZE_M, STRIP_M, deskEdge, toScene, type Vec3 } from './frame'
 import type { Mirror } from './mirror'
 import { OBJECT, PERSON, PERSON_HOT } from './palette'
-import { v3 } from './stage'
+import { DESK_TOP_M, v3 } from './stage'
 import type { RoomView } from './view'
 
 // The radio X-ray on the floor, drawn from whatever w x h grid arrives (contract sections 5 and 6).
 // People (moving_db) are an amber heat-scale shadow; objects (static_db) are grey-blue hatching. Both ease between states.
 
 const DB_RANGE = 16 // a byte covers 0..16 dB, about 0.06 dB a step
+const LIFT_M = 0.002 // just above the surface it lies on
+
+/**
+ * The surface the X-ray image lies on, for a grid from `origin` (contract metres) `size` metres across: the floor.
+ * On the desk layout the part over the desk lies on the desk top instead, so the tray on the desk shows its
+ * shadow there and not on the floor under the desk; past the desk's far edge there is nothing to draw on. One
+ * texture across both, so the image is continuous from the strip onto the desk. When the spot stops short of the
+ * desk (the gate), the floor between them is left bare: an object at the desk's edge would otherwise throw half
+ * its mark onto the floor below, where it reads as a second object.
+ */
+export function xrayGeometry(origin: [number, number], size: [number, number]): BufferGeometry {
+  const [ox, oy] = origin
+  const [sx, sy] = size
+  const fold = STRIP_M ? Math.min(Math.max(deskEdge() ?? STRIP_M[1], oy), oy + sy) : oy + sy
+  const top = STRIP_M ? Math.min(SIZE_M[1], oy + sy) : oy + sy
+  const pos: number[] = []
+  const uv: number[] = []
+  const quad = (y0: number, y1: number, z: number) => {
+    if (y1 <= y0) return
+    // South-west, south-east, north-east, north-west: counter-clockwise seen from above.
+    const corners: Vec3[] = [[ox, y0, z], [ox + sx, y0, z], [ox + sx, y1, z], [ox, y1, z]]
+    const at = corners.map((c) => toScene(c))
+    for (const i of [0, 1, 2, 0, 2, 3]) {
+      pos.push(...at[i])
+      uv.push((corners[i][0] - ox) / sx, (corners[i][1] - oy) / sy)
+    }
+  }
+  quad(oy, STRIP_M ? Math.min(fold, Math.max(STRIP_M[1], oy)) : fold, LIFT_M)
+  quad(fold, top, DESK_TOP_M + LIFT_M)
+  const g = new BufferGeometry()
+  g.setAttribute('position', new Float32BufferAttribute(pos, 3))
+  g.setAttribute('uv', new Float32BufferAttribute(uv, 2))
+  return g
+}
 
 const UP = 4 // texture texels per grid cell, each way
 
@@ -132,7 +167,7 @@ const fragmentShader = /* glsl */ `
 `
 
 export class XrayLayer {
-  private readonly mesh: Mesh<PlaneGeometry, ShaderMaterial>
+  private readonly mesh: Mesh<BufferGeometry, ShaderMaterial>
   private tex: DataTexture | null = null
   private bytes = new Uint8Array(0)
   private shown = new Float32Array(0) // eased dB, moving then static
@@ -159,8 +194,7 @@ export class XrayLayer {
         uFade: { value: 0 },
       },
     })
-    this.mesh = new Mesh(new PlaneGeometry(1, 1), material)
-    this.mesh.rotation.x = -Math.PI / 2
+    this.mesh = new Mesh(new BufferGeometry(), material)
     this.mesh.visible = false
     this.mesh.renderOrder = -1
     view.scene.add(this.mesh)
@@ -215,10 +249,8 @@ export class XrayLayer {
     this.tex.minFilter = LinearFilter
     this.tex.needsUpdate = true
     this.mesh.material.uniforms.uData.value = this.tex
-    const sizeX = x.w * x.cell_m
-    const sizeY = x.h * x.cell_m
-    this.mesh.scale.set(sizeX, sizeY, 1)
-    this.mesh.position.copy(v3([x.origin_m[0] + sizeX / 2, x.origin_m[1] + sizeY / 2, 0.002]))
+    this.mesh.geometry.dispose()
+    this.mesh.geometry = xrayGeometry(x.origin_m, [x.w * x.cell_m, x.h * x.cell_m])
   }
 
   private ease(dt: number): boolean {

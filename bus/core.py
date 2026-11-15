@@ -49,6 +49,7 @@ QUIET_S = 3.0
 LOSS_LOG_S = 5.0
 STALE_FRAC = 0.4
 OPEN_MARK = ".open"
+BASELINE_MARK = ".baseline"
 RESUME_WITHIN_S = 600
 
 log = logging.getLogger("bus")
@@ -277,8 +278,22 @@ class Bus:
         elif cmd == "record_stop":
             self.stop_session()
         else:
+            if cmd == "baseline":
+                self.mark_baseline(recv_t)
             # Other cmds (truth, label_mode, ...) are kept in the session for scoring.
             self.recorder.write(msg)
+
+    def mark_baseline(self, recv_t: int) -> None:
+        """data/sessions/.baseline says when a baseline was last asked for; with the brain's
+        baseline.json (written when it's done) board/clock.py can tell one is being captured."""
+        mark = self.recorder.folder / BASELINE_MARK
+        try:
+            self.recorder.folder.mkdir(parents=True, exist_ok=True)
+            tmp = mark.with_name(BASELINE_MARK + ".tmp")
+            tmp.write_text(json.dumps({"asked_t": recv_t}), encoding="utf-8")
+            os.replace(tmp, mark)
+        except OSError as e:
+            log.warning("can't mark the baseline (%s)", e)
 
     def start_session(self, args: dict, recv_t: int) -> None:
         session = args.get("session")

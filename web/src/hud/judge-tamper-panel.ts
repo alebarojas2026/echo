@@ -1,15 +1,16 @@
 import type { StateMsg } from '../room/contract'
 import { HALL_BEACONS, NODES } from '../room/frame'
+import { hudLayout } from './layout'
 import './tamper.css'
 
 // The tamper alert (#537, wording #533): while armed, a device that has gone silent is named in plain words, in the
 // fault colour, until it is heard again. It sits above everything in the rail, the arrival card included, and it
 // shows while the sensor is blind too: that is when it matters.
 
-/** "East beacon", from radio/nodes.json. A hall beacon is named by its letter. Never a raw id. */
+/** "Pi B", from radio/nodes.json (the file the hud read, then the room's copy). A hall beacon is named by its letter. Never a raw id. */
 export function deviceName(id: string): string {
   const hall = HALL_BEACONS.find((beacon) => beacon.node === id)
-  return NODES[id]?.name ?? (hall ? `Hall beacon ${hall.id}` : 'A device')
+  return hudLayout.nodes.find((node) => node.id === id)?.name ?? NODES[id]?.name ?? (hall ? `Hall beacon ${hall.id}` : 'A device')
 }
 
 /** "East beacon unplugged while armed", or "" when nothing is silent. */

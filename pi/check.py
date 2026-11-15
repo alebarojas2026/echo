@@ -3,7 +3,7 @@
     python3 -m pi.check                 # no sudo; exit 1 if anything failed
     python3 -m pi.check --node pi5b     # on Pi B (default: RADIO_NODE from .env, else pi5)
 
-Bluetooth powered, the radio node running and hearing the E and W beacons and sending to the
+Bluetooth powered, the radio node running and hearing every beacon the layout gives it and sending to the
 board, the Ethernet link to the board, and the sensing hotspot. Pi B has no cable and no hotspot of its
 own: it checks its two services and that it's joined to Pi A's hotspot. Each FAIL line says what to run.
 It prints no device address: only the contract's addresses (CONTRACTS.md section 2).
@@ -17,9 +17,25 @@ ETH = os.environ.get("ETH_IFACE", "eth0")
 WIFI = os.environ.get("SENSING_IFACE", "wlan0")
 UNIT = "radio-sight-radio-node"
 
-# Pi A's line lists east and west first; more links (Pi B's beacon, #460) may follow before the ";".
-STATUS = re.compile(r"\[pi\.radio_node\] east>pi5:ble (?P<east>[\d.]+)/s, west>pi5:ble (?P<west>[\d.]+)/s"
-                    r"(?:, [^;]*)?; sent (?P<sent>\d+), not sent (?P<failed>\d+)(?: \((?P<why>[^)]*)\))?")
+# Pi A's status line: every Bluetooth link it hears with its rate (radio/nodes.json's, whatever the layout holds),
+# then the sends.
+STATUS = re.compile(r"\[pi\.radio_node\] (?P<rates>\S+>\S+:ble [\d.]+/s[^;]*)"
+                    r"; sent (?P<sent>\d+), not sent (?P<failed>\d+)(?: \((?P<why>[^)]*)\))?")
+
+
+def beacon_of(link: str):
+    """(letter, advert data) of the beacon a link listens to, when it is a beacon with no scanner of its
+    own (an ESP32); None for a Pi's beacon, whose silence is that Pi's node, and for an unknown link."""
+    try:
+        from radio.nodes import DOC
+    except Exception:   # no layout to read: every link is treated as a Pi's
+        return None
+    tx = link.split(">")[0]
+    roles = next((n.get("roles", []) for n in DOC["nodes"] if n["id"] == tx), None)
+    if roles is None or "receiver" in roles:
+        return None
+    payload = next((p for p in DOC["beacons"]["payloads"] if p["node"] == tx), None)
+    return (payload["id"], payload["data_hex"][4:]) if payload else None
 
 
 def run(*cmd: str) -> tuple[int, str]:
@@ -58,24 +74,18 @@ def radio_status(run=run):
         return False, "radio node: no status line in the last 30 s", \
             f"sudo journalctl -u {UNIT} -n 20 --no-pager (no lines at all: run this check with sudo)"
     m = lines[-1]
-    east, west, failed = float(m["east"]), float(m["west"]), int(m["failed"])
-    # Links after west on the line: Pi B's beacon (pi5b>pi5:ble) in the desk layout.
-    others = [(link, float(rate)) for link, rate in LINK_RATE.findall(m.group(0))
-              if link not in ("east>pi5:ble", "west>pi5:ble")]
-    rates = ", ".join([f"east>pi5:ble {east:.1f}/s", f"west>pi5:ble {west:.1f}/s"]
-                      + [f"{link} {rate:.1f}/s" for link, rate in others]) + f", not sent {failed}"
+    failed = int(m["failed"])
+    heard = [(link, float(rate)) for link, rate in LINK_RATE.findall(m["rates"])]
+    rates = ", ".join(f"{link} {rate:.1f}/s" for link, rate in heard) + f", not sent {failed}"
     if failed:
-        return False, f"radio node: {rates} ({m['why'] or 'send failed'})", \
-            "the Ethernet link is down: see the Ethernet line below"
-    silent = [name for name, rate in (("E", east), ("W", west)) if rate <= 0]
+        return False, f"radio node: {rates} ({m['why'] or 'send failed'})",             "the Ethernet link is down: see the Ethernet line below"
+    # A beacon with no scanner of its own (an ESP32) is named by its letter; a Pi's beacon points at that Pi's check.
+    silent = [beacon_of(link) for link, rate in heard if rate <= 0 and beacon_of(link)]
     if silent:
-        return False, f"radio node: {rates}", \
-            f"nothing heard from beacon {' and '.join(silent)}: check it's powered and advertising " \
-            "(a phone scanner must show company 0xFFFF, data 525345 for E, 525357 for W)"
-    quiet = [link for link, rate in others if rate <= 0]
+        return False, f"radio node: {rates}",             f"nothing heard from beacon {' and '.join(letter for letter, _ in silent)}: check it's powered and advertising "             f"(a phone scanner must show company 0xFFFF, data {', '.join(f'{data} for {letter}' for letter, data in silent)})"
+    quiet = [link for link, rate in heard if rate <= 0]
     if quiet:
-        return False, f"radio node: {rates}", \
-            f"nothing heard on {', '.join(quiet)}: is Pi B's node running? On Pi B: python3 -m pi.check --node pi5b"
+        return False, f"radio node: {rates}",             f"nothing heard on {', '.join(quiet)}: is Pi B's node running? On Pi B: python3 -m pi.check --node pi5b"
     return True, f"radio node: {rates}", None
 
 

@@ -1,12 +1,15 @@
 import { changingText } from './changing-text'
-import { zoneName } from './judge-moment'
+import { zoneIn } from './layout'
 import type { StateMsg } from '../room/contract'
 export function cameraLine(state: StateMsg | null) {
   if (!state) return ''
   if (state.cam === 'off') return 'Camera unplugged · radio only'
   if (state.cam === 'stalled') return 'Camera stalled · radio only'
+  // Anything else that is not "on" (the board's "unknown": the camera watcher has gone quiet, #651) is not a reading
+  // of the camera, so it is never said to be unplugged.
+  if (state.cam !== 'on') return 'Camera status unknown'
   const teacher = state.teacher
-  return 'Camera on · teaching the radio' + (teacher?.present ? ` · the camera sees them in ${zoneName(teacher.zone)}${state.pred?.zone === teacher.zone ? ' · agrees' : ''}` : '')
+  return 'Camera on · teaching the radio' + (teacher?.present ? ` · the camera sees them ${zoneIn(teacher.zone)}${state.pred?.zone === teacher.zone ? ' · agrees' : ''}` : '')
 }
 export function mountPanel(root: HTMLElement) {
   root.innerHTML = '<p data-testid="cam-status"></p><p data-testid="camera-unplug" hidden>Camera unplugged · Radio alone is tracking the room</p>'

@@ -1,0 +1,15 @@
+.placement-check { margin:24px 0; padding:24px 0; border-block:1px solid var(--edge); display:grid; gap:16px; }
+.placement-check > p { color:var(--text-2); }
+.placement-check > button { justify-self:start; }
+.placement-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 32px; }
+.placement-link { min-width:0; display:grid; gap:8px; }
+.placement-link h3 { font-size:28px; font-weight:500; margin:0; }
+.placement-link > p { display:flex; justify-content:space-between; gap:16px; }
+.placement-track { position:relative; height:8px; background:var(--edge); margin:8px 0; }
+.placement-track span { display:block; height:100%; background:var(--text-2); }
+.placement-track i { position:absolute; width:2px; height:20px; top:-6px; background:var(--text); }
+.placement-link[data-seen="true"] .placement-track span { background:var(--person); }
+.placement-link .placement-result { justify-content:flex-start; align-items:center; color:var(--text-2); }
+.placement-result svg { flex-shrink:0; width:28px; height:28px; visibility:hidden; fill:none; stroke:var(--person); stroke-width:2; }
+.placement-link[data-seen="true"] .placement-result svg { visibility:visible; }
+@media(max-width:1100px) { .placement-links { grid-template-columns:1fr; } }
