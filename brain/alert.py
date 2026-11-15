@@ -354,6 +354,7 @@ LEAN_DB = 4.0          # leaning aside: the crossing lines come back up by this 
 LEAN_SHARE = 0.5       # ... and by this share of what the person standing there took off them
 LEAN_MIN_MS = 300      # for at least this long
 LEAN_MAX_MS = 2500     # and no longer: a recovery that stays is the person leaving
+STEP_MIN_MS = 300      # on a layout with a presence line: stepping out of the line for at least this long, and back, is the check-in
 STOOD_MS = 3000        # "standing there" is the lines' drop smoothed over about this long
 
 
@@ -386,6 +387,13 @@ class Watch:
         self._stood: Optional[float] = None    # the crossing lines' drop while the person stands there, smoothed
         self._lean_t: Optional[int] = None     # since when the lines have been back up
         self._lean_last: Optional[int] = None
+        # Set by the brain on a layout with a presence line: {"link", "return_ms"}. There the one line's
+        # decision is steady by itself, so the alert follows it tick for tick with no smoothing (_on_line):
+        # whenever the state's alert is counting or check_on, the pred in the same state is a person,
+        # present and still.
+        self.line: Optional[dict] = None
+        self._still_now = False                # the last decision was a person standing still
+        self._gone_t: Optional[int] = None     # since when the decisions have said nobody
 
     def on_crossing(self, t: int, drop_db: Optional[float], quiet_db: float = 0.0, link: Optional[str] = None) -> None:
         """One decision's drop of the lines that cross the spot (their median drops, averaged), on a
@@ -399,6 +407,8 @@ class Watch:
         dt, self._lean_last = (0 if self._lean_last is None else max(0, t - self._lean_last)), t
         if drop_db is None:
             return
+        if self.line:
+            return   # no lean there: a body leaning aside stays in the line. The check-in is stepping out and back (_on_line)
         if self._stood is None or not (self.still_ms > 0 or self.alerting or self._lean_t is not None):
             self._stood, self._lean_t = (drop_db if self._person else None), None
             return
@@ -423,6 +433,43 @@ class Watch:
                 self.led.smile()
                 self._clear()
 
+    def _on_line(self, t: int, dt: int, pred: dict) -> None:
+        """One decision on a layout with a presence line. The timer counts only while this decision is a
+        person standing still. The word moving (already held for motion_hold_s by the brain) puts it back
+        to zero and ends an alert that was on. Nobody stops the count at once and shows no alert. While an
+        alert is on, the person stepping out of the line (for STEP_MIN_MS or more) and back within
+        return_ms is the check-in: the alert ends and the timer starts again. Not back by then is the
+        person gone: the alert ends with why "left"."""
+        here = bool(pred.get("present")) and pred.get("kind") == "person"
+        zone = (pred.get("zone") or 0) if here else 0
+        self._kind, self._person = pred.get("kind") or "none", here
+        self._still_now = here and pred.get("motion") != "moving"
+        away = None if self._gone_t is None else t - self._gone_t
+        if here and self.alerting and away is not None and STEP_MIN_MS <= away <= self.line["return_ms"]:
+            self.checkin = {"t": t, "link": self.line["link"]}
+            self._events.append(("checkin", {"zone": self.alert_zone or zone, "link": self.line["link"]}))
+            self.led.smile()
+            self._clear("checkin")
+        if zone != self.zone:
+            self._reset_timer("zone" if zone else "gone")
+            self.zone = zone
+        elif not here:
+            self._reset_timer("gone")
+        elif not self._still_now:
+            self._reset_timer("moving")
+            if self.alerting:
+                self._clear("moved")
+        else:
+            self.still_ms += dt
+        self._gone_t = None if here else (t if self._gone_t is None else self._gone_t)
+        if self.alerting and self._gone_t is not None and t - self._gone_t > self.line["return_ms"]:
+            self._clear("left")
+        limit = self.limits.get(zone) if self._still_now else None
+        if not self.alerting and limit is not None and self.still_ms >= limit * 1000:
+            self.alerting, self.alert_zone = True, zone
+            self._events.append(("alert_on", {"zone": zone}))
+            self.led.alert(True)
+
     def on_rssi(self, msg: dict) -> None:
         t = msg["recv_t"]
         if self.checkin_rule.push(t, msg["link"], float(msg["dbm"])) and self._person:
@@ -444,6 +491,8 @@ class Watch:
         if raw_zone != self._raw_zone:             # the check-in wants pred.zone itself unchanged
             self._raw_zone = raw_zone
             self.checkin_rule.zone_changed(t)
+        if self.line:
+            return self._on_line(t, dt, pred)
         self._recent.append((raw_zone, pred.get("kind") or "none"))
         zone = _majority([z for z, _ in self._recent], self.zone, self.settings.smooth_majority)
         self._kind = _majority([k for _, k in self._recent], self._kind, self.settings.smooth_majority)
@@ -478,17 +527,18 @@ class Watch:
 
     def reset_alert(self) -> None:
         """The reset_alert cmd: clear the alert and start the still timer again."""
-        self._clear()
+        self._clear("reset")
 
     def reset(self) -> None:
         """The reset cmd (between judges): reset_alert, and forget the last check-in."""
-        self._clear()
+        self._clear("reset")
         self.checkin = None
 
-    def _clear(self) -> None:
+    def _clear(self, why: Optional[str] = None) -> None:
+        """why (only on a layout with a presence line): checkin | moved | left | reset, on the alert_off event."""
         self.still_ms = 0
         if self.alerting:
-            self._events.append(("alert_off", {"zone": self.alert_zone}))
+            self._events.append(("alert_off", {"zone": self.alert_zone, **({"why": why} if why and self.line else {})}))
             self.led.alert(False)
         self.alerting, self.alert_zone = False, None
 
@@ -500,6 +550,9 @@ class Watch:
     def alert_block(self) -> dict:
         """The state's "alert" block."""
         still_s = round(self.still_ms / 1000, 1)
+        if self.line and not self._still_now:
+            # Nobody there, or somebody moving: nothing is counting and no alert shows, whatever is latched.
+            return {"state": "none", "zone": None, "still_s": 0, "limit_s": None}
         if self.alerting:
             return {"state": "check_on", "zone": self.alert_zone, "still_s": still_s,
                     "limit_s": self.limits.get(self.alert_zone)}

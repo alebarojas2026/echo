@@ -144,6 +144,12 @@ def template(kind: str, info: dict) -> str | None:
     device = _device(info.get("node"))
     if spot():
         spot_sentences = {
+            "alert_on": (f"No movement {zone or 'here'} for {f'{limit} seconds' if limit else 'a while'}. "
+                         "Step aside and back to say you're okay."),
+            # why the alert ended (the brain says so on a layout with a presence line): they moved, they left,
+            # or they stepped aside and back (the check-in has its own sentence)
+            **({"alert_off": "They moved, so the alert is cleared."} if info.get("why") == "moved" else {}),
+            **({"alert_off": "They left while the alert was up."} if info.get("why") == "left" else {}),
             "object_on": "Something was left in the Wi-Fi line.",
             "object_off": "The obstruction in the Wi-Fi line is gone.",
             "advice": "Clear the obstruction or move the receiving device, then measure the Wi-Fi again.",

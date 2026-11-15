@@ -148,7 +148,8 @@ def test_the_presence_block_names_a_line_and_its_numbers():
     doc = json.loads((FIXTURES.parent.parent / "radio" / "nodes.json").read_text(encoding="utf-8"))
     line = {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble"}
     numbers = {"on_db": 7, "off_db": 4, "second_hold_s": 5, "object_db": 3, "object_max_db": 10,
-               "object_spread_db": 1.0, "object_hold_s": 3, "moving_spread_db": 2.0}
+               "object_spread_db": 1.0, "object_hold_s": 3, "moving_spread_db": 2.0,
+               "still_spread_db": 1.6, "motion_hold_s": 1.5, "checkin_return_s": 8}
     for presence in (line, {"line": line["line"]}, {**line, **numbers}, {**line, "object_max_db": None}):
         assert check.errors({**doc, "presence": presence}, "nodes") == [], presence
     for bad, where in (({"second": line["second"]}, "$.presence"), ({"line": "pi5>nowhere:wifi"}, "$.presence.line"),
