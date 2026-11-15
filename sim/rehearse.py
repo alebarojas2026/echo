@@ -100,7 +100,7 @@ def recap_shown(s) -> bool:
     recap limits (section 6). With no model in the rehearsal it is the template recap."""
     n = s["narration"]
     return bool(n and n["source"] == "template" and recaps.problem(n["text"], [n["text"]], camera_off=True) is None
-                and "router" in n["text"] and "zone" in n["text"])
+                and "router" in n["text"] and any(name.lower() in n["text"].lower() for name in LAYOUT.names.values()))
 
 
 def no_model(messages):

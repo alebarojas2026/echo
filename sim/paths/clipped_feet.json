@@ -1,15 +1,17 @@
 {
   "name": "clipped_feet",
-  "about": "Walk in and stand in zone 2, then zone 1. From 6 s to 9 s the camera cannot see the feet, so labels are clipped (zone, foot point and motion null).",
+  "about": "Walk in and stand at the third tour stop (the square: zone 2; the strip: the left), then the fourth (zone 1; the right). From 6 s to 9 s the camera cannot see the feet, so labels are clipped (zone, foot point and motion null).",
   "duration_s": 18,
   "person": [
-    {"t": 0, "x": 2.0, "y": 1.5},
-    {"t": 1, "x": 1.5, "y": 1.5},
-    {"t": 10, "x": 1.5, "y": 1.5},
-    {"t": 12, "x": 0.5, "y": 1.5},
-    {"t": 16, "x": 0.5, "y": 1.5},
-    {"t": 17, "x": 0.0, "y": 1.5},
+    {"t": 0, "zone": "tour3", "outside": "near"},
+    {"t": 1, "zone": "tour3"},
+    {"t": 10, "zone": "tour3"},
+    {"t": 12, "zone": "tour4"},
+    {"t": 16, "zone": "tour4"},
+    {"t": 17, "zone": "tour4", "outside": "near"},
     {"t": 17.1, "x": null}
   ],
-  "clipped": [{"t_on": 6, "t_off": 9}]
+  "clipped": [
+    {"t_on": 6, "t_off": 9}
+  ]
 }

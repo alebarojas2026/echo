@@ -8,6 +8,12 @@ from sim import fake, send
 from sim.wire import encoder
 
 
+@pytest.fixture(autouse=True)
+def _on_the_square(square):
+    """These tests check rules with the square's points and numbers, so they pin the square
+    (sim/tests/conftest.py) whichever layout radio/nodes.json holds."""
+
+
 @pytest.fixture
 def bus():
     """A stand-in for the bus: a UDP socket on a free local port."""
