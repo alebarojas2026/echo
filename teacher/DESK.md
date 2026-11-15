@@ -15,13 +15,27 @@ torso, never feet, so there is no floor point and no corner clicking. The teache
   around the split line, when the box is cut by the left or right edge of the frame, or when more
   than one person is in view. A box that runs off the top or bottom is normal here and is kept.
 
+## One spot (a layout with one zone)
+
+When `radio/nodes.json` has `frame.strip_m`, no `frame.zone_split_x_m` and exactly one zone, the
+teacher only says **somebody** or **nobody**. There is no side and no line across the frame:
+
+- One person in view, near enough: `present` true, `zone` the one zone, wherever the box sits
+  across the frame. No dead band, so nothing is dropped in the middle.
+- Standing back is handled exactly as above: `present` false, `clipped` true, until they step in.
+- `clipped` is true only for a box cut by a side edge of the frame (unless `--keep-side-edge`) or
+  more than one person in view.
+- The file has `"zones": [1]` and no `split` or `dead_band`. `--cam-x-m` and `--dead-band` mean
+  nothing here, and `TEACHER_DESK_SPLIT` and `TEACHER_DESK_DEAD_BAND` are ignored with a log line.
+  The same two commands make it: `--desk`, then `--near`.
+
 The floor view (clicked corners, foot points) is unchanged; which one runs depends only on the
 calibration file the app is given.
 
 ## The file
 
-On the board, with the desk layout's `radio/nodes.json` (it must have `frame.strip_m` and
-`frame.zone_split_x_m`; the square has no left and right and is refused):
+On the board, with the desk layout's `radio/nodes.json` (it must have `frame.strip_m`, and either
+`frame.zone_split_x_m` or one zone; the square is refused):
 
 ```sh
 python -m teacher.calibrate --desk            # writes teacher/calib.json, numbers only

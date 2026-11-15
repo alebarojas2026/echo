@@ -12,7 +12,8 @@ import time
 def area_of(config):
     """(width, height, split_x, split_y) in metres for a calibration config. The area is where a
     person can stand: the square (side_m, split in four) or, with area_m and zone_split_m from
-    nodes.json, the desk layout's strip, split along x only (split_y None)."""
+    nodes.json, the desk layout's strip, split along x only (split_y None). A strip that is one
+    spot has no split at all (split_x None too): one zone."""
     side = config.get("side_m", 2.0)
     w, h = config.get("area_m", [side, side])
     sx, sy = config.get("zone_split_m", [w / 2, h / 2])
@@ -21,10 +22,13 @@ def area_of(config):
 
 def zone_in(area, x, y):
     """CONTRACTS.md section 3: 0 outside the area; the square's 1-4 (1 + (x >= sx) + 2*(y < sy)),
-    or the strip's 1-2 (1 + (x >= sx)) when there is no split along y."""
+    or the strip's 1-2 (1 + (x >= sx)) when there is no split along y; 1 anywhere inside a strip
+    with no split (one spot)."""
     w, h, sx, sy = area
     if not (0 <= x <= w and 0 <= y <= h):
         return 0
+    if sx is None:
+        return 1
     return 1 + int(x >= sx) + (2 * int(y < sy) if sy is not None else 0)
 
 
@@ -66,6 +70,7 @@ def _number(value, name, low, high):
 
 class DeskView:
     """Left, right or nobody from the person box alone, for a webcam on the desk facing the strip.
+    On a layout with one zone (one spot): somebody or nobody, with no side.
 
     From that close the camera sees a torso, never feet, so there is no floor point: only where the
     box's centre sits across the frame. The config (written by `python -m teacher.calibrate --desk`
@@ -82,22 +87,31 @@ class DeskView:
                  `python -m teacher.calibrate --near` (at the desk edge, then one step back).
                  Without it nobody is labelled present: the teacher does not guess a distance.
     A box cut by the top or bottom edge is normal here and is kept.
+    One zone: zones is [that zone] and the file has no split and no dead_band. There is no line, so
+    nothing is dropped around one; side_edge, near_width and the rest work as above.
     """
     def __init__(self, config, image_size):
         self.width, self.height = image_size
         if self.width <= 0 or self.height <= 0:
             raise ValueError("invalid detector dimensions")
-        self.split = _number(config.get("split"), "split", 0.05, 0.95)
-        self.dead_band = _number(config.get("dead_band"), "dead_band", 0.0, 0.4)
+        zones = config.get("zones")
+        self.one_zone = isinstance(zones, list) and len(zones) == 1
+        if self.one_zone:
+            if config.get("split") is not None or config.get("dead_band") not in (None, 0, 0.0):
+                raise ValueError("desk view with one zone has no split line and no dead band")
+            self.split, self.dead_band = 0.5, 0.0   # the middle of the frame, only for metres along the strip
+        else:
+            self.split = _number(config.get("split"), "split", 0.05, 0.95)
+            self.dead_band = _number(config.get("dead_band"), "dead_band", 0.0, 0.4)
         self.view_m = _number(config.get("view_m"), "view_m", 0.1, 100.0)
         self.mirror, self.side_edge = config.get("mirror"), config.get("side_edge", "clipped")
         self.near_width = (None if config.get("near_width") is None
                            else _number(config["near_width"], "near_width", 0.02, 1.0))
-        zones = config.get("zones")
         if not isinstance(self.mirror, bool) or self.side_edge not in ("clipped", "keep"):
             raise ValueError("desk view needs mirror true or false and side_edge clipped or keep")
-        if not isinstance(zones, list) or len(zones) != 2 or zones[0] == zones[1]                 or not all(isinstance(z, int) and not isinstance(z, bool) and z > 0 for z in zones):
-            raise ValueError("desk view zones must be the two zone ids either side of the split")
+        if not isinstance(zones, list) or len(zones) not in (1, 2) or len(set(map(repr, zones))) != len(zones) \
+                or not all(isinstance(z, int) and not isinstance(z, bool) and z > 0 for z in zones):
+            raise ValueError("desk view zones must be the two zone ids either side of the split, or the one zone")
         self.zones = tuple(zones)
 
     def near(self, width):
@@ -113,6 +127,8 @@ class DeskView:
         cut = x <= 0 or x + width >= self.width
         if abs(offset) < self.dead_band or (cut and self.side_edge == "clipped"):
             zone = None
+        elif self.one_zone:
+            zone = self.zones[0]
         else:
             zone = self.zones[int((offset > 0) != self.mirror)]
         return zone, (-offset if self.mirror else offset) * self.view_m
