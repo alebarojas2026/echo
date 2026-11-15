@@ -61,6 +61,17 @@ export const HOME_SPOT = 'S-home'
 /** Where the tray goes for the object test: nodes.json's tray_spots, in order. */
 export const TRAY_SPOTS: Vec3[] = [[1.0, 0.2, 1.0]]
 
+/** A beacon far outside the layout (nodes.json hall.beacons): its node id, its letter, and where it is in the
+ *  layout's frame, or null until someone places it. */
+export interface HallBeacon {
+  node: string
+  id: string
+  xyz: Vec3 | null
+}
+
+/** nodes.json's optional hall beacons; empty when the file has none. */
+export const HALL_BEACONS: HallBeacon[] = []
+
 export interface LinkParts {
   tx: NodeId
   rx: NodeId
@@ -213,6 +224,11 @@ export function applyLayout(json: unknown): boolean {
     (r): r is { id: string; xyz_m: Vec3 } => typeof r?.id === 'string' && isVec3(r.xyz_m),
   )
   const trays = (Array.isArray(j.tray_spots) ? (j.tray_spots as Json[]) : []).map((t) => t?.xyz_m).filter(isVec3)
+  // Optional, and never a reason to refuse the file: a malformed beacon is left out.
+  const hallList = ((j.hall as Json | undefined)?.beacons ?? []) as Json[]
+  const hall: HallBeacon[] = (Array.isArray(hallList) ? hallList : [])
+    .filter((b) => typeof b?.node === 'string' && /^[a-z0-9]+$/.test(b.node) && !ids.has(b.node))
+    .map((b) => ({ node: b.node as string, id: typeof b.id === 'string' ? b.id : (b.node as string).toUpperCase(), xyz: isVec3(b.xyz_m) ? b.xyz_m : null }))
 
   SIZE_M = [size[0], size[1]]
   STRIP_M = strip ? [strip[0], strip[1]] : null
@@ -226,6 +242,7 @@ export function applyLayout(json: unknown): boolean {
     for (const r of spots) ROUTER_SPOTS[r.id] = r.xyz_m
   }
   if (trays.length) replace(TRAY_SPOTS, trays)
+  replace(HALL_BEACONS, hall)
   return true
 }
 
