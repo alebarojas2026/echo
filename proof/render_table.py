@@ -103,6 +103,28 @@ def measurements(proof):
             d += f"; 95% CI {100*p['ci95'][0]:.1f}–{100*p['ci95'][1]:.1f}%"
         extras.append((f"Device subset: {row['name']}",f"zone {z}; entry {d}" if z!="__" or d!="__" else "__",
                        "Retrained masked links; nodes: " + ", ".join(row["nodes"]),zn + "; " + n.replace("decisions","entries")))
+    trials = proof.get("security_trials") or {}
+    for block, yes, n, ci, title, unit in [
+        ("passers_by","false_intrusions","trials","ci95","Outside-only passes raising intrusion","passes"),
+        ("passers_by","still_alerts","still_trials","still_ci95","Crowd no-movement alerts","still trials"),
+        ("tamper","detected","unplugs","ci95","Tamper detected within 5 s","unplugs")]:
+        row = trials.get(block) or {}
+        value, count = agreement({"correct":row.get(yes),"total":row.get(n)})
+        bounds = row.get(ci)
+        if value != "__" and bounds: value += f"; 95% CI {100*bounds[0]:.1f}–{100*bounds[1]:.1f}%"
+        extras.append((title,value,"Confirmed operator trials; see proof/TRIALS.md",count.replace("decisions",unit)))
+    for block, key, title in [("passers_by","intrusions_per_hour","Crowd intrusions per hour"),("tamper","false_per_hour","False tamper events per hour")]:
+        row = trials.get(block) or {}
+        extras.append((title,display(row.get(key)),"Events / observed armed exposure",display(row.get("duration_s")," s")))
+    lesson = trials.get("lesson") or {}
+    for key in ("shortest_s","longest_s","median_s"):
+        extras.append(("Lesson " + key.replace("_s",""),display(lesson.get(key)," s"),"Start to 8 of last 10; recorded board states","__"))
+    for row in lesson.get("sessions") or []:
+        extras.append(("Lesson: " + row["session"],display(row.get("ready_s")," s"),"Start to trained model agreeing on 8 of last 10","1 lesson"))
+    value, count = agreement(lesson.get("unplugged_walk") or {})
+    bounds = (lesson.get("unplugged_walk") or {}).get("ci95")
+    if value != "__" and bounds: value += f"; 95% CI {100*bounds[0]:.1f}–{100*bounds[1]:.1f}%"
+    extras.append(("Post-unplug zone agreement",value,"Operator-confirmed positions; camera off",count.replace("decisions","states sampled at 200 ms")))
     return primary, extras
 
 
