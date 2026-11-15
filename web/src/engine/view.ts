@@ -1,4 +1,4 @@
-import { blocks, count, deviceViews, headlines, proveWords, seenHeads, timings, toolWord, watchLine, type AskLast, type Block, type ChainInfo, type EngineState, type Layout, type Privacy, type ProveResult, type TailRecord } from './model'
+import { blocks, count, deviceViews, headlines, hearsLines, proveAsk, proveWords, seenHeads, timings, toolWord, watchLine, type AskLast, type Block, type ChainInfo, type EngineState, type Layout, type Privacy, type ProveResult, type TailRecord } from './model'
 import { engineState, type Source } from './source'
 
 // The engine room: a second screen beside the judge's, showing the machinery as it runs. Three devices, the
@@ -47,7 +47,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
 
   // ---- top: what this is, where the data comes from, and what is not watching
   const top = el('header', 'eng-top')
-  const title = el('h1', '', 'Radio Sight')
+  const title = el('h1', '', 'Echo')
   title.append(el('span', '', 'Engine room'))
   const badge = el('p', 'eng-source')
   badge.dataset.testid = 'engine-source'
@@ -118,7 +118,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
   let ask: AskLast | null = null
   let privacy: Privacy | null = null
   let seen: { seq: number; hash: string }[] = []
-  let proved: { result: ProveResult | null; at: number } | null = null
+  let proved: { result: ProveResult | null; refused: string | null; at: number } | null = null
   let proving = false
   const heardAt = new Map<string, number>()
   const signedSeq = new Map<string, number | null>()
@@ -165,7 +165,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
       const quiet = !v.heard || !!v.witness?.silent
       d.card.dataset.state = quiet ? 'quiet' : 'ok'
       say(d.rate, v.hz === null ? (v.hears.length ? '__ readings a second' : 'Sends its signal; hears no line') : `${v.hz} readings a second`)
-      const lines = v.hears.map((h) => `${h.from} over ${h.radio}: ${h.hz === null ? 'no reading' : `${h.hz} a second`}`)
+      const lines = hearsLines(v.hears)
       if (d.hears.dataset.lines !== lines.join('|')) {
         d.hears.dataset.lines = lines.join('|')
         d.hears.replaceChildren(...lines.map((l) => el('li', '', l)))
@@ -235,7 +235,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
       proveSay.classList.add('eng-fault')
       copy.hidden = true
       say(proveNote, PROVE_NOTE)
-      return say(proveSay, 'The board did not answer, so nothing was checked.')
+      return say(proveSay, proved.refused ? `The board says: ${proved.refused}. Nothing was checked.` : 'The board did not answer, so nothing was checked.')
     }
     const { words, fault } = proveWords(proved.result)
     proveSay.classList.toggle('eng-fault', fault)
@@ -309,9 +309,10 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
     if (proving) return
     proving = true
     draw()
-    const result = await source.prove()
+    // The record to alter is one on the strip, so the copy can be drawn beside it.
+    const answer = await source.prove(proveAsk(tail))
     proving = false
-    proved = { result, at: performance.now() }
+    proved = { result: answer && 'error' in answer ? null : answer, refused: answer && 'error' in answer ? answer.error : null, at: performance.now() }
     draw()
   }
   proveButton.addEventListener('click', () => void prove())

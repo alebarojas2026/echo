@@ -380,7 +380,8 @@
   display: flex;
   gap: 24px;
   color: var(--text-2);
-  font: 500 24px/1 'Hanken Grotesk', system-ui, sans-serif;
+  /* 28 px: anything a judge reads is at least that (AGENTS.md Style). */
+  font: 500 28px/1 'Hanken Grotesk', system-ui, sans-serif;
   pointer-events: none;
   /* Inside the hall a light desk top can pass behind it: the same knockout as the device names keeps it readable. */
   -webkit-text-stroke: 6px var(--bg);
@@ -474,6 +475,16 @@
   gap: 12px;
   color: var(--text);
   font: 600 28px/1 'Hanken Grotesk', system-ui, sans-serif;
+}
+
+/* "2 new beacons: H, J" is set-up talk: shown to whoever is placing the kit (align mode) or has the operator's
+   controls open (?op=1, the O key), never to a judge. */
+.room:not([data-align='on']):not([data-op='1']) .room-tray {
+  display: none;
+}
+
+html[data-hud-operator='open'] .room:not([data-align='on']):not([data-op='1']) .room-tray {
+  display: flex;
 }
 
 .room-tray-chip {

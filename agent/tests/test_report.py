@@ -300,6 +300,7 @@ def test_never_armed_is_404(tmp_path):
     server.shutdown()
 
 
-def test_the_routes_are_the_two_get_endpoints(tmp_path):
+def test_the_routes_are_the_three_get_endpoints(tmp_path):
     from agent import endpoints
-    assert sorted(endpoints.routes(tmp_path / "store.db", "http://127.0.0.1:9")) == [("GET", "/history"), ("GET", "/report")]
+    assert sorted(endpoints.routes(tmp_path / "store.db", "http://127.0.0.1:9")) == [
+        ("GET", "/ask/last"), ("GET", "/history"), ("GET", "/report")]
