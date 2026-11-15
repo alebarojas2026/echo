@@ -17,8 +17,14 @@ record_stop, so a bus that crashed or was restarted carries on appending to the
 same file (if it was written to in the last RESUME_WITHIN_S seconds) and says so.
 
 Every 30 s the log has a line per producer (received, lost, restarts) and one line with the rssi
-rate of each link in radio/nodes.json, naming the links that sent nothing. A link that was flowing
-and goes QUIET_S without a reading gets a warning at once, and one line when it's back.
+rate of each link in radio/nodes.json, naming the links that sent nothing and, once the brain has
+written data/sessions/baseline.json, the links under 0.4 x the rate the baseline counted (the
+stale rule, CONTRACTS.md section 6). A link that was flowing and goes QUIET_S without a reading
+gets a warning at once, and one line when it's back.
+
+Losses are logged at most once per LOSS_LOG_S per producer, with the total since the last line:
+in a crowded hall a reader can lose every other advert, and a log line per gap would cost more
+than the messages themselves.
 
 A producer is one sending socket (address and port). Each process should send
 from a single socket for its whole life, or its seq gaps can't be counted.
@@ -40,6 +46,8 @@ SESSION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 PURPOSES = {"train", "heldout", "object", "crowd", "demo"}
 MAX_DATAGRAM = 65535
 QUIET_S = 3.0
+LOSS_LOG_S = 5.0
+STALE_FRAC = 0.4
 OPEN_MARK = ".open"
 RESUME_WITHIN_S = 600
 
@@ -52,6 +60,16 @@ def load_link_ids(path=REPO / "radio" / "nodes.json") -> list:
         return [link["id"] for link in json.loads(Path(path).read_text(encoding="utf-8"))["links"]]
     except (OSError, ValueError, KeyError, TypeError):
         return []
+
+
+def load_expected(path) -> dict:
+    """{link: expected_hz} from the brain's baseline.json; {} when there's none or it can't be read."""
+    try:
+        links = json.loads(Path(path).read_text(encoding="utf-8"))["links"]
+        return {k: float(v["expected_hz"]) for k, v in links.items()
+                if isinstance(v, dict) and isinstance(v.get("expected_hz"), (int, float)) and v["expected_hz"] > 0}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
 
 
 def now_ms() -> int:
@@ -72,6 +90,16 @@ class Producer:
         self.lost = 0
         self.restarts = 0
         self.last_seq = None
+        self.unsaid = 0          # lost since the last loss line
+        self.said_at = None      # recv_t of the last loss line
+
+    def loss_line(self, gap: int, now_ms: int) -> int:
+        """Count `gap` toward the next loss line; returns how many to say now (0 = not yet)."""
+        self.unsaid += gap
+        if self.said_at is not None and now_ms - self.said_at < LOSS_LOG_S * 1000:
+            return 0
+        said, self.unsaid, self.said_at = self.unsaid, 0, now_ms
+        return said
 
     def see(self, seq) -> int:
         """Count one message. Returns how many were lost just before it."""
@@ -212,7 +240,10 @@ class Bus:
             self.link_last[link] = recv_t
         gap = producer.see(msg.get("seq"))
         if gap:
-            log.info("%s (%s) lost %d before seq %s", key, producer.type, gap, msg.get("seq"))
+            lost = producer.loss_line(gap, recv_t)
+            if lost:
+                log.info("%s (%s) lost %d before seq %s (%d lost in all)", key, producer.type, lost,
+                         msg.get("seq"), producer.lost)
 
         self.recorder.write(msg)
         try:
@@ -273,7 +304,10 @@ class Bus:
         order = [link for link in self.link_ids if link in counts] + sorted(set(counts) - set(self.link_ids))
         flowing = ", ".join(f"{link} {counts[link] / seconds:.1f}/s" for link in order) or "no rssi"
         silent = [link for link in self.link_ids if link not in counts]
-        return f"links: {flowing}" + (f"; nothing from: {', '.join(silent)}" if silent else "")
+        expected = load_expected(self.recorder.folder / "baseline.json")
+        stale = [link for link in order if link in expected and counts[link] / seconds < STALE_FRAC * expected[link]]
+        return (f"links: {flowing}" + (f"; nothing from: {', '.join(silent)}" if silent else "")
+                + (f"; under 0.4 x the baseline: {', '.join(stale)}" if stale else ""))
 
     def report(self) -> list[str]:
         lines = [f"{key} ({p.type}, {p.src}): {p.received} received, {p.lost} lost, "
