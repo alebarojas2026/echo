@@ -1,5 +1,6 @@
 import { zoneName, zonePlace, linkName } from './layout'
 import { updateProofVisibility } from './proof-visibility'
+import { routerWords } from './router-words'
 import './hud.css'
 import type { HudState } from './state'
 
@@ -42,7 +43,7 @@ export function renderHud(root: HTMLElement, state: HudState) {
         <section class="hud-card hud-advice" aria-labelledby="hud-advice">
           <h2 id="hud-advice">Router placement</h2>
           <p data-testid="advice-text"></p>
-          <small>Router spot <span data-testid="router-spot"></span></small>
+          <small><span data-testid="router-spot"></span></small>
           <dl>
             <div><dt>Before (dBm)</dt><dd data-testid="before-dbm"></dd></div>
             <div><dt>After (dBm)</dt><dd data-testid="after-dbm"></dd></div>
@@ -84,7 +85,7 @@ export function renderHud(root: HTMLElement, state: HudState) {
     'pred-zone-set': pred?.zone_set.join(', ') || '__',
     'why-links': pred?.why.map(id => linkName(id)).join('; ') || '__',
     'advice-text': state.advice?.text ?? '__',
-    'router-spot': state.router,
+    'router-spot': routerWords(state.router),
     'before-dbm': measurement(state.advice?.before_dbm, ' dBm'),
     'after-dbm': measurement(state.advice?.after_dbm, ' dBm'),
     'zone-score': measurement(state.proof.agreement, '%'),
