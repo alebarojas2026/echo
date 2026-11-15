@@ -89,7 +89,7 @@ export function placeScan(min: [number, number, number], max: [number, number, n
  * With `colored`, the model's own vertex colours (shading baked in). Without, floors take the floor colour and
  * walls a shade lighter, darkened a little by which way they face. Both cut away everything above `cut`.
  */
-function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial {
+function scanMaterial(cut: { value: number }, colored: boolean, lift = 1): ShaderMaterial {
   return new ShaderMaterial({
     vertexColors: colored, // three defines USE_COLOR (and USE_COLOR_ALPHA for RGBA) and declares `color`
     uniforms: {
@@ -97,6 +97,7 @@ function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial 
       uWall: { value: new Color(0x23272d) },
       uShade: { value: new Color(WALL_SHADE) },
       uCut: cut,
+      uLift: { value: lift },
     },
     vertexShader: /* glsl */ `
       #include <color_pars_vertex>
@@ -115,12 +116,13 @@ function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial 
       uniform vec3 uWall;
       uniform vec3 uShade;
       uniform float uCut;
+      uniform float uLift;
       varying vec3 vNormal;
       varying float vHeight;
       void main() {
         if (vHeight > uCut) discard;
         #ifdef USE_COLOR
-          vec3 base = vColor.rgb; // glTF vertex colours are linear, like the rest of the scene
+          vec3 base = vColor.rgb * uLift; // glTF vertex colours are linear, like the rest of the scene
         #else
           vec3 n = normalize(vNormal);
           float up = abs(n.y);
@@ -140,9 +142,9 @@ function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial 
 const TRIANGLE_BUDGET: Record<Quality, number> = { pi: 150_000, hi: 400_000 }
 
 /** Puts our material on every mesh (coloured where it has vertex colours) and drops textures. Returns the triangle count. */
-function flatten(root: Object3D, cut: { value: number }): number {
+function flatten(root: Object3D, cut: { value: number }, lift = 1): number {
   const flat = scanMaterial(cut, false)
-  const colored = scanMaterial(cut, true)
+  const colored = scanMaterial(cut, true, lift)
   let triangles = 0
   root.traverse((obj) => {
     if (!(obj instanceof Mesh)) return
@@ -157,6 +159,13 @@ function flatten(root: Object3D, cut: { value: number }): number {
     triangles += (index ? index.count : obj.geometry.getAttribute('position').count) / 3
   })
   return triangles
+}
+
+/** ?lift=1.2 brightens the hall model's own colours (a projector washes dark tones out); 1 when not set. Only
+ *  the model's baked colours change, never the room's palette, and it is kept between 0.5 and 2. */
+export function hallLift(params: URLSearchParams): number {
+  const v = Number(params.get('lift'))
+  return Number.isFinite(v) && v >= 0.5 && v <= 2 ? v : 1
 }
 
 /** Loads the scan if there is one. Resolves to it once it stands in for the drawn room, else to null. */
@@ -175,7 +184,7 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
     const gltf = await loader.loadAsync(url)
     const box = new Box3().setFromObject(gltf.scene)
     const cut = { value: DEFAULT_CUT_M }
-    const triangles = flatten(gltf.scene, cut)
+    const triangles = flatten(gltf.scene, cut, hallLift(params))
     if (triangles > TRIANGLE_BUDGET[quality]) {
       console.warn(
         `room scan: ${Math.round(triangles)} triangles, over the ${quality} budget of ${TRIANGLE_BUDGET[quality]}. ` +
