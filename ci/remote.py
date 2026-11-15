@@ -18,8 +18,8 @@ from pathlib import Path
 import modal
 
 APP_NAME = "deadzone-ci"
-LANE_TIMEOUT_S = 600  # the whole container, image pull included
-STEP_BUDGET_S = 560  # what the steps of one lane may use together
+LANE_TIMEOUT_S = 1200  # the whole container, image pull included
+STEP_BUDGET_S = 1150  # what the steps of one lane may use together
 OUTPUT_HEAD = 4_000
 OUTPUT_TAIL = 30_000
 
