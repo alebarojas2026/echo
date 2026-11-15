@@ -4,6 +4,8 @@ import { boardNow } from './board-time'
 import { boardAskClient, makeMockAskClient } from './ask-client'
 import { mountPrivacyLine } from './privacy'
 import { mountIncidentReport } from './report'
+import { publishHealth } from './health-words'
+import './health-words.css'
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import { routerWords } from './router-words'
@@ -103,6 +105,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     lastStale = stale
     if (feed?.source === 'mock') state = alignMockState(state)
     state = holdAdvice(state)
+    publishHealth(root, state, stale)
     const [headline, detail] = judgeMoment(state, stale)
     // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
     headlineText.set(headline, !!(state as { replay?: unknown } | null)?.replay)
