@@ -59,7 +59,7 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     expect(calls[0].to_t - calls[0].from_t).toBe(120000)
     await expect(page.locator('.hud-operator')).toBeHidden()
     await expect(banner.locator('.replay-line')).toHaveText(/^REPLAY\s*from the board’s records\s*\d+:\d\d (AM|PM)\s*8x$/)
-    await expect(page.getByTestId('source-badge')).toHaveText('REPLAY')
+    await expect(page.getByTestId('source-badge')).toHaveText('Replay')
     await expect(page.locator('#room')).toHaveAttribute('data-replay', 'on')
     for (const text of await banner.locator('strong, span, button').all()) expect(parseFloat(await text.evaluate(el => getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(28)
     const box = await banner.boundingBox()
@@ -82,7 +82,7 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await capture(page, `${width}-replay-did-not-know`)
     await page.clock.runFor(2500) // past the last second: back to live by itself
     await expect(banner).toBeHidden()
-    await expect(page.getByTestId('source-badge')).toHaveText('SIM')
+    await expect(page.getByTestId('source-badge')).toHaveText('Simulated')
     await expect(page.locator('#room')).toHaveAttribute('data-replay', '')
     await expect(headline).toHaveText(live)
     expect(errors).toEqual([])
@@ -110,12 +110,12 @@ test('a live intrusion or tamper ends the replay at once', async ({ page }) => {
   for (const kind of ['intrusion', 'tamper']) {
     await startLast(page)
     await page.clock.runFor(500)
-    await expect(page.getByTestId('source-badge')).toHaveText('REPLAY')
+    await expect(page.getByTestId('source-badge')).toHaveText('Replay')
     await page.evaluate(kind => window.arrival.event(kind), kind)
     await expect(page.getByTestId('replay')).toBeHidden()
     await expect(page.locator('#room')).toHaveAttribute('data-replay', '')
     await page.clock.runFor(300)
-    await expect(page.getByTestId('source-badge')).toHaveText('SIM')
+    await expect(page.getByTestId('source-badge')).toHaveText('Simulated')
   }
   // A device going silent while armed shows in the state too, with or without its event.
   await startLast(page)
@@ -162,7 +162,7 @@ test('records that cannot be read, or hold nothing, say so in words', async ({ p
   await open(page, () => rows)
   await startLast(page)
   await expect(page.getByTestId('replay-word')).toHaveText('The records could not be read.')
-  await expect(page.getByTestId('source-badge')).toHaveText('SIM')
+  await expect(page.getByTestId('source-badge')).toHaveText('Simulated')
   await page.clock.runFor(4100)
   await expect(page.getByTestId('replay')).toBeHidden()
   rows = []

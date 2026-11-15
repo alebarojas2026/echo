@@ -1,0 +1,1 @@
+module.exports={...require('./hud.config.cjs'),workers:1,timeout:60000,testMatch:['unified.e2e.cjs','handoff.e2e.cjs','tamper-desk.e2e.cjs','panel-fit.e2e.cjs','presenter.e2e.cjs','privacy.e2e.cjs','report.e2e.cjs','arrival-gap.e2e.cjs','unplug-line.e2e.cjs','health-words.e2e.cjs','panel-readability.e2e.cjs','judge-language.e2e.cjs','dead-zone.e2e.cjs']}

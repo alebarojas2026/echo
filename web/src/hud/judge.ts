@@ -1,5 +1,12 @@
+import { fitProof } from './proof-layout'
+import { mountPresenter } from './presenter'
 import { boardNow } from './board-time'
 import { boardAskClient, makeMockAskClient } from './ask-client'
+import { mountPrivacyLine } from './privacy'
+import { mountIncidentReport } from './report'
+import { publishHealth } from './health-words'
+import './health-words.css'
+import { sourceWords } from './source-words'
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import { routerWords } from './router-words'
@@ -8,6 +15,7 @@ import { mountAskRoom } from './ask-room'
 import { updateProofVisibility } from './proof-visibility'
 import { mountArrival } from './arrival'
 import { changingText } from './changing-text'
+import { ReadingHold } from './readable-updates'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
 import { fetchProof } from '../room/hud-host'
@@ -18,7 +26,7 @@ import { mountReplay } from './replay'
 import { recordsClient } from './records'
 import { holdAdvice } from './dead-zone'
 
-type Panel = { update(state: StateMsg | null, stale: boolean): void; dispose?(): void }
+type Panel = { update(state: StateMsg | null, stale: boolean): void; dispose?(): void; reset?(): void }
 type PanelModule = { mountPanel(root: HTMLElement): Panel }
 const extraPanels = import.meta.glob<PanelModule>('./judge-*-panel.ts', { eager: true })
 const controlModule = import.meta.glob<{ mountHudControls(root: HTMLElement, send: (message: { cmd: Parameters<Feed['send']>[0]; args: Record<string, string | boolean> }) => void): void }>('./controls.ts', { eager: true })
@@ -31,6 +39,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   root.classList.add('judge')
   root.innerHTML = `
     <header><span>Radio Sight</span><span data-testid="source-badge"></span></header>
+    <div class="judge-privacy"></div>
     <section class="judge-moment" aria-live="polite"><h1 data-testid="judge-headline"></h1><p data-testid="judge-detail"></p></section>
     <div class="judge-extra"></div>
     ${Object.keys(extraPanels).some(path => path.includes("camera")) ? "" : '<p data-testid="cam-status"></p>'}
@@ -41,6 +50,17 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const field = (id: string) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`)!
   const set = (id: string, text: string) => { field(id).textContent = text }
   const headlineText = changingText(field('judge-headline'))
+  const narrator = field('narrator-text')
+  const narratorText = changingText(narrator)
+  const hold = new ReadingHold()
+  let nextNarration = ''
+  let clearNarration = false
+  const paintNarration = () => {
+    const text = hold.update(nextNarration, performance.now(), clearNarration)
+    narrator.hidden = !text
+    narratorText.set(text)
+  }
+  const narrationTimer = setInterval(paintNarration, 100)
   const debug = root.querySelector('.debug')!
   for (const id of ['pred-zone', 'pred-zone-set', 'pred-kind', 'pred-motion', 'why-links', 'router-spot', 'narrator-source', 'no-data', 'sensor-blind', 'health-links']) {
     const value = document.createElement('dd')
@@ -57,13 +77,19 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     metrics.append(item)
   }
   updateProofVisibility(root)
+  const disposeProofLayout = fitProof(root)
   const panels = Object.values(extraPanels).map(module => {
     const container = document.createElement('section')
     root.querySelector('.judge-extra')!.append(container)
     return module.mountPanel(container)
   })
+  const offPanelEvents = live?.onEvent(event => { if (event.kind === 'reset') panels.forEach(panel => panel.reset?.()) })
   const operator = root.querySelector<HTMLElement>('.hud-operator')!
   operator.hidden = new URLSearchParams(location.search).get('op') !== '1'
+  const publishOperator = () => { document.documentElement.dataset.hudOperator = operator.hidden ? 'closed' : 'open' }
+  const operatorVisibility = new MutationObserver(publishOperator)
+  operatorVisibility.observe(operator, { attributes: true, attributeFilter: ['hidden'] })
+  publishOperator()
   Object.values(controlModule)[0]?.mountHudControls(root.querySelector('.operator-controls')!, message => feed?.send(message.cmd, message.args))
   const key = (event: KeyboardEvent) => {
     if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || (event.target as HTMLElement)?.closest('input,select,textarea,[contenteditable]')) return
@@ -74,6 +100,8 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const now = () => boardNow(live?.current() ?? null)
   const ask = live?.source === 'ws' ? boardAskClient : makeMockAskClient(now)
   const disposeAsk = mountAskRoom(root.querySelector('header')!, ask, replay ? span => void replay.start(span) : undefined)
+  const disposePrivacy = mountPrivacyLine(root.querySelector('.judge-privacy')!)
+  const disposeReport = mountIncidentReport(live, recordsClient(live?.source), span => { void replay?.start(span) })
   const disposeArrival = mountArrival(root, live, operator)
   let offReplayClock: (() => void) | undefined
   if (replay) {
@@ -85,6 +113,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     last.onclick = () => { const end = now(); if (end === null) return; operator.hidden = true; void replay.start({ from_t: end - 120_000, to_t: end }) }
     operator.querySelector('.operator-controls')!.before(last)
   }
+  const disposePresenter = mountPresenter(operator, live)
   let disposed = false
   let lastState: StateMsg | null = null
   let lastStale = true
@@ -93,14 +122,16 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     lastStale = stale
     if (feed?.source === 'mock') state = alignMockState(state)
     state = holdAdvice(state)
+    publishHealth(root, state, stale)
     const [headline, detail] = judgeMoment(state, stale)
     // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
     headlineText.set(headline, !!(state as { replay?: unknown } | null)?.replay)
     set('judge-detail', detail)
-    set('source-badge', state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO')
+    set('source-badge', sourceWords(state))
     if (!Object.keys(extraPanels).some(path => path.includes('camera'))) set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] ?? 'Camera status unknown' : '')
-    set('narrator-text', !stale ? state?.narration?.text ?? '' : '')
-    field('narrator-text').hidden = !field('narrator-text').textContent
+    nextNarration = !stale ? state?.narration?.text ?? '' : ''
+    clearNarration = stale || !state
+    paintNarration()
     set('pred-zone', state?.pred?.zone ? String(state.pred.zone) : '__')
     set('pred-zone-set', state?.pred?.zone_set.join(' or ') ?? '__')
     set('pred-kind', state?.pred?.kind ?? '__')
@@ -131,7 +162,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { operatorVisibility.disconnect(); delete document.documentElement.dataset.hudOperator; offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); narratorText.dispose(); clearInterval(narrationTimer); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
