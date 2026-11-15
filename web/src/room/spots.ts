@@ -35,6 +35,13 @@ export function spotWords(id: string): { at: Vec3; side: 'west' | 'east' | 'cent
   return { at: [x, y, top], side: x < homeX ? 'west' : 'east' }
 }
 
+/** Whether the arrow and its words still show. On a desk they go once the router stands on the advised spot: the
+ *  router and its name are there now, and the words would lie across them (the panels say the move was made). On
+ *  the floor they stay, dimmer, as before. */
+export function adviceShown(arrow: ReturnType<typeof adviceArrow>): boolean {
+  return !!arrow && !(arrow.done && spotWords(arrow.to).side !== 'centre')
+}
+
 /** Whether a spot's ring is drawn: the router's own spot always; the others only while advice runs between them,
  *  so spare marks never sit unexplained under the devices. */
 export function spotShown(id: string, router: string, arrow: ReturnType<typeof adviceArrow>): boolean {
@@ -105,12 +112,12 @@ export class RouterSpots {
     }
     this.view.host.dataset.adviceArrow = arrow ? arrow.to : ''
     for (const [id, tag] of this.tags) {
-      tag.hidden = !arrow || id !== arrow.to
+      tag.hidden = !adviceShown(arrow) || id !== arrow!.to
       // On a desk the distance goes on its own line (room-label--spot-west / -east keep line breaks).
       const lines = tag.classList.contains('room-label--spot-west') || tag.classList.contains('room-label--spot-east')
       if (!tag.hidden) tag.textContent = `${arrow!.done ? 'Router moved here' : 'Move router here'},${lines ? '\n' : ' '}${spotName(id)}`
     }
-    this.growTo = arrow ? 1 : 0
+    this.growTo = adviceShown(arrow) ? 1 : 0
     if (arrow) {
       const key = `${arrow.from}>${arrow.to}`
       if (key !== this.arrowKey) {
