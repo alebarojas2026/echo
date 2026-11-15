@@ -8,7 +8,7 @@ A tripwire says something crossed; Echo says someone arrived, stayed still or mo
 
 ## Isn't presence just a signal-strength threshold?
 
-Yes, and we say so: after a baseline with the spot empty, a Wi-Fi drop that holds is a person. The work is in keeping it steady, sealing every record and answering from it.
+Yes, and we say so: after a baseline with the spot empty, a Wi-Fi drop that holds is read as a person. The work is in keeping it steady, sealing every record and answering from it.
 
 ## How does the real kit work?
 
@@ -28,7 +28,7 @@ Echo senses one spot and does not count people. Someone to the side or behind th
 
 ## What breaks it?
 
-A walk straight through is not reliably seen, because a person needs a few seconds on the line. It senses one spot only, and Pi B must sit at about desk height.
+A walk straight through is not reliably seen; it needs a few seconds on the line, and placement matters. A bag that blocks the line as much as a body reads as a person standing still.
 
 ## Why not CSI, radar or a motion sensor?
 
@@ -56,7 +56,7 @@ Each Pi keeps signing the newest record with a key that never leaves that Pi. Re
 
 ## Can I spoof it, jam it or unplug it?
 
-Unplug a device and Echo says which one went quiet and records the gap. We do not claim a defence against spoofed radio or deliberate jamming.
+If a device goes silent, Echo records the gap; nobody unplugs a Pi during the round. We do not claim a defence against spoofed radio or deliberate jamming.
 
 ## What happens when the board or a link fails?
 

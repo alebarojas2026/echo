@@ -27,7 +27,7 @@ class DevpostDraftTest(unittest.TestCase):
     def test_images_have_live_rules_and_board_captions(self):
         images = self.text.split("## Images", 1)[1].split("## Built with", 1)[0]
         rows = [line for line in images.splitlines() if re.match(r"\| \d+\.", line)]
-        self.assertEqual(len(rows), 8)
+        self.assertEqual(len(rows), 7)
         for row in rows:
             self.assertIn("Arduino UNO Q", row.split("|")[-2])
         for phrase in ("live desk", "no recognisable face", "outside the repository",
@@ -47,7 +47,7 @@ class DevpostDraftTest(unittest.TestCase):
     def test_the_text_carries_no_links_while_the_repository_is_private(self):
         self.assertEqual(re.findall(r"\]\(([^)]+)\)", self.text), [])
 
-    def test_six_story_beats_match_pitch_and_runbook(self):
+    def test_five_story_beats_match_pitch_and_runbook(self):
         positions = [self.text.index(f"- **{beat}:**") for beat in BEATS]
         self.assertEqual(positions, sorted(positions))
         for filename in ("pitch.md", "demo-runbook.md"):

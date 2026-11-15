@@ -17,8 +17,10 @@ What stands behind all of them: one person, one night, replayed through the brai
 
 ## Do not say
 
+The object rule is off on the one spot. A bag that blocks the line as much as a body reads as a person standing still.
+
 - A bare percentage ("100% detection"). Say the count and its range.
-- Any number for walk-throughs, someone crossing a metre to the side, standing behind the device, or a thing left in the line. Each was seen once and used for tuning: it is not a result.
+- Any number for walk-throughs, someone crossing a metre to the side, or standing behind the device. Each was seen once and used for tuning: it is not a result.
 - "Live" for sentences 1 to 7: they are replayed. The one live run is sentence 8, and it is a count of the arrivals the board said: it gives no delay, no still / moving number and no "nothing false", because the board's moment-by-moment decisions were not recorded in that run.
 - Anything measured on a laptop about the sealed record as if it were measured on the board. Those numbers belong in the docs with "on a laptop" beside them, and not in PROOF.md.
 - Anything simulated.

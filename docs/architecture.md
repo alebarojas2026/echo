@@ -83,10 +83,10 @@ Short enough to read aloud.
 - **Pi B (a second Raspberry Pi 5).** It sits about a metre from Pi A, at desk height, and measures how strong Pi A's signal is 25 times a second. It sends each reading to the board over that same hotspot.
 - **The sensing line.** A human body between the two Pis absorbs some of the 5 GHz signal, so the reading drops while someone stands there. It is one line and one spot.
 - **The board (an Arduino UNO Q, with the Qualcomm Dragonwing QRB2210).** Everything that thinks runs here: the message bus, the decision, the record, the web pages and the answers. The Pis run no model.
-- **The decision (the brain).** After a short baseline with the spot empty, the board compares every reading with that empty level. A drop that holds means somebody is there; how steady it is says still or moving. From that it raises the no-movement alert, raises an intrusion when the space is armed, and notices when one of its own devices is unplugged.
+- **The decision (the brain).** After a short baseline with the spot empty, the board compares every reading with that empty level. A drop that holds is read as somebody there; how steady it is says still or moving. From that it raises the no-movement alert, raises an intrusion when the space is armed, and notices when one of its own devices is unplugged.
 - **The record (the store).** Once a second, and at every event, the board writes down what it decided in one file that stays on the board. It holds decisions, not radio readings.
 - **The seal (a hash chain, SHA-256).** Every record carries the fingerprint of the record before it. Change one record and every seal after it stops matching, and the board can name the record that was changed.
-- **The signatures (the witnesses, Ed25519).** Every 5 seconds the board says where the record stands, and each Pi signs that with its own key, which never leaves that Pi. The board checks each signature and stores it in the record. Unplug a Pi and the others carry on; the gap is in the record too.
+- **The signatures (the witnesses, Ed25519).** Every 5 seconds the board says where the record stands, and each Pi signs that with its own key, which never leaves that Pi. The board checks each signature and stores it in the record. If a witness goes silent, the record keeps counting and notes the gap.
 - **The answer (Ask).** "What happened?" is answered in plain words from the sealed records only: a timeline with clock times, the steps it took and the record numbers it used. It checks the seals over those records first, and it never says who anyone is.
 - **The small language model (Qwen2.5 0.5B, on the board).** It may smooth the wording of a sentence, and for an unusual question it may pick which look-up to run. Every fact, time and number comes from a record; if the model changes one, its text is thrown away.
 - **The screens.** They are web pages the board serves to browsers on the kit's own Wi-Fi: the judge's page with a 3D model of the hall, the engine room (the three devices, the record counting up, the signatures arriving and a prove-it check), and the alarm page on a phone.
@@ -98,6 +98,7 @@ Short enough to read aloud.
 > - It does not know **where** in a room a person is. It senses one spot between two devices about a metre apart.
 > - It does not make a picture of anything, and it does not count people.
 > - It has **no camera and no microphone**, and it sends nothing to the internet while it runs.
+> - A bag that blocks the line as much as a body reads as a person standing still.
 > - A person needs a few seconds on the line. A walk straight through is not reliably seen.
 > - It has not been tested through a wall.
 > - It is a prototype built in 24 hours and tested with one person on one night. What is measured is in [PROOF.md](../PROOF.md).

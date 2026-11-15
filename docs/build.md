@@ -80,4 +80,6 @@ Do not assume the build-room setup survives a move. In the presentation room:
 4. Redo the `20 s` baseline with the gap empty.
 5. Stand on the spot once and check the figure appears, then check both Pis are signing on the engine room.
 
+A bag that blocks the line as much as a body reads as a person standing still.
+
 If the Wi-Fi line is not reporting, the correct result is no decision, not "empty." Fix the line and repeat the baseline; never present a guessed value.

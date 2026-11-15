@@ -4,28 +4,27 @@
 
 ## Inspiration
 
-Some places need a record of who was there and when, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. A camera is too much in those places, and a log that someone can quietly edit is not enough.
+Some places need a record of when someone was there, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. A camera is too much in those places, and a log that someone can quietly edit is not enough.
 
 We wanted a witness that can't see you, can't be edited, and still tells you exactly what happened. We built Echo at MadHacks 2026 for the Qualcomm / N+1 Institute track and the theme "Let's Dig In": we dug into what an ordinary Wi-Fi signal already knows about the space it crosses.
 
 ## What it does
 
-The demonstration has six beats:
+The demonstration has five beats. Nobody unplugs a Pi in the round; the silent witness is described in one sentence, not performed:
 
 - **Found you:** two small computers sit a metre apart. A body between them weakens the Wi-Fi signal. From that one line the board knows someone arrived, how long they stayed, whether they are standing still or moving, and when they left. Stand still long enough and a no-movement alert asks for a check-in: step aside and back.
 - **Intrusion alert:** armed, the spot should be empty. Step in and stay, and the board raises an intrusion alert on a phone page.
-- **Tamper alert:** unplug one of Echo's own devices and it says which one went quiet. The record carries on, and the gap itself is recorded.
 - **What happened:** everything Echo senses, and every event, is a record on the board. Ask "What happened?" and a program on the board answers in plain words from the sealed record only, showing its steps and the records it used.
 - **Engine room:** a second screen shows the three devices, the record counting up, the signatures arriving and a prove-it check. The check changes one record in a copy, verifies the copy and names the record that broke the seal. The real record is never touched.
 - **Proof:** the measured results below, each with its count and range.
 
 **It seals what it sensed.** Each record carries the SHA-256 hash of the one before it, so a changed record breaks every seal after it and the board can name the record that was changed.
 
-**Two more machines vouch for it.** Each Raspberry Pi keeps signing the board's latest record with its own Ed25519 key.
+**Two more machines vouch for it.** Each Raspberry Pi keeps signing the board's latest record with its own Ed25519 key. If a witness goes silent, the record keeps counting and notes the gap.
 
 ### What it does not do
 
-Echo does not know who a person is, and it does not know which part of a room they are in. It senses one spot. A person needs a few seconds on the line to be found. There is no camera and no microphone on the kit.
+Echo does not know who a person is, and it does not know which part of a room they are in. It senses one spot. A bag that blocks the line as much as a body reads as a person standing still. A person needs a few seconds on the line to be found. There is no camera and no microphone on the kit.
 
 ### Proof
 
@@ -58,7 +57,7 @@ Neither Pi runs a model: Pi A makes the Wi-Fi signal, Pi B measures it, and each
 ### The path of one reading
 
 1. **Reading.** Pi A is a 5 GHz Wi-Fi hotspot. Pi B, a metre away at desk height, measures how strong that signal is, continuously, and sends the readings to the board.
-2. **Decision.** The board compares the readings with the level of the empty spot. A drop that holds is a person; how steady it is says still or moving; how long it lasts says how long they stayed. There is no trained model in this step: after a baseline with the spot empty, the line alone gives the decision.
+2. **Decision.** The board compares the readings with the level of the empty spot. A drop that holds is read as a person; how steady it is says still or moving; how long it lasts says how long they stayed. There is no trained model in this step: after a baseline with the spot empty, the line alone gives the decision.
 3. **Record.** The board writes a running summary, plus one record for every event, to a small database on the board.
 4. **Seal.** Each record carries the SHA-256 hash of the record before it.
 5. **Signature.** Each Pi keeps signing the newest hash with its own key. The private keys are made on each Pi and never leave it.
@@ -107,11 +106,10 @@ This is the capture and caption plan for the submission lead. Take every view fr
 | 1. Cover | The main laptop with the figure on the spot, and the three devices in the same view | The Arduino UNO Q knows someone is on the spot from one Wi-Fi line, with nothing watching. |
 | 2. Found you | The headline and the still or moving word on the main laptop | The Arduino UNO Q finds a person standing between Pi A and Pi B. |
 | 3. Intrusion alert | The alarm page showing the live intrusion beside the main laptop | The Arduino UNO Q raises an intrusion alert when someone stays on the armed spot. |
-| 4. Tamper alert | Pi B's cable in a hand, with the tamper alert on screen | The Arduino UNO Q names the device that went quiet and records the gap. |
-| 5. What happened | The answer with its steps and cited records | The Arduino UNO Q answers "What happened?" from its sealed record only. |
-| 6. Engine room | The second laptop: the record counting, the signatures, the Prove it result | The Arduino UNO Q's record is sealed, signed by both Pis and checked on screen. |
-| 7. The hardware | Label the Arduino UNO Q and Pi A together on the desk; label Pi B across the gap at desk height | The Arduino UNO Q does all the work; Pi A makes the Wi-Fi signal and Pi B measures it. |
-| 8. Architecture | The two pictures from docs/architecture.md, "Architecture" and "Data path", exported once outside the repository | The Arduino UNO Q senses, seals, checks and answers with no cloud service. |
+| 4. What happened | The answer with its steps and cited records | The Arduino UNO Q answers "What happened?" from its sealed record only. |
+| 5. Engine room | The second laptop: the record counting, the signatures, the Prove it result | The Arduino UNO Q's record is sealed, signed by both Pis and checked on screen. |
+| 6. The hardware | Label the Arduino UNO Q and Pi A together on the desk; label Pi B across the gap at desk height | The Arduino UNO Q does all the work; Pi A makes the Wi-Fi signal and Pi B measures it. |
+| 7. Architecture | The two pictures from docs/architecture.md, "Architecture" and "Data path", exported once outside the repository | The Arduino UNO Q senses, seals, checks and answers with no cloud service. |
 
 Use the pictures as they are, with their plain titles and nothing added. The layout has one spot and three devices. The capture lead must check that each caption matches the deployed build before uploading.
 

@@ -64,18 +64,17 @@ class DemoRunbookTest(unittest.TestCase):
 
     def test_timed_round_has_speakers_actions_and_screens(self):
         desk = self.text.split("## Three-minute desk round", 1)[1].split("## Five-minute finalist round", 1)[0]
-        for phrase in ("0:00–0:30", "0:30–1:00", "1:00–1:25", "1:25–2:00", "2:00–2:30", "2:30–3:00",
+        for phrase in ("0:00–0:45", "0:45–1:15", "1:15–2:00", "2:00–2:30", "2:30–3:00",
                        "Speaker and actions", "Screen and gate"):
             self.assertIn(phrase, desk)
-        for phrase in ("cut the Tamper alert first", "Keep Found you",
+        for phrase in ("cut the Engine room", "Keep Found you",
                        "at least one of Intrusion alert or What happened", "do not stage it"):
             self.assertIn(phrase, desk)
 
     def test_the_round_is_the_witness_demo(self):
         desk = self.lower.split("## three-minute desk round", 1)[1].split("## five-minute finalist round", 1)[0]
-        for phrase in ("unplugs pi b", "that witness silent", "taps \"what happened?\"", "presses prove it",
+        for phrase in ("nobody unplugs a pi in the round", "if a witness goes silent", "do not perform it", "taps \"what happened?\"", "presses prove it",
                        "the check naming the altered record", "word for word from numbers-to-say.md",
-                       "set pi b's clock, then take the empty baseline before the next judge",
                        "stands still until the no-movement alert, then steps aside and back", "check-in received"):
             self.assertIn(phrase, desk)
 
@@ -92,7 +91,7 @@ class DemoRunbookTest(unittest.TestCase):
                        "no-movement alert", "json `null` must render as `__`",
                        "never a bare percentage", "private key stays on that pi",
                        "pi b's clock resets whenever it loses power", "secure pi b's power cable",
-                       "unplugging it is a power loss: ask alexander to set pi b's clock before the baseline",
+                       "after a power loss, ask alexander to set pi b's clock before the baseline",
                        "going back is one command on each device", "role=pib", "-44 dbm"):
             self.assertIn(phrase, self.lower)
 

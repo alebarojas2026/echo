@@ -86,6 +86,9 @@ class PublicDocsTest(unittest.TestCase):
             text = (DOCS / filename).read_text(encoding="utf-8").lower()
             self.assertIn("desk height", text)
             self.assertNotRegex(text, r"left/right|five boards|five nodes|wave a hand|30 cm")
+            self.assertIn("nobody unplugs a pi", text, filename)
+            self.assertIn("a bag that blocks the line as much as a body reads as a person standing still.", text, filename)
+            self.assertNotIn("tamper alert", text, filename)
 
     def test_judge_facing_docs_claim_nothing_that_was_cut(self):
         cut = ("taught by", "camera unplug", "unplug the camera", "camera lesson", "the lesson",
@@ -98,13 +101,16 @@ class PublicDocsTest(unittest.TestCase):
                 self.assertNotIn(phrase, text, f"{filename}: {phrase}")
             self.assertNotRegex(text, r"\bzones?\b", filename)
 
-    def test_pitch_and_video_time_windows_match(self):
+    def test_pitch_runbook_and_video_time_windows_match(self):
         pitch = (DOCS / "pitch.md").read_text()
         video = (DOCS / "video-shots.md").read_text()
         windows = re.findall(r"\*\*(\d+:\d{2}–\d+:\d{2}) \(\d+ seconds\)", pitch)
         shots = re.findall(r"^## (\d+:\d{2}–\d+:\d{2}) —", video, re.M)
-        self.assertEqual(len(windows), 6)
+        self.assertEqual(len(windows), len(BEATS))
         self.assertEqual(windows, shots)
+        runbook = (DOCS / "demo-runbook.md").read_text()
+        rounds = re.findall(r"^\| (\d+:\d{2}–\d+:\d{2}) \|", runbook, re.M)
+        self.assertEqual(windows, rounds)
 
     def test_public_markdown_avoids_prohibited_claims(self):
         public_text = "\n".join(

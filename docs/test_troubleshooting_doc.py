@@ -22,7 +22,7 @@ class TroubleshootingDocTest(unittest.TestCase):
         for phrase in ("`no data` means the state feed is stale",
                        "`sensor blind` means the wi-fi line is not reporting",
                        "neither state means that the spot is empty", "decisions stay null",
-                       "alert timers pause", "expected state while pi b is unplugged on purpose"):
+                       "alert timers pause", "expected state if pi b loses power; stop judging before recovery"):
             self.assertIn(phrase, self.lower)
 
     def test_demo_recovery_paths_are_covered(self):
