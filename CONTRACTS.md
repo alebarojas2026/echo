@@ -96,7 +96,12 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
 {"v":2,"type":"label","t":1763149512150,"seq":412,"src":"live","frame":18231,"mode":"person","persons_in_frame":1,
  "present":true,"zone":2,"foot_m":[1.22,0.31],"motion":"moving","conf":0.81,"clipped":false}
    // One label per processed camera frame (5-10/s), including frames with nobody in them.
-   // present:false only on a processed frame with no foot point inside the strip; then zone 0, foot_m null, motion null.
+   // present:false only on a processed frame with nobody in the sensing area (floor view: no foot point inside the
+   // strip; desk view: nobody in view); then zone 0, foot_m null, motion null.
+   // Desk view (the webcam on the desk, facing the person): there is no foot point. foot_m is null on every label;
+   // present is true when anyone is in view, and zone is the side of the split line the person's box centre is on.
+   // clipped is true when the centre is within the dead band around the line, the box is cut by a side edge of the
+   // frame, or more than one person is in view.
    // seq: one counter per sending socket (a producer), shared across all message types it sends.
    // clipped:true -> zone, foot_m and motion are null, whatever present is, and the window is dropped. mode = the current label_mode.
 {"v":2,"type":"cam","t":1763149512200,"seq":77,"src":"live","state":"on","fps":9.6}
@@ -139,7 +144,17 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
         // nodes.json has none; the other end is the rx node. activity is 0-1. rate_hz = readings over the last 2 s.
         // It means "movement on this path": never who, where along it, or how many. stale:true -> activity 0, moving false.
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
-        // training is null unless a fit is running; while it runs: {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
+        // training is null unless a fit is running or a lesson is on. While a fit runs:
+        //   {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
+        // A lesson = a train cmd that arrives while a record_start {purpose: train} recording is open. From then on
+        // the brain fits again from the growing recording, 15 s after each fit ends, while cam is on, and training
+        // stays set with
+        //   "lesson": {"started_t": epoch ms, "agree": 6, "of": 10, "fits": 2, "fitting": false}
+        // added to it (between fits: started_t = the lesson's start, progress null, sessions = [the lesson's recording]).
+        // agree / of: of the last `of` decisions (10 at most) that had a fresh, non-clipped camera label, `agree` gave
+        // the camera's answer (same zone, or both nobody). fits = fits finished in this lesson; fitting = one is running.
+        // The lesson ends when cam goes off or on record_stop: one last fit runs, training goes back to null, and
+        // the model carries on.
         // train_s and ms_per_decision are null when nothing was measured (the fake brain), even when trained is true.
  "armed":false,                                                             // true after arm {on:true}; missing means false
  "board":{"cpu_temp_c":57.0,"cpu_mhz":2016,"cpu_pct":61}}
@@ -164,6 +179,8 @@ Before readings, a baseline or training exists, the brain still sends state at a
 {"v":2,"type":"cmd","cmd":"train|baseline|reset_alert|reset|record_start|record_stop|label_mode|router_moved|router_home|relearn|truth|arm","args":{}}
    // record_start {session, purpose, walker}; label_mode {mode: person|object|off}; router_moved {spot}; truth {zone} (crowd game).
    // reset = between judges: clears the alert, still timer, check-in, advice and narration.
+   // train while a train recording is open also fits from that recording as far as it has got, and starts a lesson
+   // (see model.training).
    // arm {on: true|false} = "this space should be empty now" (after hours). See Armed in section 6.
    // baseline {} = a new place: the model and the older recordings are no longer used. baseline {keep_model: true} =
    // the same place set down again (the same layout at another desk, a knocked arm): only the baseline is new. Section 6.
@@ -173,7 +190,8 @@ Before readings, a baseline or training exists, the brain still sends state at a
 ```
 Windows: 1.0 s long, 0.1 s hop, on recv_t. A window's label is the majority of the non-clipped camera labels in it.
   Windows with a clipped label or with no label are dropped from training.
-Moving: foot speed > 0.25 m/s over 1 s, after a 0.5 s median filter.
+Moving: foot speed > 0.25 m/s over 1 s, after a 0.5 s median filter. In the desk view the speed is that of the
+  box centre along the strip.
 Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, and label_mode off.
   With the camera off (unplugged at the judging desk) there is no camera to ask: the capture runs on health ok and
   label_mode off alone, and the operator keeps the strip empty.

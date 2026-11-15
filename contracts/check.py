@@ -46,6 +46,9 @@ def errors(msg, schema=None):
         x = msg["xray"] or {"w": 0, "h": 0, "moving_db": [], "static_db": []}
         out += [f"$.xray.{k}: has {len(x[k])} cells, w*h is {x['w'] * x['h']}"
                 for k in ("moving_db", "static_db") if len(x[k]) != x["w"] * x["h"]]
+        lesson = (msg["model"]["training"] or {}).get("lesson")
+        if lesson and lesson["agree"] > lesson["of"]:
+            out.append(f"$.model.training.lesson.agree: {lesson['agree']} of {lesson['of']}")
         things = [(f"$.objects[{i}]", o) for i, o in enumerate(msg["objects"])] + [("$.advice", msg["advice"])]
         nodes = {**NODES, "pi5": ROUTER_SPOTS[msg["router"]]}  # the router sits at its current spot
         out += [err for where, thing in things if thing for err in _near(where, thing, nodes)]
