@@ -61,8 +61,8 @@ class JudgeFaqTest(unittest.TestCase):
         )
 
     def test_unfinished_features_are_named(self):
-        self.assertIn("armed phone-alert", self.lower)
-        self.assertIn("room-question integrations are not yet in `main`", self.lower)
+        self.assertIn("armed-mode event logic is in `main`", self.lower)
+        self.assertIn("room-question integrations are not yet complete", self.lower)
         self.assertIn("full coverage mapping still need measured tests", self.lower)
 
 

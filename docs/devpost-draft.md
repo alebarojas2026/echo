@@ -72,7 +72,7 @@ We also built the no-movement alert, deliberate check-in, caregiver phone page, 
 
 Privacy and proof are part of the architecture. The camera is temporary, images are not saved, learned work runs on the UNO Q, and every incomplete measurement stays `__` rather than becoming a demo estimate.
 
-One honest line about what does not work yet: the complete armed phone-alert and room-question path is still being integrated into `main`, and no unfinished beat will be staged as live.
+One honest line about what does not work yet: armed-mode event logic is in `main`, while the live phone display and room-question path are still being integrated, and no unfinished beat will be staged as live.
 
 ## What we learned
 
@@ -84,7 +84,7 @@ We also learned that missing-data behavior is part of the product. “Sensor bli
 
 ## What's next
 
-First, we will finish and test the armed phone-alert and local room-question integrations, then run the complete hero path without fallbacks. We will also test the caregiver page on a real phone and record every proof result with its method, sample size, date, and commit.
+First, we will finish and test the live phone display and local room-question integrations, then run the complete hero path without fallbacks. We will also test the caregiver page on a real phone and record every proof result with its method, sample size, date, and commit.
 
 After the hackathon, we want to test more building layouts, materials, access-point arrangements, and groups of people. We will measure how much of the local model can transfer between rooms, expand held-out proof, and develop the current blocked-link view into a full coverage map.
 

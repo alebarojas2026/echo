@@ -65,4 +65,4 @@ The Pi and optional beacons stand in for radios and access points already spread
 
 ## Feature gates
 
-The current `main` branch does not yet contain the complete armed phone-alert and room-question path. Until those integrations merge and pass local tests, stop after **Still follows**, explain the planned continuation in one sentence, and close on **Proof**. Never stage a fake alert or answer.
+Armed-mode event logic is now in `main`, but the live phone display and room-question path are not complete. Until both integrations merge and pass local tests, stop after **Still follows**, explain the planned continuation in one sentence, and close on **Proof**. Never stage a fake alert or answer.

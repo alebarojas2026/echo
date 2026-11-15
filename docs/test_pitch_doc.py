@@ -60,6 +60,10 @@ class PitchDocTest(unittest.TestCase):
         self.assertIn("it runs no model", self.spoken.lower())
         self.assertIn("dragonwing cpu", self.spoken.lower())
 
+    def test_feature_status_is_current(self):
+        self.assertIn("armed-mode event logic is now in `main`", self.lower)
+        self.assertIn("live phone display and room-question path are not complete", self.lower)
+
 
 if __name__ == "__main__":
     unittest.main()

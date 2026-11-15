@@ -54,7 +54,7 @@ The timer runs only while the radio model reports a person present, still, and i
 
 ## What can Radio Sight not do yet?
 
-It cannot identify a person, count a crowd, reconstruct camera-like detail, or make a prediction while required links are blind. The complete armed phone-alert and room-question integrations are not yet in `main`, and transfer to other rooms and full coverage mapping still need measured tests.
+It cannot identify a person, count a crowd, reconstruct camera-like detail, or make a prediction while required links are blind. Armed-mode event logic is in `main`, but the live phone display and room-question integrations are not yet complete, and transfer to other rooms and full coverage mapping still need measured tests.
 
 ## Honest limits
 

@@ -93,7 +93,8 @@ class DevpostDraftTest(unittest.TestCase):
             self.assertIn(phrase, self.text)
 
     def test_unfinished_features_and_hardware_are_accurate(self):
-        self.assertIn("still being integrated into `main`", self.lower)
+        self.assertIn("armed-mode event logic is in `main`", self.lower)
+        self.assertIn("live phone display and room-question path", self.lower)
         self.assertIn("no unfinished beat will be staged as live", self.lower)
         self.assertIn("stand in for access points and radios", self.lower)
 
