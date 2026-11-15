@@ -7,6 +7,7 @@ import { mockState, tourAt } from './mock'
 import { clearBox } from './scan'
 import { chairGeometry, onChair, standBase } from './stage'
 import { mixShot } from './fly'
+import { xrayGeometry } from './xray'
 import { deskAnchors, deskShot, fitCamera, inSituShot, sideOnDeg } from './view'
 
 // The gate: three devices, six links, one spot. Everything the room draws comes from the file, and the desk
@@ -45,6 +46,18 @@ describe('the gate layout', () => {
     expect(frame.applyLayout(GATE_LAYOUT)).toBe(true)
     // The hall's chairs are kept out of everything a person can stand in, right up to the desk.
     expect(clearBox().min.z).toBeCloseTo(frame.toScene([0, 0.79, 0])[2])
+  })
+
+  it('lays the X-ray on the spot and on the desk top, and leaves the floor between them bare', () => {
+    const g = xrayGeometry([-0.2, -0.2], [1.25, 1.75])
+    const pos = g.getAttribute('position')
+    const rows = new Map<number, number[]>() // height -> the scene z of its corners
+    for (let i = 0; i < pos.count; i++) rows.set(Math.round(pos.getY(i) * 100), [...(rows.get(Math.round(pos.getY(i) * 100)) ?? []), pos.getZ(i)])
+    const [floor, desk] = [...rows.keys()].sort((a, b) => a - b)
+    expect(desk).toBeGreaterThan(70)
+    const z = (y: number) => frame.toScene([0, y, 0])[2]
+    expect(Math.min(...rows.get(floor)!)).toBeCloseTo(z(0.6)) // the floor part ends at the spot's north edge
+    expect(Math.max(...rows.get(desk)!)).toBeCloseTo(z(0.8)) // the desk part starts at the desk's edge
   })
 
   it('draws the links that cross the spot in full and the two along the desk faint, by the file', () => {
