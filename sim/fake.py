@@ -24,13 +24,14 @@ import sys
 import time
 from pathlib import Path
 
+from .layout import LAYOUT
 from .wire import encoder
 
-SIZE = 2.0
-NODES = {"unoq": (1.0, 2.0), "pi5": (1.0, 0.0), "east": (2.0, 1.0), "west": (0.0, 1.0)}
-LINKS = [("pi5", "unoq", "wifi"), ("pi5", "unoq", "ble"), ("east", "unoq", "ble"),
-         ("west", "unoq", "ble"), ("east", "pi5", "ble"), ("west", "pi5", "ble")]  # (tx, rx, kind)
-ROUTER_SPOTS = {"S-home": (1.0, 0.0), "S-W30": (0.7, 0.0), "S-E30": (1.3, 0.0)}
+# From radio/nodes.json (sim/layout.py), so the fake data follows the layout the real code reads.
+SIZE = LAYOUT.size_m[0]
+NODES = dict(LAYOUT.nodes)            # id -> (x, y)
+LINKS = list(LAYOUT.links)            # (tx, rx, kind)
+ROUTER_SPOTS = dict(LAYOUT.router_spots)
 PATHS_DIR = Path(__file__).parent / "paths"
 
 REF_DBM = {"wifi": -40.0, "ble": -55.0}  # empty-room level at 1 m
@@ -44,7 +45,7 @@ def link_id(tx: str, rx: str, kind: str) -> str:
 
 
 def zone_of(x: float, y: float) -> int:
-    return 1 + int(x >= SIZE / 2) + 2 * int(y < SIZE / 2)
+    return LAYOUT.zone_of(x, y)
 
 
 def baseline(tx: str, rx: str, kind: str, nodes: dict = NODES) -> float:
