@@ -39,6 +39,7 @@ SETTLE_MS = 3_000        # after router_home, pi5 links must sit near base this 
 SETTLE_DB = 1.0          # ... within this of base, else an automatic baseline runs
 ADVICE_MEDIAN_MS = 3_000 # before_dbm and after_dbm are medians over this long
 AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
+HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable: their readings ride the sensing Wi-Fi
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
 ZONE_HOLD = 5            # decisions in a row (0.5 s) before enter, exit or zone_change is said
 TRAIN_PURPOSES = ("train", "object")
@@ -94,6 +95,12 @@ def base_at(history: List[dict], t) -> Optional[Dict[str, float]]:
     return found
 
 
+def _ends(link: str):
+    """'pi5>unoq:wifi' -> ('pi5', 'unoq')."""
+    tx, _, rest = link.partition(">")
+    return tx, rest.partition(":")[0]
+
+
 def _same_object(a, b) -> bool:
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 <= SAME_OBJECT_M
 
@@ -108,7 +115,7 @@ def now_ms() -> int:
 
 class Brain:
     def __init__(self, clock: Optional[Callable[[], int]] = None, to_bus=None, mode_file=None,
-                 spawn=None, board_stats=None, links=F.LINKS, nodes=None, led=None, sessions_dir=None):
+                 spawn=None, board_stats=None, links=None, nodes=None, led=None, sessions_dir=None):
         """clock None = follow the feed (latest recv_t), for recorded files played fast.
         to_bus(msg) forwards a command to the bus.
         spawn(fit, done) runs fit() off the loop, then done(model) back on it.
@@ -116,7 +123,17 @@ class Brain:
         led is the LED grid (brain/alert.py); None = no lights.
         sessions_dir is data/sessions: baseline.json is written there and read back at start."""
         nodes = nodes or json.loads(NODES_JSON.read_text(encoding="utf-8"))
-        self.health = Health.from_nodes(nodes)
+        # The layout is whatever radio/nodes.json says: links (in its order), zones, the router.
+        links = tuple(links or [link["id"] for link in nodes["links"]])
+        self.zone_ids = [int(z["id"]) for z in nodes["zones"]]
+        self.router_node = next((n["id"] for n in nodes["nodes"] if "router" in n.get("roles", [])), "pi5")
+        ends = {link["id"]: (link.get("tx"), link.get("rx")) for link in nodes["links"]}
+        self.router_links = [k for k in links if self.router_node in ends.get(k, _ends(k))]
+        # Links heard by a receiver whose readings travel over the sensing hotspot itself can go
+        # quiet when that link is blocked on purpose: they show stale or blind in their own rows
+        # but never blind the sensor (desk layout, Pi B).
+        over_hotspot = [k for k in links if ends.get(k, _ends(k))[1] in HOTSPOT_RECEIVERS]
+        self.health = Health.from_nodes(nodes, classifier_links=[k for k in links if k not in over_hotspot])
         self.xray = Xray.from_nodes(nodes)
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
         self._heard = set()                   # links with at least one reading
@@ -263,7 +280,7 @@ class Brain:
         self.training = {"started_t": self.now(), "progress": None,
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
-        history = self._baselines()
+        history, links, zones = self._baselines(), self.links, self.zone_ids
 
         def fit():   # may run on another thread: touches nothing of ours
             for s in sessions:   # read back from the bus's files; nothing is kept after the fit
@@ -271,7 +288,7 @@ class Brain:
                     s["messages"] = read_session(s["path"], s["meta"].get("recv_t"))
                 if not s.get("base"):
                     s["base"] = base_at(history, s["meta"].get("recv_t"))
-            return Model(base, ver=ver).fit(sessions)
+            return Model(base, ver=ver, links=links, zones=zones).fit(sessions)
 
         def done(model):   # back on the loop; model None = the fit failed
             self.training = None
@@ -385,10 +402,12 @@ class Brain:
             with open(self.sessions_dir / "model.pkl", "rb") as f:
                 doc = pickle.load(f)
             model, ver = doc["model"], str(doc["ver"])
-            if getattr(model, "features", None) != F.feature_names():
+            want = F.feature_names(self.links)
+            if getattr(model, "features", None) != want or getattr(model, "classes", None) != [0] + self.zone_ids:
                 logging.getLogger("brain").warning(
-                    "model.pkl was trained on other features (%s ...) than this brain computes (%s ...): "
-                    "not loaded, train again", (getattr(model, "features", None) or ["?"])[0], F.feature_names()[0])
+                    "model.pkl was trained on other features or zones (%d features, first %s) than this layout "
+                    "has (%d, first %s): not loaded, train again", len(getattr(model, "features", None) or []),
+                    (getattr(model, "features", None) or ["?"])[0], len(want), want[0])
                 return
             if doc.get("place_t") is not None:
                 same_place = doc["place_t"] == self.place_t
@@ -433,7 +452,7 @@ class Brain:
 
     def _median(self, link: str, t0: int, t1: Optional[int] = None) -> Optional[float]:
         """Median dBm of a link's readings with t0 <= recv_t < t1 (t1 None = up to now)."""
-        vals = [d for t, d in self._recent[link] if t >= t0 and (t1 is None or t < t1)]
+        vals = [d for t, d in self._recent.get(link, ()) if t >= t0 and (t1 is None or t < t1)]
         return round(statistics.median(vals), 1) if vals else None
 
     def _check_settle(self, now) -> None:
@@ -442,7 +461,7 @@ class Brain:
             return
         start, self.settle = self.settle, None
         for link in self.links:
-            if "pi5" in link:
+            if link in self.router_links:   # the router as tx or rx; "pi5b" is another node
                 m = self._median(link, start)
                 if m is None or abs(m - self.base[link]) > SETTLE_DB:
                     self.recalibrating, self._old_base = True, dict(self.base)

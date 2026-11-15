@@ -25,7 +25,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 from brain import features as F
 
-ZONES = [0, 1, 2, 3, 4]
+ZONES = [0, 1, 2, 3, 4]   # the default layout: empty, then the four zones of the 2 x 2 m square
 FOREST = dict(n_estimators=60, max_depth=12, min_samples_leaf=2, n_jobs=4, random_state=0)
 ZONE_SET_MIN_P = 0.25  # a zone joins zone_set when its probability is at least this
 UNSEEN_DB = 6.0        # a feature this far outside everything seen in training = "not sure"
@@ -41,42 +41,46 @@ def kind_of(window: dict) -> Optional[str]:
     return "person" if label["present"] else "none"
 
 
-def dataset(sessions: List[dict], base: Dict[str, float]) -> dict:
-    """Labeled windows from every session, as arrays."""
+def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS) -> dict:
+    """Labeled windows from every session, as arrays. links = the layout's links, in order."""
     X, zone, motion, kind, walker, session = [], [], [], [], [], []
     for s in sessions:
         meta = s.get("meta") or {}
         # A session is windowed against the baseline it was recorded on, when that is known:
         # recordings from before a re-baseline keep their own drops.
-        for w in F.windows(s["messages"], s.get("base") or base):
+        for w in F.windows(s["messages"], s.get("base") or base, links):
             lb = w["label"]
             k = kind_of(w) if lb is not None else None
             if k is None:
                 continue
-            X.append(F.vector(w))
+            X.append(F.vector(w, links))
             zone.append(lb["zone"])
             motion.append(lb["motion"] or "")
             kind.append(k)
             walker.append(meta.get("walker"))
             session.append(meta.get("session"))
     return {
-        "X": np.asarray(X, dtype=float).reshape(-1, len(F.feature_names())),
+        "X": np.asarray(X, dtype=float).reshape(-1, len(F.feature_names(links))),
         "zone": np.asarray(zone), "motion": np.asarray(motion), "kind": np.asarray(kind),
         "walker": np.asarray(walker, dtype=object), "session": np.asarray(session, dtype=object),
     }
 
 
 class Model:
-    def __init__(self, base: Dict[str, float], ver: str = "m1"):
+    def __init__(self, base: Dict[str, float], ver: str = "m1", links=F.LINKS, zones=ZONES[1:]):
+        """links and zones come from radio/nodes.json (the brain passes them); the defaults are
+        the 2 x 2 m square's. probs has one entry for empty, then one per zone, in that order."""
         self.base = dict(base)
         self.ver = ver
+        self.links = tuple(links)
+        self.classes = [0] + [int(z) for z in zones]
         self.zone = self.motion = self.kind = None
         self.train_s: Optional[float] = None
         self.windows = 0
         self.train_sessions: List[str] = []
-        self.features: List[str] = F.feature_names()   # what the forests were fit on; checked when a file is loaded
+        self.features: List[str] = F.feature_names(self.links)   # what the forests were fit on; checked when a file is loaded
         self.seen_lo = self.seen_hi = None             # per feature, the range seen in training
-        self._link_weight = np.zeros(len(F.LINKS))
+        self._link_weight = np.zeros(len(self.links))
 
     @property
     def trained(self) -> bool:
@@ -84,7 +88,7 @@ class Model:
 
     def fit(self, sessions: List[dict]) -> "Model":
         t0 = time.monotonic()
-        d = dataset(sessions, self.base)
+        d = dataset(sessions, self.base, self.links)
         if len(d["X"]) == 0:
             raise ValueError("no labeled windows to train on")
         self.zone = _forest(d["X"], d["zone"])
@@ -92,7 +96,7 @@ class Model:
         self.motion = _forest(d["X"][moving], d["motion"][moving]) if moving.any() else None
         self.kind = _forest(d["X"], d["kind"])
         # How much each link matters to the zone forest, for the "why" list.
-        imp = self.zone.feature_importances_.reshape(len(F.LINKS), len(F.STATS))
+        imp = self.zone.feature_importances_.reshape(len(self.links), len(F.STATS))
         self._link_weight = imp.sum(axis=1)
         self.seen_lo, self.seen_hi = d["X"].min(axis=0), d["X"].max(axis=0)
         self.train_s = time.monotonic() - t0
@@ -102,9 +106,9 @@ class Model:
 
     def predict(self, window: dict) -> dict:
         """The contract's pred block for one window (still_s is the alert's job)."""
-        x = np.asarray([F.vector(window)], dtype=np.float32)   # the trees' own input type
-        probs = _probs(self.zone, x, ZONES)
-        zone = int(np.argmax(probs))
+        x = np.asarray([F.vector(window, self.links)], dtype=np.float32)   # the trees' own input type
+        probs = _probs(self.zone, x, self.classes)
+        zone = self.classes[int(np.argmax(probs))]
         kind = str(_pick(self.kind, x))
         present = zone != 0
         if present:
@@ -114,11 +118,12 @@ class Model:
         motion = None
         if present and self.motion is not None:
             motion = str(_pick(self.motion, x)) or None
-        zone_set = ([z for z in ZONES[1:] if probs[z] >= ZONE_SET_MIN_P] or [zone]) if present else []
+        zone_set = ([z for i, z in enumerate(self.classes) if z and probs[i] >= ZONE_SET_MIN_P] or [zone]) \
+            if present else []
         if present and not self.familiar(x[0]):
             # Somebody is there, but the links read like nothing the model was taught: say
             # "not sure where" (every zone it knows) instead of naming one zone as if it knew.
-            zone_set = [z for z in ZONES[1:] if z in self.zone.classes_] or zone_set
+            zone_set = [z for z in self.classes[1:] if z in self.zone.classes_] or zone_set
         return {
             "present": present, "kind": kind, "zone": zone,   # 0 = nobody there (section 3)
             "zone_set": zone_set, "probs": [round(float(p), 3) for p in probs],
@@ -134,11 +139,11 @@ class Model:
     def why(self, window: dict, top: int = 2) -> List[str]:
         """Links that most explain this decision: importance x how far they dropped."""
         score = []
-        for i, link in enumerate(F.LINKS):
+        for i, link in enumerate(self.links):
             s = window["links"].get(link) or {}
             score.append(self._link_weight[i] * abs(s.get("drop_db") or 0.0))
         order = np.argsort(score)[::-1]
-        return [F.LINKS[i] for i in order[:top] if score[i] > 0]
+        return [self.links[i] for i in order[:top] if score[i] > 0]
 
     def info(self) -> dict:
         """The contract's model block (ms_per_decision is measured by the live loop)."""
@@ -183,7 +188,8 @@ def _probs(forest, x, classes) -> np.ndarray:
     out = np.zeros(len(classes))
     p = _forest_proba(forest, x)
     for c, v in zip(forest.classes_, p):
-        out[classes.index(int(c))] = v
+        if int(c) in classes:   # a zone the layout doesn't have can't be answered
+            out[classes.index(int(c))] = v
     return out
 
 

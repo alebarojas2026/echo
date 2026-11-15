@@ -25,6 +25,7 @@ from collections import deque
 import numpy as np
 
 SQUARE_M = 2.0
+DESK_CELL_M = 0.125    # cell size on a layout that isn't square
 MARGIN_M = 0.2
 NODES = {"unoq": (1.0, 2.0), "pi5": (1.0, 0.0), "east": (2.0, 1.0), "west": (0.0, 1.0)}
 LINKS = ("pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble",
@@ -61,15 +62,43 @@ def zone_of(x, y, square_m=SQUARE_M):
     return 1 + int(x >= half) + 2 * int(y < half)
 
 
+def zone_rule(doc):
+    """zone(x, y) for the layout in radio/nodes.json.
+
+    A frame with strip_m and zone_split_x_m is the desk layout: zone = 1 + (x >= split) inside
+    the strip, 0 anywhere else (the desk top is never a zone). Otherwise the square's four.
+    """
+    frame = (doc or {}).get("frame", {})
+    strip, split = frame.get("strip_m"), frame.get("zone_split_x_m")
+    if strip and split is not None:
+        sx, sy, split = float(strip[0]), float(strip[1]), float(split)
+        return lambda x, y: 1 + int(x >= split) if 0 <= x <= sx and 0 <= y <= sy else 0
+    side = float(frame.get("size_m", [SQUARE_M])[0])
+    return lambda x, y: zone_of(x, y, side)
+
+
+def grid_shape(size_m, margin_m=MARGIN_M):
+    """(w, h) of the grid for a layout: 10 x 10 for a square (section 5), else cells of
+    DESK_CELL_M over the rectangle plus the margin (16 x 12 for the 1.6 x 1.1 m desk)."""
+    sx, sy = float(size_m[0]), float(size_m[-1])
+    if sx == sy:
+        return 10, 10
+    return round((sx + 2 * margin_m) / DESK_CELL_M), round((sy + 2 * margin_m) / DESK_CELL_M)
+
+
 class Grid:
     """w x h square cells covering the square plus the margin, centred on it."""
 
-    def __init__(self, w=10, h=10, square_m=SQUARE_M, margin_m=MARGIN_M):
+    def __init__(self, w=10, h=10, square_m=SQUARE_M, margin_m=MARGIN_M, size_m=None):
+        """size_m = (x, y) of a layout that isn't square; the cells stay square and the grid
+        is centred on the layout."""
         self.w, self.h = int(w), int(h)
-        span = square_m + 2 * margin_m
-        self.cell_m = span / min(self.w, self.h)
-        mid = square_m / 2
-        self.origin_m = (mid - self.w * self.cell_m / 2, mid - self.h * self.cell_m / 2)
+        sx, sy = (float(size_m[0]), float(size_m[-1])) if size_m else (square_m, square_m)
+        if sx == sy:
+            self.cell_m = (sx + 2 * margin_m) / min(self.w, self.h)
+        else:
+            self.cell_m = max((sx + 2 * margin_m) / self.w, (sy + 2 * margin_m) / self.h)
+        self.origin_m = (sx / 2 - self.w * self.cell_m / 2, sy / 2 - self.h * self.cell_m / 2)
         xs = self.origin_m[0] + (np.arange(self.w) + 0.5) * self.cell_m
         ys = self.origin_m[1] + (np.arange(self.h) + 0.5) * self.cell_m
         gx, gy = np.meshgrid(xs, ys)  # shape (h, w), so ravel gives iy * w + ix
@@ -199,12 +228,15 @@ class Xray:
     """
 
     def __init__(self, nodes=None, links=LINKS, w=10, h=10, alpha=None,
-                 excess_m=EXCESS_PATH_M, router_spots=None, square_m=SQUARE_M):
+                 excess_m=EXCESS_PATH_M, router_spots=None, square_m=SQUARE_M, size_m=None,
+                 zone_at=None, router="pi5"):
         self.nodes = {k: (float(p[0]), float(p[1])) for k, p in (nodes or NODES).items()}
         self.links = list(links)
         self.router_spots = dict(router_spots or ROUTER_SPOTS)
         self.square_m = square_m
-        self.grid = Grid(w, h, square_m=square_m)
+        self.router_node = router               # the node that moves on router_moved
+        self.zone_at = zone_at or (lambda x, y: zone_of(x, y, square_m))
+        self.grid = Grid(w, h, square_m=square_m, size_m=size_m)
         self.alpha = alpha
         self.excess_m = excess_m
         self.rebuild()
@@ -212,11 +244,18 @@ class Xray:
 
     @classmethod
     def from_nodes(cls, doc, **kw):
-        """Build from radio/nodes.json, already parsed. kw: w, h, alpha, excess_m."""
+        """Build from radio/nodes.json, already parsed. kw: w, h, alpha, excess_m.
+
+        Nodes, links, router spots, the size of the layout, its zone rule and which node is the
+        router all come from the file."""
+        size = doc.get("frame", {}).get("size_m", [SQUARE_M, SQUARE_M])
+        w, h = grid_shape(size)
+        kw = {"w": w, "h": h, **kw}
+        router = next((n["id"] for n in doc["nodes"] if "router" in n.get("roles", [])), "pi5")
         return cls({n["id"]: n["xyz_m"] for n in doc["nodes"]},
                    [link["id"] for link in doc["links"]],
                    router_spots={s["id"]: s["xyz_m"][:2] for s in doc.get("router_spots", [])},
-                   square_m=float(doc.get("frame", {}).get("size_m", [SQUARE_M])[0]), **kw)
+                   square_m=float(size[0]), size_m=size, zone_at=zone_rule(doc), router=router, **kw)
 
     def rebuild(self):
         """Recompute W and P from the current node positions."""
@@ -229,7 +268,7 @@ class Xray:
 
     def set_router(self, spot):
         """router_moved {spot} or router_home ("S-home"): move pi5 and rebuild P."""
-        self.move_node("pi5", self.router_spots[spot])
+        self.move_node(self.router_node, self.router_spots[spot])
 
     def reset(self):
         """Forget histories, static levels and objects (after a new baseline)."""
@@ -343,6 +382,6 @@ class Xray:
     def _event(self, kind, o):
         x, y = o["xy"]
         return {"kind": kind, "info": {"node": o["near"], "link": o["link"],
-                                       "zone": zone_of(x, y, self.square_m),
+                                       "zone": self.zone_at(x, y),
                                        "xy_m": [round(x, 2), round(y, 2)],
                                        "drop_db": round(o["drop"], 1)}}
