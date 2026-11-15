@@ -24,8 +24,8 @@ test('the mock follows a one-zone layout: zone 1, zone_set [1], probs [empty, th
 })
 
 test('headlines say where by the zone name, and never a side', () => {
-  expect(judgeMoment(here('still'), false, layout)).toEqual(['Still at the desk', ''])
-  expect(judgeMoment(here('moving'), false, layout)).toEqual(['Moving at the desk', ''])
+  expect(judgeMoment(here('still'), false, layout)).toEqual(['Someone is here, standing still', ''])
+  expect(judgeMoment(here('moving'), false, layout)).toEqual(['Someone is here, moving', ''])
   expect(judgeMoment(alignMockState(mockState('empty', 1, 0), layout), false, layout)[0]).toBe('Nobody is here')
   expect(zoneName(1, layout)).toBe('At the desk')
   expect(zonePlace(1, layout)).toBe('at the desk')
