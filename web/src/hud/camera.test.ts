@@ -1,3 +1,6 @@
+import { vi } from 'vitest'
+// These legacy scenarios deliberately exercise the two-zone desk fixture.
+vi.mock('../../../radio/nodes.json', async () => ({ default: (await import('../../tests/fixtures/desk-layout.json')).default }))
 import { expect, test } from 'vitest'
 import { mockState } from './mock-layout'
 import { hudLayout } from './layout'
