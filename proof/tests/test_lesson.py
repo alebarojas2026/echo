@@ -1,6 +1,8 @@
 import pytest
 
-from proof.lesson import Coach
+import json
+
+from proof.lesson import Coach, label_summary
 
 T0 = 1_763_149_500_000
 
@@ -62,3 +64,24 @@ def test_no_lesson_block_is_said_plainly():
 def test_bad_ids_are_refused(session, walker):
     with pytest.raises(ValueError):
         Coach(session, walker, lambda m: None)
+
+
+def test_recording_without_a_lesson_never_sends_train():
+    coach, sent, said = run([state(s, teacher=1) for s in range(0, 40)], purpose="demo", train=False)
+    coach.stop()
+    assert [m["cmd"] for m in sent] == ["label_mode", "record_start", "record_stop", "label_mode"]
+    assert sent[1]["args"]["purpose"] == "demo" and not any("Step to your" in line for line in said)
+    assert "no lesson was asked for" in said[-1]
+
+
+def test_label_summary_counts_what_the_camera_said():
+    def label(i, persons=1, zone=1, clipped=False):
+        return json.dumps({"type": "label", "t": i * 100, "recv_t": i * 100, "persons_in_frame": persons,
+                           "zone": None if clipped else zone, "clipped": clipped})
+    lines = [label(0, 0, 0), label(1), label(2), label(3, zone=2), label(4, clipped=True),
+             label(5, 2, clipped=True), '{"type":"rssi"}', '{"type":"lab']
+    text = label_summary(lines)
+    assert "6 labels in 0.5 s (10.0 a second)" in text and "nobody in frame: 1" in text
+    assert "one person, usable: 3   zone 1: 2   zone 2: 1" in text
+    assert "dropped (dead band or side edge): 1" in text and "more than one person: 1" in text
+    assert label_summary(['{"type":"rssi"}']) == "no camera labels in this recording"
