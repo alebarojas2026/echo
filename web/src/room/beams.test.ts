@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { beamLook, nodePair, overFloor } from './beams'
+import { amberDb, beamLook, DROPPING_DB, explains, nodePair, overFloor, WHY_OFF_MS, WHY_ON_MS } from './beams'
+import { Held } from './motion'
 import type { LinkState } from './contract'
 
 const link = (drop: number | null, status = 'ok'): LinkState => ({
@@ -24,6 +25,48 @@ describe('beam look', () => {
     expect(look.why).toBe(true)
     expect(look.width).toBeGreaterThan(beamLook(link(12), false, none).width)
     expect(look.opacity).toBeGreaterThanOrEqual(0.8)
+  })
+
+  it('counts a link as explaining only when it is in pred.why and its own drop is 3 dB or more', () => {
+    expect(DROPPING_DB).toBe(3)
+    expect(explains(link(3), true)).toBe(true)
+    expect(explains(link(9.8), true)).toBe(true)
+    expect(explains(link(2.9), true)).toBe(false) // listed, but sitting at its baseline
+    expect(explains(link(9.8), false)).toBe(false) // dropping, but not what the brain went by
+    expect(explains(link(-4), true)).toBe(false) // a stronger signal is not a drop
+    expect(explains(link(null), true)).toBe(false) // no baseline yet
+    expect(explains(undefined, true)).toBe(false)
+  })
+
+  it('takes the drop that lights a line from the address when it is set, else 3 dB', () => {
+    const at = (q: string) => amberDb(new URLSearchParams(q))
+    expect(at('')).toBe(3)
+    expect(at('amber_db=5')).toBe(5)
+    expect(at('amber_db=4.5')).toBe(4.5)
+    expect(at('amber_db=0')).toBe(3) // would light every listed line: not believed
+    expect(at('amber_db=99')).toBe(3)
+    expect(at('amber_db=')).toBe(3)
+    expect(at('amber_db=abc')).toBe(3)
+    expect(explains(link(4), true, 5)).toBe(false)
+    expect(explains(link(5), true, 5)).toBe(true)
+  })
+
+  it('holds the highlight steady while a link wobbles across the 3 dB line', () => {
+    const held = new Held<boolean>(false, (on) => (on ? WHY_ON_MS : WHY_OFF_MS))
+    const at = (drop: number, ms: number) => held.update(explains(link(drop), true), ms)
+    // Ten readings a second, in and out of the line every 200 ms: never lit.
+    for (let ms = 0; ms < 2200; ms += 100) expect(at(Math.floor(ms / 200) % 2 ? 3.4 : 2.6, ms)).toBe(false)
+    // Over the line and staying there: lit after 300 ms, not before.
+    expect(at(5, 2200)).toBe(false)
+    expect(at(5, 2400)).toBe(false)
+    expect(at(5, 2500)).toBe(true)
+    // Dips under for 400 ms and comes back: stays lit.
+    for (let ms = 2600; ms < 3000; ms += 100) expect(at(2.5, ms)).toBe(true)
+    expect(at(5, 3000)).toBe(true)
+    // Under for 500 ms: lets go.
+    expect(at(1, 3100)).toBe(true)
+    expect(at(1, 3500)).toBe(true)
+    expect(at(1, 3600)).toBe(false)
   })
 
   it('draws a link that never crosses the floor faint at rest, and in full once it explains the prediction', () => {
