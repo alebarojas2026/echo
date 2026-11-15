@@ -9,6 +9,10 @@ from store import Store
 from store.__main__ import fill_from_sim
 
 NOW = 1_763_149_500_000
+REPO_LAYOUT = json.loads((Path(__file__).resolve().parents[2] / "radio" / "nodes.json").read_text(encoding="utf-8"))
+# One spot (the gate): the router is cabled and never moved, so the answers are about a thing left in the Wi-Fi line.
+ONE_SPOT = len(REPO_LAYOUT["zones"]) == 1
+NOTHING_LEFT = "No object blocking the Wi-Fi line was recorded in that time."
 
 
 @pytest.fixture
@@ -28,22 +32,28 @@ def query(store, question, **kw):
 
 def test_weakest_uses_latest_wifi_drop_and_configured_names(recorded, tmp_path):
     layout = tmp_path / "nodes.json"
+    # The recorded links are those of the layout in use, so every one of its devices gets a name of this file's own.
     layout.write_text(json.dumps({"zones": [{"id": 1, "name": "At the desk"}],
-                                  "nodes": [{"id": "pi5", "name": "Desk radio"}, {"id": "unoq", "name": "Board"}],
-                                  "links": [{"id": "pi5>unoq:wifi", "tx": "pi5", "rx": "unoq"}]}))
+                                  "nodes": [{"id": n["id"], "name": f"Radio {n['id']}"} for n in REPO_LAYOUT["nodes"]],
+                                  "links": [{"id": k["id"], "tx": k["tx"], "rx": k["rx"]} for k in REPO_LAYOUT["links"]]}))
     # Compare actual simulated saved drops, rather than inventing a baseline.
     latest = recorded.latest()
     reply = query(recorded, "Where is the Wi-Fi weakest right now?", nodes_path=layout)
     row = reply["rows"][0]
     expected = max((v["drop_db"] for k, v in latest["links"].items() if k.endswith(":wifi") and v["status"] == "ok"))
     assert row["drop_db"] == expected
-    assert row["name"] == "Desk radio to Board"
+    tx, rx = row["link"].split(":")[0].split(">")
+    assert row["name"] == f"Radio {tx} to Radio {rx}"
     assert reply["tool"] == "link_history"
 
 
 def test_blocked_wifi_reports_saved_advice_and_drop(recorded):
     reply = query(recorded, "Did anything block the Wi-Fi in the last 10 minutes?")
     assert reply["tool"] == "explain_advice"
+    if ONE_SPOT:   # nothing is ever said about moving the router: a thing left in the line, or nothing
+        assert reply["answer"].startswith("Something was left in the Wi-Fi line") or reply["answer"] == NOTHING_LEFT
+        assert "router" not in reply["answer"]
+        return
     assert "blockage advice" in reply["answer"]
     row = reply["rows"][0]
     assert row["max_drop_db"] == max(r["links"][row["link"]]["drop_db"] for r in recorded.seconds()
@@ -61,6 +71,10 @@ def test_router_move_reports_measured_before_after_and_gain(recorded):
 def test_no_dead_zone_and_no_move_in_simulated_empty_room():
     store = Store(":memory:")
     fill_from_sim(store, "empty_room", end_ms=NOW)
+    if ONE_SPOT:
+        assert query(store, "Did anything block the Wi-Fi?")["answer"] == NOTHING_LEFT
+        assert query(store, "What did moving the router do?")["answer"] == NOTHING_LEFT
+        return
     assert "No dead zone was found" in query(store, "Did anything block the Wi-Fi?")["answer"]
     assert "router has not been moved" in query(store, "What did moving the router do?")["answer"]
 
@@ -107,7 +121,8 @@ def test_missing_baseline_does_not_name_a_weakest_link():
 def test_move_without_measurement_says_result_is_pending():
     store = Store(":memory:")
     store.add({"type": "event", "t": NOW, "id": "move", "kind": "router_moved", "src": "sim", "info": {}})
-    assert "no measured before-and-after" in query(store, "What did moving the router do?")["answer"]
+    answer = query(store, "What did moving the router do?")["answer"]
+    assert answer == NOTHING_LEFT if ONE_SPOT else "no measured before-and-after" in answer
 
 
 @pytest.mark.parametrize("kind, link, expected", [
