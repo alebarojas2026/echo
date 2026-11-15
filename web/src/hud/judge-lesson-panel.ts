@@ -1,4 +1,5 @@
 import type { StateMsg } from '../room/contract'
+import { hudLayout } from './layout'
 import { LessonProgress } from './lesson'
 import './lesson.css'
 
@@ -14,7 +15,7 @@ export function mountPanel(root: HTMLElement) {
   let state: StateMsg | null = null, stale = true
   const paint = () => {
     const next = progress.update(state, stale)
-    root.hidden = !next
+    root.hidden = !!hudLayout.presence?.line || !next
     if (!next) return
     if (status.textContent !== next.line) status.textContent = next.line
     if (agreement.textContent !== next.agreement) agreement.textContent = next.agreement

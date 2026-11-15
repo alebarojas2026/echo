@@ -1,3 +1,6 @@
+import { vi } from 'vitest'
+// These legacy scenarios deliberately exercise the two-zone desk fixture.
+vi.mock('../../../radio/nodes.json', async () => ({ default: (await import('../../tests/fixtures/desk-layout.json')).default }))
 import {expect,test} from 'vitest'
 import gate from '../../tests/fixtures/gate-layout.json'
 import desk from '../../tests/fixtures/desk-layout.json'

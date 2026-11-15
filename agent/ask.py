@@ -312,6 +312,38 @@ def checked(pick, zones: dict, links: list) -> tuple:
 
 
 USES_MINUTES = ("presence", "still_spans", "alerts", "intrusions", "link_history")
+MAX_CITES = 60   # the most record numbers one such answer names
+
+
+def shown_work(store, out: dict, tool: str, now_ms: int, minutes: int, tool_ms: float, timer=time.perf_counter) -> dict:
+    """The answer with its "steps", and "cites" and "chain_ok" when the stretch holds sealed records
+    (CONTRACTS.md section 13), for an answer read from a stretch of stored records. cites are the records
+    where what the answer is about changed (somebody came or went, an alert, an intrusion), with the first
+    and the last record of the stretch; the chain is checked from the first to the last before answering.
+    If it does not check out the answer says so first and names the record."""
+    start = timer()
+    seconds = [r for r in store.seconds(now_ms - minutes * 60_000, now_ms) if r.get("seq") is not None]
+    events = [e for e in store.events(now_ms - minutes * 60_000) if e["t"] <= now_ms and e.get("seq") is not None]
+    steps = [{"tool": "fetch summaries", "ms": round((timer() - start) * 1000, 2), "rows": len(seconds)},
+             {"tool": tool, "ms": round(tool_ms, 2), "rows": len(out["rows"])}]
+    if not seconds and not events:
+        return {**out, "steps": steps}   # nothing sealed in the stretch: no cites, no chain_ok
+    turns = [r["seq"] for a, r in zip(seconds, seconds[1:]) if (a["present"], a["kind"], a["alert"]) != (r["present"], r["kind"], r["alert"])]
+    ends = [seconds[0]["seq"], seconds[-1]["seq"]] if seconds else []
+    cited = sorted(set(ends + [e["seq"] for e in events] + turns))
+    if len(cited) > MAX_CITES:
+        cited = sorted(set(ends + cited[-(MAX_CITES - 2):]))
+    start = timer()
+    chain = detective.verify(store, cited[0], cited[-1])
+    steps.append({"tool": "verify the chain", "ms": round((timer() - start) * 1000, 2), "rows": chain["checked"]})
+    if chain["ok"] is None:
+        return {**out, "steps": steps}
+    answer = out["answer"]
+    if chain["ok"] is False:
+        bad = chain["first_bad_seq"]
+        answer = (f"Warning: the sealed record does not check out at record {bad}, so this answer can't be trusted. "
+                  if bad is not None else "Warning: the sealed record does not check out, so this answer can't be trusted. ") + answer
+    return {**out, "answer": answer, "steps": steps, "cites": cited, "chain_ok": chain["ok"]}
 
 
 def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic,
@@ -355,6 +387,7 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
         out = {"answer": can_answer() + (" " + CANT_ANSWER if refused else ""), "rows": []}
     else:
         specific = room_facts.intent(read)
+        began = time.perf_counter()   # not the injected timer: that one times the whole answer
         current = not specific and len(zones) == 1 and tool in ("presence", "still_spans") and re.search(
             r"right now|currently|at the moment|what.*happening|^(is|are)\b", read, re.I)
         current = current and not re.search(r"\b(last|past|since|today|yesterday)\b", read, re.I)
@@ -365,6 +398,10 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
             out = current_spot(store, now_ms, zones, nodes_path)
         else:
             out = TOOLS[tool](store, now_ms, zones, nodes_path=nodes_path, **args)
+        tool_ms = (time.perf_counter() - began) * 1000
+        if tool in USES_MINUTES and not specific and not current:   # ("right now" reads the latest state, not a stretch)
+            # An answer read from a stretch of the record shows its work like the story does (section 13).
+            out = shown_work(store, out, tool, now_ms, args["minutes"], tool_ms)
         if tool in USES_MINUTES or specific:   # the minutes in the answer are in a row too
             out = {**out, "rows": out["rows"] + [{"row": "asked", "minutes": args["minutes"]}]}
     latest = store.latest()

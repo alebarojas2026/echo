@@ -1,3 +1,6 @@
+import { vi } from 'vitest'
+// This router-move scenario deliberately uses the legacy desk fixture.
+vi.mock('../../../radio/nodes.json', async () => ({ default: (await import('../../tests/fixtures/desk-layout.json')).default }))
 import { expect, test } from 'vitest'
 import { mockState } from './mock-layout'
 import { adviceResult } from './judge-advice-panel'

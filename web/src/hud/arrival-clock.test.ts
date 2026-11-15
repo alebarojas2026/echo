@@ -34,12 +34,12 @@ describe('the walk-up card follows the board clock', () => {
 describe('a layout with a presence line has no camera', () => {
   const gate = { ...hudLayout, presence: { line: 'pi5>pi5b:wifi' } }
   const state = (cam: string) => ({ ...mockState('still', 0, 7000), cam }) as ReturnType<typeof mockState>
-  it('shows nothing about a camera until the board has reported one', () => {
+  it('keeps teaching panels off the one-spot judge screen', () => {
     const camera = new CameraSeen()
     expect(camera.absent(state('off'), gate)).toBe(true)
     expect(camera.absent(state('unknown'), gate)).toBe(true)
-    expect(camera.absent(state('on'), gate)).toBe(false)
-    expect(camera.absent(state('off'), gate)).toBe(false)
+    expect(camera.absent(state('on'), gate)).toBe(true)
+    expect(camera.absent(state('off'), gate)).toBe(true)
   })
   it('leaves every other layout as it was', () => {
     expect(new CameraSeen().absent(state('off'), { ...hudLayout, presence: null })).toBe(false)
