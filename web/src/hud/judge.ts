@@ -1,5 +1,6 @@
 import { boardNow } from './board-time'
 import { boardAskClient, makeMockAskClient } from './ask-client'
+import { mountIncidentReport } from './report'
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import { routerWords } from './router-words'
@@ -74,6 +75,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const now = () => boardNow(live?.current() ?? null)
   const ask = live?.source === 'ws' ? boardAskClient : makeMockAskClient(now)
   const disposeAsk = mountAskRoom(root.querySelector('header')!, ask, replay ? span => void replay.start(span) : undefined)
+  const disposeReport = mountIncidentReport(live, recordsClient(live?.source), span => { void replay?.start(span) })
   const disposeArrival = mountArrival(root, live, operator)
   let offReplayClock: (() => void) | undefined
   if (replay) {
@@ -131,7 +133,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposeReport(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
