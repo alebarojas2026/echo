@@ -210,3 +210,45 @@ for those missing recordings.
 
 [kit5-report]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6894490243
 [kit5-inputs]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6894671044
+
+## Later kit-5.1 acceptance: the still-person alert did not pass
+
+The later [acceptance report][kit51-failure], [baseline comparison][kit51-baselines]
+and [placement experiment][kit51-placement] retain a failure after the successful kit-5
+run above. These are operator-reported observations from 15 November 2026, through
+13:28 UTC, on `kit-5.1` (`4be0eea7405f6de566eb0c6001418ce1898ab7ab`). The raw files have
+not been independently scored in this workspace. The earlier run must not be presented
+as evidence that the later placement passed the no-movement alert or check-in.
+
+The reported gate settings were unchanged between kit-5 and kit-5.1:
+`on_db=7`, `off_db=3`, `object_db=3`, `object_max_db=10`,
+`object_spread_db=1.0`, `object_hold_s=3`. This section records the observed limitation;
+it does not change those settings or the frozen device software.
+
+| Check | Reported result | Method and scope | N | Date (UTC) | Board build |
+|---|---|---|---|---|---|
+| First short stand | Person and still were shown | One approximately 10 s stand; this alone did not establish an alert/check-in pass. | 1 stand | 2026-11-15 | 4be0eea |
+| Continued stands intended to reach the alert | No no-movement alert or check-in obtained in the reported attempts | The brain changed from person to object/nobody after reported person intervals of 9 s, 4.5 s and 8.5 s. A person remained on the spot; steady drops near 9 to 10 dB fell in the configured object band. | Reported attempts, no fixed trial protocol | 2026-11-15 | 4be0eea |
+| After turning/sliding Pi B and taking a new baseline | Somebody on every sampled reading during 20 s while the person shifted | Drop read every 2 s: 9, 10, 12, 8, 10, 10, 11, 5, 5, 13 dB. The person was moving enough to avoid the steady-object rule; this is not a stillness/alert pass. | 1 exploratory interval | 2026-11-15 | 4be0eea |
+| Receive rate while the acceptance failed | 25.0 readings/s | radio.check for pi5>pi5b:wifi; passing link/service checks did not establish that a still person would retain the person label. | 1 reported check | 2026-11-15 | 4be0eea |
+| Record integrity during these checks | Chain verified; both witnesses sig_ok true | The reported healthy chain and signatures coexist with the mistaken person/object label. They do not validate the truth of a sensor classification. | Reported status checks | 2026-11-15 | 4be0eea |
+
+The operator's baseline comparison places the changed link readings after the kit-5
+Pi B unplug, before the kit-5.1 deployment: Pi B-to-board Bluetooth changed from -67 dBm
+at 12:25 to -56 dBm at 12:42, while the presence Wi-Fi baseline was -43 and -44 dBm.
+The comparison does not establish exactly what physically moved. Turning/sliding Pi B
+changed the Bluetooth level, but the partial adjustment did not restore the earlier
+person drop. An empty Wi-Fi baseline alone therefore did not reproduce the earlier
+successful sensing conditions in these reports.
+
+The recorded sessions named for the failures are `flutter-131051` and `flutter-131741`.
+An independent still-person/object accuracy, a failure probability and a successful
+repeated alert result remain unmeasured here. The proposed settings change discussed
+afterward was simulated only; it supplies no additional real-board result to this table.
+Acceptance steps 6c through 6g had not been reported in the cited failure check. Later
+results, if obtained, must identify their actual settings and build and retain these
+failed attempts.
+
+[kit51-failure]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6894915077
+[kit51-baselines]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6894938312
+[kit51-placement]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6895027963
