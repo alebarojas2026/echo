@@ -97,6 +97,12 @@ def test_proof_security_is_optional_and_names_real_links():
     assert "$.security.fewer_devices[0].links[0]" in errors[0][1]   # not a link in nodes.json
 
 
+def test_not_sure_where_is_every_zone_in_zone_set():
+    not_sure = [json.loads(line)["pred"] for line in read("valid_state.jsonl").splitlines()]
+    not_sure = [p for p in not_sure if p and len(p["zone_set"]) > 1]
+    assert not_sure and all(p["present"] and p["zone_set"] == [1, 2] and p["zone"] in (1, 2) for p in not_sure)
+
+
 def rssi(seq, rx="pi5"):
     link = "east>pi5:ble" if rx == "pi5" else "east>unoq:ble"
     return json.dumps({"v": 2, "type": "rssi", "t": 1763149512120 + seq, "seq": seq, "src": "live",
