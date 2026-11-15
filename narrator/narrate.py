@@ -41,10 +41,10 @@ EVENT_KINDS = ("enter", "exit", "zone_change", "checkin", "object_on", "object_o
 PRIORITY = ("intrusion", "alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
             "recalibrating", "trained", "zone_change", "exit")
 NEVER = ("router_moved", "advice")   # the screen already says these itself
-# Zone id -> (name, still_alert_s), from radio/nodes.json (CONTRACTS.md section 3) when it can be read,
-# so a new layout's zones reach the sentences and the prompt. These are the contract's zones.
-CONTRACT_ZONES = {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}
-ZONES = dict(CONTRACT_ZONES)
+# Zone id -> (name, still_alert_s). Always read from radio/nodes.json (CONTRACTS.md section 3), at import
+# and again in main for --nodes, so the sentences, the alert time and the prompt follow the layout.
+# No zones are written here: if the file can't be read, sentences name no zone.
+ZONES: dict = {}
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 NODES = {"unoq": "receiver", "pi5": "router", "pi5b": "second Pi", "east": "east beacon", "west": "west beacon"}
 
@@ -163,19 +163,21 @@ def template(kind: str, info: dict) -> str | None:
 # ---------------------------------------------------------------- the model
 
 def load_zones(path=NODES_JSON) -> dict:
-    """{zone id: (name, still_alert_s)} from nodes.json, or the contract's zones if it can't be read."""
+    """{zone id: (name, still_alert_s)} from nodes.json. {} if it can't be read: then no zone is named."""
     try:
         with open(path, encoding="utf-8") as f:
-            zones = {int(z["id"]): (str(z["name"]), z.get("still_alert_s")) for z in json.load(f)["zones"]}
-        return zones or dict(CONTRACT_ZONES)
+            return {int(z["id"]): (str(z["name"]), z.get("still_alert_s")) for z in json.load(f)["zones"]}
     except (OSError, ValueError, KeyError, TypeError) as e:
-        log(f"zones from {path} not readable ({e}); using the contract's")
-        return dict(CONTRACT_ZONES)
+        log(f"zones from {path} not readable ({e}); sentences will name no zone")
+        return {}
 
 
 def set_zones(zones: dict) -> None:
     ZONES.clear()
     ZONES.update(zones)
+
+
+set_zones(load_zones())   # whoever imports this (the service, the recap, the rehearsal) gets the layout's zones
 
 
 def _join(words: list) -> str:
@@ -187,21 +189,25 @@ def system() -> str:
     where = (f"People stand in front of a desk, {_join([f'on the {n.lower()}' for _, (n, _) in sorted(ZONES.items())])}. "
              "Say on the left or on the right, never zone numbers. "
              if desk() else
-             f"The room has {count}: {_join([f'zone {z} ({name})' for z, (name, _) in sorted(ZONES.items())])}. ")
+             f"The room has {count}: {_join([f'zone {z} ({name})' for z, (name, _) in sorted(ZONES.items())])}. "
+             if ZONES else "")
     return ("You write captions for the screen of a Wi-Fi sensing demo. " + where +
             "Rewrite the facts as one short, friendly sentence of at most 12 words. "
             "Use only the facts given. Call a person someone. Say no movement when nobody moves. "
             "Reply with the sentence only.")
 
 
-def example_zone() -> int:
-    return 2 if 2 in ZONES else min(ZONES)
+def example_zone() -> int | None:
+    """The zone the prompt's example and the warm-up use: 2 if the layout has it, else its first. None with no zones."""
+    return (2 if 2 in ZONES else min(ZONES)) if ZONES else None
 
 
 def examples() -> tuple:
     z = example_zone()
-    name = ZONES[z][0]
-    first = (("enter", f"Someone just stepped up on the {name.lower()}.", f"Someone stepped up, on the {name.lower()} side.")
+    name = ZONES[z][0] if ZONES else ""
+    first = (("enter", "Someone just walked into the room.", "Someone just stepped into the room.")
+             if not ZONES else
+             ("enter", f"Someone just stepped up on the {name.lower()}.", f"Someone stepped up, on the {name.lower()} side.")
              if desk() else
              ("enter", f"Someone just walked into zone {z} ({name}).", f"Someone just stepped into zone {z}, by the {name.lower()}."))
     return (first,

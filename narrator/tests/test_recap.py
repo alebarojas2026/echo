@@ -221,7 +221,7 @@ def test_recap_check_prints_a_model_recap_and_fails_on_the_template(capsys, monk
 
 def test_sample_demo_gives_facts_without_numbers_beyond_the_times():
     saved = dict(n.ZONES)
-    n.set_zones(dict(n.CONTRACT_ZONES))   # the square's zones, whatever nodes.json says
+    n.set_zones({1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)})   # the square, whatever nodes.json says
     try:
         lines = r.facts(r.sample(NOW))
     finally:
