@@ -193,6 +193,9 @@ export interface PlacementPreset {
 }
 export const PLACEMENT: PlacementPreset = { nearApartM: 0.08, farApartM: 0.7, inFromEdgeM: 0.08, aboveTopM: 0.05, facingWithinM: 1.2, standAcrossM: 1.0, standHighM: 1.0 }
 
+/** A table needs this much of the gap beyond the device on its near edge, or it stands in the next desk. */
+const TABLE_ROOM_M = 0.3
+
 /** "70 cm left of the middle", as you stand in the spot facing our desk (the layout's west is your left). */
 function sideWords(dx: number): string {
   const cm = Math.round(Math.abs(dx) * 100)
@@ -231,27 +234,43 @@ export function placementGuide(h: HallDesks, spot: DeskSpot, nodes: readonly Gui
     // Only a desk that reaches this angle is across from us (a row can end before it).
     if (d && rad(outside(d, thDeg)) * d.r_m < 0.3) facing = { gap: Math.abs(d.r_m - spot.desk.r_m) - 2 * half, floor: d.floor_m }
   }
-  const onDesk = facing !== null && facing.gap > 0 && facing.gap <= FACING_WITHIN_M
+  // A layout that already has a device across the spot (the gate) says itself how deep the gate is and how high
+  // each end stands (the two ends are each on the edge of their own table and need not be level). The guide keeps
+  // both, so measured numbers in the file drop straight in.
+  const acrossNow = nodes.filter((n) => n.xyz[1] < -0.01)
+  const gate = acrossNow.length > 0
+  const depth = gate ? cm(sh - Math.min(...acrossNow.map((n) => n.xyz[1]))) : STAND_ACROSS_M
+  // On the gate the far end stands on its own table in the gap when a table fits there, and on the desk across when
+  // it doesn't (between two rows): nothing is ever placed inside the next desk.
+  const onDesk = facing !== null && facing.gap > 0 && (gate ? facing.gap < depth + TABLE_ROOM_M : facing.gap <= FACING_WITHIN_M)
+  // The desk's edge is read from where the desk's devices stand, so on the gate they are placed on it, not in from it.
+  const inFromEdge = gate ? 0 : IN_FROM_EDGE_M
 
   // One row along our desk's edge and one across the gap. The board's group takes one, the rest the other.
   const ours = (n: GuideNode, dx: number): Placement => ({
-    id: n.id, xyz: [cm(sw / 2 + dx), cm(sh + IN_FROM_EDGE_M), cm(ourTop + ABOVE_TOP_M)], on: 'our desk',
+    id: n.id, xyz: [cm(sw / 2 + dx), cm(sh + inFromEdge), gate ? n.xyz[2] : cm(ourTop + ABOVE_TOP_M)], on: 'our desk',
     words: `${n.name}: on our desk, at the edge facing the spot, ${sideWords(dx)}`,
   })
-  const across = (n: GuideNode, dx: number): Placement =>
+  const which = (dx: number, alone: boolean) => (alone ? '' : `, ${sideWords(dx)}`)
+  const across = (n: GuideNode, dx: number, alone = false): Placement =>
     onDesk
       ? {
-          id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - facing!.gap - IN_FROM_EDGE_M), cm(facing!.floor - floor_m + h.desk_height_m + ABOVE_TOP_M)], on: 'facing desk',
-          words: `${n.name}: on the desk across the gap, at its near edge, ${sideWords(dx)}`,
+          id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - facing!.gap - inFromEdge), cm(facing!.floor - floor_m + h.desk_height_m + ABOVE_TOP_M)], on: 'facing desk',
+          words: gate ? `${n.name}: on the desk across from you, opposite the board${which(dx, alone)}` : `${n.name}: on the desk across the gap, at its near edge, ${sideWords(dx)}`,
         }
-      : {
-          id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - STAND_ACROSS_M), STAND_HIGH_M], on: 'stand',
-          words: `${n.name}: on a stand or chair back, ${STAND_ACROSS_M} m across the gap and ${STAND_HIGH_M} m high, ${sideWords(dx)}`,
-        }
+      : gate
+        ? {
+            id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - depth), n.xyz[2]], on: 'stand',
+            words: `${n.name}: on its own table, about ${depth} m straight out from the board${which(dx, alone)}`,
+          }
+        : {
+            id: n.id, xyz: [cm(sw / 2 + dx), cm(sh - STAND_ACROSS_M), STAND_HIGH_M], on: 'stand',
+            words: `${n.name}: on a stand or chair back, ${STAND_ACROSS_M} m across the gap and ${STAND_HIGH_M} m high, ${sideWords(dx)}`,
+          }
   const [boardRow, otherRow] = spot.boardAcross ? [across, ours] : [ours, across]
   return [
-    ...near.map((n, i) => boardRow(n, spread(i, near.length, NEAR_APART_M))),
-    ...far.map((n, i) => otherRow(n, spread(i, far.length, FAR_APART_M))),
+    ...near.map((n, i) => boardRow(n, spread(i, near.length, NEAR_APART_M), near.length === 1)),
+    ...far.map((n, i) => otherRow(n, spread(i, far.length, FAR_APART_M), far.length === 1)),
   ]
 }
 
