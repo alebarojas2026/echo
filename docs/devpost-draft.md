@@ -1,6 +1,6 @@
 # Radio Sight: Safety and After-Hours Security with Wi-Fi
 
-**Wi-Fi that understands the room.**
+**Taught by a camera. Runs without one.**
 
 ## Images
 
@@ -21,7 +21,7 @@ Use the [current architecture source](https://github.com/alebarojas2026/echo/blo
 
 ## Inspiration
 
-Radio Sight brings safety and after-hours security to buildings using the Wi-Fi already there, with no permanent camera and no cloud dependency.
+Places like bathrooms, patient rooms, and offices after hours need to know someone is there without keeping a camera on them. Radio Sight teaches the room with a temporary camera, unplugs it, and then provides safety and after-hours security using the Wi-Fi already there. Everything learned runs on the Arduino UNO Q, entirely on device, and nothing is sent to the internet.
 
 Patient rooms, bathrooms, study rooms, and offices after hours all need a simple answer to the same question: is someone present, and are they moving? A camera often captures far more than that question requires. We wanted the radio links already crossing a room to provide a smaller, private signal that can be understood locally.
 

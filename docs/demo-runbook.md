@@ -104,7 +104,7 @@ Use these exact beat names and keep them in this order.
 5. **Arm the space:** Ask the judge to step out. Use the arm control only if the current build exposes contract v2 `armed` state, emits `armed`, and the phone page is connected to the live feed.
 6. **Intrusion alert:** Ask the judge to re-enter and stay in the spot. Continue only after the board emits the live `intrusion` event and the phone page shows it. A passer-by gets no intrusion alert. Do not identify the judge or claim crowd counting.
 7. **Ask the room:** Ask the prepared question only if the current build can answer from its local timestamped event records. Read the returned facts; do not improvise an answer.
-8. **Proof:** Finish on `/proof.json`. Say only completed values. Close with `Images stored: __` and `Bytes sent outside local network: __` until proof records replace them.
+8. **Proof:** Finish on `/proof.json`. Show `Images stored: __` and `Bytes sent outside local network: __` until proof replaces them, but say only completed values. Close with “We dug into a signal every building already has, for rooms where cameras cannot go. Taught by a camera. Runs without one. Next is the same lesson on real access points. We would like to keep building it.”
 
 If the feature gate for **Arm the space**, **Intrusion alert**, or **Ask the room** fails, stop the live sequence after **Still follows**, use the matching **At the desk** sentence, then go directly to **Proof**.
 
