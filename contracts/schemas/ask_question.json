@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/ask_question.json",
+  "$comment": "Section 10: the body of POST /ask. Not a bus message: no envelope. The 2048-byte limit is on the body and is checked by board/serve.py.",
+  "type": "object",
+  "properties": {"question": {"type": "string", "pattern": "\\S"}},
+  "required": ["question"]
+}

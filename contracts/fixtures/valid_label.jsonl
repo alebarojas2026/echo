@@ -1,4 +1,5 @@
-{"v":2,"type":"label","t":1763149512150,"seq":412,"src":"live","frame":18231,"mode":"person","persons_in_frame":1,"present":true,"zone":4,"foot_m":[1.42,0.61],"motion":"moving","conf":0.81,"clipped":false}
+{"v":2,"type":"label","t":1763149512150,"seq":412,"src":"live","frame":18231,"mode":"person","persons_in_frame":1,"present":true,"zone":2,"foot_m":[1.22,0.31],"motion":"moving","conf":0.81,"clipped":false}
 {"v":2,"type":"label","t":1763149512280,"seq":413,"src":"live","frame":18232,"mode":"person","persons_in_frame":0,"present":false,"zone":0,"foot_m":null,"motion":null,"conf":0.9,"clipped":false}
 {"v":2,"type":"label","t":1763149512150,"seq":414,"src":"live","frame":18233,"mode":"person","persons_in_frame":1,"present":false,"zone":null,"foot_m":null,"motion":null,"conf":0.81,"clipped":true}
 {"v":2,"type":"label","t":1763149512150,"seq":415,"src":"live","frame":18234,"mode":"person","persons_in_frame":1,"present":true,"zone":null,"foot_m":null,"motion":null,"conf":0.81,"clipped":true}
+{"v":2,"type":"label","t":1763149512400,"seq":416,"src":"live","frame":18235,"mode":"person","persons_in_frame":1,"present":true,"zone":1,"foot_m":null,"motion":"still","conf":0.77,"clipped":false}
