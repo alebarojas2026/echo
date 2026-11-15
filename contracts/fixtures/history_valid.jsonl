@@ -1,0 +1,3 @@
+{"from_t":1763149300000,"to_t":1763149303000,"step_s":1,"rows":[{"t":1763149300000,"present":true,"zone":2,"zone_set":[2],"motion":"still","armed":true,"alert":false,"health":"ok","tamper":[]},{"t":1763149301000,"present":false,"zone":0,"zone_set":[],"motion":null,"armed":false,"alert":false,"health":"ok","tamper":[]},{"t":1763149303000,"present":null,"zone":null,"zone_set":[],"motion":null,"armed":true,"alert":false,"health":"blind","tamper":["east"]}]}
+{"from_t":1763149300000,"to_t":1763151100000,"step_s":1,"rows":[]}
+{"from_t":1763149300000,"to_t":1763149303000,"step_s":1,"rows":[{"t":1763149300000,"present":true,"zone":1,"zone_set":[1,2],"motion":"moving","armed":true,"alert":true,"health":"degraded","tamper":[]}]}
