@@ -189,6 +189,7 @@ def test_sides_of_the_desk(question, zone):
 def test_typos_next_to_a_keyword_are_read_as_the_keyword():
     assert A.fix_typos("Did the alamr go off sinec 2?") == "Did the alarm go off since 2?"
     assert A.fix_typos("Is armed mode on?") == "Is armed mode on?"
+    assert A.fix_typos("Could you clear the alert?") == "Could you clear the alert?"
 
 
 @pytest.mark.parametrize("tool", list(TOOLS))
