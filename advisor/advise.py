@@ -185,14 +185,19 @@ def _r2(v):
 
 
 def _node_name(node_id, tx, rx, nodes):
+    """How the text names a node. With a `name` in nodes.json (the desk layout) it is used:
+    "the router (Pi A)", "the receiver (Board)", "Pi B", "the East beacon"."""
+    node = next((n for n in nodes["nodes"] if n["id"] == node_id), None)
+    if node is None:
+        return None
+    name = node.get("name")
     if node_id == tx:
-        return "the router"
+        return f"the router ({name})" if name else "the router"
     if node_id == rx:
-        return "the receiver"
-    for n in nodes["nodes"]:
-        if n["id"] == node_id:
-            return f"the {node_id} beacon" if "beacon" in n.get("roles", []) else f"the {node_id} node"
-    return None
+        return f"the receiver ({name})" if name else "the receiver"
+    if name:
+        return name if name.split()[0] == "Pi" else f"the {name}"
+    return f"the {node_id} beacon" if "beacon" in node.get("roles", []) else f"the {node_id} node"
 
 
 def _length(m):
@@ -203,10 +208,10 @@ def _length(m):
 def _text(near, tx, rx, nodes, move_m, home, receiver):
     """Two sentences built from the result: what is blocked, and where to move."""
     place = _node_name(near, tx, rx, nodes) if near else None
-    if place == "the router":
-        first = "An obstruction next to the router is blocking its link to the receiver."
-    elif place == "the receiver":
-        first = "An obstruction next to the receiver is blocking the router's link to it."
+    if near == tx:
+        first = f"An obstruction next to {place} is blocking its link to the receiver."
+    elif near == rx:
+        first = f"An obstruction next to {place} is blocking the router's link to it."
     elif place:
         first = f"An obstruction next to {place} is blocking the router's link to the receiver."
     else:

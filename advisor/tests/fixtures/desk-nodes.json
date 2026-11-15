@@ -1,0 +1,68 @@
+{
+  "v": 2,
+  "layout": "desk",
+  "frame": {
+    "units": "m",
+    "origin": "the strip's aisle-side west corner",
+    "x": "east, along the desk",
+    "y": "north, towards the desk",
+    "z": "up",
+    "size_m": [1.6, 1.1],
+    "strip_m": [1.6, 0.6],
+    "zone_split_x_m": 0.8,
+    "note": "size_m is the whole layout from the origin: the strip (strip_m, the aisle floor a person stands on) plus the desk top behind it (y 0.6 to 1.1). People are only ever in the strip."
+  },
+  "nodes": [
+    {"id": "unoq", "name": "Board", "xyz_m": [1.1, 0.6, 1.0], "roles": ["receiver"]},
+    {"id": "pi5", "name": "Pi A", "xyz_m": [0.8, 1.1, 1.0], "roles": ["router", "beacon", "receiver"]},
+    {"id": "pi5b", "name": "Pi B", "xyz_m": [0.5, 0.6, 1.0], "roles": ["beacon", "receiver"]},
+    {"id": "east", "name": "East beacon", "xyz_m": [1.6, 0.25, 1.0], "roles": ["beacon"]},
+    {"id": "west", "name": "West beacon", "xyz_m": [0.0, 0.25, 1.0], "roles": ["beacon"]}
+  ],
+  "links": [
+    {"id": "pi5>unoq:wifi", "tx": "pi5", "rx": "unoq", "kind": "wifi", "expected_hz": null},
+    {"id": "pi5>unoq:ble", "tx": "pi5", "rx": "unoq", "kind": "ble", "expected_hz": null},
+    {"id": "east>unoq:ble", "tx": "east", "rx": "unoq", "kind": "ble", "expected_hz": null},
+    {"id": "west>unoq:ble", "tx": "west", "rx": "unoq", "kind": "ble", "expected_hz": null},
+    {"id": "east>pi5:ble", "tx": "east", "rx": "pi5", "kind": "ble", "expected_hz": null},
+    {"id": "west>pi5:ble", "tx": "west", "rx": "pi5", "kind": "ble", "expected_hz": null},
+    {"id": "pi5b>unoq:ble", "tx": "pi5b", "rx": "unoq", "kind": "ble", "expected_hz": null},
+    {"id": "pi5>pi5b:wifi", "tx": "pi5", "rx": "pi5b", "kind": "wifi", "expected_hz": null},
+    {"id": "pi5>pi5b:ble", "tx": "pi5", "rx": "pi5b", "kind": "ble", "expected_hz": null},
+    {"id": "east>pi5b:ble", "tx": "east", "rx": "pi5b", "kind": "ble", "expected_hz": null},
+    {"id": "west>pi5b:ble", "tx": "west", "rx": "pi5b", "kind": "ble", "expected_hz": null},
+    {"id": "pi5b>pi5:ble", "tx": "pi5b", "rx": "pi5", "kind": "ble", "expected_hz": null}
+  ],
+  "zone_rule": "zone = 1 + (x >= 0.8) when 0 <= x <= 1.6 and 0 <= y <= 0.6; anywhere else 0 = empty",
+  "zones": [
+    {"id": 1, "side": "W", "name": "Left", "centre_m": [0.4, 0.3], "still_alert_s": 10},
+    {"id": 2, "side": "E", "name": "Right", "centre_m": [1.2, 0.3], "still_alert_s": 10}
+  ],
+  "router_spots": [
+    {"id": "S-home", "xyz_m": [0.8, 1.1, 1.0]},
+    {"id": "S-W30", "xyz_m": [0.5, 1.1, 1.0]},
+    {"id": "S-E30", "xyz_m": [1.1, 1.1, 1.0]}
+  ],
+  "router_spots_note": "Gate 7 sets the distance from S-home.",
+  "tray_spots": [
+    {"id": "T1", "xyz_m": [0.86, 1.0, 1.0]}
+  ],
+  "beacons": {
+    "match": "manufacturer data, never MAC",
+    "company_id": "FFFF",
+    "prefix_hex": "5253",
+    "payloads": [
+      {"node": "pi5", "id": "S", "data_hex": "FFFF525353"},
+      {"node": "pi5b", "id": "B", "data_hex": "FFFF525342"},
+      {"node": "east", "id": "E", "data_hex": "FFFF525345"},
+      {"node": "west", "id": "W", "data_hex": "FFFF525357"}
+    ]
+  },
+  "hall": {
+    "note": "Optional beacons far outside the layout. A hall link is any link whose tx is one of them, heard by any receiver above: <node>><receiver>:ble. Hall links are never core links: they stay out of the links list above. xyz_m is each beacon's spot in the frame above, null until it is measured in the room.",
+    "beacons": [
+      {"node": "h", "id": "H", "data_hex": "FFFF525348", "xyz_m": null},
+      {"node": "j", "id": "J", "data_hex": "FFFF52534A", "xyz_m": null}
+    ]
+  }
+}
