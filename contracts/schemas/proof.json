@@ -5,7 +5,8 @@
   "$defs": {
     "count": {"type": ["integer", "null"], "minimum": 0},
     "num": {"type": ["number", "null"], "minimum": 0},
-    "score": {"type": "object", "properties": {"correct": {"$ref": "#/$defs/count"}, "total": {"$ref": "#/$defs/count"}}, "required": ["correct", "total"]}
+    "score": {"type": "object", "properties": {"correct": {"$ref": "#/$defs/count"}, "total": {"$ref": "#/$defs/count"}}, "required": ["correct", "total"]},
+    "ci95": {"type": ["array", "null"], "items": {"type": "number", "minimum": 0, "maximum": 1}, "minItems": 2, "maxItems": 2}
   },
   "type": "object",
   "properties": {
@@ -26,7 +27,33 @@
                      "source": {"type": ["string", "null"]}},
       "required": ["idle", "teaching", "radio_only", "source"], "additionalProperties": false},
     "bytes_out": {"$ref": "#/$defs/count"}, "images_stored": {"$ref": "#/$defs/count"}, "models_on_board": {"$ref": "#/$defs/count"},
-    "measured_at": {"type": "string"}, "commit": {"type": "string"}
+    "measured_at": {"type": "string"}, "commit": {"type": "string"},
+    "security": {
+      "$comment": "Optional. Every unmeasured value is null. fewer_devices names nodes and links from radio/nodes.json.",
+      "type": "object",
+      "properties": {
+        "detection": {
+          "type": "object",
+          "properties": {"entries": {"$ref": "#/$defs/count"}, "detected": {"$ref": "#/$defs/count"}, "ci95": {"$ref": "#/$defs/ci95"},
+                         "armed_entries": {"$ref": "#/$defs/count"}, "intrusions": {"$ref": "#/$defs/count"}, "intrusion_ci95": {"$ref": "#/$defs/ci95"},
+                         "within_s": {"type": "number", "exclusiveMinimum": 0}},
+          "required": ["entries", "detected", "ci95", "armed_entries", "intrusions", "intrusion_ci95", "within_s"], "additionalProperties": false},
+        "false_alarms": {
+          "type": "object",
+          "properties": {"presence_events": {"$ref": "#/$defs/count"}, "intrusions": {"$ref": "#/$defs/count"}, "duration_s": {"$ref": "#/$defs/num"},
+                         "armed_duration_s": {"$ref": "#/$defs/num"}, "presence_per_hour": {"$ref": "#/$defs/num"}, "intrusions_per_hour": {"$ref": "#/$defs/num"}},
+          "required": ["presence_events", "intrusions", "duration_s", "armed_duration_s", "presence_per_hour", "intrusions_per_hour"],
+          "additionalProperties": false},
+        "fewer_devices": {"type": "array", "items": {
+          "type": "object",
+          "properties": {"name": {"type": "string"}, "nodes": {"type": "array", "items": {"$ref": "common.json#/$defs/node"}},
+                         "links": {"$ref": "common.json#/$defs/links"}, "zone": {"$ref": "#/$defs/score", "unevaluatedProperties": false},
+                         "presence": {"type": "object",
+                                      "properties": {"entries": {"$ref": "#/$defs/count"}, "detected": {"$ref": "#/$defs/count"}, "ci95": {"$ref": "#/$defs/ci95"}},
+                                      "required": ["entries", "detected", "ci95"], "additionalProperties": false}},
+          "required": ["name", "nodes", "links", "zone", "presence"], "additionalProperties": false}}
+      },
+      "required": ["detection", "false_alarms", "fewer_devices"], "additionalProperties": false}
   },
   "required": ["zone", "threshold_zone", "person_vs_object", "false_alarms_per_min", "train_s", "ms_per_decision", "watts",
                "bytes_out", "images_stored", "models_on_board", "measured_at", "commit"],

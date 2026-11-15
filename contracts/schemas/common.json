@@ -9,11 +9,17 @@
                      "src": {"enum": ["live", "sim", "replay"]}, "recv_t": {"type": "integer", "minimum": 0}}
     },
     "envelope": {"$ref": "#/$defs/fields", "required": ["v", "type", "t", "seq", "src"]},
-    "node": {"enum": ["unoq", "pi5", "east", "west"]},
-    "near": {"$comment": "The closest node within 0.5 m of xy_m, else null (distance checked in check.py).", "enum": ["unoq", "pi5", "east", "west", null]},
-    "link": {"enum": ["pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble", "east>pi5:ble", "west>pi5:ble"]},
+    "node": {"enum": ["unoq", "pi5", "pi5b", "east", "west"]},
+    "near": {"$comment": "The closest node within 0.5 m of xy_m, else null (distance checked in check.py).", "enum": ["unoq", "pi5", "pi5b", "east", "west", null]},
+    "link": {"$comment": "Section 3: the twelve links of the desk layout, in radio/nodes.json order.",
+             "enum": ["pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble", "east>pi5:ble", "west>pi5:ble",
+                      "pi5b>unoq:ble", "pi5>pi5b:wifi", "pi5>pi5b:ble", "east>pi5b:ble", "west>pi5b:ble", "pi5b>pi5:ble"]},
     "links": {"type": "array", "items": {"$ref": "#/$defs/link"}},
-    "zone": {"type": "integer", "minimum": 0, "maximum": 4},
+    "receiver": {"$comment": "Section 3: the nodes with the receiver role.", "enum": ["unoq", "pi5", "pi5b"]},
+    "hall_node": {"$comment": "Section 3: the optional hall beacons H and J.", "enum": ["h", "j"]},
+    "hall_link": {"$comment": "Section 3: a hall beacon heard by a receiver. Never a core link.",
+                  "enum": ["h>unoq:ble", "j>unoq:ble", "h>pi5:ble", "j>pi5:ble", "h>pi5b:ble", "j>pi5b:ble"]},
+    "zone": {"$comment": "Section 3: 0 = empty, 1 West, 2 East.", "type": "integer", "minimum": 0, "maximum": 2},
     "xy_m": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
     "motion": {"enum": ["moving", "still"]},
     "cam_state": {"enum": ["on", "off", "stalled"]},
@@ -25,6 +31,11 @@
     "recap_text": {"$comment": "Section 6: a recap (event_kind recap) has at most 45 words.", "type": "string", "pattern": "^\\s*\\S+(\\s+\\S+){0,44}\\s*$"},
     "event_kind": {"enum": ["enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice", "advice_result",
                             "router_moved", "router_home", "recalibrating", "cam_off", "cam_on", "cam_stalled", "alert_on",
-                            "alert_off", "blind_on", "blind_off", "trained", "baseline_done", "drift", "reset", "recording"]}
+                            "alert_off", "blind_on", "blind_off", "trained", "baseline_done", "drift", "reset", "recording",
+                            "armed", "disarmed", "intrusion", "tamper", "tamper_cleared"]},
+    "any_node": {"$comment": "Section 6, Tamper: a node of the layout, or a hall beacon.", "anyOf": [{"$ref": "#/$defs/node"}, {"$ref": "#/$defs/hall_node"}]},
+    "span": {"$comment": "Section 10: a stretch of time in epoch ms. from_t <= to_t is checked in check.py.", "type": "object",
+             "properties": {"from_t": {"type": "integer", "minimum": 0}, "to_t": {"type": "integer", "minimum": 0}},
+             "required": ["from_t", "to_t"], "additionalProperties": false}
   }
 }
