@@ -2,6 +2,7 @@ import type { StateMsg } from '../room/contract'
 import './stillness.css'
 import { zonePlace } from './layout'
 import { zoneName } from './judge-moment'
+import { framesDrawn } from './changing-text'
 
 export function stillness(state: StateMsg | null, stale: boolean) {
   if (!state || stale || state.health.status === 'blind') return { text: '', tone: '', progress: 0, detail: '' }
@@ -17,7 +18,7 @@ export function stillness(state: StateMsg | null, stale: boolean) {
 
 export function mountPanel(root: HTMLElement) {
   root.className = 'stillness-card'
-  root.innerHTML = '<p data-testid="alert-banner"></p><p data-testid="checkin-toast"></p><p data-testid="alert-zone"></p><p data-testid="alert-seconds"></p><p data-testid="checkin-instruction" hidden>Lean aside to say you&#39;re okay.</p><div class="stillness-track"><span></span></div>'
+  root.innerHTML = '<p data-testid="alert-banner"></p><p data-testid="checkin-toast"></p><p data-testid="alert-zone"></p><p data-testid="alert-seconds"></p><p data-testid="checkin-instruction" hidden>Step aside and back to say you&#39;re okay.</p><div class="stillness-track"><span></span></div>'
   const text = root.querySelector<HTMLElement>('[data-testid="alert-banner"]')!
   const checkin = root.querySelector<HTMLElement>('[data-testid="checkin-toast"]')!
   const instruction = root.querySelector<HTMLElement>('[data-testid="checkin-instruction"]')!
@@ -50,7 +51,7 @@ export function mountPanel(root: HTMLElement) {
       previous = identity
       const current = ++revision
       animations.forEach(animation => animation.cancel())
-      if (matchMedia('(prefers-reduced-motion: reduce)').matches || root.hidden) { apply(); return }
+      if (!framesDrawn() || matchMedia('(prefers-reduced-motion: reduce)').matches || root.hidden) { apply(); return }
       void animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100, fill: 'forwards' }).then(async () => {
         if (current !== revision) return
         apply()

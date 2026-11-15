@@ -32,8 +32,7 @@ for (const [width, height] of [[1920,1080],[1440,900]]) test(`privacy stays hone
   await page.evaluate(() => window.arrival.update('still'))
   await page.clock.runFor(6000)
   await expect(arrival).toBeHidden()
-  await expect(main.getByTestId('privacy-values')).toBeVisible()
-  await expect(main.getByTestId('privacy-values')).toHaveText('privacy meter not running')
+  await expect(main.getByTestId('privacy-values')).toBeHidden()   // a meter that is not running is not shown as a fault
   value = { ...value, images: 0, bytes_out: 0, t: 70000 }
   await page.clock.runFor(1100)
   await expect(main.getByTestId('privacy-values')).toHaveText('0 images stored · 0 bytes sent out')
@@ -41,13 +40,13 @@ for (const [width, height] of [[1920,1080],[1440,900]]) test(`privacy stays hone
   const mainY = (await main.getByTestId('judge-headline').boundingBox()).y
   value = { ok: false, why: 'counter stopped' }
   await page.clock.runFor(1100)
-  await expect(main.getByTestId('privacy-values')).toHaveText('privacy meter not running')
+  await expect(main.getByTestId('privacy-values')).toBeHidden()   // a meter that is not running is not shown as a fault
   await expect(main.getByTestId('privacy-duration')).toBeHidden()
   expect((await main.getByTestId('judge-headline').boundingBox()).y).toBe(mainY)
   await capture('unavailable')
   broken = true
   await page.clock.runFor(1100)
-  await expect(main.getByTestId('privacy-values')).toHaveText('privacy meter not running')
+  await expect(main.getByTestId('privacy-values')).toBeHidden()   // a meter that is not running is not shown as a fault
   expect(calls).toBeLessThan(17)
   await page.evaluate(() => window.arrival.dispose())
   const stopped = calls

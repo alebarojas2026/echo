@@ -70,6 +70,8 @@ export function mountPrivacyLine(host: HTMLElement) {
   const paint = () => {
     const current = reading && performance.now() - changedAt < 3000 ? reading : null
     values.textContent = current ? `${current.images} images stored · ${current.bytes_out} bytes sent out` : 'privacy meter not running'
+    // A meter that is not running is not a fault of the room: the judge's page says nothing (data-reason keeps why).
+    values.style.visibility = current ? 'visible' : 'hidden'
     values.dataset.tone = current && (current.images !== 0 || current.bytes_out !== 0) ? 'fault' : ''
     const seconds = current ? Math.floor((current.t - current.since_t) / 1000) : 0
     duration.textContent = current ? `Counting for ${Math.floor(seconds / 60)} min ${seconds % 60} s` : ''
