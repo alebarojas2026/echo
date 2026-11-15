@@ -1,3 +1,4 @@
+import { mountPrivacyLine } from './privacy'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
 import { changingText } from './changing-text'
@@ -32,6 +33,8 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   view.innerHTML = `<header><span>Radio Sight</span><span data-testid="arrival-source"></span></header>
     <div class="arrival-message" aria-live="polite"><h1 data-testid="arrival-title"></h1><p data-testid="arrival-detail"></p><p class="arrival-passed" data-testid="arrival-passed"></p></div>
     <footer><span>Taught by a camera. Runs without one.</span><span data-testid="visitor-count">Visitor 0</span></footer>`
+  const disposePrivacy = mountPrivacyLine(view)
+  view.querySelector('.arrival-message')!.before(view.querySelector('.privacy-line')!)
   document.body.append(view)
   const title = changingText(view.querySelector('h1')!)
   const detail = changingText(view.querySelector('.arrival-message p')!)
@@ -127,7 +130,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
         if (view.hidden) return
         announce('found')
         // Only the words fade. The rail behind them keeps the page colour, so nothing shows through half-way.
-        fade = [...view.children].map(part => part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FOUND_FADE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }))
+        fade = [...view.children].filter(part => !part.classList.contains('privacy-line')).map(part => part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FOUND_FADE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }))
         hold = setTimeout(() => { complete = true; cancelHold(); render() }, FOUND_FADE_MS)
       }, FOUND_HOLD_MS)
       return
@@ -172,5 +175,5 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   visibility.observe(operator, { attributes: true, attributeFilter: ['hidden'] })
   visibility.observe(document.documentElement, { attributes: true, attributeFilter: ['data-hud-replay'] })
   render()
-  return () => { cancelHold(); clearTimeout(presentTimer); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
+  return () => { disposePrivacy(); cancelHold(); clearTimeout(presentTimer); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
 }
