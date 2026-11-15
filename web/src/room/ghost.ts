@@ -30,6 +30,16 @@ import type { RoomView } from './view'
 // faceless figure (figure.ts) that stands while the person is still and walks while they move, facing the way it
 // glides.
 
+/** How long the figure keeps its pose after the last reading that had a person. States come ten a second, and
+ *  one that is missing or empty (a dropped reading) is not someone leaving: without this the figure faded out and
+ *  came back in place, a blink and a jump. A person who really leaves is gone this much later. */
+export const GONE_HOLD_MS = 400
+
+/** Whether the figure still holds its pose at `nowMs`, having last had a person at `seenAtMs` (null: never). */
+export function holdsPose(seenAtMs: number | null, nowMs: number): boolean {
+  return seenAtMs !== null && nowMs >= seenAtMs && nowMs - seenAtMs < GONE_HOLD_MS
+}
+
 export interface GhostSpot {
   zone: number
   /** 0..1, how solid this ghost is drawn. */
@@ -161,10 +171,21 @@ export class Presence {
     return this.placed && this.zones.value ? this.zones.value.split(',').map(Number) : []
   }
 
+  /** When the last reading with a person in it came, on update()'s clock. */
+  private seenAt: number | null = null
+
+  /** Nobody, at once and with no hold: the next sighting starts fresh, in place (a replay starting or ending). */
+  clear(nowMs = performance.now()) {
+    this.seenAt = null
+    this.update(null, [], null, nowMs)
+  }
+
   update(pred: Pred | null, objects: ObjectMark[], xray: Xray | null = null, nowMs = performance.now()) {
     const spots = ghostSpots(pred)
     let lone: [number, number] | null = null
-    if (!spots.length) {
+    if (!spots.length && this.placed && holdsPose(this.seenAt, nowMs)) {
+      // A dropped reading: the figure holds where and how it stands until the next one, or until the hold runs out.
+    } else if (!spots.length) {
       // Gone: fade out where it stands. The next sighting starts fresh, in place.
       this.alphaTo = 0
       this.placed = false
@@ -172,6 +193,7 @@ export class Presence {
       this.motion.set('')
       this.walking = false
     } else {
+      this.seenAt = nowMs
       const key = zonesKey(spots)
       if (!this.placed) {
         this.zones.set(key)
