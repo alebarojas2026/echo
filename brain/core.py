@@ -23,12 +23,14 @@ from typing import Callable, Dict, List, Optional
 
 from advisor.advise import advise
 from brain import features as F
-from brain.alert import Watch
+from brain.alert import Armed, Watch
 from brain.health import Health
+from brain.lesson import Lesson
 from brain.train import Model
 from brain.xray import Xray
 
 BASELINE_MS = 20_000
+BASELINE_GIVE_UP_MS = 120_000   # a baseline asked for by hand that still can't start after this long is dropped
 HOME = "S-home"
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 CAM_SILENT_MS = 3_000
@@ -109,6 +111,7 @@ class Brain:
         self.health = Health.from_nodes(nodes)
         self.xray = Xray.from_nodes(nodes)
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
+        self.armed = Armed()                  # after hours: a person appearing is an intrusion
         self._heard = set()                   # links with at least one reading
         self._last_seen: Dict[str, int] = {}  # link -> recv_t of its last reading
         self._last_dbm: Dict[str, float] = {} # link -> the last dbm we sent (or its last reading)
@@ -147,6 +150,7 @@ class Brain:
         self.model: Optional[Model] = None
         self.model_n = 0
         self.training: Optional[dict] = None
+        self.lesson = Lesson()                # the live lesson (brain/lesson.py)
         self.decision_ms: deque = deque(maxlen=200)
         self.pred: Optional[dict] = None
         self.sessions: Dict[str, dict] = {}
@@ -243,8 +247,12 @@ class Brain:
             return
         self._find_sessions()
         sessions = [dict(s) for s in self.sessions.values() if s["meta"].get("purpose") in TRAIN_PURPOSES]
+        teaching = self._open_train_session()   # a train recording still open: fit from it as far as it has got
+        if teaching:
+            sessions.append(teaching)
         if not sessions:
             return
+        self.lesson.train_cmd(self.now(), teaching and teaching["meta"].get("session"))
         self.training = {"started_t": self.now(), "progress": None,
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
@@ -257,6 +265,7 @@ class Brain:
 
         def done(model):   # back on the loop; model None = the fit failed
             self.training = None
+            self.lesson.fitted(self.now(), model is not None)
             if model is None or place != self.place_t:
                 return   # the fit failed, or the place changed while it ran: that model is for the old one
             self.model, self.model_n = model, self.model_n + 1
@@ -268,10 +277,27 @@ class Brain:
 
         self.spawn(fit, done)
 
+    def _open_train_session(self) -> Optional[dict]:
+        """The open recording as a session to fit from, if its purpose is train; else None.
+        On the board the bus has it on disk and the fit reads the file as far as it has got."""
+        s = self.open_session
+        if not s or s["meta"].get("purpose") != "train":
+            return None
+        if s["messages"] is not None:
+            return {"meta": s["meta"], "messages": list(s["messages"])}
+        path = self._session_path(s["meta"].get("session"))
+        return {"meta": s["meta"], "messages": None, "path": path} if path else None
+
     def _cmd_relearn(self, args):
         """Forget the current model and train again from this place's recorded sessions."""
         self.model = self.pred = None
         self._cmd_train(args)
+
+    def _cmd_arm(self, args):
+        """arm {on: true|false}: "this space should be empty now"."""
+        on = args.get("on")
+        if isinstance(on, bool) and self.armed.arm(on):
+            self.emit("armed" if on else "disarmed", {})
 
     def _cmd_reset_alert(self, args):
         self.watch.reset_alert()
@@ -282,6 +308,7 @@ class Brain:
         self.watch.reset()
         self._dismissed = self.advice["xy_m"] if self.advice else None
         self.narration = self.advice = None
+        self._cmd_arm({"on": False})
         self._watch_events()
         self.emit("reset", {})
 
@@ -396,7 +423,13 @@ class Brain:
                 logging.getLogger("brain").warning("could not write label mode %r to %s: %s", mode, self.mode_file, e)
 
     def _cmd_router_moved(self, args):
-        self.router = args.get("spot") or "moved"
+        spot = args.get("spot")
+        if not isinstance(spot, str) or spot == HOME or spot not in self.xray.router_spots:
+            # state.router can only name a spot from nodes.json, and the x-ray needs its position.
+            # Back on S-home is router_home's job (it runs the 3 s check).
+            logging.getLogger("brain").warning("router_moved ignored: %r is not a spot to move to", spot)
+            return
+        self.router = spot
         self._move_router(self.router)
         self._moved_t, self.settle = self.now(), None
         before = self.advice["before_dbm"] if self.advice else self._median(WIFI, self.now() - ADVICE_MEDIAN_MS)
@@ -521,9 +554,10 @@ class Brain:
 
     def _start_capture(self, new_place: Optional[bool] = None):
         """new_place None = keep what the running capture was asked for (a restart of its 20 s)."""
+        asked = self.capture["asked"] if self.capture else None   # set on the first tick: the clock may not have started
         if new_place is None:
             new_place = bool(self.capture and self.capture["new_place"])
-        self.capture = {"start": None, "messages": [], "new_place": new_place}
+        self.capture = {"start": None, "messages": [], "new_place": new_place, "asked": asked}
 
     def _new_place(self, now) -> None:
         """The operator's baseline finished: nothing learned before it is used from here on.
@@ -568,11 +602,21 @@ class Brain:
         now = self.now()
         if self.capture:
             wait = self._capture_wait(now)
+            if self.capture["asked"] is None:
+                self.capture["asked"] = now
             if wait != self._wait_said:             # said once per reason, not on every message
                 self._wait_said = wait
                 log = logging.getLogger("brain")
                 log.warning("baseline is waiting: %s", wait) if wait else log.info("baseline: capturing 20 s")
-            if wait:
+            if wait and self.capture["new_place"] and not self.recalibrating \
+                    and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS:
+                # Pressed by mistake in front of an audience, or the room never cleared: without
+                # this pred stays hidden for ever. The old baseline and the model are untouched.
+                logging.getLogger("brain").warning(
+                    "baseline given up after %d s (%s); press Baseline again when the square is clear",
+                    BASELINE_GIVE_UP_MS // 1000, wait)
+                self.capture, self._wait_said = None, ()
+            elif wait:
                 self._start_capture()               # a condition broke: the 20 s start again
             elif self.capture["start"] is None:
                 self.capture["start"] = now
@@ -611,6 +655,7 @@ class Brain:
         if self.capture or self.router != HOME or self.health.blind or self.settle is not None:
             self.pred = None                 # hidden; SENSOR BLIND never reads as "empty"
             self.watch.on_pred(now, None)    # the alert timer pauses, the LED shows "?"
+            self.armed.on_pred(None)         # and nothing is raised on a decision nobody may see
             return
         if not self._fresh:
             return
@@ -619,7 +664,11 @@ class Brain:
         self.watch.on_pred(self.window["end"], pred)
         pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
+        self.lesson.saw(now, pred, self.label)
         self._announce(pred["zone"] if pred["present"] else 0)
+        intruder = self.armed.on_pred(pred)
+        if intruder is not None:
+            self.emit("intrusion", {"zone": intruder})
 
     def _announce(self, zone: int) -> None:
         """enter, exit and zone_change, once the new zone has held for ZONE_HOLD decisions.
@@ -688,6 +737,7 @@ class Brain:
         if self.health.blind and self.pred is not None:
             self.pred = None
             self.watch.on_pred(now, None)
+            self.armed.on_pred(None)
         # Section 5: xray is null before the first baseline, links are [] before any reading.
         xray = self.xray.update(now, self.pred["kind"] if self.pred else None) if self.base else \
             {"xray": None, "objects": [], "events": []}
@@ -702,6 +752,9 @@ class Brain:
         if cam != self._said_cam and cam in ("on", "off", "stalled"):
             self._said_cam = cam
             self.emit(f"cam_{cam}", {})
+        teaching = self._open_train_session()
+        if self.lesson.due(now, teaching and teaching["meta"].get("session"), cam, self.training is not None):
+            self._cmd_train({})   # the lesson's next fit, or its last one
         self._seq += 1
         lb = self.label
         teacher = None
@@ -710,10 +763,15 @@ class Brain:
         model = self.model.info() if self.model else {"trained": False, "ver": None, "train_s": None,
                                                       "windows": 0, "train_sessions": []}
         model["ms_per_decision"] = round(statistics.median(self.decision_ms), 2) if self.decision_ms else None
-        model["training"] = self.training
-        return {"v": 2, "type": "state", "t": now, "seq": self._seq, "src": self.src,
-                "cam": cam, "router": self.router, "links": links,
-                "health": health["health"],
-                "pred": self.pred, "objects": xray["objects"], "xray": xray["xray"],
-                "alert": self.watch.alert_block(), "checkin": self.watch.checkin, "advice": self.advice and dict(self.advice), "narration": self.narration, "teacher": teacher,
-                "model": model, "board": self.board_stats()}
+        model["training"] = self.lesson.block(self.training)
+        state = {"v": 2, "type": "state", "t": now, "seq": self._seq, "src": self.src,
+                 "cam": cam, "router": self.router, "links": links,
+                 "health": health["health"],
+                 "pred": self.pred, "objects": xray["objects"], "xray": xray["xray"],
+                 "alert": self.watch.alert_block(), "checkin": self.watch.checkin, "advice": self.advice and dict(self.advice), "narration": self.narration, "teacher": teacher,
+                 "model": model, "board": self.board_stats()}
+        if self.armed.on:
+            # Section 5: a missing "armed" means false. Sent only while armed until state.json
+            # knows the field (#440); a state that never arms is byte for byte what it was.
+            state["armed"] = True
+        return state

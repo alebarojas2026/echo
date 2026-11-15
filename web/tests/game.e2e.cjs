@@ -34,6 +34,8 @@ for (const [mock, label, title] of [
   ['alert', 'NO-MOVEMENT ALERT', 'No movement in the Bathroom for 10 s.'],
   ['checkin', 'ALL GOOD', 'Someone is in the Bathroom zone.'],
   ['blind', 'SENSOR BLIND', 'The radio cannot read the room right now.'],
+  ['armed', 'ARMED', 'Nobody is here.'],
+  ['intrusion', 'INTRUSION', 'Someone is in the Bathroom zone.'],
 ]) {
   test(`phone ${mock} at 390x844`, async ({ page }) => {
     const errors = await open(page, `/src/game/phone/index.html?mock=${mock}`, 390, 844)

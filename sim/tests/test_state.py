@@ -293,3 +293,42 @@ def test_reset_sends_the_reset_event_and_the_template_recap():
     # the next reset only tells what happened since this one
     brain.command({"cmd": "reset"})
     assert brain.narration is None or brain.narration["text"] != recap["text"]
+
+
+# Section 5 and 6, Armed. The schema in contracts/ doesn't list `armed` or its events yet (its issue is
+# open), so these are the only schema errors allowed here.
+ARMED_NOT_IN_SCHEMA = ("armed", "disarmed", "intrusion", "Unevaluated properties are not allowed ('armed' was unexpected)")
+
+
+def test_armed_mode_raises_one_intrusion_per_arrival():
+    brain = state.Brain(fake.load_path("arrival"))
+    msgs = []
+    for m in state.run(brain.path, brain=brain):
+        msgs.append(m)
+        if m["type"] == "state" and m["t"] == 3.0:
+            brain.command({"cmd": "arm", "args": {"on": True}})
+        if m["type"] == "state" and m["t"] == 25.0:
+            brain.command({"cmd": "reset"})
+    events = [(m["t"], m["kind"], m["info"]) for m in msgs if m["type"] == "event"]
+    kinds = [k for _, k, _ in events]
+    assert kinds.count("armed") == 1 and kinds.count("intrusion") == 1 and kinds.count("disarmed") == 1
+    t_in = next(t for t, k, _ in events if k == "enter")
+    t_intrusion, _, info = next(e for e in events if e[1] == "intrusion")
+    assert info == {"zone": 3} and 0 <= t_intrusion - t_in <= 1.0     # once the person holds the majority
+    assert at([m for m in msgs if m["type"] == "state"], 20)["armed"] is True
+    assert "armed" not in at([m for m in msgs if m["type"] == "state"], 26)   # missing means false
+    encode = encoder(1763149500000)
+    for m in msgs:
+        for err in errors(json.loads(encode(m))):
+            assert err in UNMEASURED or any(word in err for word in ARMED_NOT_IN_SCHEMA), err
+
+
+def test_no_intrusion_while_blind_or_disarmed():
+    brain = state.Brain(fake.load_path("arrival"))
+    kinds = [m["kind"] for m in state.run(brain.path, brain=brain) if m["type"] == "event"]
+    assert "intrusion" not in kinds and "armed" not in kinds                       # never armed
+    brain = state.Brain(fake.load_path("arrival"))
+    brain._arm(0.0, True)
+    brain.recent.extend([("person", 3, False)] * 10)
+    brain._intrusion(5.0, None)                                                     # pred null: blind or not trained
+    assert not any(e["kind"] == "intrusion" for e in brain.events)
