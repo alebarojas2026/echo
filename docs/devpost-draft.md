@@ -12,9 +12,9 @@ We built Radio Sight at MadHacks 2026 for the Qualcomm / N+1 track and the theme
 
 ## What it does
 
-Walk between two devices and the signal gives you away. Radio Sight reads the Bluetooth paths between an Arduino UNO Q and two Pis to report presence and motion in one spot. Wi-Fi is the separate dead-zone demonstration. It does not identify anyone or count a crowd.
+Walk between two devices and the signal gives you away. Radio Sight reads the Wi-Fi link between Pi A and Pi B to report presence and motion in one spot. Bluetooth from Pi B to the Arduino UNO Q gives a second opinion. The same Wi-Fi link shows a dead zone. It does not identify anyone or count a crowd.
 
-Most Wi-Fi sensing only sees movement. Ours sees you standing still. In this kit, the people-sensing signal is Bluetooth; the camera teaches the local model, then is unplugged.
+Most Wi-Fi sensing only sees movement. Ours sees you standing still. In this kit, Wi-Fi across the gap is the main sensor; the camera teaches the local model, then is unplugged.
 
 ### Who it is for
 

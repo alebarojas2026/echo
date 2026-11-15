@@ -2,7 +2,7 @@
 
 ## How does Radio Sight work?
 
-Walk between two devices and the signal gives you away. Bluetooth paths between the Arduino UNO Q and two Pis detect presence and movement in one spot; Wi-Fi is used for the separate dead-zone demonstration.
+Walk between two devices and the signal gives you away. Wi-Fi between the two Pis is the main sensor; Bluetooth to the Arduino UNO Q gives a second opinion. That same Wi-Fi link shows a dead zone.
 
 ## Why are there so many boards?
 

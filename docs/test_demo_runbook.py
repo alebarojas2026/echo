@@ -126,7 +126,7 @@ class DemoRunbookTest(unittest.TestCase):
             "power pi b",
             "three devices for one spot",
             "pi b about a metre away at desk height",
-            "bluetooth detects people",
+            "wi-fi from pi a to pi b is the main presence sensor",
             "lean aside",
             "step up to the desk",
             "baseline {keep_model: true}",

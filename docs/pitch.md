@@ -26,7 +26,7 @@ _Unplug the camera in one continuous shot and keep the cable visible._
 
 _Ask the judge to move, then stand still._
 
-> Most Wi-Fi sensing only sees movement. Ours sees you standing still. Here, Bluetooth between the devices senses presence and motion in one spot. Wi-Fi is for the dead-zone demonstration.
+> Most Wi-Fi sensing only sees movement. Ours sees you standing still. Wi-Fi across this gap is our main sensor. Bluetooth gives a second opinion. The same Wi-Fi link shows a dead zone.
 
 ### Arm the space
 

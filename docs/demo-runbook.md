@@ -42,7 +42,7 @@ While the Operator fixes a failure, the Talker says exactly one of these:
 - [ ] Confirm the source is `live`, the feed is fresh, and `health.status` is `ok`.
 - [ ] Power Pi B, join it to Pi A's hotspot, and confirm its reader sends through Pi A to the board.
 - [ ] Set the three devices for one spot: Arduino UNO Q and Pi A together on the desk, Pi B about a metre away at desk height on a chair. Confirm the deployed `radio/nodes.json` matches this kit.
-- [ ] Keep the path between Pi B and the desk clear. Bluetooth detects people; Wi-Fi serves the dead-zone demonstration. Do not connect extra beacon devices.
+- [ ] Keep the path between Pi B and the desk clear. Wi-Fi from Pi A to Pi B is the main presence sensor and the dead-zone link; Bluetooth from Pi B to the board is a second opinion. Do not connect extra beacon devices.
 - [ ] Connect the temporary setup camera and confirm `cam-status` reports `on`.
 - [ ] Clear people and movable objects from the sensing area before the baseline.
 - [ ] Let the narrator warm its local model in the background. The template path remains available, so do not delay the demo.
@@ -68,7 +68,7 @@ Use these exact beat names and keep them in this order.
 1. **Found you:** Start with the camera disconnected. Ask the judge to step up to the desk, into the sensing strip. Show a fresh `person` prediction and say, “Found you. Camera disconnected.” Do not substitute a numeric camera claim while proof remains pending.
 2. **Teach the room:** Connect the camera, start the fresh judge lesson, and display `Lesson time: __ s`. Show labels, not an image. Wait for successful training before continuing.
 3. **Camera unplug:** Unplug the camera in one continuous shot. Follow the camera-unplug proof below and leave the cable visible.
-4. **Still follows:** Ask the judge to move and then stand still in the spot. Show presence and motion continuing from Bluetooth alone. If a required link goes blind, say so and stop; never call it empty.
+4. **Still follows:** Ask the judge to move and then stand still in the spot. Show presence and motion continuing from radio alone, with Wi-Fi across the gap as the main sensor. If a required link goes blind, say so and stop; never call it empty.
 5. **Arm the space:** Ask the judge to step out. Use the arm control only if the current build exposes contract v2 `armed` state, emits `armed`, and the phone page is connected to the live feed.
 6. **Intrusion alert:** Ask the judge to re-enter and stay in the spot. Continue only after the board emits the live `intrusion` event and the phone page shows it. A passer-by gets no intrusion alert. Do not identify the judge or claim crowd counting.
 7. **Ask the room:** Ask the prepared question only if the current build can answer from its local timestamped event records. Read the returned facts; do not improvise an answer.
