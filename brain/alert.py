@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import statistics
+import threading
 import time
 from collections import deque
 from pathlib import Path
@@ -65,30 +66,46 @@ class BridgeLed:
     """The LED grid on the microcontroller, called over the Bridge (mcu/ sketch).
 
     A failed call is logged once and otherwise ignored: the lights must never
-    stop the brain. A call can take its whole 1 s timeout to fail, and it runs on
-    the live loop, so after a failure the grid is left alone for LED_RETRY_S: a
-    dead Bridge then costs one late state message every half minute, not one on
-    every zone change. Not yet tried on the board.
+    stop the brain. A call can take its whole 1 s timeout, so it never runs on the
+    live loop: each call goes to a worker thread, and a call made while the last
+    one hasn't come back is dropped (#648). After a failure the grid is left alone
+    for LED_RETRY_S. Not yet tried on the board.
+
+    run(fn) starts fn off the loop; the default is a daemon thread. Tests pass
+    run=lambda fn: fn() to keep it in line.
     """
 
-    def __init__(self, call=None, clock=time.monotonic):
+    def __init__(self, call=None, clock=time.monotonic, run=None):
         if call is None:
             from arduino.app_utils import Bridge   # the app-bricks wheel; only on the board
             call = Bridge.call
         self._call, self._clock = call, clock
+        self._run = run or (lambda fn: threading.Thread(target=fn, name="led", daemon=True).start())
+        self._busy = False
+        self.dropped = 0
         self._warned = False
         self._quiet_until = float("-inf")
 
     def _send(self, name, *args):
         if self._clock() < self._quiet_until:
             return
-        try:
-            self._call(name, *args, timeout=1)
-        except Exception as e:
-            self._quiet_until = self._clock() + LED_RETRY_S
-            if not self._warned:
-                self._warned = True
-                logging.getLogger("brain").warning("LED grid call %s failed: %s", name, e)
+        if self._busy:              # the last call hasn't come back: don't queue behind it
+            self.dropped += 1
+            return
+        self._busy = True
+
+        def work():
+            try:
+                self._call(name, *args, timeout=1)
+            except Exception as e:
+                self._quiet_until = self._clock() + LED_RETRY_S
+                if not self._warned:
+                    self._warned = True
+                    logging.getLogger("brain").warning("LED grid call %s failed: %s", name, e)
+            finally:
+                self._busy = False
+
+        self._run(work)
 
     def show_zone(self, n): self._send("show_zone", int(n))
     def alert(self, on): self._send("alert", bool(on))
