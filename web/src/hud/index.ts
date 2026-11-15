@@ -1,3 +1,4 @@
+import { zoneName, zonePlace, linkName } from './layout'
 import './hud.css'
 import type { HudState } from './state'
 
@@ -73,14 +74,14 @@ export function renderHud(root: HTMLElement, state: HudState) {
     'cam-status': state.camera,
     'narrator-text': state.narration?.text ?? '__',
     'narrator-source': state.narration?.source ?? '',
-    'alert-banner': blind || stale ? '' : state.alert,
-    'alert-zone': blind || stale || state.alertZone == null ? '' : `Zone ${state.alertZone}`,
+    'alert-banner': blind || stale ? '' : state.movement === 'check_on' && state.alertZone != null ? `No movement ${zonePlace(state.alertZone)} for ${state.alertLimit ?? '__'} s` : state.alert,
+    'alert-zone': blind || stale || state.alertZone == null ? '' : zoneName(state.alertZone),
     'checkin-toast': !blind && !stale && state.checkin ? 'Check-in received' : '',
     'pred-kind': pred?.kind ?? '__',
     'pred-motion': pred?.motion ?? '__',
     'pred-zone': measurement(pred?.zone),
     'pred-zone-set': pred?.zone_set.join(', ') || '__',
-    'why-links': pred?.why.join(', ') || '__',
+    'why-links': pred?.why.map(id => linkName(id)).join('; ') || '__',
     'advice-text': state.advice?.text ?? '__',
     'router-spot': state.router,
     'before-dbm': measurement(state.advice?.before_dbm, ' dBm'),
@@ -98,6 +99,8 @@ export function renderHud(root: HTMLElement, state: HudState) {
     const field = root.querySelector(`[data-testid="${id}"]`)
     if (field && field.textContent !== value) field.textContent = value
   }
+  const why = root.querySelector<HTMLElement>('[data-testid="why-links"]')
+  if (why) why.dataset.links = pred?.why.join(',') ?? ''
   root.dataset.movement = state.checkin ? 'check-in' : state.movement
 }
 export { mountHud } from './judge'

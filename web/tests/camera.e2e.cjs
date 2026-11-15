@@ -1,10 +1,11 @@
+const layoutFixture = require('./layout-fixture.cjs')
 const { test, expect } = require('@playwright/test')
 test('camera agreement and the eight-second unplug state', async ({ page }) => {
   await page.clock.install()
   await page.goto('/src/hud/index.html')
   await page.evaluate(async () => {
     const { mountPanel } = await import('/src/hud/judge-camera-panel.ts')
-    const { mockState } = await import('/src/room/mock.ts')
+    const { mockState } = await import('/src/hud/mock-layout.ts')
     document.body.innerHTML = '<section id="panel"></section>'
     window.panel = mountPanel(document.querySelector('#panel'))
     window.state = mockState('camera', 0, 1000)

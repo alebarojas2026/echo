@@ -1,9 +1,10 @@
+const layoutFixture = require('./layout-fixture.cjs')
 const { test, expect } = require('@playwright/test')
 test('advice shows measured gains and preserves missing values', async ({ page }) => {
   await page.goto('/src/hud/index.html')
   await page.evaluate(async () => {
     const { mountPanel } = await import('/src/hud/judge-advice-panel.ts')
-    const { mockState } = await import('/src/room/mock.ts')
+    const { mockState } = await import('/src/hud/mock-layout.ts')
     document.body.innerHTML = '<section id="panel"></section>'
     window.panel = mountPanel(document.querySelector('#panel'))
     window.state = mockState('object', 0, 1000)

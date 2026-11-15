@@ -1,3 +1,5 @@
+import { loadHudLayout, linkName } from './layout'
+import { alignMockState } from './mock-layout'
 import './judge.css'
 import { mountAskRoom } from './ask-room'
 import { changingText } from './changing-text'
@@ -27,7 +29,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const set = (id: string, text: string) => { field(id).textContent = text }
   const headlineText = changingText(field('judge-headline'))
   const debug = root.querySelector('.debug')!
-  for (const id of ['pred-zone', 'pred-zone-set', 'pred-kind', 'pred-motion', 'why-links', 'router-spot', 'narrator-source', 'no-data', 'sensor-blind']) {
+  for (const id of ['pred-zone', 'pred-zone-set', 'pred-kind', 'pred-motion', 'why-links', 'router-spot', 'narrator-source', 'no-data', 'sensor-blind', 'health-links']) {
     const value = document.createElement('dd')
     value.dataset.testid = id
     debug.append(value)
@@ -55,7 +57,12 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   document.addEventListener('keydown', key)
   const disposeAsk = mountAskRoom(root.querySelector('header')!)
   let disposed = false
+  let lastState: StateMsg | null = null
+  let lastStale = true
   const render = (state: StateMsg | null, stale: boolean) => {
+    lastState = state
+    lastStale = stale
+    if (feed?.source === 'mock') state = alignMockState(state)
     const [headline, detail] = judgeMoment(state, stale)
     headlineText.set(headline)
     set('judge-detail', detail)
@@ -67,13 +74,16 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     set('pred-zone-set', state?.pred?.zone_set.join(' or ') ?? '__')
     set('pred-kind', state?.pred?.kind ?? '__')
     set('pred-motion', state?.pred?.motion ?? '__')
-    set('why-links', state?.pred?.why.join(', ') ?? '')
+    set('why-links', state?.pred?.why.map(id => linkName(id)).join('; ') ?? '')
+    field('why-links').dataset.links = state?.pred?.why.join(',') ?? ''
+    set('health-links', state?.health.status === 'degraded' ? state.links.filter(link => link.status !== 'ok').map(link => linkName(link.id)).join('; ') : '')
     set('router-spot', state?.router ?? '')
     set('narrator-source', state?.narration?.source ?? '')
     set('no-data', stale || !state ? 'No data' : '')
     set('sensor-blind', !stale && state?.health.status === 'blind' ? 'Sensor blind' : '')
     panels.forEach(panel => panel.update(state, stale))
   }
+  void loadHudLayout().then(() => { if (!disposed) render(lastState, lastStale) })
   render(null, true)
   const unsubscribe = feed?.subscribe(({ state, stale }) => render(state, stale))
   const number = (value: number | null | undefined, suffix = '') => Number.isFinite(value) ? `${value}${suffix}` : '__'
