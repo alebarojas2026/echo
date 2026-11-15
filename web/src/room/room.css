@@ -7,7 +7,7 @@
   --text: #e6e8eb;
   --text-2: #9aa3ad;
   --link: #858e99;
-  --person: #ff9f43;
+  --person: #1fa5cf;
   --object: #a9b4c2;
   --action: #34b277;
   --fault: #f2555a;
@@ -168,7 +168,7 @@
   font: 500 28px/1.3 'Hanken Grotesk', system-ui, sans-serif;
 }
 
-/* "Movement on this path": person amber, at node-label size, readable from the wide hall framing. */
+/* "Movement on this path": person blue, at node-label size, readable from the wide hall framing. */
 /* The whole hall: where we are, above the person's column. */
 .room-label--ourdesk {
   translate: -50% -100%;

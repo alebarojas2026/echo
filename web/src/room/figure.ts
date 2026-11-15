@@ -126,7 +126,7 @@ const shadeTo = (darkest: number) => `
   vec4 matcapColor = vec4( vec3( shade ), 1.0 ); // figure-shade`
 /** The solid figure's far side, as a fraction of the person colour. */
 const DARKEST = 0.3
-/** A see-through figure keeps its form but stays light, so it still reads amber over the dark floor. */
+/** A see-through figure keeps its form but stays light, so it still reads blue over the dark floor. */
 const DARKEST_SEE_THROUGH = 0.72
 
 /** Patches a matcap material's fragment shader with the clay shade. Exported for the test. */

@@ -15,7 +15,7 @@ import { roomShot, type RoomView, type Shot, type ShotFor } from './view'
 //   on H       to the other framing, for the presenter
 // ?view=hall or ?view=square pins one framing (H still works). Under reduced motion the camera cuts instead.
 // While wide, the labels fade out (they would pile up on a square 60 px across), the square gets a
-// pixel-width outline, and an amber column stands over the figure so the person still reads from the back row.
+// pixel-width outline, and a blue column stands over the figure so the person still reads from the back row.
 
 export type Framing = 'hall' | 'square'
 

@@ -11,7 +11,7 @@ import { v3 } from './stage'
 import type { RoomView } from './view'
 
 // One thin neutral line per radio link (contract section 3), drawn between the node heads.
-// It dims as drop_db rises, turns amber (the person's colour) when the link is in pred.why and is itself dropping
+// It dims as drop_db rises, turns blue (the person's colour) when the link is in pred.why and is itself dropping
 // (explains, below), and breaks into dashes when blind.
 // A link whose straight path never passes over the floor a person stands on (on the desk layout, one between two
 // devices on the desk) is drawn faint while nothing is happening on it: the links a person can cut read first.

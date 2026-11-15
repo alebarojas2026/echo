@@ -49,7 +49,7 @@ FPS = 30
 WALK_FRAMES = 32        # one cycle (two steps) = 32 / 30 = 1.067 s
 STRIDE_M = 1.18         # ground covered per cycle at full stride
 IDLE_FRAMES = 240       # 8 s
-AMBER = (1.0, 0x9F / 255, 0x43 / 255)  # person #FF9F43 (sRGB); the app sets its own material from palette.ts
+BLUE = (0x1F / 255, 0xA5 / 255, 0xCF / 255)  # person #1FA5CF (sRGB); the app sets its own material from palette.ts
 
 # ------------------------------------------------------------------------------------------------- proportions
 # Joint centres for the LEFT side (+x), metres. Blender frame: x = the figure's left, -y = forward, z = up.
@@ -968,9 +968,9 @@ def check_feet(obj, rig, legs):
 
 # ------------------------------------------------------------------------------------------------- 6. export
 def material():
-    """One plain amber material (the app swaps in its own clay shader; this is for other glTF viewers)."""
+    """One plain blue material (the app swaps in its own clay shader; this is for other glTF viewers)."""
     mat = bpy.data.materials.new('person')
-    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in AMBER]
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in BLUE]
     mat.diffuse_color = (*lin, 1.0)
     bsdf = mat.node_tree.nodes.get('Principled BSDF') if mat.node_tree else None
     if bsdf:

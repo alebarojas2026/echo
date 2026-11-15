@@ -75,8 +75,8 @@ CONTRACTS.md, contracts/, AGENTS.md, CLAUDE.md and README.md are changed only by
 Colours: each one means one thing and nothing else.
 - Page and canvas #111316. Floor and cards #1A1D21. Edges and lines #353B43. The sensing square's outline #6B7480.
 - Text #E6E8EB. Secondary text #9AA3AD.
-- link #858E99: a healthy radio link. Neutral on purpose: only the links behind the decision turn person amber.
-- person #FF9F43: the one accent. The person (the figure, the X-ray heat up to #FFD29A, the links behind the decision, zone names).
+- link #858E99: a healthy radio link. Neutral on purpose: only the links behind the decision turn person blue.
+- person #1FA5CF: the one accent (blue). The person (the figure, the X-ray heat up to #A6E0F2, the same blue lighter; the links behind the decision, zone names).
 - object #A9B4C2: objects (hatching, markers).
 - action #34B277: the router advice arrow and the check-in.
 - fault #F2555A: a broken link and the no-movement alert.

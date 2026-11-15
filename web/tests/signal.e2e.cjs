@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test')
 const path = require('node:path')
 require('./layout-fixture.cjs')
 const shots = process.env.HUD_SCREENSHOTS
-const PERSON = 'rgb(255, 159, 67)'
+const PERSON = 'rgb(31, 165, 207)'
 
 async function open(page, width = 1920, height = 1080) {
   await page.setViewportSize({ width, height })

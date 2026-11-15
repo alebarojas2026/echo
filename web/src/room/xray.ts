@@ -7,7 +7,7 @@ import { DESK_TOP_M, v3 } from './stage'
 import type { RoomView } from './view'
 
 // The radio X-ray on the floor, drawn from whatever w x h grid arrives (contract sections 5 and 6).
-// People (moving_db) are an amber heat-scale shadow; objects (static_db) are grey-blue hatching. Both ease between states.
+// People (moving_db) are a blue heat-scale shadow; objects (static_db) are grey-blue hatching. Both ease between states.
 
 const DB_RANGE = 16 // a byte covers 0..16 dB, about 0.06 dB a step
 const LIFT_M = 0.002 // just above the surface it lies on
@@ -149,7 +149,7 @@ const fragmentShader = /* glsl */ `
 
   void main() {
     vec2 db = texture2D(uData, vUv).rg * uRange;
-    // People: a heat-scale shadow, amber deepening to pale gold at the strongest drop, edged by one
+    // People: a heat-scale shadow, blue lightening to pale blue at the strongest drop, edged by one
     // 2 px line at 3 dB.
     float edgeLine = 0.9 * contour(db.r, 3.0);
     float people = max(0.7 * smoothstep(1.0, 6.0, db.r), edgeLine);
