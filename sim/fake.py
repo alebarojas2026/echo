@@ -40,6 +40,12 @@ PERSON_WIDTH_M = LAYOUT.width_m   # how fast the drop fades with distance from t
 PERSON_BODY_M = LAYOUT.body_m     # the full drop within this distance of the line
 MOVING_SPEED = 0.25    # m/s over 1 s, contract section 6
 
+# Optional hall links (issue #358): far beacons heard a few times a second, at uneven moments.
+HALL_SENT_HZ = 25.0                # adverts a second a hall beacon sends
+HALL_HEARD = 0.3                   # the share of them a receiver hears
+HALL_CHANNEL_DB = (-1.5, 0.0, 1.0) # an advert is heard on one of three channels, each at its own level
+HALL_NOISE_DB = 0.7
+
 
 def link_id(tx: str, rx: str, kind: str) -> str:
     return f"{tx}>{rx}:{kind}"
@@ -118,10 +124,59 @@ def is_moving(waypoints: list, t: float, window_s: float = 1.0) -> bool:
     return bool(ahead) and math.dist(now, ahead) / 0.1 > MOVING_SPEED
 
 
+def receivers() -> list:
+    """The nodes that receive, in the order LINKS first names them."""
+    return list(dict.fromkeys(rx for _, rx, _ in LINKS))
+
+
+def hall_links(path: dict) -> list:
+    """(tx, rx) of every hall link of a path: each hall beacon heard by each receiver. [] with no "hall"."""
+    beacons = (path.get("hall") or {}).get("beacons") or {}
+    return [(tx, rx) for rx in receivers() for tx in beacons]
+
+
+def hall_walk(walk: dict, tx: str, rx: str, t: float) -> bool:
+    """True while somebody walks along this hall link. A walk with no "tx" or "rx" is on all of them."""
+    return active(walk, t) and walk.get("tx", tx) == tx and walk.get("rx", rx) == rx
+
+
+def hall_events(path: dict, seed: int = 0) -> list:
+    """rssi events of the path's hall links, in time order. They use their own random stream, so a
+    path gives the same core readings with and without a "hall" block.
+
+    Each beacon sends about `sent_hz` adverts a second and a receiver hears a share `heard` of them,
+    on one of three channels that sit at different levels. During a walk the level dips (deepest in
+    the middle of the walk) and flutters. Outages silence a hall beacon like any other node.
+    """
+    hall = path.get("hall") or {}
+    rng = random.Random(f"hall-{seed}")
+    every, heard = 1.0 / hall.get("sent_hz", HALL_SENT_HZ), hall.get("heard", HALL_HEARD)
+    out = []
+    for tx, rx in hall_links(path):
+        link, t = link_id(tx, rx, "ble"), rng.uniform(0.0, every)
+        while t < path["duration_s"]:
+            silent = any(active(o, t) and (o.get("link") == link or o.get("node") in (tx, rx))
+                         for o in path.get("outages") or [])
+            if not silent and rng.random() < heard:
+                spot = ROUTER_SPOTS[latest(path.get("router"), t, "spot", "S-home")] if rx == "pi5" else NODES[rx]
+                dbm = (REF_DBM["ble"] - 20.0 * math.log10(math.dist(hall["beacons"][tx], spot))
+                       + rng.choice(HALL_CHANNEL_DB) + rng.gauss(0.0, HALL_NOISE_DB))
+                for w in hall.get("walks") or []:
+                    if hall_walk(w, tx, rx, t):
+                        mid, half = (w["t_on"] + w["t_off"]) / 2, (w["t_off"] - w["t_on"]) / 2
+                        dbm -= (w.get("drop_db", PERSON_DROP_DB) * max(0.0, 1.0 - abs(t - mid) / half)
+                                * max(0.0, 1.0 + rng.gauss(0.0, 0.3)))
+                out.append({"type": "rssi", "t": round(t, 3), "link": link, "kind": "ble",
+                            "tx": tx, "rx": rx, "dbm": round(dbm)})
+            t += every + rng.uniform(0.0, 0.010)
+    return sorted(out, key=lambda e: e["t"])
+
+
 def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
              seed: int = 0, noise_db: float = 1.0):
     """Yield internal events (see wire.py) for a scripted path, in time order."""
     rng = random.Random(seed)
+    hall, h = hall_events(path, seed), 0
     waypoints = path.get("person") or []
     label_every = max(1, round(rate / label_rate))
     meta = {"session": "sim-" + path.get("name", "path"), "purpose": "demo", "walker": "sim"}
@@ -132,6 +187,9 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
     desk, split = path.get("teacher") == "desk", LAYOUT.split_x_m if LAYOUT.strip_m else SIZE / 2
     for i in range(int(path["duration_s"] * rate)):
         t = round(i / rate, 3)
+        while h < len(hall) and hall[h]["t"] <= t:   # hall readings come at their own uneven moments
+            yield hall[h]
+            h += 1
         pos = position(waypoints, t)
         moving = is_moving(waypoints, t)
         nodes = {**NODES, "pi5": ROUTER_SPOTS[latest(path.get("router"), t, "spot", "S-home")]}
