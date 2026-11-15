@@ -136,3 +136,56 @@ def test_the_tamper_beats_show_in_good_time(desk):
     shown = {name: s for name, _, s in desk}
     assert 2.5 <= shown["tamper: a beacon unplugged while armed"] <= 4.0      # 3 s of silence from every east link
     assert shown["tamper: cleared when the beacon is back"] <= 3.0            # 2 s after its links are back
+
+
+# ---- a crowded aisle (python -m sim.rehearse --aisle) ----
+# Beats today's brain does not pass yet, by layout. They are marked xfail with strict=True, so they show
+# as known failures in every run, and the run fails the day one of them starts passing: then take it
+# out of this list. Brain issue #581 has the numbers.
+AISLE_KNOWN_FAILING = {
+    "square": {"aisle: walking past is nobody (no Found you)", "aisle: armed, walking past is nobody"},
+    "strip": set(),
+}
+AISLE_BEATS = [name for name, _, _, _, _ in rehearse.aisle_script()[2]]
+LAYOUT_NAME = "strip" if rehearse.LAYOUT.strip_m else "square"
+
+
+@pytest.fixture(scope="module")
+def aisle():
+    return {name: passed for name, passed, _ in rehearse.rehearse(rehearse.aisle_script())}
+
+
+@pytest.mark.parametrize("beat", [
+    pytest.param(name, marks=pytest.mark.xfail(
+        name in AISLE_KNOWN_FAILING[LAYOUT_NAME], strict=True,
+        reason="known failing on today's brain: a passer-by shows as a person for 0.1-0.2 s (brain issue #581)"))
+    for name in AISLE_BEATS])
+def test_aisle_beat(aisle, beat):
+    assert aisle["setup: baseline"] and aisle["setup: training"]
+    assert aisle[beat], f"{beat} did not hold"
+
+
+def test_aisle_script_has_the_beats_it_promises():
+    path, commands, beats = rehearse.aisle_script()
+    kinds = {kind for _, _, _, kind, _ in beats}
+    assert kinds == {"every state", "no event", "count", "event", "state"}
+    assert [c[1:] for c in commands] == [("arm", {"on": True}), ("arm", {"on": False})]
+    assert sum(1 for p in path["passers"] if p.get("reach_m")) == 2   # a brush before and while armed
+    assert path["neighbours"] == [{"end": "east", "past_m": 1.0}] and path["camera"] == [{"t": 0, "state": "off"}]
+
+
+def test_every_state_and_no_event_beats_fail_by_name():
+    path, commands, beats = rehearse.aisle_script()
+    # someone stands just inside the area during the walk-past: every-state and no-event beats must catch it
+    x, y = rehearse.Z[rehearse.STILL]
+    inside = dict(path, person=[{"t": 0, "x": None}, {"t": 20, "x": x, "y": y}, {"t": 30, "x": x, "y": y},
+                                {"t": 30.1, "x": None}] + path["person"][1:])
+    failed = {name for name, passed, _ in rehearse.rehearse((inside, commands, beats)) if not passed}
+    assert {"aisle: walking past is nobody (no Found you)", "aisle: walking past is no enter"} <= failed
+
+
+def test_aisle_flag_runs_the_aisle_script(capsys, monkeypatch):
+    seen = []
+    monkeypatch.setattr(rehearse, "rehearse", lambda script=None, **k: seen.append(script) or [("a beat", True, None)])
+    assert rehearse.main(["--aisle"]) == 0
+    assert seen[0][0]["name"] == "aisle-rehearsal" and "1 of 1 beats passed" in capsys.readouterr().out

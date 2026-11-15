@@ -3,6 +3,7 @@
     python -m sim.rehearse          # PASS/FAIL per beat, exit 1 if any beat fails
     python -m sim.rehearse --desk   # the same for the 3-minute desk visit
     python -m sim.rehearse --lesson # the live lesson: teach left and right, then unplug the camera
+    python -m sim.rehearse --aisle  # a crowded aisle: people walk past, a judge stands still
 
 The fake feed goes into the real bus code (bus.core.Bus), which stamps recv_t and forwards to
 the real brain (brain.core.Brain); the brain's state and events are what the screen would get.
@@ -191,6 +192,60 @@ def desk_script():
     return path, commands, beats
 
 
+def person_here(s) -> bool:
+    """What the arrival screen shows "Found you." for: a prediction of a person present."""
+    return bool(s["pred"] and s["pred"]["present"] and s["pred"]["kind"] == "person")
+
+
+def aisle_passers(start: float, end: float, brush_at=None) -> list:
+    """Passers-by from sim/paths/aisle.json, again and again from start until end, and one who
+    brushes an arm tip over the edge at brush_at (the file's own brush is left out)."""
+    walkers = [p for p in fake.load_path("aisle")["passers"] if not p.get("reach_m")]
+    period = max(p["t_on"] for p in walkers) + 12.0
+    out, t = [], start
+    while t < end:
+        out += [dict(p, t_on=t + p["t_on"]) for p in walkers if t + p["t_on"] < end]
+        t += period
+    if brush_at is not None:
+        out.append({"t_on": brush_at, "from": "east", "lane_m": 0.25, "speed_mps": 1.0, "reach_m": 0.3})
+    return out
+
+
+def aisle_script():
+    """A crowded aisle at the judging desk, camera unplugged: people walk past without stepping in
+    and a neighbour stands 1 m beyond the east end the whole time. First nobody is in the area, then
+    the space is armed with people still walking past, then a judge steps in and stands still in the
+    alert zone while others pass. Walking past must never be a person here, an enter or an
+    intrusion; the judge standing still must still get the no-movement alert."""
+    arm, disarm, back, finish = 62.0, 112.0, 116.0, 156.0
+    still_from = back + 1.5
+    x, y = Z[STILL]
+    w = (LAYOUT.strip_m or LAYOUT.size_m)[0]
+    out = {"x": -0.4 if x < w / 2 else w + 0.4, "y": y}   # 0.4 m past the end nearer the alert zone
+    person = [{"t": 0, "x": None}, {"t": back, **out}, {"t": still_from, "x": x, "y": y},
+              {"t": finish - 4, "x": x, "y": y}, {"t": finish - 3, **out}, {"t": finish - 2.9, "x": None}]
+    path = {"name": "aisle-rehearsal", "duration_s": finish, "person": person,
+            "passers": aisle_passers(2.0, arm - 4, brush_at=40.0) + aisle_passers(arm + 2, disarm - 4, brush_at=90.0)
+                       + aisle_passers(back + 4, finish - 6),
+            "neighbours": [{"end": "east", "past_m": 1.0}],
+            "camera": [{"t": 0, "state": "off"}], "router": [{"t": 0, "spot": "S-home"}]}
+    commands = [(arm, "arm", {"on": True}), (disarm, "arm", {"on": False})]
+    nobody = lambda s: not person_here(s)   # noqa: E731
+    beats = [   # (name, from s, to s, kind, check); "every state" and "no event" must hold the whole time
+        ("aisle: walking past is nobody (no Found you)", 2, arm, "every state", nobody),
+        ("aisle: walking past is no enter", 2, arm, "no event", lambda e: e["kind"] == "enter"),
+        ("aisle: armed", arm, arm + 2, "event", lambda e: e["kind"] == "armed"),
+        ("aisle: armed, walking past is nobody", arm, disarm, "every state", nobody),
+        ("aisle: armed, walking past is no intrusion", arm, disarm, "no event", lambda e: e["kind"] == "intrusion"),
+        # Since the 3 s hold (#582) a short appearance while armed is a passed_by, not an intrusion: allowed, counted.
+        ("aisle: armed, passed_by events while people walk past", arm, disarm, "count", lambda e: e["kind"] == "passed_by"),
+        ("aisle: the judge steps in and is found", back, still_from + 4, "state", person_here),
+        ("aisle: the judge stands still while others pass: no-movement alert", still_from + 9.5, still_from + 16,
+         "event", lambda e: e["kind"] == "alert_on"),
+    ]
+    return path, commands, beats
+
+
 def lesson_script():
     """The live lesson (sim/lesson.py): the commands the screen sends and the beats to look for.
     The model starts from nothing: only a baseline and an empty recording exist before it."""
@@ -332,10 +387,17 @@ def rehearse(script=None, seed: int = 0, lesson: bool = False) -> list:
             results = [("setup: baseline", "baseline_done" in setup, None), ("setup: training", "trained" in setup, None)]
         t0 = stack.play(path, commands)
         for name, start, end, where, shows in beats:
-            items = stack.states if where == "state" else stack.events
-            hits = [(m["t"] - t0) / 1000 - start for m in items
-                    if start <= (m["t"] - t0) / 1000 < end and shows(m)]
-            results.append((name, bool(hits), round(hits[0], 1) if hits else None))
+            items = stack.states if where.endswith("state") else stack.events
+            inside = [m for m in items if start <= (m["t"] - t0) / 1000 < end]
+            hits = [(m["t"] - t0) / 1000 - start for m in inside if shows(m)]
+            if where == "every state":   # it must hold in every state of the window
+                results.append((name, bool(inside) and len(hits) == len(inside), None))
+            elif where == "no event":    # it must never happen in the window
+                results.append((name, not hits, None))
+            elif where == "count":       # allowed any number of times: how many is the result
+                results.append((name, True, len(hits)))
+            else:
+                results.append((name, bool(hits), round(hits[0], 1) if hits else None))
         if lesson:
             results.append(follows_unplugged(stack, t0))
     return results
@@ -347,10 +409,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Play the demo through the real bus and brain, beat by beat.")
     ap.add_argument("--desk", action="store_true", help="the hero path at the desk instead: found, lesson, unplug, still, arm + intrusion")
     ap.add_argument("--lesson", action="store_true", help="the live lesson: teach left and right, then unplug")
+    ap.add_argument("--aisle", action="store_true", help="a crowded aisle: people walk past, a judge stands still")
     args = ap.parse_args(argv)
-    results = rehearse(lesson=True) if args.lesson else rehearse(desk_script()) if args.desk else rehearse()
+    results = (rehearse(lesson=True) if args.lesson else rehearse(desk_script()) if args.desk
+               else rehearse(aisle_script()) if args.aisle else rehearse())
     for name, passed, shown in results:
-        took = "" if shown is None else f"  shown after {shown:.1f} s"
+        took = "" if shown is None else f"  {shown} seen" if isinstance(shown, int) else f"  shown after {shown:.1f} s"
         print(f"{'PASS' if passed else 'FAIL'}  {name}{took}")
     failed = [name for name, passed, _ in results if not passed]
     print(f"{len(results) - len(failed)} of {len(results)} beats passed" + (f"; failed: {', '.join(failed)}" if failed else ""))

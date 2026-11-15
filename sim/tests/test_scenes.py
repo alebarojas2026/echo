@@ -106,3 +106,38 @@ def test_camera_unplug_keeps_the_radio_going(each_layout):
     assert max(e["t"] for e in events if e["type"] == "label") < 14
     assert {e["state"] for e in events if e["type"] == "cam" and e["t"] >= 14} == {"off"}
     assert len(dbm(events, WIFI, 14, 32)) == 18 * 15
+
+
+# ---- a crowded aisle: people outside the area ----
+
+def test_passers_by_walk_past_outside_the_area_and_are_never_present(each_layout):
+    path = fake.load_path("aisle")
+    w = (fake.LAYOUT.strip_m or fake.LAYOUT.size_m)[0]
+    for t in range(0, 90):
+        for x, y, walking, arm in fake.bystanders(path, t):
+            assert y < 0 or x < 0 or x > w        # on the aisle side or beyond an end, never inside
+    labels = [e for e in run(path) if e["type"] == "label"]
+    assert not any(e["present"] for e in labels) and {e["zone"] for e in labels} == {0}
+    assert {e["persons_in_frame"] for e in labels} >= {1, 2}   # the neighbour, and a passer-by with them
+    assert 0.6 <= min(p["speed_mps"] for p in path["passers"]) and max(p["speed_mps"] for p in path["passers"]) <= 1.4
+
+
+def test_the_brush_puts_an_arm_tip_over_the_edge_with_the_feet_outside():
+    brush = next(p for p in fake.load_path("aisle")["passers"] if p.get("reach_m"))
+    _, y, _, arm = next(b for b in fake.bystanders({"passers": [brush]}, brush["t_on"] + 1.0))
+    assert y < 0 <= arm[1]
+
+
+def test_walking_past_shakes_a_nearby_link_and_standing_still_does_not(each_layout):
+    quiet = run({"duration_s": 6}, noise_db=0.0)
+    walker = run({"duration_s": 6, "passers": [{"t_on": 0, "from": "west", "lane_m": 0.1, "speed_mps": 0.6}]}, noise_db=0.0)
+    standing = run({"duration_s": 6, "neighbours": [{"end": "east", "past_m": 1.0}]}, noise_db=0.0)
+    shaken = [link for link in {e["link"] for e in quiet if e["type"] == "rssi"}
+              if dbm(walker, link) != dbm(quiet, link)]
+    assert shaken                                            # someone walking 0.1 m out moves some link
+    assert all(dbm(standing, link) == dbm(quiet, link) for link in {e["link"] for e in quiet if e["type"] == "rssi"})
+
+
+def test_paths_without_bystanders_draw_the_same_numbers(each_layout):
+    plain = fake.load_path("zone_tour")
+    assert run(plain) == run(dict(plain, passers=[], neighbours=[]))
