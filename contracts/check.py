@@ -3,7 +3,7 @@
     python -m contracts.check session.jsonl            # one message per line
     python -m sim.fake zone_tour --fast | python -m contracts.check -
     python -m contracts.check proof.json               # a .json file is checked as proof.json
-    python -m contracts.check --as ask_reply replies.jsonl   # a web server body: ask_question, ask_reply, history, report
+    python -m contracts.check --as ask_reply replies.jsonl   # a web server body: ask_question, ask_reply, history, report, layout
 
 Prints file:line and the error for every bad line and exits 1 if any line fails.
 A jump in a producer's seq (lost messages) is a warning, not a failure.
@@ -32,8 +32,9 @@ def _load():
 
 
 VALIDATORS = _load()
-# proof.json (section 7) and the bodies of the board's web server (section 10): POST /ask, GET /history, GET /report
-NOT_MESSAGES = {"proof", "ask_question", "ask_reply", "history", "report"}
+# proof.json (section 7) and the bodies of the board's web server: /layout (section 2), POST /ask, GET /history
+# and GET /report (section 10)
+NOT_MESSAGES = {"proof", "ask_question", "ask_reply", "history", "report", "layout"}
 HISTORY_MAX_MS = 30 * 60 * 1000
 TYPES = sorted(set(VALIDATORS) - NOT_MESSAGES)
 

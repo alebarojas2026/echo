@@ -42,6 +42,11 @@ Ports:
 - web: http://192.168.77.2:8080. board/serve.py serves web/dist, /nodes.json and /proof.json, and answers POST /ask,
   GET /history and GET /report (section 10). Those three answer from the board's own records, need no internet and
   are reached on our own network only (the cable and the sensing hotspot).
+  It also has /layout for the operator's align mode: GET gives {"room": {offset_m, yaw_deg, scale, cut_m} | null,
+  "hall_beacons": [{node, xyz_m}]} (every hall beacon in nodes.json; xyz_m is [x, y, z] or null). POST takes the
+  same shape with either key or both (a room is never null there), JSON only, and only from the board itself,
+  192.168.77.0/24 or 10.42.0.0/24; it answers like GET. It is saved on the board (data/layout.local.json) and is
+  for drawing only: /nodes.json carries the saved hall xyz_m, and nothing else changes.
 - llm: http://127.0.0.1:8091 (llama-server).
 ```
 
@@ -89,6 +94,8 @@ Hall links (optional): up to two more beacons far outside the layout, as tripwir
   Hall beacons: manufacturer data FFFF 52 53 'H' and FFFF 52 53 'J' -> nodes h and j (beacon only, never a receiver).
   They live in nodes.json under "hall", with their positions (same frame, metres; may be many metres outside the
   layout; null until measured in the room).
+  A hall beacon's xyz_m in /nodes.json is the one saved with /layout (section 2) when there is one; radio/nodes.json
+  itself is not rewritten.
   A hall link is any link whose tx is a hall beacon: "<h|j>><rx>:ble" for every receiver rx in nodes.json
   (h>unoq:ble, j>pi5:ble, h>pi5b:ble, ...). The scanners send them as ordinary section 4 rssi messages (kind ble).
   The core links are the twelve listed in nodes.json "links". Hall links are never core links: they are not listed
