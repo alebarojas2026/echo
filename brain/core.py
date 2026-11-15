@@ -964,9 +964,12 @@ class Brain:
     def state(self) -> dict:
         now = self.now()
         self._tick()
-        # A baseline asked for by hand measures the rates again; the old ones don't judge it.
+        # A baseline asked for by hand, with or without keep_model, measures the rates again; the
+        # old ones don't judge it. (The same layout at another desk can have a slower link: judged
+        # against its old rate it went stale, then blind, and blind held up the very capture that
+        # would have measured the new rate.)
         health = self.health.update(now, self.raw_kind, self.router == HOME, self.capture is not None,
-                                    rates_known=not (self.capture and self.capture["new_place"]))
+                                    rates_known=not (self.capture and self.capture["by_hand"]))
         self._health_ok = health["health"]["status"] == "ok"
         self._quiet = [row["id"] for row in health["links"]
                        if row["status"] != "ok" and row["id"] in self.health.classifier_links]
