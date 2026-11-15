@@ -25,6 +25,17 @@ test('alert: no-movement wording with the zone and the limit from the state', ()
   assert.equal(noLimit.title, 'No movement in the room.')
 })
 
+test('alert: the hint names the check-in the layout has: step aside and back on one spot, a wave elsewhere', () => {
+  const before = { ...ZONES }
+  assert.equal(show('alert').detail, 'A wave or a tap on reset clears it.')
+  useZones({ zones: [{ id: 1, name: 'At the desk' }], presence: { line: 'pi5>pi5b:wifi' } })
+  const spot = card({ ...MOCKS.alert, alert: { state: 'check_on', zone: 1, still_s: 12, limit_s: 10 } }, 0)
+  assert.equal(spot.detail, 'Stepping aside and back, or a tap on reset, clears it.')
+  assert.doesNotMatch(spot.detail, /wave/i)
+  useZones({ zones: Object.entries(before).map(([id, name]) => ({ id: Number(id), name })) })
+  assert.equal(show('alert').detail, 'A wave or a tap on reset clears it.')
+})
+
 test('check-in: back to calm, with the time of the last check-in', () => {
   const c = show('checkin')
   assert.equal(c.mode, 'calm')
