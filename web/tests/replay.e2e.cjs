@@ -135,7 +135,7 @@ test('an Ask answer with a span offers Replay; Esc, the button and the timeline 
   await page.clock.runFor(700)
   await expect(page.getByTestId('ask-answer')).toHaveText(/^Mock records: someone was here for \d+ s of the last 2 minutes\.$/)
   await page.getByTestId('ask-replay').click()
-  await expect(page.locator('dialog')).not.toBeVisible()
+  await expect(page.locator('dialog.ask-room')).not.toBeVisible()
   const banner = page.getByTestId('replay')
   await expect(banner).toBeVisible()
   expect(calls).toHaveLength(1)
