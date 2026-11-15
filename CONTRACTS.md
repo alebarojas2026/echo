@@ -96,6 +96,10 @@ router_spots: S-home (0.8, 1.1, 1.0), S-W30 (0.5, 1.1, 1.0), S-E30 (1.1, 1.1, 1.
 tray_spots: T1 (0.86, 1.0, 1.0).
 Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'B' | 'E' | 'W'>, never by MAC.
   S = pi5, B = pi5b, E = east, W = west.
+  Gate 2 passes a Bluetooth link on what its beacon can give, never on a fixed number such as 20/s: the beacon is
+  heard on at least 30% of its advertising events, and never under 7/s. A beacon sends one event every interval
+  + 5 ms on average, and a scanner hears at most one copy of each. So E and W (ESP32, 35 ms) can give 25/s and pass
+  at 7.5/s; S and B (a Pi, 20 ms) can give 40/s and pass at 12/s. radio/GATE.md has the procedure.
 Hall links (optional): up to two more beacons far outside the layout, as tripwires.
   Hall beacons: manufacturer data FFFF 52 53 'H' and FFFF 52 53 'J' -> nodes h and j (beacon only, never a receiver).
   They live in nodes.json under "hall", with their positions (same frame, metres; may be many metres outside the
