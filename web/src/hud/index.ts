@@ -13,7 +13,7 @@ export function renderHud(root: HTMLElement, state: HudState) {
   if (!root.querySelector('.hud-header')) {
     root.innerHTML = `
       <header class="hud-header">
-        <h1>Radio Sight</h1>
+        <h1>Echo</h1>
         <div class="hud-indicators">
           <span data-testid="source-badge" class="hud-badge"></span>
           <span data-testid="cam-status" class="hud-camera"></span>
