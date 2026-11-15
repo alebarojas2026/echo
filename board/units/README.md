@@ -29,7 +29,7 @@ journalctl -u radio-sight-bus -f  # every 30 s a links: line; "<link> quiet for 
 Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sudo (it uses sudo itself). It checks out the ref and restarts only what changed. The Pi uses the same commands; there it installs only `radio-sight-radio-node`, and runs it with or without `--no-pi`, since beacon S doesn't need the cable.
 
 ## Keep what the board learned
-After the final lesson, connect the laptop through Ethernet and run
+After a successful empty-spot baseline, connect the laptop through Ethernet and run
 `board/keep.sh save`. Use BOARD_USER (the checkout owner), BOARD_REPO and
 BOARD_HOST from the laptop's environment or .env, as for push-web. The host must
 be 192.168.77.2, with no PI_HOST hop; the script checks that the laptop's route
@@ -38,37 +38,41 @@ needs `ip`; macOS uses `route` and `networksetup`.
 An explicit environment value wins over .env, including `PI_HOST=` to disable
 a saved proxy hop for this wired command.
 
-The dated laptop folder under data/keep/ is gitignored. It contains only
-model.pkl, baseline.json, place.json, baselines.jsonl, a consistent store.db
-snapshot made by Python's SQLite backup API (the same online snapshot as
-`sqlite3 .backup`), the source COMMIT and checksums. No extra SQLite CLI package
-is required. Recordings
-are never copied. If learning changes during save, the snapshot is refused.
+The dated laptop folder under data/keep/ is gitignored. It contains baseline.json,
+place.json, baselines.jsonl, a consistent store.db, and model.pkl only if one
+exists, plus the COMMIT, layout/model metadata and checksums. The model-free kit
+does not need a model, a lesson or a camera. The database snapshot uses Python's
+SQLite backup API (the same online snapshot as `sqlite3 .backup`), requiring no
+extra CLI package. Recordings are excluded. A save is refused if the state changes.
+MODEL records whether the optional model exists; restoring an absent-model
+snapshot removes a stale model instead of creating a dummy. Witness private
+keys are outside this fixed file list and are never copied or restored.
+The snapshot also records LAYOUT.sha256: canonical active radio/nodes.json with
+the same saved device/hall placement overlay that board.layout writes for the
+brain. Save requires the layout to remain unchanged during copying. Note the
+selected layout name and placement alongside the snapshot.
+An existing generated data/nodes.local.json must agree before save. This binds
+restore to the saved startup configuration; it does not prove when a baseline
+or legacy model was recorded. Take a fresh baseline after changing layout;
+replacing both layout files cannot certify an older baseline's provenance.
 
 To recover, deploy the backup's COMMIT first, then run
 `board/keep.sh restore <saved-folder>` from the wired laptop. It checks the
-files and commit before stopping the brain/store, stages on the board's data
-filesystem, replaces the five files with renames, starts both services, waits
+files, commit and effective-layout fingerprint before stopping the brain/store.
+If the layout changed without a commit (for example via radio.use_layout),
+select the matching layout and restore its saved placement first. JSON spacing,
+key order and drawing-only room alignment do not change the fingerprint. Custom
+RADIO_SIGHT_NODES selectors outside the standard brain unit's data/nodes.local.json
+are refused explicitly, including .env overrides; the tool does not guess which
+configuration the deployed brain uses. Older snapshots without LAYOUT.sha256
+are refused and need a new verified save. The restore stages on the board's data
+filesystem, replaces the saved files with renames, starts both services, waits
 up to 20 s for service/port readiness, then runs the localhost read-only demo
 check. A failure while replacing files leaves
 services stopped; inspect the error and retry before using the judge screen.
 The SSH login must have noninteractive sudo for the service stop/start. Rehearse
-one real restore after the last lesson; no successful hardware restore is
+one real restore after the final baseline; no successful hardware restore is
 claimed by the fixture tests.
-
-## Going back
-Save the incident log first:
-`journalctl -u 'radio-sight-*' --since -5min > incident.txt`.
-Then run `board/deploy.sh <last-good-commit>` on the board and
-`board/push-web.sh --back` from the laptop. The latter swaps the board's current
-and previous screen builds in place: no rebuild and no asset transfer over the
-hotspot. It prints the build now served and fails without changing the live
-build if no previous build exists. Each normal push keeps just one previous
-build, so a second `--back` returns to the build you left.
-
-Finish with `python scripts/demo_check.py` from the laptop (or give its localhost
-HTTP/WebSocket addresses when running on the board). Rehearse this sequence on
-the kit and record the elapsed time; no rollback duration is measured yet.
 
 ## Placeholders
 | In the file | Becomes |

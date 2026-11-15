@@ -1,5 +1,6 @@
 """Backup and restore through fake ssh, with a real SQLite backup and file renames."""
 import os
+import json
 from pathlib import Path
 import shutil
 import sqlite3
@@ -26,9 +27,15 @@ def setup(tmp_path):
     shutil.copy2(REPO/'board/keep.sh',laptop/'board/keep.sh')
     (board/'data/sessions').mkdir(parents=True)
     (board/'scripts').mkdir()
+    (board/'board').mkdir()
+    (board/'radio').mkdir()
+    for name in ('__init__.py','layout.py','keep_layout.py'): shutil.copy2(REPO/'board'/name,board/'board'/name)
+    (board/'radio/nodes.json').write_text(json.dumps({'v':2,'layout':'fixture',
+        'nodes':[{'id':'pi5','roles':['router'],'xyz_m':[0,0,1]},{'id':'unoq','roles':['receiver'],'xyz_m':[1,0,1]}],
+        'links':[],'zones':[{'id':1}],'presence':{'on_db':7,'off_db':4}}))
     (board/'scripts/demo_check.py').write_text('print("PASS restored demo path")\n')
     git(laptop,'init','-q');git(laptop,'add','-A');git(laptop,'commit','-qm','first')
-    git(board,'init','-q');git(board,'add','scripts');git(board,'commit','-qm','first')
+    git(board,'init','-q');git(board,'add','scripts','board','radio');git(board,'commit','-qm','first')
     for name in FILES: (board/'data/sessions'/name).write_text('original '+name)
     (board/'data/sessions/recording.jsonl').write_text('leave recordings alone')
     with sqlite3.connect(board/'data/sessions/store.db') as db:
@@ -46,7 +53,7 @@ def setup(tmp_path):
 
 def keep(s,*args,ok=True,**extra):
     env=dict(os.environ)
-    for key in ['BOARD_USER','BOARD_REPO','BOARD_HOST','PI_HOST','KEEP_INTERFACE']: env.pop(key,None)
+    for key in ['BOARD_USER','BOARD_REPO','BOARD_HOST','PI_HOST','KEEP_INTERFACE','RADIO_SIGHT_NODES']: env.pop(key,None)
     env.update({'BOARD_USER':'operator','BOARD_REPO':posix(s['board']),'BOARD_HOST':'192.168.77.2',
                 'FAKE_LOG':posix(s['log']),'FAKE_BIN':posix(s['bin']),'PYTHON':posix(s['bin']/'python'),
                 'REAL_PYTHON':sys.executable,**extra})
@@ -67,7 +74,7 @@ def test_save_includes_live_sqlite_snapshot_and_no_recordings(setup):
         db.execute('insert into evidence values (8)');db.commit()
         out=keep(setup,'save');folder=saved(setup)
         assert 'keep: saved' in out and 'recording.jsonl' not in [p.name for p in folder.iterdir()]
-        assert sorted(p.name for p in folder.iterdir())==sorted(FILES+['store.db','COMMIT','CHECKSUMS'])
+        assert sorted(p.name for p in folder.iterdir())==sorted(FILES+['store.db','COMMIT','LAYOUT.sha256','MODEL','CHECKSUMS'])
         with sqlite3.connect(folder/'store.db') as copy: assert copy.execute('select value from evidence').fetchall()==[(7,),(8,)]
         assert git(setup['laptop'],'check-ignore',str(folder/'model.pkl'))
     finally: db.close()
@@ -109,8 +116,8 @@ def test_restore_requires_the_saved_code_commit(setup):
 
 
 def test_missing_learned_file_does_not_publish_a_partial_backup(setup):
-    (setup['board']/'data/sessions/model.pkl').unlink()
-    assert 'missing model.pkl' in keep(setup,'save',ok=False)
+    (setup['board']/'data/sessions/baseline.json').unlink()
+    assert 'missing baseline.json' in keep(setup,'save',ok=False)
     assert not any(p.is_dir() for p in (setup['laptop']/'data/keep').iterdir())
 
 
@@ -132,3 +139,60 @@ def test_failed_readiness_does_not_report_a_successful_restore(setup):
 def test_wired_environment_can_disable_a_saved_proxy_hop(setup):
     (setup['laptop']/'.env').write_text('PI_HOST=hotspot-hop\n')
     assert 'keep: saved' in keep(setup,'save',PI_HOST='')
+
+
+@pytest.mark.parametrize('change',['layout','presence','placement'])
+def test_same_commit_layout_mismatch_is_rejected_before_service_stop(setup,change):
+    keep(setup,'save');folder=saved(setup)
+    for name in FILES: (setup['board']/'data/sessions'/name).write_text('current state')
+    path=setup['board']/'radio/nodes.json';doc=json.loads(path.read_text())
+    if change=='layout':
+        doc['layout']='other';doc['zones'].append({'id':2})
+    elif change=='presence': doc['presence']['on_db']=9
+    else: (setup['board']/'data/layout.local.json').write_text(json.dumps({'nodes':{'unoq':[0.5,0,1]}}))
+    path.write_text(json.dumps(doc))
+    out=keep(setup,'restore',folder,ok=False)
+    assert 'matching layout and placement' in out and 'systemctl stop' not in setup['log'].read_text()
+    for name in FILES: assert (setup['board']/'data/sessions'/name).read_text()=='current state'
+
+
+def test_layout_formatting_and_drawing_only_changes_do_not_block_restore(setup):
+    keep(setup,'save');folder=saved(setup)
+    path=setup['board']/'radio/nodes.json'
+    path.write_text(json.dumps(json.loads(path.read_text()),sort_keys=True,indent=4))
+    (setup['board']/'data/layout.local.json').write_text(json.dumps({'room':{'scale':2}}))
+    assert 'restored learned state' in keep(setup,'restore',folder)
+
+
+@pytest.mark.parametrize('environment',[True,False])
+def test_nonstandard_deployed_selector_fails_before_restoring(setup,environment):
+    keep(setup,'save');folder=saved(setup)
+    extra={'RADIO_SIGHT_NODES':'radio/layouts/custom.json'} if environment else {}
+    if not environment: (setup['board']/'.env').write_text('RADIO_SIGHT_NODES=radio/layouts/custom.json\n')
+    out=keep(setup,'restore',folder,ok=False,**extra)
+    assert 'nonstandard RADIO_SIGHT_NODES' in out and 'systemctl stop' not in setup['log'].read_text()
+
+
+def test_standard_merged_selector_is_accepted(setup):
+    selector=str(setup['board']/'data/nodes.local.json')
+    keep(setup,'save',RADIO_SIGHT_NODES=selector)
+    assert 'restored learned state' in keep(setup,'restore',saved(setup),RADIO_SIGHT_NODES=selector)
+
+
+def test_baseline_only_backup_preserves_model_absence_and_excludes_keys(setup):
+    state=setup['board']/'data/sessions'
+    (state/'model.pkl').unlink()
+    (state/'witness.key').write_text('device-local fixture, never copied')
+    keep(setup,'save');folder=saved(setup)
+    assert (folder/'MODEL').read_text().strip()=='absent'
+    assert not (folder/'model.pkl').exists() and not (folder/'witness.key').exists()
+    (state/'model.pkl').write_text('stale model must not survive this restore')
+    assert 'restored learned state' in keep(setup,'restore',folder)
+    assert not (state/'model.pkl').exists()
+    assert (state/'witness.key').read_text()=='device-local fixture, never copied'
+
+
+def test_save_rejects_a_stale_generated_layout(setup):
+    (setup['board']/'data/nodes.local.json').write_text('{"layout":"stale"}')
+    assert 'generated layout disagrees' in keep(setup,'save',ok=False)
+    assert not any(p.is_dir() for p in (setup['laptop']/'data/keep').iterdir())
