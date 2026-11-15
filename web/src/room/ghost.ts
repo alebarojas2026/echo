@@ -15,7 +15,7 @@ import { createFigure, FIGURE_HEIGHT_M, type Figure } from './figure'
 import { EASE_CSS, fade, GHOST_OMEGA, Held, MOTION, springStep } from './motion'
 import { SIZE_M, ZONES, floorSize, toScene, zoneAt, zoneCenter, zoneRect } from './frame'
 import { OBJECT, PERSON } from './palette'
-import { v3 } from './stage'
+import { standBase, v3 } from './stage'
 import { shadowCentre } from './xray'
 import type { RoomView } from './view'
 
@@ -96,7 +96,7 @@ const zonesKey = (spots: GhostSpot[]) => spots.map((s) => s.zone).sort().join(',
  * into the square, as seen from the camera), so this lane between them stays clear on any canvas size.
  */
 export function objectTagAt([x, y]: [number, number]): [number, number, number] {
-  return [x, y + 0.3 <= SIZE_M[1] - 0.45 ? y + 0.3 : y - 0.3, 0.08]
+  return [x, y + 0.3 <= SIZE_M[1] - 0.45 ? y + 0.3 : y - 0.3, standBase([x, y, 0])[2] + 0.08]
 }
 
 export class Presence {
@@ -237,7 +237,8 @@ export class Presence {
       const o = objects[i]
       b.to = o ? 1 : 0
       if (!o) return
-      b.mesh.position.copy(v3([o.xy_m[0], o.xy_m[1], 0.08]))
+      // On the desk top for the tray on the desk (the dead-zone beat), on the floor anywhere else.
+      b.mesh.position.copy(v3([o.xy_m[0], o.xy_m[1], standBase([o.xy_m[0], o.xy_m[1], 0])[2] + 0.08]))
       this.view.moveLabel(b.label, v3(objectTagAt(o.xy_m)))
     })
     this.view.host.dataset.objects = String(objects.length)

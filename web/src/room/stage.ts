@@ -11,6 +11,9 @@ import {
   PlaneGeometry,
   Vector3,
 } from 'three'
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, type NodeId, type Vec3 } from './frame'
 import type { Hearing } from './heard'
 import { fade, Glide3 } from './motion'
@@ -130,19 +133,20 @@ function outline(pts: Vec3[]): Vec3[] {
 const HEAD_M = 0.08
 const ZONE_IN_X = 0.1 // zone names start (west zones) or end (east zones) this far in from the side
 
-/**
- * Where a node's stand meets something: the floor on the square; on the desk layout the desk top for a node on
- * the desk, or the desk's edge for a beacon on an arm over the aisle (the arm runs level to its tip).
- */
-export function standBase([x, y, z]: Vec3): Vec3 {
-  if (!STRIP_M) return [x, y, 0]
-  return y >= STRIP_M[1] - 0.01 ? [x, y, DESK_TOP_M] : [x, STRIP_M[1], z]
+/** Where a node's stand meets something: the desk top for a device on the desk, else the floor. (An arm out from
+ *  the desk's edge read as a stray line from the camera's side; a post to the floor reads as a stand.) */
+export function standBase([x, y]: Vec3): Vec3 {
+  return STRIP_M && y >= STRIP_M[1] - 0.01 ? [x, y, DESK_TOP_M] : [x, y, 0]
 }
+
+/** Stands are drawn in the devices' own colour, fainter than the head, and wide enough to read on a desk top. */
+const STAND_ALPHA = 0.45
+const STAND_PX = 2
 
 interface NodeMesh {
   id: NodeId
   head: Mesh<BoxGeometry, MeshBasicMaterial>
-  post: LineSegments<BufferGeometry, LineBasicMaterial>
+  post: LineSegments2
   label: HTMLElement
   /** 0..1 as drawn, and where it is heading: 1 heard, LOST_ALPHA heard before but quiet now, 0 never heard. */
   alpha: number
@@ -182,9 +186,9 @@ export class Stage {
     const headGeom = new BoxGeometry(HEAD_M, HEAD_M, HEAD_M)
     for (const info of Object.values(NODES)) {
       const head = new Mesh(headGeom, new MeshBasicMaterial({ color: TEXT, transparent: true, opacity: 0 }))
-      const postGeom = new BufferGeometry()
-      postGeom.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3))
-      const post = new LineSegments(postGeom, new LineBasicMaterial({ color: EDGE, transparent: true, opacity: 0 }))
+      const postMat = new LineMaterial({ color: TEXT, linewidth: STAND_PX, transparent: true, opacity: 0 })
+      const post = new LineSegments2(new LineSegmentsGeometry(), postMat)
+      view.onResize((w, h) => postMat.resolution.set(w, h))
       head.visible = post.visible = false
       this.group.add(head, post)
       const label = view.addLabel(info.name, new Vector3(), `room-label--node room-label--${nodeLabelSide(info.id)}`)
@@ -213,12 +217,8 @@ export class Stage {
       const p = n.id === router ? this.routerGlide.now() : nodePosition(n.id, null)
       const top = v3(p)
       n.head.position.copy(top)
-      // The stand: a line from the floor, the desk top, or the desk's edge (an arm) up to the head.
-      const base = v3(standBase(p))
-      const stand = n.post.geometry.getAttribute('position') as Float32BufferAttribute
-      stand.set([base.x, base.y, base.z, top.x, top.y, top.z])
-      stand.needsUpdate = true
-      n.post.geometry.computeBoundingSphere()
+      // The stand: a post from the floor or the desk top up to the head.
+      n.post.geometry.setPositions([...v3(standBase(p)).toArray(), ...top.toArray()])
       // Each label hangs off the cube's face on its side, so the cube never sits on its own label.
       const [dx, dz] = { above: [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0] }[nodeLabelSide(n.id)]
       this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))
@@ -264,7 +264,8 @@ export class Stage {
     for (const n of this.nodes) {
       n.alpha = fade(n.alpha, n.alphaTo, dt)
       busy ||= n.alpha !== n.alphaTo
-      n.head.material.opacity = n.post.material.opacity = n.alpha
+      n.head.material.opacity = n.alpha
+      n.post.material.opacity = n.alpha * STAND_ALPHA
       n.head.visible = n.post.visible = n.alpha > 0
       // The name stays readable on a quiet device: "not heard" is the point of showing it at all.
       n.label.style.opacity = String(n.alphaTo === LOST_ALPHA ? Math.min(1, n.alpha / LOST_ALPHA) : n.alpha)

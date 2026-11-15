@@ -21,6 +21,12 @@ export function adviceArrow(advice: Advice | null, router: string): { from: stri
   return { from: HOME_SPOT, to: advice.to_spot, done: router === advice.to_spot }
 }
 
+/** Whether a spot's ring is drawn: the router's own spot always; the others only while advice runs between them,
+ *  so spare marks never sit unexplained under the devices. */
+export function spotShown(id: string, router: string, arrow: ReturnType<typeof adviceArrow>): boolean {
+  return id === router || (!!arrow && (id === arrow.to || id === arrow.from))
+}
+
 /** A flat arrow along +x, `len` metres long, lying in the shape's XY plane. */
 function arrowGeometry(len: number): ShapeGeometry {
   const head = Math.min(0.08, len * 0.45)
@@ -40,6 +46,7 @@ function arrowGeometry(len: number): ShapeGeometry {
 
 export class RouterSpots {
   private readonly rings = new Map<string, MeshBasicMaterial>()
+  private readonly meshes = new Map<string, Mesh>()
   private readonly arrow: Mesh<ShapeGeometry, MeshBasicMaterial>
   private arrowKey = ''
   /** Spot tags stay hidden until there is advice; then only the advised spot says where to put the router. */
@@ -56,8 +63,10 @@ export class RouterSpots {
       mesh.rotation.x = -Math.PI / 2
       mesh.position.copy(v3([x, y, standBase([x, y, 0])[2] + 0.003])) // on the floor, or on the desk top
       view.scene.add(mesh)
+      mesh.visible = id === HOME_SPOT
       this.rings.set(id, mat)
-      const tag = view.addLabel(spotName(id), v3([x, y + 0.26 * outward(y), 0]), 'room-label--spot')
+      this.meshes.set(id, mesh)
+      const tag = view.addLabel(spotName(id), v3([x, y + 0.26 * outward(y), standBase([x, y, 0])[2]]), 'room-label--spot')
       tag.hidden = true
       this.tags.set(id, tag)
     }
@@ -74,8 +83,11 @@ export class RouterSpots {
   }
 
   update(router: string, advice: Advice | null) {
-    for (const [id, mat] of this.rings) mat.color.setHex(id === router ? TEXT : EDGE)
     const arrow = adviceArrow(advice, router)
+    for (const [id, mat] of this.rings) {
+      mat.color.setHex(id === router ? TEXT : EDGE)
+      this.meshes.get(id)!.visible = spotShown(id, router, arrow)
+    }
     this.view.host.dataset.adviceArrow = arrow ? arrow.to : ''
     for (const [id, tag] of this.tags) {
       tag.hidden = !arrow || id !== arrow.to
@@ -88,9 +100,11 @@ export class RouterSpots {
         this.arrowKey = key
         const [fx, fy] = ROUTER_SPOTS[arrow.from]
         const [tx] = ROUTER_SPOTS[arrow.to]
-        const arrowY = fy + 0.13 * outward(fy)
-        const start = v3([fx, arrowY, 0.004])
-        const end = v3([tx, arrowY, 0.004])
+        // On the floor just outside the spots; on the desk, on its top just inside the back edge they sit on.
+        const lift = standBase([fx, fy, 0])[2]
+        const arrowY = fy + 0.13 * (lift > 0 ? -outward(fy) : outward(fy))
+        const start = v3([fx, arrowY, lift + 0.004])
+        const end = v3([tx, arrowY, lift + 0.004])
         this.arrow.geometry.dispose()
         this.arrow.geometry = arrowGeometry(start.distanceTo(end))
         this.arrow.position.copy(start)
