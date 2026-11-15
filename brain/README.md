@@ -199,3 +199,14 @@ state of a whole demo run). Every entry point of the module catches its own erro
 
 The thresholds are first values, and the tests use synthetic links. How far a link reaches in a
 full hall, and how a real crossing looks, have to be measured there (issue #95).
+
+## Which links see a person (`brain/linkrank.py`)
+
+For placing the devices, before any baseline or model. Record a few 20 s blocks, empty and with one person standing in the area, and it ranks every link by how far the person moves it against how far the same link moves between two empty blocks.
+
+```
+python -m brain.linkrank --capture 20 empty left empty right empty     # records the blocks through the bus, Enter starts each
+python -m brain.linkrank empty=s1 left=s2 empty=s3 right=s4 empty=s5   # blocks already in data/sessions (ids or paths)
+```
+
+Each link gets `clear`, `weak` or `no signal`, and the last lines say which links carry the detection and whether left can be told from right. Only the standard library.
