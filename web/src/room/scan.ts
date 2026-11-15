@@ -58,6 +58,8 @@ export interface ScanFit {
   scale?: number
   /** Anything higher than this (metres) is cut away so the camera sees into the room. */
   cut_m?: number
+  /** How far the model's floor sits below ours, in metres: a tier's height when the square stands on that tier. */
+  floor_m?: number
 }
 
 /** Anything above 1.4 m is cut away unless room.json says otherwise. */
@@ -78,7 +80,8 @@ export function placeScan(min: [number, number, number], max: [number, number, n
   const scale = fit.scale && fit.scale > 0 ? fit.scale : 1
   return {
     inner: [-(min[0] + max[0]) / 2, -min[1], -(min[2] + max[2]) / 2],
-    outer: [dx, -0.03, -dy], // 3 cm under our floor marks, so a bumpy scanned floor never pokes through them
+    // 3 cm under our floor marks, so a bumpy scanned floor never pokes through them; floor_m lower on a tier.
+    outer: [dx, -0.03 - (fit.floor_m ?? 0), -dy],
     yaw: ((fit.yaw_deg ?? 0) * Math.PI) / 180,
     scale,
     cut: fit.cut_m ?? DEFAULT_CUT_M,

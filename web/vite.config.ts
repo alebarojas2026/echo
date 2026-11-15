@@ -69,14 +69,15 @@ function roomScan() {
   return { hi, lo, fit }
 }
 
-/** Only the four alignment numbers, each finite and in a sane range, or null. */
+/** Only the alignment numbers (floor_m optional), each finite and in a sane range, or null. */
 export function cleanFit(body: unknown): Record<string, unknown> | null {
   if (!body || typeof body !== 'object') return null
-  const { offset_m, yaw_deg, scale, cut_m } = body as Record<string, unknown>
+  const { offset_m, yaw_deg, scale, cut_m, floor_m } = body as Record<string, unknown>
   const num = (v: unknown, lo: number, hi: number) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi
   if (!Array.isArray(offset_m) || offset_m.length !== 2 || !offset_m.every((v) => num(v, -100, 100))) return null
   if (!num(yaw_deg, -360, 360) || !num(scale, 0.25, 4) || !num(cut_m, 0, 20)) return null
-  return { offset_m, yaw_deg, scale, cut_m }
+  if (floor_m !== undefined && !num(floor_m, -2, 10)) return null
+  return { offset_m, yaw_deg, scale, cut_m, ...(floor_m === undefined ? {} : { floor_m }) }
 }
 
 // Under `vite` only: the screen asks here for the scan on every load (GET), so a new room.glb or room.json
