@@ -1,3 +1,4 @@
 {"v":2,"layout":"desk"}
 {"armed":{"hold_s":4}}
 {"armed":{},"hall":{"note":"...","beacons":[],"links":[{"id":"h>unoq:ble","empty_quiet_db":0.8},{"id":"j>pi5b:ble","empty_quiet_db":1.4}]}}
+{"links":[{"id":"pi5>pi5b:ble","tx":"pi5","rx":"pi5b","kind":"ble","expected_hz":1.7,"classifier":false},{"id":"pi5>unoq:wifi","tx":"pi5","rx":"unoq","kind":"wifi","expected_hz":null}]}

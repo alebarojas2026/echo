@@ -78,8 +78,14 @@ Link id = "<tx>><rx>:<kind>". Twelve links, always in this order (nodes.json, fe
   11  west>pi5b:ble   ble   west  pi5b  across the strip, West
   12  pi5b>pi5:ble    ble   pi5b  pi5   over the desk
   Two are Wi-Fi (1 and 8: the board's and Pi B's reading of Pi A's hotspot signal). Ten are Bluetooth.
-  Links 1-6 keep the ids they had on the old layout; 7-12 are new with Pi B. All twelve are classifier links.
+  Links 1-6 keep the ids they had on the old layout; 7-12 are new with Pi B. All twelve are classifier links
+  unless nodes.json says otherwise for one.
   Each link in nodes.json carries expected_hz, written after the baseline capture.
+  A link may also carry "classifier": false (missing means true). It is for a link too thin to classify on: under
+  4 readings a second at the baseline. Such a link is read and sent like any other, is listed in state.links, is
+  judged by the stale and blind rules and counts for Tamper. But it never makes health blind, never goes into
+  health.blind, never nulls pred, and is left out of feature vectors, pred.why, xray, objects, checkin and advice.
+  The order and numbers of the twelve links do not change when one is switched off this way.
 Zones: two, in the strip only, split at x = 0.8 (frame.zone_split_x_m).
   zone = 1 + (x >= 0.8) when 0 <= x <= 1.6 and 0 <= y <= 0.6; anywhere else 0 = empty.
   1 West "Left", centre (0.4, 0.3). 2 East "Right", centre (1.2, 0.3). The names are the sides as seen on the screen.
@@ -257,6 +263,10 @@ Link health:
   whose reading is below its base and steady: the std of its 0.5 s means, over the time since it went off base (2 s at least,
   5 s at most), is < 0.8 dB. A steady drop is an object, not a broken link. Above base, or off base and not steady, is still a jump.
 - health is blind when any classifier link is blind. Then pred is null and the screen shows SENSOR BLIND (never "empty").
+  A link with "classifier": false in nodes.json (section 3) is not one: stale or blind, it shows it in state.links
+  and health.status is then degraded, as for the links Pi B hears below.
+- A link whose baseline counted under 4/s is judged on rate only once its expected_hz is 4/s or more. Below that it
+  shows status stale while it reads under 0.4 x expected_hz, but is never blind by rate.
   Alert timers pause. It clears after 3 s ok.
 - The links Pi B hears (rx pi5b: links 8, 9, 10 and 11) are the exception. Their readings reach the board over the
   hotspot, which can lose packets for reasons that have nothing to do with the radio path. Each of them is still

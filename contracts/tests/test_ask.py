@@ -57,6 +57,7 @@ BAD_NODES = [
     "$.hall.links[0].id",               # only a hall link has an empty-hall level
     "'empty_quiet_db' is a required property",   # a link is listed only once it is calibrated
     "$.hall.links[0].empty_quiet_db",   # a quiet level is above 0
+    "$.links[0].classifier",            # classifier is true or false
 ]
 BAD_REPORTS = [
     "$.intrusions[0]",                  # a hall link is its link id, not the beacon's letter
