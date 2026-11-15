@@ -12,12 +12,14 @@ for(const [width,height] of [[1920,1080],[1440,900]]) test(`lesson progress uses
  await lesson(112000,6,10)
  await expect(page.getByTestId('lesson-status')).toHaveText('Teaching the radio · 12 s')
  await expect(page.getByTestId('lesson-agreement')).toHaveText('Radio agrees with the camera: 6 of 10')
- await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow','60')
+ await expect(page.locator('.lesson-bar')).toHaveAttribute('aria-valuenow','60')
+ // On the screen the handoff strip carries the lesson: its words, its time and the measured agreement.
+ await expect(page.getByTestId('handoff-title')).toHaveText('CAMERA TEACHING');await expect(page.getByTestId('handoff-time')).toHaveText('0:12');await expect(page.getByTestId('handoff-detail')).toHaveText('6 of 10 agree · 2 fits')
  await expect(page.getByTestId('cam-status')).toBeHidden()
  if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-lesson.png`)})}
  await page.evaluate(()=>{const s=window.arrival.peek('still');window.arrival.update('still',{t:131000,model:{...s.model,training:null}})})
  await expect(page.getByTestId('lesson-status')).toHaveText('Taught in 31 s')
  await page.clock.runFor(5000)
  await expect(page.getByTestId('lesson-status')).toBeHidden()
- await expect(page.getByTestId('cam-status')).toBeVisible()
+ await expect(page.getByTestId('handoff-title')).toHaveText('RADIO ONLY')
 })

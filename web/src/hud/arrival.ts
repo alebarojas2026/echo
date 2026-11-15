@@ -1,8 +1,11 @@
+import { mountPrivacyLine } from './privacy'
+import { sourceWords } from './source-words'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
 import { changingText } from './changing-text'
 import './arrival.css'
 import { judgeMoment } from './judge-moment'
+import { blindSentence } from './health-words'
 import { zonePlace } from './layout'
 
 type ArrivalState = StateMsg & { armed?: boolean }
@@ -32,6 +35,8 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   view.innerHTML = `<header><span>Radio Sight</span><span data-testid="arrival-source"></span></header>
     <div class="arrival-message" aria-live="polite"><h1 data-testid="arrival-title"></h1><p data-testid="arrival-detail"></p><p class="arrival-passed" data-testid="arrival-passed"></p></div>
     <footer><span>Taught by a camera. Runs without one.</span><span data-testid="visitor-count">Visitor 0</span></footer>`
+  const disposePrivacy = mountPrivacyLine(view)
+  view.querySelector('.arrival-message')!.before(view.querySelector('.privacy-line')!)
   document.body.append(view)
   const title = changingText(view.querySelector('h1')!)
   const detail = changingText(view.querySelector('.arrival-message p')!)
@@ -98,12 +103,11 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     else presentSince ??= performance.now()
     arm.textContent = state?.armed ? 'Disarm space' : 'Arm space'
     arm.disabled = !feed || stale
-    source.textContent = state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO'
+    source.textContent = sourceWords(state)
     if (!state || stale) { cancelHold(); show('No data', 'Waiting for the room signal.'); return }
     if (state.armed && state.tamper?.length) { cancelHold(); close(true); return }
-    if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', 'A radio link stopped.'); return }
-    // Once the visitor has been found, a dead zone (advice, the router moved) is the main screen's moment.
-    if (complete && !state.armed && (state.advice || state.router !== 'S-home')) { cancelHold(); close(); return }
+    if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', blindSentence(state)); return }
+    if (complete && !state.armed) { cancelHold(); close(); return }
     if (!state.pred || state.router !== 'S-home') {
       cancelHold()
       const [heading, line] = judgeMoment(state, false)
@@ -127,7 +131,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
         if (view.hidden) return
         announce('found')
         // Only the words fade. The rail behind them keeps the page colour, so nothing shows through half-way.
-        fade = [...view.children].map(part => part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FOUND_FADE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }))
+        fade = [...view.children].filter(part => !part.classList.contains('privacy-line')).map(part => part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FOUND_FADE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }))
         hold = setTimeout(() => { complete = true; cancelHold(); render() }, FOUND_FADE_MS)
       }, FOUND_HOLD_MS)
       return
@@ -172,5 +176,5 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   visibility.observe(operator, { attributes: true, attributeFilter: ['hidden'] })
   visibility.observe(document.documentElement, { attributes: true, attributeFilter: ['data-hud-replay'] })
   render()
-  return () => { cancelHold(); clearTimeout(presentTimer); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
+  return () => { disposePrivacy(); cancelHold(); clearTimeout(presentTimer); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
 }
