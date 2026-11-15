@@ -691,9 +691,11 @@ POST http://192.168.77.2:8080/chain/prove        // operator only; JSON; the bod
  "verified":true,"witnesses_ok":2,"witnesses":2}
    // From the board to the bus (127.0.0.1:5600) every 5 s. t: the board's clock when it was sent. verified,
    //   witnesses_ok and witnesses are optional: the brain copies them into state.chain.
-   // The bus sends each chain_head on to every sender outside the board it heard from in the last 60 s, to the
-   //   address and port that sender's messages came from: a witness reads the head on the socket it sends from.
-   //   A witness that has heard no head yet reads it from GET /chain (head.seq, head.hash, head.t) instead.
+   // The bus sends each chain_head on, from its own port, to every socket that sent it a chain_witness or a
+   //   chain_sub in the last 60 s: a witness reads the head on the socket it sends from. A chain_sub
+   //   ({"v":2,"type":"chain_sub","node":"pi5","src":"live"}) is only a witness saying it is there; it stops at
+   //   the bus and is not a contract message. GET /chain carries the same head (head.seq, head.hash, head.t).
+   // A witness signs a head whose seq steps back too (and notes it on its own device); it never signs seq 0.
 {"v":2,"type":"chain_witness","t":1763149515000,"seq":4127,"src":"live","node":"pi5","hash":"<64 hex>","sig":"<base64>"}
    // From a witness to the bus (192.168.77.2:5600). seq, hash and t are the head it signs, exactly as given.
    // sig: the Ed25519 signature (64 bytes, in base64; hex is read too) over the ASCII bytes
@@ -705,7 +707,8 @@ POST http://192.168.77.2:8080/chain/prove        // operator only; JSON; the bod
    //   and checked on the board with
    //     openssl pkeyutl -verify -pubin -inkey witness.pub -rawin -in msg.bin -sigfile sig.bin
    // Enrolment: data/witness_keys.local.json on the board (never in git), {"pi5": "<the PEM text of witness.pub>",
-   //   "pi5b": "..."}. A missing file means no witnesses are enrolled; it is never an error.
+   //   "pi5b": "..."}. A missing file means no witnesses are enrolled; it is never an error. The web server reads
+   //   the file again every second, so a key is enrolled without restarting anything.
    // The board stores a signature that checks out, for a record whose hash it holds, as a witness record; one that
    //   does not, from an enrolled node, as witness_bad (at most one every 5 s for each node). A message from a node
    //   that is not enrolled is dropped. A witness with no good signature for 15 s is stored once as witness_silent
