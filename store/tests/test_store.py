@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from store import Store, summary
+from store import SCHEMA, Store, summary
 from store.__main__ import fill_from_sim
 
 T0 = 1_763_149_500_000
@@ -44,6 +44,28 @@ def test_clock_backwards_keeps_new_rows_and_replaces_collisions(tmp_path, caplog
     s.close()
     s = Store(path)
     assert s.latest()["t"] == 100_000
+
+
+def test_legacy_epoch_primary_key_migration_preserves_rows_and_optional_columns(tmp_path):
+    path = tmp_path / "legacy.db"
+    db = sqlite3.connect(path)
+    db.executescript(SCHEMA.replace("t int primary key", "t integer primary key"))
+    for second in (100, 110):
+        row = summary(state(second * 1000, tamper=["pi5"],
+                            pred={"present": True, "kind": "person", "zone": 1, "zone_set": [1], "motion": "still"}))
+        db.execute(f"insert into seconds({', '.join(row)}) values ({', '.join('?' * len(row))})", tuple(row.values()))
+    db.commit()
+    db.close()
+    s = Store(path)
+    assert [r["t"] for r in s.seconds()] == [100_000, 110_000]
+    assert all(r["tamper"] == ["pi5"] and r["zone_set"] == [1] and r["model"]["ver"] == "m3" for r in s.seconds())
+    assert s.latest()["t"] == 110_000
+    assert s.add(state(50_000)) and s.latest()["t"] == 50_000
+    assert s.add(state(100_000, armed=True)) and s.latest()["armed"] == 1
+    assert len(s.seconds()) == 3
+    s.close()
+    s = Store(path)
+    assert s.latest()["t"] == 100_000 and len(s.seconds()) == 3
 
 
 def test_history_limits_rows_in_sql():
