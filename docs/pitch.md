@@ -1,8 +1,8 @@
 # Radio Sight: Spoken Pitch
 
-Radio Sight brings safety and after-hours security to buildings using the Wi-Fi already there. The desk round below is the primary story. Keep the laptop interface and hardware visible, and do not say a proof value that is still `__`.
+Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras. The desk round below is the primary story. Keep the laptop interface and hardware visible, and do not say a proof value that is still `__`.
 
-The twelve beats below have the same names, in the same order, in [demo-runbook.md](demo-runbook.md), [devpost-draft.md](devpost-draft.md) and [video-shots.md](video-shots.md).
+The beats below have the same names, in the same order, in [demo-runbook.md](demo-runbook.md), [devpost-draft.md](devpost-draft.md) and [video-shots.md](video-shots.md).
 
 ## Three-minute desk round
 
@@ -10,13 +10,13 @@ The twelve beats below have the same names, in the same order, in [demo-runbook.
 
 _Start with the setup camera disconnected and the hall view behind the words. Ask the judge to step up to the desk._
 
-> This is Radio Sight: safety and after-hours security from the Wi-Fi a building already has. You stepped up and it found you, and no camera is connected. The laptop shows the local interface.
+> Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras. You stepped up and it found you. The laptop shows the local interface.
 
 ### Live signal
 
 _Point at the signal trace as it dips. Ask the judge to wave a hand._
 
-> That line is one radio link, live. It dipped when you stepped in. Wave your hand and it moves. Nothing here is scripted.
+> These lines are the radio links on each side, live. Each shows that side's deepest drop. Wave your hand and they move. Nothing here is scripted.
 
 ### Teach the room
 
@@ -36,6 +36,12 @@ _Ask the judge to step left, step right, then stand still._
 
 > It still follows you, left and right, even standing still. If a link goes blind it says so, never a false all-clear.
 
+### Dead zone
+
+_Put the tray at its marked spot. Wait for the advice, move Pi A to the named spot, and show the measured change._
+
+> The same links find Wi-Fi dead zones. This tray blocked the router, the board told us where to move it, and the measured signal changed from __ to __.
+
 ### Arm the space
 
 _Ask the judge to step out. Arm the space._
@@ -44,9 +50,9 @@ _Ask the judge to step out. Arm the space._
 
 ### Intrusion alert
 
-_Ask the judge to step back in. Show the phone page once it displays the live alert._
+_Ask the judge to step back in and stay put. Wait for the sustained-person rule, then show the live phone alert._
 
-> Step back in. One intrusion alert, on the phone, naming the side and never the person.
+> Step back in and stay there. A passer-by gets no alert; a person who remains raises one intrusion alert, naming the side and never the person.
 
 ### Tamper alert
 
@@ -58,7 +64,7 @@ _Alexander unplugs the east beacon. Wait for the screen to name it._
 
 _Type or pick the prepared question._
 
-> Ask it what happened. A small language model on the board picks the question, and the answer is filled from the board's own records.
+> Ask it what happened. The board works out which records the question is about, and fills the answer from those records.
 
 ### Replay
 
@@ -80,7 +86,7 @@ _Finish on the proof strip._
 
 ## When the judge is short on time
 
-Drop beats in this order, and never drop **Found you**, **Teach the room**, **Camera unplug**, **Still follows** or **Proof**:
+Drop beats in this order, and never drop **Found you**, **Camera unplug**, **Dead zone** or **Proof**. If the dead-zone path is unavailable, keep **Intrusion alert** instead:
 
 1. **Replay**
 2. **Incident report**
@@ -91,10 +97,10 @@ Drop beats in this order, and never drop **Found you**, **Teach the room**, **Ca
 
 ## Five-minute finalist extension
 
-Open with the whole-hall view and movement paths, then run the same twelve beats in the same order. After **Proof**, add one or two of these only if the measured path is ready:
+Open with the whole-hall view and movement paths, then run the same beats in the same order. After **Proof**, add one or two of these only if the measured path is ready:
 
 - show a no-movement alert and clear it with a deliberate check-in;
-- place the tray, explain the person-versus-object result, and demonstrate router advice with measured before-and-after values;
+- explain the person-versus-object result behind the desk-round dead-zone advice;
 - show the end-of-demo recap from recorded local events; or
 - invite judges to try the crowd game, clearly labeled as a finalist interaction rather than a crowd-counting claim.
 

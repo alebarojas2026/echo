@@ -1,6 +1,6 @@
 # Radio Sight Demo Runbook
 
-Use this checklist for the live building-safety demo. It follows `CONTRACTS.md` v2. The desk round is the primary path; the finalist extension comes second. A result missing from `PROOF.md` stays `__`.
+Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras. This checklist follows `CONTRACTS.md` v2. The desk round is the primary path; the finalist extension comes second. A result missing from `PROOF.md` stays `__`.
 
 ## Preflight
 
@@ -40,30 +40,32 @@ Use these exact beat names and keep them in this order. The words to say with ea
 3. **Teach the room:** Connect the camera, start the fresh judge lesson, and display `Lesson time: __ s`. The lesson starts with the space empty and has one step out of view; follow the words on screen. Show labels, not an image. Wait for successful training before continuing.
 4. **Camera unplug:** Unplug the camera in one continuous shot. Follow the camera-unplug proof below and leave the cable visible.
 5. **Still follows:** Ask the judge to step left, step right and then stand still. Show presence, side and motion state continuing from radio alone. If a required link goes blind, say so and stop; never call it empty.
-6. **Arm the space:** Ask the judge to step out. Arm only when the screen shows nobody. Confirm contract v2 `armed` state and the `armed` event.
-7. **Intrusion alert:** Ask the judge to step back in. Continue only after one live `intrusion` event names the side and the phone page shows it. Do not identify the judge or claim crowd counting.
-8. **Tamper alert:** While still armed, ask Alexander to unplug the east beacon. Wait for the `tamper` event and the screen's plain words naming the device. Plug it back in and wait for `tamper_cleared` before the next beat.
-9. **Ask the room:** Ask the prepared question. Read the returned facts and the rows under them; do not improvise an answer. If the reply says the tool was picked by rules, say so: the model was slow.
-10. **Replay:** Press Replay next to the answer. Keep the replay banner on screen the whole time; a second with no record shows as "no record", never as an empty room. Return to live before the next beat.
-11. **Incident report:** Disarm. Wait for the report card and read its text. Its numbers come from the board's records; do not add one.
-12. **Proof:** Finish on `/proof.json`. Say only completed values. Close with `Images stored: __` and `Bytes sent outside local network: __` until proof records replace them.
+6. **Dead zone:** Ask Alexander to put the tray at `T1`. Confirm `pi5>unoq:wifi` has a live `drop_db` of at least `3 dB`; advice does not appear without that drop. Wait for the screen to say a dead zone was found and name a router spot. Move Pi A only to that spot, send `router_moved`, and show the measured before and after values as `__` until proof supplies them.
+7. **Arm the space:** Remove the tray, return Pi A to `S-home`, wait for prediction to resume, then ask the judge to step out. Arm only when the screen shows nobody. Confirm contract v2 `armed` state and the `armed` event.
+8. **Intrusion alert:** Ask the judge to step back in and stay put. Wait through the sustained-person rule; continue only after one live `intrusion` event names the side and the phone page shows it. A walk-through should say “Someone passed by” and raise no alert. Do not identify the judge or claim crowd counting.
+9. **Tamper alert:** While still armed, ask Alexander to unplug the east beacon. Wait for the `tamper` event and the screen's plain words naming the device. Plug it back in and wait for `tamper_cleared` before the next beat.
+10. **Ask the room:** Ask the prepared question. Read the returned facts and the rows under them; do not improvise an answer. The board selects which records the question is about; if the reply says the tool was picked by rules, say so: the model was slow.
+11. **Replay:** Press Replay next to the answer. Keep the replay banner on screen the whole time; a second with no record shows as "no record", never as an empty room. Return to live before the next beat.
+12. **Incident report:** Disarm. Wait for the report card and read its text. Its numbers come from the board's records; do not add one.
+13. **Proof:** Finish on `/proof.json`. Say only completed values. Close with `Images stored: __` and `Bytes sent outside local network: __` until proof records replace them.
 
 ### When the judge is short on time
 
-Drop beats in this order: **Replay**, **Incident report**, **Tamper alert**, **Live signal** (leave the trace on screen), **Ask the room**, then **Arm the space** with **Intrusion alert**. Never drop **Found you**, **Teach the room**, **Camera unplug**, **Still follows** or **Proof**.
+Drop beats in this order: **Replay**, **Incident report**, **Tamper alert**, **Live signal** (leave the trace on screen), **Ask the room**, then **Arm the space** with **Intrusion alert**. Never drop **Found you**, **Camera unplug**, **Dead zone** or **Proof**. If the dead-zone gate fails, keep **Intrusion alert** instead.
 
 ### Feature gates
 
 Check each of these in preflight, on the real hardware, before the first judge:
 
 - **Live signal:** the trace is on screen and dips when someone steps in.
-- **Arm the space** and **Intrusion alert:** arming shows `armed`, stepping in sends one `intrusion`, and the phone page shows it.
+- **Dead zone:** the tray creates live advice, Pi A can move to the named spot, and measured before and after values appear.
+- **Arm the space** and **Intrusion alert:** arming shows `armed`; a person who steps in and stays sends one `intrusion`, while a walk-through says “Someone passed by” without an alert; the phone page shows the intrusion.
 - **Tamper alert:** unplugging the east beacon while armed sends `tamper`; plugging it back sends `tamper_cleared`.
 - **Ask the room:** the prepared question gets an answer with rows, and `python -m store` is running.
 - **Replay:** the answer has a Replay button and `GET /history` returns rows for it.
 - **Incident report:** after a disarm, `GET /report` returns a report.
 
-If a gate fails, skip that beat without comment. If the gate for **Arm the space** fails, stop the live sequence after **Still follows**. State that the remaining integrations are not ready, then go directly to **Proof**. Never stage an alert, an answer, a replay or a report.
+If a gate fails, skip that beat without comment. If the gate for **Arm the space** fails, keep **Dead zone**, then go directly to **Proof**. Never stage an alert, an answer, a replay or a report.
 
 ## Camera-unplug proof
 
@@ -77,12 +79,12 @@ The camera supplies temporary setup labels. The demo must not show or save an im
 
 ## Five-minute finalist round
 
-Open with the whole-hall view and movement paths. Then run **Found you**, **Live signal**, **Teach the room**, **Camera unplug**, **Still follows**, **Arm the space**, **Intrusion alert**, **Tamper alert**, **Ask the room**, **Replay**, **Incident report**, and **Proof** in that same order.
+Open with the whole-hall view and movement paths. Then run **Found you**, **Live signal**, **Teach the room**, **Camera unplug**, **Still follows**, **Dead zone**, **Arm the space**, **Intrusion alert**, **Tamper alert**, **Ask the room**, **Replay**, **Incident report**, and **Proof** in that same order.
 
 After the primary path, use only the extensions that passed preflight:
 
 - **No-movement alert and check-in:** Wait for the configured local alert, then use the practiced wave and confirm `checkin-toast` clears it.
-- **Tray and router advice:** Ask Alexander to place the tray. Confirm `pi5>unoq:wifi` is dropping with `drop_db` of at least `3 dB`; advice does not appear without that live drop. Wait for `advice-text`, move only to a spot from `/nodes.json`, send `router_moved`, and report the before/after result only if proof contains it.
+- **Person versus object:** Explain why the tray used in **Dead zone** is shown as an object rather than a person.
 - **Recap:** Show the fact-based local recap. If generation is unavailable, use the template recap; never invent an event.
 - **Game:** Invite interaction without saying the system counts or identifies the crowd.
 

@@ -49,6 +49,16 @@ class PitchDocTest(unittest.TestCase):
         self.assertIn("a beat is said only when it passed preflight on the day", self.lower)
         self.assertIn("never stage a fake alert, answer, replay or report", self.lower)
 
+    def test_live_trace_ask_and_intrusion_words_match_the_product(self):
+        for phrase in (
+            "radio links on each side",
+            "each shows that side's deepest drop",
+            "works out which records the question is about",
+            "a passer-by gets no alert",
+            "person who remains raises one intrusion alert",
+        ):
+            self.assertIn(phrase, self.spoken.lower())
+
     def test_the_short_visit_names_what_to_drop_and_what_never_to_drop(self):
         short = self.text.split("## When the judge is short on time", 1)[1].split("## ", 1)[0]
         dropped = re.findall(r"^\d+\. \*\*(.+?)\*\*", short, re.M)

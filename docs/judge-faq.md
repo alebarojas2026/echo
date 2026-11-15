@@ -62,7 +62,7 @@ The board keeps what the radio decided, once a second: present or not, which sid
 
 ## What about people walking past?
 
-An intrusion alert needs a person pattern that holds inside the sensing area, not one flicker from the aisle. How often passers-by set it off is being measured and stays `__` until that proof row is complete. The long hall links only report movement on a path, never who or how many.
+A person who only walks through is shown as “Someone passed by” and raises no intrusion alert. A person who steps in and stays through the sustained-person wait raises one; the measured rate remains `__` until that proof row is complete. The long hall links only report movement on a path, never who or how many.
 
 ## How do you know it isn't scripted?
 

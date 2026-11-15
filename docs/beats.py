@@ -7,6 +7,7 @@ BEATS = (
     "Teach the room",
     "Camera unplug",
     "Still follows",
+    "Dead zone",
     "Arm the space",
     "Intrusion alert",
     "Tamper alert",
@@ -15,5 +16,7 @@ BEATS = (
     "Incident report",
     "Proof",
 )
-# Never dropped, however short the visit.
-CORE = ("Found you", "Teach the room", "Camera unplug", "Still follows", "Proof")
+# Never dropped, however short the visit. Dead zone is the required safety/security
+# or dead-zone proof; intrusion may replace it only when the operator deliberately
+# chooses that path.
+CORE = ("Found you", "Camera unplug", "Dead zone", "Proof")

@@ -1,10 +1,10 @@
 # Radio Sight: Safety and After-Hours Security with Wi-Fi
 
-**Wi-Fi that understands the room.**
+**Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras.**
 
 ## Inspiration
 
-Radio Sight brings safety and after-hours security to buildings using the Wi-Fi already there, with no permanent camera and no cloud dependency.
+Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras. Radio Sight learns a space from a temporary camera, unplugs it, and then works from radio alone.
 
 Patient rooms, bathrooms, study rooms, and offices after hours all need a simple answer to the same question: is someone present, and are they moving? A camera often captures far more than that question requires. We wanted the radio links already crossing a room to provide a smaller, private signal that can be understood locally.
 
@@ -27,18 +27,19 @@ A temporary camera teaches the radio model on the board. It supplies zone and mo
 
 Four things make it more than a presence light:
 
-- **A live signal you can test.** One radio link is drawn as a line that dips when someone steps in. Wave a hand and it moves, so anyone can see the sensing is not scripted.
+- **A live signal you can test.** The radio links on each side are drawn live; each line shows that side's deepest drop. Wave a hand and they move, so anyone can see the sensing is not scripted.
 - **You can't unplug it without it noticing.** While the space is armed, a device that goes silent raises a tamper alert that names the device.
 - **A replay with no video.** The board keeps what the radio decided, once a second: present or not, which side, moving or still. The screen can play a stretch back like footage, and a second with no record shows as no record, never as an empty room.
 - **An incident report written on the board.** After an armed stretch the board reports when it was armed, each alert, and how long someone was present. A small language model on the board may word it, but every number is checked against the board's records first.
 
-The primary story uses the same twelve beats as our runbook:
+The primary story uses the same beats as our runbook:
 
 - **Found you:** the changed radio links report that a person stepped up, with no camera connected.
-- **Live signal:** a radio link drawn live dips when they step in and moves when they wave.
+- **Live signal:** the radio links on each side move when they step in or wave.
 - **Teach the room:** the temporary camera labels a fresh local lesson.
 - **Camera unplug:** the teacher goes off and stays off.
 - **Still follows:** radio continues reporting presence when the person moves or stands still.
+- **Dead zone:** a tray blocks the router's link, the board names where to move it, and measured before and after values show the change.
 - **Arm the space:** armed mode says the space should be empty.
 - **Intrusion alert:** a new sustained person appearance creates one local event and phone-page alert.
 - **Tamper alert:** unplugging a device while armed is noticed and named.
@@ -49,13 +50,17 @@ The primary story uses the same twelve beats as our runbook:
 
 The measured zone accuracy is __ ([method](../PROOF.md)). The measured presence accuracy is __ ([method](../PROOF.md)). The measured person-vs-object accuracy is __ ([method](../PROOF.md)). The measured update latency is __ ([method](../PROOF.md)). The measured no-movement alert latency is __ ([method](../PROOF.md)). The measured dead-zone improvement is __ ([method](../PROOF.md)). Images stored is __ and bytes sent outside the local network is __ until those proof rows are complete.
 
+### Privacy by design
+
+No camera watches the live space. The temporary teacher is unplugged, no image is stored, the system cannot identify anyone, and nothing is sent to the internet. The live proof line shows `Images stored: __` and `Bytes sent outside local network: __` until the measured rows are complete.
+
 ### How it is different
 
 Commercial Wi-Fi products make different architecture choices, so we do not claim they all work the same way. [Aerial documents hybrid cloud and edge deployment](https://aerial.ai/motion-intelligence), while [Origin documents edge sensing that can communicate activity events to cloud services](https://www.originwirelessai.com/trupresence-2/). Radio Sight's training, inference, event decisions, and demo display stay on the UNO Q and its private local network; it requires no vendor cloud for the live loop.
 
 Building location analytics can also answer a different question. [Cisco Meraki describes detecting Wi-Fi and Bluetooth client devices and aggregating their location data in the Meraki cloud](https://documentation.meraki.com/Wireless/Operate_and_Maintain/User_Guides/Monitoring_and_Reporting/Location_Analytics). Radio Sight instead measures how a person changes the room's radio links, so the person does not need to carry the device being located.
 
-The radio X-ray, person-vs-object result, no-movement alert, check-in, dead-zone advisor, and on-board narrator remain available for the finalist round and judge questions rather than crowding the primary desk story.
+The radio X-ray, person-vs-object result, no-movement alert, check-in, and on-board narrator remain available for the finalist round and judge questions rather than crowding the primary desk story.
 
 ## How we built it
 
@@ -97,7 +102,7 @@ We also learned that missing-data behavior is part of the product. “Sensor bli
 
 ## What's next
 
-First, we will run the complete twelve-beat path on the real hardware without fallbacks and measure how often people walking past set off an alert. We will also test the caregiver page on a real phone and record every proof result with its method, sample size, date, and commit.
+First, we will run the complete path on the real hardware without fallbacks and measure how often people walking past are correctly shown as passed by without an alert. We will also test the caregiver page on a real phone and record every proof result with its method, sample size, date, and commit.
 
 After the hackathon, we want to test more building layouts, materials, access-point arrangements, and groups of people. We will measure how much of the local model can transfer between rooms, expand held-out proof, and develop the current blocked-link view into a full coverage map.
 

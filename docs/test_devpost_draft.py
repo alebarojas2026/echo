@@ -32,7 +32,7 @@ class DevpostDraftTest(unittest.TestCase):
     def test_building_story_and_audiences_lead(self):
         for phrase in (
             "safety and after-hours security",
-            "using the wi-fi already there",
+            "using the wi-fi that's already there",
             "patient rooms",
             "bathrooms",
             "study rooms",

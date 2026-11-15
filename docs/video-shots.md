@@ -19,11 +19,11 @@ The Devpost video, three minutes at most. The beats have the same names, in the 
 
 **Picture:** The fly-in through the hall, ending above the desk. Nobody is at the desk.
 
-**Voiceover:** "Some places need to know someone is there, and cannot have a camera. Radio Sight uses the Wi-Fi a building already has."
+**Voiceover:** "Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras."
 
 **On screen:** `Radio Sight · safety and after-hours security · no cameras`
 
-## 0:10–0:25 — Found you
+## 0:10–0:22 — Found you
 
 **Source:** Desk, then Screen.
 
@@ -33,17 +33,17 @@ The Devpost video, three minutes at most. The beats have the same names, in the 
 
 **On screen:** `Found you · camera: off`
 
-## 0:25–0:38 — Live signal
+## 0:22–0:32 — Live signal
 
 **Source:** Screen, with the Desk shot inset.
 
-**Picture:** The signal trace dips as the person steps in. A hand waves in the desk shot and the line moves with it.
+**Picture:** The two side traces dip as the person steps in. A hand waves in the desk shot and the lines move with it.
 
-**Voiceover:** "This line is one radio link, live. It dips when someone steps in, and moves when they wave."
+**Voiceover:** "These lines are the radio links on each side, live. Each shows that side's deepest drop."
 
-**On screen:** `One radio link · live`
+**On screen:** `Left and Right radio links · live`
 
-## 0:38–1:00 — Teach the room
+## 0:32–0:52 — Teach the room
 
 **Source:** Desk, then Screen.
 
@@ -53,7 +53,7 @@ The Devpost video, three minutes at most. The beats have the same names, in the 
 
 **On screen:** `Lesson time: __ s · images stored: __`
 
-## 1:00–1:10 — Camera unplug
+## 0:52–1:00 — Camera unplug
 
 **Source:** Desk, one unbroken shot.
 
@@ -63,7 +63,7 @@ The Devpost video, three minutes at most. The beats have the same names, in the 
 
 **On screen:** `Camera: off · Radio: live`
 
-## 1:10–1:25 — Still follows
+## 1:00–1:12 — Still follows
 
 **Source:** Screen, with the Desk shot inset.
 
@@ -73,7 +73,17 @@ The Devpost video, three minutes at most. The beats have the same names, in the 
 
 **On screen:** `Person · Still · Right`
 
-## 1:25–1:33 — Arm the space
+## 1:12–1:32 — Dead zone
+
+**Source:** Desk, then Screen.
+
+**Picture:** Put the tray at its marked spot. Hold on `Dead zone found` and the named router move, then slide Pi A to that spot and show the before and after values.
+
+**Voiceover:** "The same links find Wi-Fi dead zones. The board says where to move the router, then measures the change."
+
+**On screen:** `Dead zone found · Before: __ · After: __`
+
+## 1:32–1:39 — Arm the space
 
 **Source:** Screen.
 
@@ -83,17 +93,17 @@ The Devpost video, three minutes at most. The beats have the same names, in the 
 
 **On screen:** `Armed`
 
-## 1:33–1:45 — Intrusion alert
+## 1:39–1:53 — Intrusion alert
 
 **Source:** Desk, then a phone screen.
 
-**Picture:** The person steps back in, seen from behind. Cut to the phone page showing the alert.
+**Picture:** The person steps back in, stays put through the sustained-person wait, then the phone page shows the alert.
 
-**Voiceover:** "Someone steps in, and one intrusion alert reaches the phone. It names the side, never the person."
+**Voiceover:** "A passer-by gets no alert. Someone who steps in and stays raises one, naming the side, never the person."
 
 **On screen:** `Intrusion alert · Left`
 
-## 1:45–1:58 — Tamper alert
+## 1:53–2:03 — Tamper alert
 
 **Source:** Desk, then Screen.
 
@@ -103,17 +113,17 @@ The Devpost video, three minutes at most. The beats have the same names, in the 
 
 **On screen:** `East beacon unplugged while armed`
 
-## 1:58–2:13 — Ask the room
+## 2:03–2:15 — Ask the room
 
 **Source:** Screen.
 
 **Picture:** The question is typed. The answer appears with the records it came from under it.
 
-**Voiceover:** "Ask the room what happened. A small language model on the board picks the question, and the answer is filled from the board's own records."
+**Voiceover:** "Ask what happened. The board works out which records the question is about, then fills the answer from them."
 
 **On screen:** `Answered on the board`
 
-## 2:13–2:28 — Replay
+## 2:15–2:25 — Replay
 
 **Source:** Screen.
 
@@ -123,7 +133,7 @@ The Devpost video, three minutes at most. The beats have the same names, in the 
 
 **On screen:** `REPLAY · from the board's records`
 
-## 2:28–2:40 — Incident report
+## 2:25–2:33 — Incident report
 
 **Source:** Screen.
 
@@ -133,7 +143,7 @@ The Devpost video, three minutes at most. The beats have the same names, in the 
 
 **On screen:** `Incident report · written on the board`
 
-## 2:40–2:55 — Proof
+## 2:33–2:55 — Proof
 
 **Source:** Screen, with the unplugged camera cable at the edge of the Desk shot.
 

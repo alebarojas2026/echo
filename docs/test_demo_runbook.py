@@ -78,13 +78,14 @@ class DemoRunbookTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.lower)
 
-    def test_finalist_advice_waits_for_the_live_wifi_drop(self):
-        finalist = self.lower.split("## five-minute finalist round", 1)[1].split(
-            "## if asked", 1
+    def test_dead_zone_beat_waits_for_the_live_wifi_drop(self):
+        desk = self.lower.split("## three-minute desk round", 1)[1].split(
+            "## camera-unplug proof", 1
         )[0]
-        self.assertIn("pi5>unoq:wifi", finalist)
-        self.assertIn("drop_db` of at least `3 db`", finalist)
-        self.assertIn("advice does not appear without that live drop", finalist)
+        self.assertIn("pi5>unoq:wifi", desk)
+        self.assertIn("drop_db` of at least `3 db`", desk)
+        self.assertIn("advice does not appear without that drop", desk)
+        self.assertIn("measured before and after values", desk)
 
     def test_finish_order_clears_optional_hardware_before_reset(self):
         steps = (
