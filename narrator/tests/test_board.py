@@ -128,8 +128,8 @@ def test_the_recap_puts_the_sentence_prompt_back_in_the_cache():
 def test_zones_come_from_nodes_json(tmp_path):
     saved = dict(n.ZONES)
     try:
-        # main's layout gives the same prompt as before
-        n.set_zones(n.load_zones())
+        # the square's zones give the same prompt as before
+        n.set_zones(dict(n.CONTRACT_ZONES))
         assert n.ZONES == {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}
         assert "The room has four zones: zone 1 (Bed), zone 2 (Chair), zone 3 (Hall) and zone 4 (Bathroom)." in n.system()
         assert n.examples()[0][2] == "Someone just stepped into zone 2, by the chair."
