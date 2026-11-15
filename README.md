@@ -19,7 +19,7 @@ Built at MadHacks 2026 for the Qualcomm / N+1 Institute track. In this demo our 
 4. The screen shows the room, the radio links, where people are, and plain-language explanations. No image is ever saved and nothing is sent to the internet.
 
 ## What this demo is and isn't
-- A building already has access points and other radios. In this demo our own Pi, UNO Q and beacons stand in for them, on our own hotspot. Running on a building's installed equipment is not tested.
+- A building already has access points and other radios. In this demo our own two Raspberry Pis and the UNO Q stand in for them, on our own hotspot. Running on a building's installed equipment is not tested.
 - The camera is needed for the lesson, and a new place needs a new lesson. It is not needed afterwards.
 - Every number we quote is measured and has a row in [PROOF.md](PROOF.md). A row with no value has not been measured yet.
 
