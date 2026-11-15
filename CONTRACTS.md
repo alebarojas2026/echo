@@ -206,6 +206,10 @@ Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, 
   after place.json's t.
   While a baseline started by the `baseline` cmd runs, no link is stale by rate; the capture sets expected_hz again.
   A link with no reading for 1 s restarts the capture.
+  A baseline asked for by the `baseline` cmd (with or without keep_model) that still cannot start 120 s after the cmd
+  is given up: nothing changes and pred returns. The old baseline, the model and the recordings stay. There is no
+  event for it; the brain logs why it never started. A capture that is running at 120 s goes on, and is given up if
+  a condition then breaks. The automatic baseline after router_home keeps waiting.
   baseline {keep_model: true} is the exception to "a new place": it is the same place set down again, so, like the
   automatic baseline, it keeps the model, the recordings and place.json and only the baseline is new. The model was
   taught on drops from a baseline, so it carries over to a new baseline of the same layout; features are taken
