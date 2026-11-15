@@ -14,6 +14,7 @@ for (const width of [320, 768, 1024, 1440]) {
       'ms-per-decision', 'watts', 'bytes-out', 'images-stored', 'models-count', 'pred-kind', 'pred-zone']) {
       await expect(page.getByTestId(id)).toHaveText('__')
     }
+    await expect(page.locator('.hud-proof')).toBeHidden()
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
   })
 }
@@ -47,6 +48,8 @@ test('reads proof.json and preserves missing metrics and measured zero', async (
   } }))
   await page.goto(path)
   await expect(page.getByTestId('models-count')).toHaveText('0')
+  await expect(page.getByTestId('models-count')).toBeVisible()
+  await expect(page.getByTestId('watts')).toBeHidden()
   for (const id of ['zone-score', 'person-object-score', 'train-seconds', 'ms-per-decision',
     'watts', 'bytes-out', 'images-stored']) await expect(page.getByTestId(id)).toHaveText('__')
 })
