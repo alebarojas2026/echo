@@ -22,7 +22,7 @@ def normal_stop_close(error, commands):
             and commands[-1]["cmd"] == "record_stop")
 
 
-def test_state_flood_does_not_starve_ping_or_record_stop():
+def test_state_flood_does_not_starve_ping_or_record_stop(square):
     # Connected local sockets need no listening port or network access.
     server_sock, client_sock = socket.socketpair()
     commands, errors = [], []

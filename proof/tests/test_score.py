@@ -36,9 +36,12 @@ def test_recv_t_majority_and_clipped_labels():
     assert truth([], 1000) is None
 
 
-def test_scores_counts_baseline_and_null_unmeasured_values():
-    result = score([session(zone=4)], FakeReplay((4,) * 11), commit="abc")
+def test_scores_counts_baseline_and_null_unmeasured_values(square):
+    details = {}
+    result = score([session(zone=4)], FakeReplay((4,) * 11), commit="abc", details=details)
     assert result["zone"]["correct"] == result["zone"]["total"] == 11
+    assert details["confusion"]["counts"][4][4] == 11 and details["confusion"]["chance"] == 0.2
+    assert "confusion" not in result["zone"]                       # proof.json's zone block stays as section 7 has it
     assert result["threshold_zone"] == {"correct": 11, "total": 11}
     assert result["person_vs_object"]["correct"] == 11
     assert result["zone"]["ci95"] is None
@@ -106,7 +109,7 @@ def test_bus_jsonl_requires_recv_t_and_one_meta(tmp_path):
         load_session(path)
 
 
-def test_fixed_threshold_baseline():
+def test_fixed_threshold_baseline(square):
     assert threshold_zone({"west>pi5:ble": {"drop_db": 3}}) == 3
     assert threshold_zone({"west>pi5:ble": {"drop_db": 2.9}}) == 0
     assert threshold_zone({}) is None
@@ -237,3 +240,34 @@ def test_replay_windows_a_held_out_session_on_its_own_baseline(monkeypatch):
     for recv_t in (3000, 6000, 10):
         list(adapter.replay({"meta": {"session": "s", "recv_t": recv_t}, "messages": []}))
     assert [b[link] for b in seen if link in b][-3:] == [-50.0, -57.0, -60.0]
+
+
+def test_threshold_zone_on_the_desk_layout():
+    from pathlib import Path
+    from proof import layout
+    desk = layout.load(Path(__file__).parent / "fixtures" / "desk-nodes.json")
+    assert threshold_zone({"west>pi5b:ble": {"drop_db": 5}}, doc=desk) == 1
+    assert threshold_zone({"east>unoq:ble": {"drop_db": 5}}, doc=desk) == 2
+    assert threshold_zone({"east>unoq:ble": {"drop_db": 2}}, doc=desk) == 0
+    assert threshold_zone({"pi5>unoq:wifi": {"drop_db": 9}}, doc=desk) is None      # over the desk: ignored
+    assert threshold_zone({"pi5>unoq:wifi": {"drop_db": 9}, "west>unoq:ble": {"drop_db": 4}}, doc=desk) == 1
+    assert threshold_zone({"pi5b>unoq:ble": {"drop_db": 9}}, doc=desk) is None      # midpoint on the desk edge
+    assert layout.link_zones(desk) == {"west>pi5b:ble": 1, "west>unoq:ble": 1, "east>unoq:ble": 2, "east>pi5b:ble": 2}
+
+
+def test_threshold_table_on_the_square_is_unchanged(square):
+    from proof import layout
+    assert layout.link_zones(square) == {"pi5>unoq:wifi": 2, "pi5>unoq:ble": 2, "east>unoq:ble": 2,
+                                               "west>unoq:ble": 1, "east>pi5:ble": 4, "west>pi5:ble": 3}
+
+
+def test_confusion_has_one_row_and_column_per_class_and_says_the_chance_level():
+    from pathlib import Path
+    from collections import Counter
+    from proof import layout
+    from proof.score import confusion_report, zone_classes
+    desk = layout.load(Path(__file__).parent / "fixtures" / "desk-nodes.json")
+    assert zone_classes(desk) == [0, 1, 2]
+    c = confusion_report(Counter({(1, 1): 7, (1, 2): 2, (0, 0): 4, (2, 0): 1}), desk)
+    assert c["counts"] == [[4, 0, 0], [0, 7, 2], [1, 0, 0]] and c["chance"] == round(1 / 3, 4)
+    assert confusion_report(Counter(), layout.load(Path(__file__).parent / "fixtures" / "square-nodes.json"))["chance"] == 0.2

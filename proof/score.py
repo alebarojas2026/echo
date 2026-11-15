@@ -12,6 +12,10 @@ import random
 from statistics import mean, pstdev
 import subprocess
 
+from proof import layout
+
+LAYOUT = layout.load()
+
 
 def load_session(path):
     messages = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
@@ -71,10 +75,13 @@ def truth(messages, end):
     return {"zone": zone, "kind": kind, "labels": len(labels)}
 
 
-def threshold_zone(links, threshold=3.0):
-    """Fixed 3 dB strongest-link baseline; map the link midpoint to a zone."""
-    zones = {"pi5>unoq:wifi": 2, "pi5>unoq:ble": 2, "east>unoq:ble": 2,
-             "west>unoq:ble": 1, "east>pi5:ble": 4, "west>pi5:ble": 3}
+def threshold_zone(links, threshold=3.0, doc=None):
+    """Fixed 3 dB strongest-link baseline: the zone of that link's midpoint.
+
+    Only links whose midpoint lies in a zone take part (proof.layout.link_zones); on the desk
+    layout the links over the desk or at the strip's ends are left out.
+    """
+    zones = layout.link_zones(doc or LAYOUT)
     drops = [(v.get("drop_db"), link) for link, v in links.items()
              if link in zones and v.get("drop_db") is not None]
     if not drops:
@@ -159,7 +166,24 @@ class BrainReplay:
                        "ms": brain.decision_ms[-1] if brain.pred is not None and brain.decision_ms else None}
 
 
-def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
+def zone_classes(doc=None):
+    """The zone score's classes: 0 (empty) and every zone in the layout."""
+    return [0] + sorted(int(z["id"]) for z in (doc or LAYOUT)["zones"])
+
+
+def confusion_report(pairs, doc=None):
+    """Three-class (or five-class) confusion of camera zone vs radio zone, and the chance level.
+
+    proof.json's zone block has no room for these (section 7), so they go next to it.
+    """
+    classes = zone_classes(doc)
+    counts = [[pairs.get((a, p), 0) for p in classes] for a in classes]
+    return {"classes": classes, "rows_are": "camera zone", "columns_are": "radio zone",
+            "counts": counts, "chance": round(1 / len(classes), 4)}
+
+
+def score(sessions, replay, on_board=False, allow_sim=False, commit=None, details=None):
+    """details, when given, gets "confusion": the zone confusion and the chance level."""
     ids = [s["meta"]["session"] for s in sessions]
     if len(set(ids)) != len(ids) or set(ids) & set(replay.train_sessions):
         raise ValueError("duplicate sessions or training/held-out leakage")
@@ -170,6 +194,7 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
             raise ValueError("sim/replay data is for self-tests, not measured proof")
     correct = total = baseline_correct = baseline_total = po_correct = po_total = 0
     false_alarms = empty_ms = 0
+    pairs = Counter()
     durations, clusters, used, walkers = [], [], [], set()
     missing_walker = False
     for session in sessions:
@@ -191,6 +216,7 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
             zone = prediction.get("zone") if prediction.get("present") else 0
             sc += int(zone == actual["zone"])
             sn += 1
+            pairs[(actual["zone"], zone)] += 1
             baseline = threshold_zone(row["links"])
             if baseline is not None:
                 baseline_correct += int(baseline == actual["zone"])
@@ -214,6 +240,8 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
                 missing_walker = True
         correct += sc
         total += sn
+    if details is not None:
+        details["confusion"] = confusion_report(pairs)
     return {"zone": {"correct": correct if total else None, "total": total or None,
                      "ci95": cluster_interval(clusters), "sessions": used, "walkers": len(walkers) if used and not missing_walker else None,
                      "method": ("SYNTHETIC SELF-TEST; " if allow_sim else "") + "held-out recv_t windows; 95% session bootstrap, 2000 draws; see proof/README.md"},
@@ -317,10 +345,18 @@ def main():
     model = Model(base).fit(training)
     adapter = BrainReplay(model, base, rates, history)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    report = score(heldout, adapter, args.on_board, args.allow_sim, commit)
+    details = {}
+    report = score(heldout, adapter, args.on_board, args.allow_sim, commit, details)
     if args.output.exists():
         report = merge_scored(json.loads(args.output.read_text()), report)
     args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    # The confusion and chance level sit next to proof.json, which has no field for them.
+    side = args.output.with_name(args.output.stem + ".confusion.json")
+    side.write_text(json.dumps(dict(details["confusion"], commit=commit), indent=2) + "\n")
+    c = details["confusion"]
+    print(f"zone confusion (rows camera, columns radio; classes {c['classes']}, chance {c['chance']:.2f}):")
+    for cls, row in zip(c["classes"], c["counts"]):
+        print(f"  {cls}: {row}")
 
 
 if __name__ == "__main__":

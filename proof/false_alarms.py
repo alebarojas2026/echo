@@ -6,12 +6,13 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import subprocess
+from proof import layout
 from proof.provenance import prepare_update, require_board
 
 
 def load_zones():
-    path = Path(__file__).resolve().parents[1] / "radio/nodes.json"
-    return {z["id"]: z.get("still_alert_s") for z in json.loads(path.read_text())["zones"]}
+    """{zone id: still_alert_s} from the layout (RADIO_SIGHT_NODES or radio/nodes.json)."""
+    return {z["id"]: z.get("still_alert_s") for z in layout.load()["zones"]}
 
 
 def read_jsonl(path):
