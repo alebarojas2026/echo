@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeFit, nudge, tidyFit } from './align'
+import { describeFit, layoutBody, nudge, tidyFit } from './align'
 
 describe('align mode keys', () => {
   it('moves 2 cm a press, 10 cm with Shift, east and north', () => {
@@ -45,5 +45,16 @@ describe('the saved file', () => {
     expect(describeFit({ offset_m: [0.12, -0.04], yaw_deg: 3 })).toBe(
       'East +0.12 m · North −0.04 m\nTurn +3.0° · Scale 1.000 · Cut 1.40 m',
     )
+  })
+})
+
+describe('saving on the board (POST /layout)', () => {
+  it('sends exactly the shape the board takes: room, and hall_beacons only when there are any', () => {
+    expect(JSON.parse(layoutBody({ offset_m: [1.7411, -7.31] }, undefined))).toEqual({
+      room: { offset_m: [1.741, -7.31], yaw_deg: 0, scale: 1, cut_m: 1.4 },
+    })
+    expect(Object.keys(JSON.parse(layoutBody({}, [])))).toEqual(['room'])
+    const both = JSON.parse(layoutBody({}, [{ node: 'h', xyz_m: [3, 19, 1] }, { node: 'j', xyz_m: null }]))
+    expect(both.hall_beacons).toEqual([{ node: 'h', xyz_m: [3, 19, 1] }, { node: 'j', xyz_m: null }])
   })
 })

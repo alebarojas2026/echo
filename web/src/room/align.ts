@@ -78,15 +78,28 @@ function drawOnTop(root: Object3D, skip: Object3D) {
   for (const child of root.children) drawOnTop(child, skip)
 }
 
-/** Saves under `vite` straight to web/public/models/room.json; anywhere else, downloads room.json. */
-async function save(json: string): Promise<string> {
-  if (import.meta.env.DEV) {
-    try {
-      const res = await fetch('/__room-scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: json })
-      if (res.ok) return 'Saved to web/public/models/room.json. board/push-web.sh takes it to the board.'
-    } catch {
-      // fall through to the download
+/** The body of the board's POST /layout (#532): the alignment and, when there are any, the hall beacons. */
+export function layoutBody(fit: ScanFit, beacons: { node: string; xyz_m: unknown }[] | undefined): string {
+  return JSON.stringify(beacons?.length ? { room: tidyFit(fit), hall_beacons: beacons } : { room: tidyFit(fit) })
+}
+
+/** Saves the alignment and the hall beacons' spots where the page is served from: under `vite` into the repo's
+ *  room.json and radio/nodes.json; on the board through its POST /layout, kept on the board; anywhere else, or if
+ *  that fails, room.json downloads. */
+async function saveAll(fit: ScanFit, beacons: HallBeacons | undefined): Promise<string> {
+  const json = `${JSON.stringify(tidyFit(fit), null, 2)}\n`
+  const post = (url: string, body: string) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body })
+  try {
+    if (import.meta.env.DEV) {
+      const room = await post('/__room-scan', json)
+      const hall = beacons ? await post('/__hall-beacons', JSON.stringify(beacons.positions())) : null
+      if (room.ok) return `Saved to web/public/models/room.json${hall?.ok ? ' and the beacons to radio/nodes.json' : ''}. board/push-web.sh takes it to the board.`
+    } else {
+      const res = await post('/layout', layoutBody(fit, beacons?.positions()))
+      if (res.ok) return 'Saved on the board. A reload keeps it.'
     }
+  } catch {
+    // fall through to the download
   }
   const a = document.createElement('a')
   a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
@@ -94,17 +107,6 @@ async function save(json: string): Promise<string> {
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
   return 'Downloaded room.json. Put it in web/public/models/, then build again.'
-}
-
-/** Saves the hall beacons' positions: under `vite` straight into radio/nodes.json, else nothing to send to. */
-async function saveBeacons(beacons: HallBeacons): Promise<string> {
-  if (!import.meta.env.DEV) return ''
-  try {
-    const res = await fetch('/__hall-beacons', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(beacons.positions()) })
-    return res.ok ? ' Beacons saved to radio/nodes.json.' : ''
-  } catch {
-    return ''
-  }
 }
 
 /** Turns align mode on. With no scan loaded it only says how to make one. */
@@ -140,7 +142,7 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
       pre.textContent = json
       pre.hidden = false
       status.textContent = 'Saving…'
-      void Promise.all([save(json), beacons ? saveBeacons(beacons) : '']).then(([said, more]) => (status.textContent = said + more))
+      void saveAll(scan.fit, beacons).then((said) => (status.textContent = said))
     } else if (key === 'Tab' && beacons) {
       beacons.cycle()
     } else if (key === 'Escape' && beacons?.selected) {
