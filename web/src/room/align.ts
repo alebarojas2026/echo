@@ -1,4 +1,5 @@
 import type { Material, Object3D } from 'three'
+import type { HallBeacons } from './devices'
 import { DEFAULT_CUT_M, type Scan, type ScanFit } from './scan'
 import type { Stage } from './stage'
 import { roomShot, topShot, type RoomView } from './view'
@@ -12,6 +13,9 @@ import { roomShot, topShot, type RoomView } from './view'
 //   [ / ]   lower / raise the cut height by 5 cm
 //   V       straight-down view, or back to the normal one
 //   S       save room.json
+// Hall beacons (devices.ts): Tab picks the next heard one (or a click on it); while one is picked the arrows move
+// it on the floor (10 cm, Shift 1 m) and it can be dragged, from the "new beacon" tray too; Esc lets go. S saves
+// their positions into radio/nodes.json as well.
 
 const STEP_M = 0.02
 const BIG_STEP_M = 0.1
@@ -92,13 +96,24 @@ async function save(json: string): Promise<string> {
   return 'Downloaded room.json. Put it in web/public/models/, then build again.'
 }
 
+/** Saves the hall beacons' positions: under `vite` straight into radio/nodes.json, else nothing to send to. */
+async function saveBeacons(beacons: HallBeacons): Promise<string> {
+  if (!import.meta.env.DEV) return ''
+  try {
+    const res = await fetch('/__hall-beacons', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(beacons.positions()) })
+    return res.ok ? ' Beacons saved to radio/nodes.json.' : ''
+  } catch {
+    return ''
+  }
+}
+
 /** Turns align mode on. With no scan loaded it only says how to make one. */
-export function startAlign(view: RoomView, stage: Stage, scan: Scan | null) {
+export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beacons?: HallBeacons) {
   const panel = document.createElement('div')
   panel.className = 'room-align'
-  panel.innerHTML = '<h2>Align the scan</h2><p class="room-align-fit"></p><p class="room-align-keys"></p><p class="room-align-status"></p><pre hidden></pre>'
+  panel.innerHTML = '<h2>Align the scan</h2><p class="room-align-fit"></p><p class="room-align-beacon"></p><p class="room-align-keys"></p><p class="room-align-status"></p><pre hidden></pre>'
   document.body.append(panel) // over the panels' rail, outside the room's stacking context
-  const [fitLine, keys, status, pre] = ['.room-align-fit', '.room-align-keys', '.room-align-status', 'pre'].map((q) => panel.querySelector<HTMLElement>(q)!)
+  const [fitLine, beaconLine, keys, status, pre] = ['.room-align-fit', '.room-align-beacon', '.room-align-keys', '.room-align-status', 'pre'].map((q) => panel.querySelector<HTMLElement>(q)!)
   view.host.dataset.align = scan ? 'on' : 'no-scan'
   if (!scan) {
     fitLine.textContent = 'No scan loaded.'
@@ -106,8 +121,9 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null) {
     return
   }
 
-  keys.innerHTML = 'Arrows move · Q E turn · + − scale<br>[ ] cut height · Shift for big steps<br>V view from above · S save'
+  keys.innerHTML = 'Arrows move · Q E turn · + − scale<br>[ ] cut height · Shift for big steps<br>Tab picks a beacon · Esc lets go<br>V view from above · S save'
   fitLine.textContent = describeFit(scan.fit)
+  beacons?.startEditing(() => (beaconLine.textContent = beacons.describe()))
   drawOnTop(stage.group, stage.drawnRoom)
   view.requestRender()
   let top = false
@@ -124,7 +140,15 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null) {
       pre.textContent = json
       pre.hidden = false
       status.textContent = 'Saving…'
-      void save(json).then((said) => (status.textContent = said))
+      void Promise.all([save(json), beacons ? saveBeacons(beacons) : '']).then(([said, more]) => (status.textContent = said + more))
+    } else if (key === 'Tab' && beacons) {
+      beacons.cycle()
+    } else if (key === 'Escape' && beacons?.selected) {
+      beacons.select(null)
+    } else if (beacons?.selected && key.startsWith('Arrow')) {
+      const step = event.shiftKey ? 1 : 0.1
+      const [dx, dy] = { ArrowRight: [step, 0], ArrowLeft: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[key] ?? [0, 0]
+      beacons.nudge(dx, dy)
     } else {
       const fit = nudge(scan.fit, key, event.shiftKey)
       if (!fit) return

@@ -1,7 +1,7 @@
-import type { Advice, Alert, Checkin, CmdMsg, EventMsg, LinkState, Narration, ObjectMark, Pred, StateMsg, Teacher, Xray } from './contract'
+import type { Advice, Alert, Checkin, CmdMsg, EventMsg, HallLink, LinkState, Narration, ObjectMark, Pred, StateMsg, Teacher, Xray } from './contract'
 import type { Transport } from './feed'
 import { DEMO_MS, demoScene } from './demo'
-import { HOME_SPOT, LINK_IDS, SIZE_M, STRIP_M, TRAY_SPOTS, ZONES, floorSize, nodePosition, parseLinkId, routerId, zoneAt, zoneCenter } from './frame'
+import { HALL_BEACONS, HOME_SPOT, LINK_IDS, SIZE_M, STRIP_M, TRAY_SPOTS, ZONES, floorSize, nodePosition, parseLinkId, routerId, zoneAt, zoneCenter } from './frame'
 
 // Mock state messages (CONTRACTS.md v2 section 5) for building the screen without the board.
 // src is "sim" so nothing here can pass for live, and measured numbers (train time, ms per decision,
@@ -26,7 +26,12 @@ export type MockScenario =
   | 'tour' | 'still' | 'checkin' | 'camera' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall' | 'demo' | 'power'
 
 /** ?mock=power: someone walks the tour while the East beacon is switched off for 6 s in every 16. Its links go
- *  stale, then blind after 3 s (SENSOR BLIND), and the beacon fades to "not heard" until it is back. */
+ *  stale, then blind after 3 s (SENSOR BLIND), and the beacon fades to "not heard" until it is back. Hall beacon
+ *  J (when nodes.json has one) is off for the first 4 s of each cycle, so it turns up as a new beacon. */
+export function hallOff(tMs: number): string[] {
+  return tMs % 16000 < 4000 ? ['j'] : []
+}
+
 export function powerOff(tMs: number): { nodes: string[]; forS: number } | undefined {
   const cycle = tMs % 16000
   return cycle >= 6000 && cycle < 12000 ? { nodes: ['east'], forS: (cycle - 6000) / 1000 } : undefined
@@ -160,6 +165,8 @@ export interface Scene {
   cam: 'on' | 'off'
   /** Devices switched off, and for how long: their links read nothing (stale, then blind after 3 s). */
   off?: { nodes: string[]; forS: number }
+  /** Hall beacons switched off: their hall rows read nothing (stale). */
+  hallOff?: string[]
   /** Advice about the object by the router. It only reaches the state while the Wi-Fi link is dropping. */
   advice: boolean
   narration: Narration | null
@@ -185,6 +192,7 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
     advice: !!object,
     narration: null,
     off: scenario === 'power' ? powerOff(tMs) : undefined,
+    hallOff: scenario === 'power' ? hallOff(tMs) : [],
   })
 }
 
@@ -271,6 +279,14 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
           text: 'An object next to the router is blocking its link to the receiver. Move the router 30 cm west.',
         }
       : null
+  // nodes.json's hall beacons, heard by the board: "movement on this path" while someone walks.
+  const hall: HallLink[] = HALL_BEACONS.map((b) => {
+    const quiet = (scene.hallOff ?? []).includes(b.node)
+    return {
+      id: `${b.node}>unoq:ble`, tx: b.node, rx: 'unoq', xy_m: b.xyz ? [b.xyz[0], b.xyz[1]] : null,
+      activity: quiet ? 0 : person?.moving ? 0.6 : 0.05, moving: !quiet && !!person?.moving, rate_hz: quiet ? 0 : 6.5, stale: quiet,
+    }
+  })
   const teacher: Teacher | null =
     scene.cam === 'on'
       ? pred ? { present: pred.present, zone: pred.zone, motion: pred.motion } : { present: false, zone: 0, motion: null }
@@ -283,6 +299,7 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
     alert: scene.alert, checkin: scene.checkin, advice, narration: scene.narration, teacher,
     model: MOCK_MODEL,
     board: NO_BOARD,
+    ...(hall.length ? { hall } : {}),
   }
 }
 

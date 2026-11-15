@@ -28,4 +28,10 @@ export const DESK_LAYOUT = {
     { id: 'S-E30', xyz_m: [1.1, 1.1, 1.0] },
   ],
   tray_spots: [{ id: 'T1', xyz_m: [0.86, 1.0, 1.0] }],
+  hall: {
+    beacons: [
+      { node: 'h', id: 'H', data_hex: 'FFFF525348', xyz_m: null as number[] | null },
+      { node: 'j', id: 'J', data_hex: 'FFFF52534A', xyz_m: null as number[] | null },
+    ],
+  },
 }
