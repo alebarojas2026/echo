@@ -6,7 +6,8 @@
 Every connected screen gets the same `state` and `event` messages (CONTRACTS.md section 5,
 src "sim") at real speed. `cmd` messages from the screen are read: reset_alert clears the
 alert, reset also clears the still timer, check-in and advice, sends the `reset` event and puts
-the template end-of-demo recap in the narration, and the rest are accepted and ignored. Needs websockets 14 or newer.
+the template end-of-demo recap in the narration (and disarms), `arm {on}` arms or disarms
+(section 6, Armed), and the rest are accepted and ignored. Needs websockets 14 or newer.
 """
 import argparse
 import asyncio
