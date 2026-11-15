@@ -8,3 +8,5 @@
 {"v":2,"type":"cmd","cmd":"baseline","args":{"keep_model":true}}
 {"v":2,"type":"cmd","cmd":"arm","args":{"on":true}}
 {"v":2,"type":"cmd","cmd":"arm","args":{"on":false}}
+{"v":2,"type":"cmd","cmd":"arm","args":{"on":false},"key":"a-key-typed-on-the-board"}
+{"v":2,"type":"cmd","cmd":"truth","args":{"zone":1}}

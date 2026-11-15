@@ -62,6 +62,19 @@ INVALID = [
     "$.tamper[1]",                  # no such node
     "$.tamper",                     # tamper is a list of nodes
     "$.tamper",                     # a node is listed once
+    "'zone' is a required property",   # a passed_by names its zone
+    "$.info.zone",                  # nobody passes by in zone 0
+    "$.hall[0].moving",             # a busy path never says moving
+    "$.hall[0].busy",               # a stale path is not busy
+    "$.hall[0].busy",               # busy is true or false
+    "$.key",                       # an empty key is no key
+    "$.args",                      # the key sits beside args, never in them
+    "$.locked",                    # locked is true or false
+    "$.state",                     # the camera watcher reports what it reads; unknown is the brain's word
+    "$.cam",                       # on, off, stalled or unknown
+    "$.hall[0].xy_m",               # a placed beacon has a position, not an estimate
+    "$.hall[0].range.from[0]",      # heard by receivers only
+    "'lo_m' is a required property",   # an estimate always carries its span and what it assumes
     "bad JSON",
 ]
 
@@ -92,6 +105,46 @@ def test_each_invalid_line_fails_for_its_reason():
 def test_proof():
     assert check.check_lines([read("valid_proof.json")], "proof")[1] == []
     assert "$.zone.correct" in check.check_lines([read("invalid_proof.json")], "proof")[1][0][1]
+
+
+def test_proof_presence_is_optional_and_carries_its_always_empty_score():
+    proof = json.loads(read("valid_proof.json"))
+    assert "presence" not in proof                              # older proof files still pass
+    presence = {"correct": 171, "total": 180, "always_empty_correct": 96, "cycles": 6, "method": "held-out cycles, see PROOF.md"}
+    assert check.check_lines([json.dumps({**proof, "presence": presence})], "proof")[1] == []
+    assert check.check_lines([json.dumps({**proof, "presence": {**presence, "correct": None, "total": None, "cycles": None}})], "proof")[1] == []
+    del presence["always_empty_correct"]                        # the score never goes out without its comparison
+    assert "'always_empty_correct' is a required property" in check.check_lines([json.dumps({**proof, "presence": presence})], "proof")[1][0][1]
+    zone = {**proof["zone"], "majority_class_correct": 30}
+    assert check.check_lines([json.dumps({**proof, "zone": zone})], "proof")[1] == []
+
+
+def test_proof_security_takes_the_armed_hold_and_the_passed_by_rate():
+    proof = json.loads(read("valid_proof.json"))
+    security = proof["security"]
+    assert "hold_s" not in security["detection"] and "passed_by_events" not in security["false_alarms"]   # older files pass
+    security["detection"].update(within_s=5, hold_s=3)
+    security["false_alarms"].update(passed_by_events=4, passed_by_duration_s=1800, passed_by_per_hour=8.0)
+    assert check.check_lines([json.dumps(proof)], "proof")[1] == []
+    security["false_alarms"]["passed_by_events"] = -1
+    assert "$.security.false_alarms.passed_by_events" in check.check_lines([json.dumps(proof)], "proof")[1][0][1]
+
+
+def test_proof_security_trials_are_optional_block_by_block():
+    proof = json.loads(read("valid_proof.json"))
+    assert "security_trials" not in proof
+    passers = dict.fromkeys(["trials", "false_intrusions", "ci95", "intrusion_events", "duration_s", "intrusions_per_hour",
+                             "still_trials", "still_alerts", "still_ci95"])
+    tamper = {"unplugs": 5, "detected": 5, "ci95": [0.57, 1.0], "within_s": 5, "false_events": 0, "duration_s": 900, "false_per_hour": 0}
+    lesson = {"sessions": [{"session": "s31", "ready_s": 34.2}, {"session": "s32", "ready_s": None}], "shortest_s": 34.2,
+              "longest_s": 34.2, "median_s": 34.2, "unplugged_walk": {"correct": None, "total": None, "ci95": None}}
+    for trials in ({}, {"passers_by": passers}, {"tamper": tamper, "lesson": lesson}):
+        assert check.check_lines([json.dumps({**proof, "security_trials": trials})], "proof")[1] == []
+    del tamper["within_s"]
+    bad = check.check_lines([json.dumps({**proof, "security_trials": {"tamper": tamper}})], "proof")[1]
+    assert "'within_s' is a required property" in bad[0][1]
+    bad = check.check_lines([json.dumps({**proof, "security_trials": {"crowd": {}}})], "proof")[1]
+    assert "'crowd' was unexpected" in bad[0][1]
 
 
 def test_proof_security_is_optional_and_names_real_links():

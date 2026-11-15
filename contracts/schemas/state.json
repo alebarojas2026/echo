@@ -5,7 +5,8 @@
   "$ref": "common.json#/$defs/envelope",
   "properties": {
     "type": {"const": "state"},
-    "cam": {"$ref": "common.json#/$defs/cam_state"},
+    "cam": {"$comment": "unknown = no cam message in the last 3 s, or none yet. Only state says it; a cam message never does.",
+            "anyOf": [{"$ref": "common.json#/$defs/cam_state"}, {"const": "unknown"}]},
     "router": {"$ref": "common.json#/$defs/router_spot"},
     "links": {"type": "array", "items": {
       "$comment": "Listed once it has a reading. Before the baseline base_dbm, drop_db and expected_hz are null and status is ok or stale.",
@@ -68,15 +69,30 @@
       "properties": {"present": {"type": "boolean"}, "zone": {"$ref": "common.json#/$defs/zone"}, "motion": {"enum": ["moving", "still", null]}},
       "required": ["present", "zone", "motion"], "additionalProperties": false},
     "hall": {
-      "$comment": "Optional (section 5): a missing hall reads as []. One row per hall link that has a reading. stale -> activity 0 and moving false.",
+      "$comment": "Optional (section 5): a missing hall reads as []. One row per hall link that has a reading. stale -> activity 0 and moving false. busy is optional (missing means false): busy -> moving false, and a stale row is never busy.",
       "type": "array", "items": {
         "type": "object",
         "properties": {"id": {"$ref": "common.json#/$defs/hall_link"}, "tx": {"$ref": "common.json#/$defs/hall_node"}, "rx": {"$ref": "common.json#/$defs/receiver"},
                        "xy_m": {"anyOf": [{"$ref": "common.json#/$defs/xy_m"}, {"type": "null"}]}, "activity": {"type": "number", "minimum": 0, "maximum": 1},
-                       "moving": {"type": "boolean"}, "rate_hz": {"type": "number", "minimum": 0}, "stale": {"type": "boolean"}},
+                       "moving": {"type": "boolean"}, "rate_hz": {"type": "number", "minimum": 0}, "stale": {"type": "boolean"},
+                       "busy": {"type": "boolean"},
+                       "range": {"$comment": "Optional (section 6, Hall range): an estimated distance for a beacon with no position. Never with an xy_m.",
+                                 "type": "object",
+                                 "properties": {"m": {"type": "number", "exclusiveMinimum": 0, "maximum": 100}, "lo_m": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+                                                "hi_m": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+                                                "from": {"type": "array", "items": {"$ref": "common.json#/$defs/receiver"}, "minItems": 1, "uniqueItems": true},
+                                                "assumes": {"type": "object",
+                                                            "properties": {"at_1m_dbm": {"type": "number"}, "exponent": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "minItems": 2, "maxItems": 2}},
+                                                            "required": ["at_1m_dbm", "exponent"], "additionalProperties": false}},
+                                 "required": ["m", "lo_m", "hi_m", "from", "assumes"], "additionalProperties": false}},
         "required": ["id", "tx", "rx", "xy_m", "activity", "moving", "rate_hz", "stale"], "additionalProperties": false,
-        "if": {"properties": {"stale": {"const": true}}}, "then": {"properties": {"activity": {"const": 0}, "moving": {"const": false}}}}},
+        "allOf": [
+          {"if": {"properties": {"stale": {"const": true}}}, "then": {"properties": {"activity": {"const": 0}, "moving": {"const": false}, "busy": {"const": false}}}},
+          {"if": {"properties": {"busy": {"const": true}}, "required": ["busy"]}, "then": {"properties": {"moving": {"const": false}}}},
+          {"if": {"required": ["range"]}, "then": {"properties": {"xy_m": {"type": "null"}}}}
+        ]}},
     "armed": {"$comment": "Optional (section 6, Armed): true after arm {on: true}; missing means false.", "type": "boolean"},
+    "locked": {"$comment": "Optional (section 6, Operator key): the board has an operator key; missing means false.", "type": "boolean"},
     "tamper": {"$comment": "Optional (section 6, Tamper): the nodes silent while armed; missing means [].", "type": "array",
                "items": {"$ref": "common.json#/$defs/any_node"}, "uniqueItems": true},
     "model": {

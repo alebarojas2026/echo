@@ -32,7 +32,7 @@
     "event_kind": {"enum": ["enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice", "advice_result",
                             "router_moved", "router_home", "recalibrating", "cam_off", "cam_on", "cam_stalled", "alert_on",
                             "alert_off", "blind_on", "blind_off", "trained", "baseline_done", "drift", "reset", "recording",
-                            "armed", "disarmed", "intrusion", "tamper", "tamper_cleared"]},
+                            "armed", "disarmed", "intrusion", "tamper", "tamper_cleared", "passed_by"]},
     "any_node": {"$comment": "Section 6, Tamper: a node of the layout, or a hall beacon.", "anyOf": [{"$ref": "#/$defs/node"}, {"$ref": "#/$defs/hall_node"}]},
     "span": {"$comment": "Section 10: a stretch of time in epoch ms. from_t <= to_t is checked in check.py.", "type": "object",
              "properties": {"from_t": {"type": "integer", "minimum": 0}, "to_t": {"type": "integer", "minimum": 0}},
