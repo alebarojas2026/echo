@@ -172,6 +172,16 @@ export class Fly {
     this.begin()
   }
 
+  /** The close framing changed under the camera (room kept free for a bar over the room's bottom): glide to it.
+   *  Nothing to do while the camera is on the hall or heading there; it lands on the new framing when it comes
+   *  down. */
+  refit() {
+    const heading = this.legs.at(-1)?.to ?? this.framing
+    if (heading !== 'square' || this.pinned === 'hall') return
+    this.legs = [{ to: 'square', waitMs: 0 }]
+    this.begin()
+  }
+
   /** H: to the other framing, from wherever the camera is now. */
   toggle() {
     if (!this.hall) return

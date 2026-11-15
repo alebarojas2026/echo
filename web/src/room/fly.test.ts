@@ -81,6 +81,45 @@ describe('the hall view\u2019s caption', () => {
   })
 })
 
+describe('room kept free at the bottom of the close view', () => {
+  const hall = hallShot(HALL, 12)
+  it('glides to the lifted framing when a bar covers the room\u2019s bottom, and back when it goes', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    let lift = 0
+    // A close framing that depends on the room kept free, as the desk's fitted shots do.
+    fly.setClose((w, h) => ({ ...roomShot(w, h), target: roomShot(w, h).target.clone().add(new Vector3(0, 0, lift)) }))
+    fly.setHall(hall)
+    view.run(FIRST_LOOK_MS + FLY_MS + 100)
+    expect(fly.wide).toBe(0)
+    const before = view.shot.target.clone()
+    lift = 0.4
+    const from = view.shots.length
+    fly.refit()
+    view.run(FLY_MS + 100)
+    expect(view.shot.target.z - before.z).toBeCloseTo(0.4)
+    const steps = view.shots.slice(from).map((s, i, all) => (i ? s.target.distanceTo(all[i - 1].target) : 0))
+    expect(Math.max(...steps)).toBeLessThan(0.02) // a glide, never a jump
+    expect(fly.wide).toBe(0)
+    expect(view.host.dataset.view).toBe('square')
+    lift = 0
+    fly.refit()
+    view.run(FLY_MS + 100)
+    expect(view.shot.target.distanceTo(before)).toBeLessThan(1e-6)
+  })
+
+  it('does nothing while the camera is on the hall: it lands on the new framing when it comes down', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.hold()
+    fly.setHall(hall)
+    view.run(500)
+    fly.refit()
+    view.run(FLY_MS + 100)
+    expect(fly.wide).toBe(1)
+  })
+})
+
 describe('the see-through row', () => {
   it('stays solid until the camera is nearly down, then opens smoothly: never a slot seen from far away', () => {
     expect(cutaway(1)).toBe(0)
