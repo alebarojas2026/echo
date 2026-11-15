@@ -258,21 +258,20 @@ class Tamper:
 
 
 class Armed:
-    """Armed mode (section 6): the space should be empty, so a person appearing is an intrusion.
+    """Armed mode (section 6): the space should be empty, so a person who appears and stays is an intrusion.
 
-    One intrusion each time a person appears: present with kind person for the majority of
-    the last 10 decisions (6 of them), after that was not so. A person who stays raises
-    nothing more; they have to be gone for the majority of 10 decisions before the next one
-    counts. Objects never count. Decisions with pred null (blind, recalibrating) are not
-    decisions: the count starts again when pred is back, and whoever was already in stays "in".
-
-    settings.intrusion_confirm (0 today, the contract's rule) makes it wait: the intrusion is sent
-    only when the person is still there that many decisions after appearing. Somebody gone before
-    then walked past: their zone goes to `passed` (pop_passed) and no intrusion is sent.
+    A person appears when present with kind person for the majority of the last 10 decisions
+    (6 of them), after that was not so. Still there hold_s later (armed.hold_s in nodes.json,
+    3 s): one intrusion. Gone first (not present for the majority of the last 10): they walked
+    past, and their zone goes to pop_passed() for a passed_by event instead. One event per
+    appearance; a person who stays raises nothing more. Objects raise neither. Decisions with
+    pred null (blind, recalibrating) are not decisions: the counts and the wait pause, start
+    again when pred is back, and whoever was already in stays "in".
     """
 
-    def __init__(self, settings: Optional[S.Settings] = None):
+    def __init__(self, settings: Optional[S.Settings] = None, hold_s: float = S.HOLD_S):
         self.settings = settings or S.DEFAULT
+        self.hold = round(hold_s * S.DECISIONS_PER_S)   # decisions somebody must stay; 0 = an intrusion at once
         self.on = False
         self._recent: deque = deque(maxlen=self.settings.intrusion_decisions)   # per decision: (a person is present, zone)
         self._inside = False
@@ -307,7 +306,7 @@ class Armed:
             self._inside = True
             if self.on:
                 self._zone = max(set(zones), key=zones.count)
-                if self.settings.intrusion_confirm <= 0:
+                if self.hold <= 0:
                     return self._zone
                 self._waited = 0
         elif self._inside and len(self._recent) - inside >= self.settings.intrusion_majority:
@@ -317,7 +316,7 @@ class Armed:
                 self._passed.append(self._zone)
         elif self._waited is not None:
             self._waited += 1
-            if self._waited >= self.settings.intrusion_confirm:
+            if self._waited >= self.hold:
                 self._waited = None              # still there: this is the intrusion
                 return max(set(zones), key=zones.count) if zones else self._zone
         return None

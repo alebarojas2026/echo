@@ -12,15 +12,14 @@ in brain/ carries its own copy.
                           still timer resets
     intrusion_decisions   Armed: a person appears when present for the        10 (1 s)
     intrusion_majority    majority of the last N decisions                    6
-    intrusion_confirm     Armed: decisions a person must then stay before     0 = at once
-                          the intrusion is sent. 0 is the contract's rule.
-                          Above 0 (30 = 3 s) somebody gone sooner gives a
-                          passed_by event instead: that needs the contract
-                          and the schema changed first, so it stays 0 here
     zone_hold             the brain's own: decisions in a row before enter,   5 (0.5 s)
                           exit or zone_change is said
     motion_links          which links' features decide moving / still         null = every link
                           (takes effect at the next train)
+
+One number of these rules is not here because the contract puts it in radio/nodes.json: how
+long an armed space waits before an appearance is an intrusion, armed.hold_s (3 s when the file
+has none). brain.settings.hold_s(nodes) reads it.
 
 A decision is one classifier answer; there are 10 a second (section 6, Windows: 0.1 s hop).
 
@@ -47,7 +46,6 @@ class Settings:
     moving_run: int = 5
     intrusion_decisions: int = 10
     intrusion_majority: int = 6
-    intrusion_confirm: int = 0
     zone_hold: int = 5
     motion_links: Optional[Tuple[str, ...]] = None
 
@@ -60,8 +58,8 @@ class Settings:
                 if isinstance(value, str) or not value or not all(isinstance(k, str) for k in value):
                     raise ValueError("motion_links is a list of link ids, or null for every link")
                 object.__setattr__(self, f.name, tuple(value))
-            elif not isinstance(value, int) or isinstance(value, bool) or value < (0 if f.name == "intrusion_confirm" else 1):
-                raise ValueError(f"{f.name} must be a whole number, {0 if f.name == 'intrusion_confirm' else 1} or more (got {value!r})")
+            elif not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ValueError(f"{f.name} must be a whole number, 1 or more (got {value!r})")
         for part, whole in (("smooth_majority", "smooth_decisions"), ("intrusion_majority", "intrusion_decisions")):
             if not getattr(self, whole) / 2 < getattr(self, part) <= getattr(self, whole):
                 raise ValueError(f"{part} must be more than half of {whole} and at most {whole}")
@@ -81,6 +79,17 @@ class Settings:
 
 
 DEFAULT = Settings()   # the contract's values
+HOLD_S = 3.0           # section 6, Armed: armed.hold_s when nodes.json has none
+DECISIONS_PER_S = 10   # section 6, Windows: a 0.1 s hop
+
+
+def hold_s(nodes: Optional[dict]) -> float:
+    """armed.hold_s from a parsed nodes.json: how long somebody must stay, after appearing in an
+    armed space, to be an intrusion and not a passer-by. 3 s when the file doesn't say."""
+    value = ((nodes or {}).get("armed") or {}).get("hold_s", HOLD_S)
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 60:
+        raise ValueError(f"armed.hold_s in nodes.json must be a number of seconds from 0 to 60 (got {value!r})")
+    return float(value)
 
 
 def load(path=None) -> Settings:

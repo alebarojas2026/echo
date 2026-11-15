@@ -1,7 +1,8 @@
 """Play a recording through the brain's real decision code and count what it would have said.
 
     python -m brain.replay data/sessions/crowd1.jsonl --sessions data/sessions --armed
-    python -m brain.replay data/sessions/crowd1.jsonl --sessions data/sessions --armed --set moving_run=8
+    python -m brain.replay data/sessions/crowd1.jsonl --sessions data/sessions --armed --hold-s 4
+    python -m brain.replay data/sessions/crowd1.jsonl --sessions data/sessions --set moving_run=8
     python -m brain.replay crowd1.jsonl --sessions data/sessions --train walk1 walk2 empty1
 
 For choosing the people rules' numbers (brain/settings.py) from a recording instead of from a
@@ -19,8 +20,8 @@ The brain needs a baseline and a model:
 - --train names recordings in that folder to fit a model from, instead of model.pkl (needed
   to try motion_links, which takes effect when a model is fit).
 
---armed arms before the first reading. --set name=value changes a setting for this run, any
-number of times. It prints one JSON object; nothing is written anywhere, and a person decides.
+--armed arms before the first reading. --hold-s tries another armed.hold_s than nodes.json has.
+--set name=value changes a setting for this run, any number of times. It prints one JSON object; nothing is written anywhere, and a person decides.
 The counts say what the rules do with this recording. They are not accuracy numbers.
 """
 from __future__ import annotations
@@ -33,7 +34,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 from brain import settings as S
-from brain.core import Brain, base_at, last_meta, read_session
+from brain.core import NODES_JSON, Brain, base_at, last_meta, read_session
 from brain.train import Model
 
 STATE_EVERY_MS = 100   # the live loop takes state about 10 times a second
@@ -77,25 +78,30 @@ def replay(brain: Brain, messages: Iterable[dict], armed: bool = False) -> dict:
         "states_with_no_pred": hidden,               # blind, or no model: nothing was decided then
         "present_s": round(present * STATE_EVERY_MS / 1000, 1),
         "intrusions": kinds.count("intrusion"),
-        "passed_by": kinds.count("passed_by"),       # always 0 unless intrusion_confirm is above 0
+        "passed_by": kinds.count("passed_by"),       # appeared while armed, gone before armed.hold_s
         "alerts": kinds.count("alert_on"),
         "still_timer_resets": resets,                # a timer that had started, put back to zero
         "longest_still_s": round(longest_still, 1),
         "events": {k: kinds.count(k) for k in COUNTED if k in kinds},
         "armed": armed,
+        "hold_s": brain.armed.hold / S.DECISIONS_PER_S,
         "settings": brain.settings.as_dict(),
     }
 
 
 def prepared(sessions_dir, settings: Optional[S.Settings] = None, train: Optional[List[str]] = None,
-             folder=None) -> Brain:
+             folder=None, hold_s: Optional[float] = None) -> Brain:
     """A brain with the baseline and model of sessions_dir, working on a copy in `folder`.
-    train: session names to fit a model from, instead of loading model.pkl."""
+    train: session names to fit a model from, instead of loading model.pkl.
+    hold_s: another armed.hold_s than radio/nodes.json has, for this run."""
+    nodes = json.loads(NODES_JSON.read_text(encoding="utf-8"))
+    if hold_s is not None:
+        nodes["armed"] = {**(nodes.get("armed") or {}), "hold_s": hold_s}
     src, folder = Path(sessions_dir), Path(folder)
     for name in ("baseline.json", "place.json", "baselines.jsonl") + (() if train else ("model.pkl",)):
         if (src / name).exists():
             shutil.copy(src / name, folder / name)
-    brain = Brain(clock=None, sessions_dir=folder, settings=settings)
+    brain = Brain(clock=None, sessions_dir=folder, settings=settings, nodes=nodes)
     if not brain.base:
         raise SystemExit(f"no baseline.json in {src}: the brain can't judge a recording without one")
     if train:
@@ -137,6 +143,7 @@ def main(argv=None) -> int:
     ap.add_argument("--sessions", required=True, help="the folder with baseline.json and model.pkl (never written to)")
     ap.add_argument("--train", nargs="+", metavar="SESSION", help="fit the model from these recordings instead of model.pkl")
     ap.add_argument("--armed", action="store_true", help="arm before the first reading")
+    ap.add_argument("--hold-s", type=float, metavar="SECONDS", help="another armed.hold_s than nodes.json has, for this run")
     ap.add_argument("--set", action="append", default=[], metavar="NAME=VALUE", help="change a setting for this run")
     args = ap.parse_args(argv)
     try:
@@ -146,7 +153,7 @@ def main(argv=None) -> int:
     meta = last_meta(args.recording)
     messages = read_session(args.recording, meta.get("recv_t") if meta else None)
     with tempfile.TemporaryDirectory() as folder:
-        brain = prepared(args.sessions, settings, args.train, folder)
+        brain = prepared(args.sessions, settings, args.train, folder, args.hold_s)
         counts = replay(brain, messages, armed=args.armed)
     counts["recording"] = {"file": Path(args.recording).name, "src": messages[0].get("src") if messages else None,
                            "purpose": (meta or {}).get("purpose")}

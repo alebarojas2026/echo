@@ -25,7 +25,6 @@ def test_the_defaults_are_the_contract_values():
         "smooth_decisions": 10, "smooth_majority": 6,          # section 6, Alert: the majority of the last 10
         "moving_run": 5,                                       # ... 5 moving decisions in a row (0.5 s)
         "intrusion_decisions": 10, "intrusion_majority": 6,    # section 6, Armed: the majority of the last 10
-        "intrusion_confirm": 0,                                # ... and sent at once
         "zone_hold": 5, "motion_links": None}
     assert Brain().settings == S.DEFAULT
 
@@ -51,36 +50,14 @@ def raised(rule, preds):
     return [z for z in (rule.on_pred(p) for p in preds) if z is not None]
 
 
-def test_the_intrusion_hold_is_a_setting():
+def test_how_long_a_person_must_be_seen_to_have_appeared_is_a_setting():
     crossing = [NOBODY] * 20 + [PERSON] * 15 + [NOBODY] * 20           # somebody crosses in 1.5 s
     today = Armed()
     today.arm(True)
-    assert raised(today, crossing) == [4]                               # today's rule: 6 of the last 10
-    longer = Armed(S.DEFAULT.with_(intrusion_decisions=30, intrusion_majority=20))   # 2 of the last 3 s
-    longer.arm(True)
-    assert raised(longer, crossing) == []
-    assert raised(longer, [PERSON] * 19) == [] and raised(longer, [PERSON]) == [4]   # the 20th decision
-
-
-def test_a_wait_before_the_intrusion_is_a_setting_that_is_off_by_default():
-    """The study's "still there 3 s later, else passed by". Off (0) until the contract says so."""
-    crossing = [NOBODY] * 20 + [PERSON] * 15 + [NOBODY] * 20           # somebody crosses in 1.5 s
-    staying = [NOBODY] * 20 + [PERSON] * 60
-    today = Armed()
-    today.arm(True)
-    assert raised(today, crossing) == [4] and today.pop_passed() == []
-    wait = Armed(S.DEFAULT.with_(intrusion_confirm=30))
-    wait.arm(True)
-    assert raised(wait, crossing) == [] and wait.pop_passed() == [4]    # gone within 3 s: passed by, no intrusion
-    assert raised(wait, staying[:55]) == [] and raised(wait, staying[55:]) == [4]   # 6 to appear, then 30 more
-    assert wait.pop_passed() == [] and raised(wait, [PERSON] * 100) == []           # one per stay
-    assert raised(wait, [NOBODY] * 20 + [PERSON] * 20 + [None] * 50 + [PERSON] * 15) == []   # blind time doesn't count
-    assert raised(wait, [PERSON]) == [4]
-    wait.arm(False)
-    wait.arm(True)
-    assert raised(wait, [PERSON] * 10) == []
-    wait.arm(False)                                                     # disarmed during the wait: nothing is said
-    assert raised(wait, [NOBODY] * 20) == [] and wait.pop_passed() == []
+    assert raised(today, crossing) == [] and today.pop_passed() == [4]  # seen (6 of the last 10), gone: passed by
+    slower = Armed(S.DEFAULT.with_(intrusion_decisions=30, intrusion_majority=20))   # 2 of the last 3 s to appear
+    slower.arm(True)
+    assert raised(slower, crossing) == [] and slower.pop_passed() == []  # never seen as having appeared at all
 
 
 def still_after(watch, preds):
@@ -152,8 +129,8 @@ def recorded(tmp_path_factory):
     return folder
 
 
-def run(folder, tmp_path, name, armed=False, train=None, **changes):
-    brain = R.prepared(folder, S.DEFAULT.with_(**changes), train, tmp_path)
+def run(folder, tmp_path, name, armed=False, train=None, hold_s=None, **changes):
+    brain = R.prepared(folder, S.DEFAULT.with_(**changes), train, tmp_path, hold_s)
     return R.replay(brain, R.read_session(folder / f"{name}.jsonl"), armed=armed)
 
 
@@ -164,23 +141,26 @@ def test_a_recording_played_through_the_real_brain_counts_intrusions_alerts_and_
     assert 19 <= stand["seconds"] <= 20 and stand["states"] >= 190 and stand["present_s"] >= 14
     assert stand["settings"] == S.DEFAULT.as_dict()
     passers = run(recorded, tmp_path, "passers", armed=True)
-    assert passers["intrusions"] == 3 and passers["alerts"] == 0        # today's rule: every passer-by is an intrusion
+    assert (passers["intrusions"], passers["passed_by"]) == (0, 3) and passers["alerts"] == 0   # 2 s each: passed by
+    assert run(recorded, tmp_path, "stand", armed=True)["intrusions"] == 1                      # 15 s: an intrusion
     assert {p.name: p.stat().st_mtime_ns for p in recorded.iterdir()} == before     # the folder is only read
 
 
 def test_a_setting_changes_the_count_on_the_same_recording(recorded, tmp_path):
+    at_once = run(recorded, tmp_path, "passers", armed=True, hold_s=0)                 # the rule before the hold
+    assert (at_once["intrusions"], at_once["passed_by"], at_once["hold_s"]) == (3, 0, 0.0)
     held = run(recorded, tmp_path, "passers", armed=True, intrusion_decisions=40, intrusion_majority=30)
-    assert held["intrusions"] == 0 and held["settings"]["intrusion_majority"] == 30
-    waited = run(recorded, tmp_path, "passers", armed=True, intrusion_confirm=30)
-    assert (waited["intrusions"], waited["passed_by"]) == (0, 3)       # 2 s in the square each: all three walked past
-    assert run(recorded, tmp_path, "stand", armed=True, intrusion_confirm=30)["intrusions"] == 1   # 15 s: an intrusion
-    assert run(recorded, tmp_path, "passers")["intrusions"] == 0        # not armed: nothing to raise
+    assert (held["intrusions"], held["passed_by"]) == (0, 0) and held["settings"]["intrusion_majority"] == 30
+    assert run(recorded, tmp_path, "passers")["passed_by"] == 0         # not armed: nothing to raise
 
 
 def test_the_command_prints_the_counts_and_can_fit_its_own_model(recorded, capsys):
     R.main([str(recorded / "passers.jsonl"), "--sessions", str(recorded), "--armed", "--set", "moving_run=8"])
     out = json.loads(capsys.readouterr().out)
-    assert out["intrusions"] == 3 and out["settings"]["moving_run"] == 8 and out["armed"] is True
+    assert (out["intrusions"], out["passed_by"], out["hold_s"]) == (0, 3, 3.0)
+    assert out["settings"]["moving_run"] == 8 and out["armed"] is True
+    R.main([str(recorded / "passers.jsonl"), "--sessions", str(recorded), "--armed", "--hold-s", "1"])
+    assert json.loads(capsys.readouterr().out)["intrusions"] == 3      # 2 s in the square outlasts a 1 s hold
     assert out["recording"] == {"file": "passers.jsonl", "src": "sim", "purpose": "crowd"}
     R.main([str(recorded / "stand.jsonl"), "--sessions", str(recorded), "--train", "s01", "s10", "s11",
             "--set", "motion_links=east>pi5:ble,east>unoq:ble"])

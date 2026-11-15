@@ -47,6 +47,7 @@ HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable (Pi B): their readings
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
+SILENT_MS = 3_000        # a keep-model baseline restarts only for a link with no reading for this long
 LABEL_MODES = ("person", "object", "off")
 CAM_STATES = ("on", "off", "stalled")
 
@@ -150,7 +151,8 @@ class Brain:
         self.health = Health.from_nodes(nodes, classifier_links=[k for k in links if k not in over_hotspot])
         self.xray = Xray.from_nodes(nodes)
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led, self.settings)
-        self.armed = Armed(self.settings)     # after hours: a person appearing is an intrusion
+        # after hours: a person who appears and is still there armed.hold_s later is an intrusion
+        self.armed = Armed(self.settings, S.hold_s(nodes))
         self.tamper = Tamper.from_nodes(nodes)   # ... and a device going silent is tampering
         # The optional hall beacons (nodes.json "hall"): not core links, but tamper counts them.
         self._hall_nodes = {b.get("node") for b in (nodes.get("hall") or {}).get("beacons") or []}
@@ -687,11 +689,16 @@ class Brain:
             return "the camera sees somebody"
         if self.label_mode != "off":
             return f"label mode is {self.label_mode}, not off"
-        quiet = [link for link in self.links if now - self._last_seen.get(link, -10**15) > LINK_FRESH_MS]
+        # baseline {keep_model: true} is the same layout set down at a new desk, in a hall full of
+        # phones: only a link silent for 3 s, or health blind, holds it up. A stale link does not.
+        lenient = bool(self.capture and self.capture["by_hand"] and not self.capture["new_place"])
+        gap = SILENT_MS if lenient else LINK_FRESH_MS
+        quiet = [link for link in self.links if now - self._last_seen.get(link, -10**15) > gap]
         if quiet:
-            return "no readings in the last second from " + ", ".join(quiet)
-        if not self._health_ok or self.health.blind:
-            return "link health is not ok"
+            return f"no readings in the last {gap // 1000} s from " + ", ".join(quiet) if lenient else \
+                "no readings in the last second from " + ", ".join(quiet)
+        if self.health.blind or (not self._health_ok and not lenient):
+            return "link health is blind" if lenient else "link health is not ok"
         return None
 
     def _tick(self):
@@ -765,7 +772,7 @@ class Brain:
         intruder = self.armed.on_pred(pred)
         if intruder is not None:
             self.emit("intrusion", {"zone": intruder})
-        for zone in self.armed.pop_passed():   # only with settings.intrusion_confirm above 0 (not today's contract)
+        for zone in self.armed.pop_passed():   # appeared while armed and gone before the hold was over
             self.emit("passed_by", {"zone": zone})
 
     def _announce(self, zone: int) -> None:
