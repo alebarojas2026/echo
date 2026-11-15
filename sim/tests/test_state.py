@@ -453,3 +453,9 @@ def test_the_demo_alerts_once_and_only_in_the_alert_zone(each_layout):
     # still timer (5 moving decisions in a row): only the stand in the alert zone raises it.
     _, events = run("demo")
     assert [e["info"]["zone"] for e in events if e["kind"] == "alert_on"] == [each_layout.still_zone()]
+
+
+def test_the_fake_brain_sees_nobody_in_a_crowded_aisle(each_layout):
+    states, events = run("aisle")
+    assert not any(s["pred"] and s["pred"]["present"] for s in states)
+    assert not {"enter", "intrusion", "alert_on"} & set(kinds(events))

@@ -1,0 +1,18 @@
+{
+  "name": "aisle",
+  "about": "A crowded aisle and nobody in the area: people walk past on the aisle side (0.25-0.5 m out, 0.6-1.4 m/s, about five a minute), one of them brushes an arm tip over the edge at 40 s, and a neighbour stands 1 m beyond the east end the whole time. Nobody should be present.",
+  "duration_s": 90,
+  "person": null,
+  "passers": [
+    {"t_on": 3, "from": "west", "lane_m": 0.3, "speed_mps": 1.0},
+    {"t_on": 14, "from": "east", "lane_m": 0.5, "speed_mps": 1.4},
+    {"t_on": 26, "from": "west", "lane_m": 0.4, "speed_mps": 0.6},
+    {"t_on": 40, "from": "east", "lane_m": 0.25, "speed_mps": 1.0, "reach_m": 0.3},
+    {"t_on": 52, "from": "west", "lane_m": 0.3, "speed_mps": 1.2},
+    {"t_on": 64, "from": "east", "lane_m": 0.4, "speed_mps": 0.8},
+    {"t_on": 76, "from": "west", "lane_m": 0.5, "speed_mps": 1.4}
+  ],
+  "neighbours": [
+    {"end": "east", "past_m": 1.0}
+  ]
+}
