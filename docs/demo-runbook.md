@@ -8,7 +8,7 @@ A witness that never watches. Echo knows when someone is in a space, keeps a rec
 |---|---|---|---|
 | Talker | __ | Says the round, points at the right screen | Touches a laptop |
 | Operator | __ | Drives the main laptop: arm, disarm, "What happened?", Prove it, reset between judges | Explains while typing |
-| Hardware | __ | Handles the Arduino and the two Pis, unplugs and replugs Pi B, fixes anything knocked | Leaves the desk |
+| Hardware | __ | Sets up and secures the Arduino and the two Pis before judging; handles recovery between judges | Leaves the desk |
 | Spotter | __ | Keeps the gap clear of passers-by and places a second judge | Stands in the gap |
 
 Keep at least two people at the desk for every half hour:
@@ -66,7 +66,7 @@ Record the operator, checker, and actual finish time beside each step. These are
 | 8 | Have someone outside the team walk the full round | __ | __ |
 | 9 | Ask "What happened?" using the real local model and open the records it cites | __ | __ |
 
-The baseline comes first, before anything is judged, and again after every deploy, after Pi B is unplugged and replugged, and after any device is moved. A FAIL from the check is a stop: page/layout means check the web server and deployed layout; WebSocket means check bus and brain; clock means set time while idle; links/health means inspect the named radio; records means check `radio-sight-store`; Ask means inspect the answer service and local model.
+The baseline comes first, before anything is judged, and again after every deploy, after any power loss, and after any device is moved. A FAIL from the check is a stop: page/layout means check the web server and deployed layout; WebSocket means check bus and brain; clock means set time while idle; links/health means inspect the named radio; records means check `radio-sight-store`; Ask means inspect the answer service and local model.
 
 The Pi keys are made and enrolled once, at deploy: each Pi's private key stays on that Pi and is never copied or pasted anywhere. After any restart, check the signing program is running on each Pi (`journalctl -u radio-sight-witness -n 2 -o cat`). If `/chain` lists no witnesses, the board has not read its key file; ask Alexander.
 
@@ -112,36 +112,35 @@ Follow the exact spoken script in [pitch.md](pitch.md). These are rehearsal allo
 
 | Time | Beat | Speaker and actions | Screen and gate |
 |---|---|---|---|
-| 0:00–0:30 | **Found you** | Talker invites the judge onto the spot; judge stands still until the no-movement alert, then steps aside and back | Main laptop: the figure and the headline; the no-movement alert; "Check-in received" |
-| 0:30–1:00 | **Intrusion alert** | Judge steps out; Operator arms only while empty; judge steps in and stays | Armed state; the alarm page turns red with the live intrusion |
-| 1:00–1:25 | **Tamper alert** | Still armed, Hardware unplugs Pi B, waits for the alert, plugs it back in | The tamper alert names Pi B; the engine room shows that witness silent and the record still counting |
-| 1:25–2:00 | **What happened** | Operator disarms and taps "What happened?" | The story in plain words with clock times, its steps and the records it used |
+| 0:00–0:45 | **Found you** | Talker invites the judge onto the spot; judge stands still until the no-movement alert, then steps aside and back | Main laptop: the figure and the headline; the no-movement alert; "Check-in received" |
+| 0:45–1:15 | **Intrusion alert** | Judge steps out; Operator arms only while empty; judge steps in and stays | Armed state; the alarm page turns red with the live intrusion |
+| 1:15–2:00 | **What happened** | Operator disarms and taps "What happened?" | The story in plain words with clock times, its steps and the records it used |
 | 2:00–2:30 | **Engine room** | Talker points to the second laptop; Operator presses Prove it | The record counting, the signatures, and the check naming the altered record |
 | 2:30–3:00 | **Proof** | Talker reads the measured sentences from the slide and closes | The looping slide, word for word from numbers-to-say.md |
 
-While Pi B is unplugged the screen says the sensor is blind. That is right: its Wi-Fi line is the sensor. The rest of the round needs no sensing. After the judge leaves, wait for Pi B to rejoin and its witness to sign again, set Pi B's clock, then take the empty baseline before the next judge.
+Nobody unplugs a Pi in the round. During the Engine room beat, say only: “If a witness goes silent, the record keeps counting and notes the gap.” Do not perform it.
 
 For the “I'm okay” check the judge steps fully out of the line and back within a few seconds, then waits for "Check-in received". Do not claim it before that confirmation.
 
-**If interrupted:** cut the Tamper alert first, then the Engine room, then shorten Proof to its closing line. Keep Found you, and at least one of Intrusion alert or What happened. If a beat did not pass preflight, say what it would have shown and move on; do not stage it.
+**If interrupted:** cut the Engine room, then shorten Proof to its closing line. Keep Found you, and at least one of Intrusion alert or What happened. If a beat did not pass preflight, say what it would have shown and move on; do not stage it.
 
 Feature gates before admitting a judge:
 - **Found you:** a person standing in the gap for a few seconds is found; nobody is found with the gap empty; standing still raises the no-movement alert and stepping aside and back clears it.
 - **Intrusion alert:** stay until the live event arrives.
-- **Tamper alert:** rehearse unplugging and replugging Pi B; the alert names it, the witness comes back by itself, and the baseline is taken again.
 - **What happened:** the answer cites the board's records; show those records if the wording fails.
 - **Engine room:** Prove it reports the altered record, and `/chain/verify` still says the real record is whole.
 - **Proof:** only the sentences in numbers-to-say.md are spoken; no bare percentage and nothing simulated.
 
 ## Five-minute finalist round
 
-Run the same six beats and one-spot kit. Add only what passed preflight: a second question, the incident report and more of the measured sentences. If generation is unavailable, use factual template wording; never invent an event.
+Run the same five beats and one-spot kit. Add only what passed preflight: a second question, the incident report and more of the measured sentences. If generation is unavailable, use factual template wording; never invent an event.
 
 ## If asked
 
 - The UNO Q makes the decision, keeps and seals the record, checks the signatures and answers questions on its Dragonwing CPU. The Pis provide the Wi-Fi line and sign the record; they run no model.
 - These development boards stand in for an access point and a device a building already has.
 - Echo senses one spot. It does not know who a person is or which part of a room they are in.
+- A bag that blocks the line as much as a body reads as a person standing still.
 - The no-movement alert notices sustained stillness, not its cause.
 - A person needs a few seconds on the line. A quick pass through the gap is not something we claim.
 
@@ -149,8 +148,8 @@ Run the same six beats and one-spot kit. Add only what passed preflight: a secon
 
 Alexander handles the Pis; the Operator handles software controls.
 
-1. If Pi B was unplugged, confirm it is plugged in and back on the hotspot.
-2. Pi B's clock resets whenever it loses power, and unplugging it is a power loss: ask Alexander to set Pi B's clock before the baseline.
+1. Leave both Pis powered and in place. If a device unexpectedly loses power, stop the round and ask Alexander to restore it before another judge.
+2. Pi B's clock resets whenever it loses power: after a power loss, ask Alexander to set Pi B's clock before the baseline.
 3. Everyone steps away from the gap and stays out.
 4. Disarm if needed and send `reset`.
 5. Take the empty baseline and wait for "baseline done"; confirm health is `ok` and the headline says "Nobody is here".

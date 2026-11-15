@@ -24,7 +24,7 @@ class PitchDocTest(unittest.TestCase):
         words = re.findall(r"\b[\w'-]+\b", self.spoken)
         self.assertLessEqual(len(words), 340)
 
-    def test_first_five_beats_leave_time_for_questions(self):
+    def test_first_four_beats_leave_time_for_questions(self):
         desk_round = self.text.split("## Three-minute desk round", 1)[1].split(
             "## Five-minute finalist extension", 1
         )[0]
@@ -33,7 +33,7 @@ class PitchDocTest(unittest.TestCase):
         )
         spoken = " ".join(
             line.removeprefix("> ")
-            for section in sections[:5]
+            for section in sections[:4]
             for line in section.splitlines()
             if line.startswith("> ")
         )

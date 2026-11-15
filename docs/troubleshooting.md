@@ -45,7 +45,7 @@ Do not call this state empty. The screen needs a current state message before it
 
 ## The screen says `SENSOR BLIND`
 
-The Wi-Fi line from Pi A to Pi B is stale. Decisions stay null and alert timers pause until it recovers. This is the expected state while Pi B is unplugged on purpose.
+The Wi-Fi line from Pi A to Pi B is stale. Decisions stay null and alert timers pause until it recovers. This is the expected state if Pi B loses power; stop judging before recovery. Nobody unplugs a Pi during the round.
 
 1. Ask Alexander to confirm Pi B is powered and its power cable is secure.
 2. On Pi B, run `python3 -m pi.check --node pi5b` and confirm the board bus at `192.168.77.2:5600` is reachable and `pi5>pi5b:wifi` is listed and updating.
@@ -61,6 +61,8 @@ Pi B has no cable and its address comes from DHCP: do not record it. Any device,
 2. Check nothing was nudged. A small move of one device costs the margin; the empty line should read about -44 dBm or better.
 3. Clear the gap, keep everyone 2 m away, and take the `20 s` baseline again. Wait for `baseline_done`.
 4. A person must stand in the line between the two devices for a few seconds. A walk straight through is not reliably seen.
+
+A bag that blocks the line as much as a body reads as a person standing still.
 
 ## A witness is silent, or none is listed
 
@@ -98,7 +100,7 @@ The Pis run no model. The decision, the alerts, the record and the answers run l
 
 Before the next judge:
 
-- plug Pi B back in if it was unplugged, wait for it to rejoin, and set Pi B's clock, which resets whenever it loses power;
+- if Pi B unexpectedly lost power, ask Alexander to restore it, wait for it to rejoin, and set Pi B's clock, which resets whenever it loses power;
 - disarm and send `reset`;
 - take the baseline with the spot empty;
 - confirm health is `ok` and the headline says "Nobody is here";
