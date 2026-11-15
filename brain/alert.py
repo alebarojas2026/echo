@@ -169,6 +169,79 @@ class CheckIn:
         return True
 
 
+TAMPER_SILENT_MS = 3000   # a node is silent when none of its links has had a reading for this long
+TAMPER_FRESH_MS = 1000    # a link is fresh when its last reading is at most this old
+TAMPER_CLEAR_MS = 2000    # ... and a node is back when its links have been fresh for this long
+
+
+class Tamper:
+    """Tamper while armed (contract proposal, issue #533): a device unplugged or silenced is noticed.
+
+    A node is silent when every link it sends or receives on has had no reading for 3 s. While
+    armed, a node that goes silent raises `tamper` once and is listed until its links have been
+    fresh for 2 s, or until disarm. Arming with a node already silent raises it at once. It does
+    not look at health or pred: it works while the sensor is blind, which is the point.
+
+    Ordinary packet loss never gets there: at 10 readings a second and 60% loss, a link going
+    3 s without a single reading would take 30 losses in a row, on every link of the node at once.
+
+    One step past the proposal's wording, so two devices can come back one at a time: a node's
+    links to another node that is itself still listed are left out when judging whether it is
+    back (it can't be blamed for the other one's silence), as long as one of its links remains.
+    """
+
+    def __init__(self, links_of: Dict[str, List[str]]):
+        """links_of: {node: [link ids it sends or receives on]}, from radio/nodes.json."""
+        self.links_of = {node: list(links) for node, links in links_of.items() if links}
+        self.silent: List[str] = []                     # listed nodes, in the order they went silent
+        self._fresh_since: Dict[str, int] = {}
+        self._start: Optional[int] = None
+
+    @classmethod
+    def from_nodes(cls, doc) -> "Tamper":
+        links_of: Dict[str, List[str]] = {}
+        for link in doc["links"]:
+            for node in (link["tx"], link["rx"]):
+                links_of.setdefault(node, []).append(link["id"])
+        return cls(links_of)
+
+    def update(self, now: int, armed: bool, last_seen: Dict[str, int]) -> List[tuple]:
+        """One tick. last_seen: {link: recv_t of its last reading}. Returns (kind, {"node": id}) events."""
+        events = []
+        if self._start is None:
+            self._start = now
+        if not armed:
+            events = [("tamper_cleared", {"node": node}) for node in self.silent]
+            self.silent, self._fresh_since = [], {}
+            return events
+
+        if self._start is None:
+            self._start = now
+
+        def age(link):   # a link never heard counts from when this rule first ran, not from for ever
+            return now - last_seen.get(link, self._start)
+
+        for node, links in self.links_of.items():
+            if node not in self.silent:
+                if all(age(link) >= TAMPER_SILENT_MS for link in links):
+                    self.silent.append(node)
+                    self._fresh_since.pop(node, None)
+                    events.append(("tamper", {"node": node}))
+        for node in list(self.silent):
+            others = [k for k in self.links_of[node]
+                      if not any(k in self.links_of[n] for n in self.silent if n != node)]
+            judged = others or self.links_of[node]
+            if all(age(link) <= TAMPER_FRESH_MS for link in judged):
+                since = self._fresh_since.setdefault(node, now)
+                if now - since >= TAMPER_CLEAR_MS:
+                    self.silent.remove(node)
+                    self._fresh_since.pop(node, None)
+                    events.append(("tamper_cleared", {"node": node}))
+            else:
+                self._fresh_since.pop(node, None)
+        return events
+
+
 class Armed:
     """Armed mode (section 6): the space should be empty, so a person appearing is an intrusion.
 
