@@ -88,6 +88,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     source.textContent = state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO'
     if (!state || stale) { cancelHold(); show('No data', 'Waiting for the room signal.'); return }
     if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', 'A radio link stopped.'); return }
+    if (complete && !state.armed) { cancelHold(); close(); return }
     if (!state.pred || state.router !== 'S-home') {
       cancelHold()
       const [heading, line] = judgeMoment(state, false)
@@ -106,7 +107,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     if (here && waited < FOUND_AFTER_MS && !hold) presentTimer ??= setTimeout(() => { presentTimer = undefined; render() }, FOUND_AFTER_MS - waited)
     if (here && (waited >= FOUND_AFTER_MS || hold)) {
       // The words hold, then the card fades as the room flies from the hall down to the floor.
-      show('Found you.', state.cam === 'off' ? '0 cameras' : state.cam === 'on' ? 'Camera teaching' : 'Camera stalled', false, fade ? 'found' : 'waiting')
+      show('Found you.', state.cam === 'off' ? '0 cameras' : state.cam === 'on' ? 'By radio. The camera is only teaching.' : 'Camera stalled', false, fade ? 'found' : 'waiting')
       if (!hold) hold = setTimeout(() => {
         if (view.hidden) return
         announce('found')
