@@ -157,9 +157,11 @@ class Windower:
             self._next_end = -(-(t + WINDOW_MS) // HOP_MS) * HOP_MS
         done = []
         while t >= self._next_end:
-            done.append(self._close(self._next_end))
-            self._next_end += HOP_MS
+            end, self._next_end = self._next_end, self._next_end + HOP_MS   # moved on first: a window that
+            done.append(self._close(end))                                  # can't be closed is skipped, not retried for ever
         if kind == "rssi":
+            if not isinstance(msg.get("link"), str):
+                return done
             self._rssi.append((t, msg["link"], float(msg["dbm"])))
         else:
             self._labels.append((t, msg))

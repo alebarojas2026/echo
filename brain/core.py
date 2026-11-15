@@ -113,6 +113,12 @@ def _is_reading(dbm) -> bool:
     return isinstance(dbm, (int, float)) and not isinstance(dbm, bool) and math.isfinite(dbm)
 
 
+def _is_label(msg: dict) -> bool:
+    """A camera label whose zone and persons_in_frame are whole numbers or null."""
+    return all(v is None or (isinstance(v, int) and not isinstance(v, bool))
+               for v in (msg.get("zone"), msg.get("persons_in_frame")))
+
+
 def now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -208,8 +214,10 @@ class Brain:
         t, kind = msg.get("recv_t"), msg.get("type")
         if t is None:
             return
-        if kind == "rssi" and not _is_reading(msg.get("dbm")):
-            return   # no number, or NaN (JSON lets it through): one such reading in a baseline would poison it
+        if kind == "rssi" and not (_is_reading(msg.get("dbm")) and isinstance(msg.get("link"), str)):
+            return   # no number, NaN (JSON lets it through) or a link that isn't a name: never used
+        if kind == "label" and not _is_label(msg):
+            return   # a zone or a count that isn't a number: the windows would choke on it
         self.feed_t = max(self.feed_t, int(t))
         if kind == "rssi":
             # state.src mirrors the radio feed. The camera and the bus's meta say "live"
