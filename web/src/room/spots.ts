@@ -1,15 +1,19 @@
 import { Mesh, MeshBasicMaterial, RingGeometry, Shape, ShapeGeometry } from 'three'
 import type { Advice } from './contract'
-import { HOME_SPOT, ROUTER_SPOTS, spotName } from './frame'
+import { HOME_SPOT, ROUTER_SPOTS, SIZE_M, spotName } from './frame'
 import { ACTION, EDGE, TEXT } from './palette'
-import { v3 } from './stage'
+import { standBase, v3 } from './stage'
 import { fade } from './motion'
 import type { RoomView } from './view'
 
 // Floor marks for the router spots (contract section 3) and, while advice is set, a green arrow on the
 // floor from S-home to advice.to_spot. Green means "something to do": move the router this way.
 
-const ARROW_Y_M = -0.13 // just south of the square's edge, clear of the spot rings
+/** Which way is out from the spots' edge: south of the square's south edge, north of the desk's back edge. The
+ *  arrow lies 13 cm out from the spots, clear of their rings; the tags 26 cm out. */
+function outward(y: number): number {
+  return y > SIZE_M[1] / 2 ? 1 : -1
+}
 
 /** The arrow to draw for this advice and router spot: from S-home to the advised spot, or null. */
 export function adviceArrow(advice: Advice | null, router: string): { from: string; to: string; done: boolean } | null {
@@ -50,10 +54,10 @@ export class RouterSpots {
       const mat = new MeshBasicMaterial({ color: EDGE })
       const mesh = new Mesh(ring, mat)
       mesh.rotation.x = -Math.PI / 2
-      mesh.position.copy(v3([x, y, 0.003]))
+      mesh.position.copy(v3([x, y, standBase([x, y, 0])[2] + 0.003])) // on the floor, or on the desk top
       view.scene.add(mesh)
       this.rings.set(id, mat)
-      const tag = view.addLabel(spotName(id), v3([x, y - 0.26, 0]), 'room-label--spot')
+      const tag = view.addLabel(spotName(id), v3([x, y + 0.26 * outward(y), 0]), 'room-label--spot')
       tag.hidden = true
       this.tags.set(id, tag)
     }
@@ -82,10 +86,11 @@ export class RouterSpots {
       const key = `${arrow.from}>${arrow.to}`
       if (key !== this.arrowKey) {
         this.arrowKey = key
-        const [fx] = ROUTER_SPOTS[arrow.from]
+        const [fx, fy] = ROUTER_SPOTS[arrow.from]
         const [tx] = ROUTER_SPOTS[arrow.to]
-        const start = v3([fx, ARROW_Y_M, 0.004])
-        const end = v3([tx, ARROW_Y_M, 0.004])
+        const arrowY = fy + 0.13 * outward(fy)
+        const start = v3([fx, arrowY, 0.004])
+        const end = v3([tx, arrowY, 0.004])
         this.arrow.geometry.dispose()
         this.arrow.geometry = arrowGeometry(start.distanceTo(end))
         this.arrow.position.copy(start)
