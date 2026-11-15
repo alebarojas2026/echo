@@ -60,13 +60,16 @@ class DevpostDraftTest(unittest.TestCase):
                        "sha-256 hash of the one before it", "ed25519", "from the sealed record only",
                        "the real record is never touched", "it senses one spot",
                        "does not know who a person is", "a few seconds on the line",
-                       "neither pi runs a model", "calls no cloud service", "no trained model"):
+                       "neither pi runs a model", "calls no cloud service", "no trained model",
+                       "### what runs on the uno q", "four cortex-a53 cores", "step aside and back",
+                       "\"architecture\" and \"data path\""):
             self.assertIn(phrase, self.lower)
 
     def test_nothing_cut_from_the_product_is_claimed(self):
         for cut in ("taught by", "camera unplug", "lesson", "dead zone", "dead-zone", "beacon",
                     "second opinion", "moving the router", "which side", "wave", "passed by",
-                    "walk-through", "walked through", "nothing is sent to the internet", "0 bytes"):
+                    "walk-through", "walked through", "nothing is sent to the internet", "0 bytes",
+                    "the others carry on", "blockchain", "unhackable", "tamper-proof"):
             self.assertNotIn(cut, self.lower)
 
 

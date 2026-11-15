@@ -12,9 +12,9 @@ We wanted a witness that can't see you, can't be edited, and still tells you exa
 
 The demonstration has six beats:
 
-- **Found you:** two small computers sit a metre apart. A body between them weakens the Wi-Fi signal. From that one line the board knows someone arrived, how long they stayed, whether they are standing still or moving, and when they left.
+- **Found you:** two small computers sit a metre apart. A body between them weakens the Wi-Fi signal. From that one line the board knows someone arrived, how long they stayed, whether they are standing still or moving, and when they left. Stand still long enough and a no-movement alert asks for a check-in: step aside and back.
 - **Intrusion alert:** armed, the spot should be empty. Step in and stay, and the board raises an intrusion alert on a phone page.
-- **Tamper alert:** unplug one of Echo's own devices and it says which one went quiet. The others carry on, and the gap itself is recorded.
+- **Tamper alert:** unplug one of Echo's own devices and it says which one went quiet. The record carries on, and the gap itself is recorded.
 - **What happened:** every second, and every event, is a record on the board. Ask "What happened?" and a program on the board answers in plain words from the sealed record only, showing its steps and the records it used.
 - **Engine room:** a second screen shows the three devices, the record counting up, the signatures arriving and a prove-it check. The check changes one record in a copy, verifies the copy and names the record that broke the seal. The real record is never touched.
 - **Proof:** the measured results below, each with its count and range.
@@ -42,7 +42,20 @@ One person, one night, replayed from recordings taken on the kit. The recordings
 
 ## How we built it
 
-Everything runs on an Arduino UNO Q (Qualcomm Dragonwing QRB2210): the sensing decision, the records, the checking and a small language model, all on the Dragonwing CPU. Neither Pi runs a model. Echo needs no internet connection and calls no cloud service.
+### What runs on the UNO Q
+
+Everything runs on an Arduino UNO Q (Qualcomm Dragonwing QRB2210, four Cortex-A53 cores, 4 GB of memory), all on the Dragonwing CPU:
+
+- the decision from the Wi-Fi readings: nobody, somebody still, somebody moving;
+- the alerts: intrusion while armed, no movement, a device gone quiet;
+- the record in a small SQLite database, and the SHA-256 seal on every record;
+- the check of each Pi's signature, and the check of the whole chain;
+- a small language model that words the answer to "What happened?" from the sealed records;
+- the web server for every screen.
+
+Neither Pi runs a model: Pi A makes the Wi-Fi signal, Pi B measures it, and each signs the record. Echo needs no internet connection and calls no cloud service.
+
+### The path of one reading
 
 1. **Reading.** Pi A is a 5 GHz Wi-Fi hotspot. Pi B, a metre away at desk height, measures how strong that signal is 25 times a second and sends the readings to the board.
 2. **Decision.** The board compares each second with the level of the empty spot. A drop that holds is a person; how steady it is says still or moving; how long it lasts says how long they stayed. There is no trained model in this step: after a baseline with the spot empty, the line alone gives the decision.
@@ -98,9 +111,9 @@ This is the capture and caption plan for the submission lead. Take every view fr
 | 5. What happened | The answer with its steps and cited records | The Arduino UNO Q answers "What happened?" from its sealed record only. |
 | 6. Engine room | The second laptop: the record counting, the signatures, the Prove it result | The Arduino UNO Q's record is sealed, signed by both Pis and checked on screen. |
 | 7. The hardware | Label the Arduino UNO Q and Pi A together on the desk; label Pi B across the gap at desk height | The Arduino UNO Q does all the work; Pi A makes the Wi-Fi signal and Pi B measures it. |
-| 8. Architecture | Export the current diagram once for Devpost, outside the repository | The Arduino UNO Q senses, seals, checks and answers with no cloud service. |
+| 8. Architecture | The two pictures from docs/architecture.md, "Architecture" and "Data path", exported once outside the repository | The Arduino UNO Q senses, seals, checks and answers with no cloud service. |
 
-Use the current diagram from docs/architecture.md. The layout has one spot and three devices. The capture lead must check that each caption matches the deployed build before uploading.
+Use the pictures as they are, with their plain titles and nothing added. The layout has one spot and three devices. The capture lead must check that each caption matches the deployed build before uploading.
 
 ## Built with
 

@@ -36,8 +36,7 @@ class DemoRunbookTest(unittest.TestCase):
         for phrase in ("that's the honest failure. the wi-fi line stopped reporting",
                        "the screen lost the board's feed",
                        "it needs a few seconds on the line",
-                       "the language model on this board is tiny",
-                       "this is a recording of the real board from this morning"):
+                       "the language model on this board is tiny"):
             self.assertIn(phrase, at_desk)
         self.assertIn("at least two people at the desk", at_desk)
         self.assertNotIn("not ready", self.lower)
@@ -48,7 +47,8 @@ class DemoRunbookTest(unittest.TestCase):
                        "`http://192.168.77.2:8080/`", "`http://192.168.77.2:8080/engine/`",
                        "`http://192.168.77.2:8080/phone/`", "A looping slide",
                        "one page per device, full screen, in the front tab",
-                       "sleep and dimming off", "has no internet, which is expected"):
+                       "sleep and dimming off", "has no internet, which is expected",
+                       "press `P`, click the desk the board is on", "press `Enter`", "Saved: Row N, block M"):
             self.assertIn(phrase, screens)
 
     def test_contract_v2_failure_states_are_distinct(self):
@@ -75,7 +75,8 @@ class DemoRunbookTest(unittest.TestCase):
         desk = self.lower.split("## three-minute desk round", 1)[1].split("## five-minute finalist round", 1)[0]
         for phrase in ("unplugs pi b", "that witness silent", "taps \"what happened?\"", "presses prove it",
                        "the check naming the altered record", "word for word from numbers-to-say.md",
-                       "take the empty baseline before the next judge"):
+                       "take the empty baseline before the next judge",
+                       "stands still until the no-movement alert, then steps aside and back", "check-in received"):
             self.assertIn(phrase, desk)
 
     def test_preflight_uses_the_live_laptop_path(self):
@@ -87,9 +88,11 @@ class DemoRunbookTest(unittest.TestCase):
 
     def test_one_spot_kit_and_check_in_are_explicit(self):
         for phrase in ("power pi b", "three devices for one spot", "pi b about a metre away at desk height",
-                       "wi-fi from pi a to pi b is the only line that decides", "step aside and back",
+                       "wi-fi from pi a to pi b is the only line that decides", "steps aside and back",
                        "no-movement alert", "json `null` must render as `__`",
-                       "never a bare percentage", "private key stays on that pi"):
+                       "never a bare percentage", "private key stays on that pi",
+                       "pi b's clock resets whenever it loses power", "secure pi b's power cable",
+                       "going back is one command on each device", "role=pib", "-44 dbm"):
             self.assertIn(phrase, self.lower)
 
     def test_narrator_warmup_never_blocks_the_demo(self):
@@ -99,7 +102,8 @@ class DemoRunbookTest(unittest.TestCase):
 
     def test_nothing_cut_from_the_product_is_in_the_runbook(self):
         for cut in ("camera lesson", "unplug the camera", "teacher", "lesson", "dead zone", "dead-zone", "beacon", "bluetooth", "move the router",
-                    "taught by", "lean aside", "passed by", "walk-through", "walked through"):
+                    "taught by", "lean aside", "passed by", "walk-through", "walked through", "recording of the real board",
+                    "tracks", "locates", "pinpoints", "blockchain", "unhackable", "tamper-proof"):
             self.assertNotIn(cut, self.lower)
 
 

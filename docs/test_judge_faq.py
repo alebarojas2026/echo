@@ -22,7 +22,8 @@ class JudgeFaqTest(unittest.TestCase):
                 self.assertNotIn("__", answer)
 
     def test_hard_questions_and_honest_limits(self):
-        for phrase in ("tripwire", "threshold", "csi", "two people", "recording me", "cloud",
+        for phrase in ("tripwire", "threshold", "csi", "two people", "recording me", "cloud", "what exactly runs on the chip?", "what breaks it?",
+                       "a walk straight through is not reliably seen",
                        "not edited", "forging both signatures", "spoof", "jamming",
                        "single point of failure", "language model", "step aside and back",
                        "cost", "let's dig in", "senses one spot", "does not count people",
@@ -39,7 +40,8 @@ class JudgeFaqTest(unittest.TestCase):
 
     def test_nothing_cut_from_the_product_is_claimed(self):
         for cut in ("taught by", "lesson", "dead zone", "beacon", "bluetooth", "move the router",
-                    "lean aside", "wave", "esp32", "passed by", "walked through", "second opinion"):
+                    "lean aside", "wave", "esp32", "passed by", "walked through", "second opinion",
+                    "blockchain", "unhackable", "tamper-proof", "counts people"):
             self.assertNotIn(cut, self.lower)
 
 

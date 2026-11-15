@@ -26,9 +26,9 @@ It needs no training on you: one baseline with the spot empty is the whole setup
 
 Echo senses one spot and does not count people. Someone to the side or behind the device was only seen during tuning, so we give no result for it.
 
-## What if I just run through the gap?
+## What breaks it?
 
-A quick pass puts a body in the line for under a second, and we do not claim to catch it. A person needs a few seconds on the line.
+A walk straight through is not reliably seen, because a person needs a few seconds on the line. It senses one spot only, and Pi B must sit at about desk height.
 
 ## Why not CSI, radar or a motion sensor?
 
@@ -42,9 +42,9 @@ The places this is for cannot have one, so Echo never uses one. There is no came
 
 The board records that someone was on the spot, when, and still or moving, with nothing that says who. It holds no pictures and no sound.
 
-## What runs on the board and what needs the cloud?
+## What exactly runs on the chip?
 
-The decision, the record, the checks and the answers all run on the Arduino UNO Q's Qualcomm Dragonwing CPU. Neither Pi runs a model, and Echo calls no cloud service.
+The decision, the alerts, the sealed record, the signature checks, the language model and the web pages all run on the Arduino UNO Q's Qualcomm Dragonwing CPU. Neither Pi runs a model, and Echo calls no cloud service.
 
 ## How do I know the record was not edited?
 

@@ -30,7 +30,6 @@ While the Operator fixes a failure, the Talker says exactly one of these:
 - **No data:** “The screen lost the board's feed, so it says no data, not empty. Reconnecting.”
 - **Nobody found:** “It needs a few seconds on the line. Stand right between the two devices and hold still.”
 - **"What happened?" is slow or wrong:** “The language model on this board is tiny. The records it reads from are right; here they are.” Open the records the answer cites.
-- **The board will not return in 30 s:** “This is a recording of the real board from this morning.” Play the time-titled recording kept on the demo laptop, never the simulated demo.
 
 ### Judge-day screens
 
@@ -45,6 +44,8 @@ The stand uses several screens, and every one of them joins the kit's own Wi-Fi 
 
 Rules for every screen: one page per device, full screen, in the front tab (a hidden tab draws no frames); plugged in; sleep and dimming off; joined to the kit's Wi-Fi the night before and checked once. A laptop on the kit's Wi-Fi has no internet, which is expected.
 
+At the stand, place the screen once: on the main laptop press `P`, click the desk the board is on, press `G` if Pi B is on the other side, press `Enter`. The page loads again and says "Saved: Row N, block M" with your row and block. Then take the empty baseline.
+
 In the script: the judge looks at the main laptop; the alarm page turns red when armed and somebody steps in; the engine room is where "What happened?" shows its steps and where Prove it is pressed.
 
 ## Preflight
@@ -56,10 +57,10 @@ Record the operator, checker, and actual finish time beside each step. These are
 | Order | Action | Time | Operator / checker |
 |---|---|---|---|
 | 1 | Power up the Arduino UNO Q, Pi A, Pi B, and the laptops. No webcam is plugged in | __ | __ |
-| 2 | Set the board's clock from the laptop using the operator clock control; disarm first, then wait for reconnection | __ | __ |
+| 2 | Set the board's clock from the laptop using the operator clock control; disarm first, then wait for reconnection. Pi B's clock resets whenever it loses power: ask Alexander to set it after any power-up, before the baseline | __ | __ |
 | 3 | Write down the commit the deploy printed and the served screen build: board __, screen __, previous good tag __ | __ | __ |
 | 4 | Confirm the layout is the gate on all three devices: `python3 -m radio.use_layout gate` reports three devices | __ | __ |
-| 5 | Capture the empty baseline: nobody within 2 m of the gap, press Baseline in the operator drawer (O key), wait for "baseline done". The headline then says "Nobody is here" | __ | __ |
+| 5 | Capture the empty baseline: nobody within 2 m of the gap, press Baseline in the operator drawer (O key), wait for "baseline done". The headline then says "Nobody is here", and the empty line reads about -44 dBm or better | __ | __ |
 | 6 | Run `python scripts/demo_check.py`; fix every FAIL using its printed instruction | __ | __ |
 | 7 | Open `http://192.168.77.2:8080/chain` twice, ten seconds apart: `head.seq` is higher, `"verified": true`, and each Pi is a witness with `"sig_ok": true` and `"silent": false` | __ | __ |
 | 8 | Have someone outside the team walk the full round | __ | __ |
@@ -67,7 +68,9 @@ Record the operator, checker, and actual finish time beside each step. These are
 
 The baseline comes first, before anything is judged, and again after every deploy, after Pi B is unplugged and replugged, and after any device is moved. A FAIL from the check is a stop: page/layout means check the web server and deployed layout; WebSocket means check bus and brain; clock means set time while idle; links/health means inspect the named radio; records means check `radio-sight-store`; Ask means inspect the answer service and local model.
 
-The Pi keys are made and enrolled once, at deploy: each Pi's private key stays on that Pi and is never copied or pasted anywhere. If `/chain` lists no witnesses, the board has not read its key file; ask Alexander.
+The Pi keys are made and enrolled once, at deploy: each Pi's private key stays on that Pi and is never copied or pasted anywhere. After any restart, check the signing program is running on each Pi (`journalctl -u radio-sight-witness -n 2 -o cat`). If `/chain` lists no witnesses, the board has not read its key file; ask Alexander.
+
+Secure Pi B's power cable: it has come out once. A small nudge of one device costs the margin, so the devices are placed and the empty line checked before each session.
 
 **From Sunday 9:30 AM the board runs a tagged commit. Nothing goes onto it afterwards except a rollback to the previous tag: no deploy or screen build pushed during judging.**
 
@@ -77,9 +80,12 @@ The Pi keys are made and enrolled once, at deploy: each Pi's private key stays o
 
 Record last good board tag __, last good screen build __, operator __, checker __, and measured recovery time __ s. Save the logs first.
 
-1. `board/deploy.sh <last-good-tag>` — use the recorded previous tag, already available locally.
-2. `board/push-web.sh --back` — restore the previous screen build locally on the board.
-3. Take the empty baseline, then `python scripts/demo_check.py` — inspect the screen and every check before admitting another judge.
+Going back is one command on each device, with the recorded previous tag:
+
+1. On the board and on Pi A: `git checkout radio/nodes.json && board/deploy.sh <last-good-tag> --no-check && python3 -m radio.use_layout gate && sudo systemctl restart 'radio-sight-*'`
+2. On Pi B, the same with `ROLE=pib` before `board/deploy.sh`.
+3. On the laptop: `board/push-web.sh --back` restores the previous screen build.
+4. Take the empty baseline, then `python scripts/demo_check.py`; look at the screen and every check before admitting another judge.
 
 Never rebuild or copy a screen bundle over the hotspot while sensing runs.
 
@@ -106,7 +112,7 @@ Follow the exact spoken script in [pitch.md](pitch.md). These are rehearsal allo
 
 | Time | Beat | Speaker and actions | Screen and gate |
 |---|---|---|---|
-| 0:00–0:30 | **Found you** | Talker invites the judge onto the spot; judge stands a few seconds, then shifts about | Main laptop: the figure, the headline, still or moving |
+| 0:00–0:30 | **Found you** | Talker invites the judge onto the spot; judge stands still until the no-movement alert, then steps aside and back | Main laptop: the figure and the headline; the no-movement alert at about ten seconds; "Check-in received" |
 | 0:30–1:00 | **Intrusion alert** | Judge steps out; Operator arms only while empty; judge steps in and stays | Armed state; the alarm page turns red with the live intrusion |
 | 1:00–1:25 | **Tamper alert** | Still armed, Hardware unplugs Pi B, waits for the alert, plugs it back in | The tamper alert names Pi B; the engine room shows that witness silent and the record still counting |
 | 1:25–2:00 | **What happened** | Operator disarms and taps "What happened?" | The story in plain words with clock times, its steps and the records it used |
@@ -115,10 +121,12 @@ Follow the exact spoken script in [pitch.md](pitch.md). These are rehearsal allo
 
 While Pi B is unplugged the screen says the sensor is blind. That is right: its Wi-Fi line is the sensor. The rest of the round needs no sensing. After the judge leaves, wait for Pi B to rejoin and its witness to sign again, then take the empty baseline before the next judge.
 
+For the “I'm okay” check the judge steps fully out of the line and back within a few seconds, then waits for "Check-in received". Do not claim it before that confirmation.
+
 **If interrupted:** cut the Tamper alert first, then the Engine room, then shorten Proof to its closing line. Keep Found you, and at least one of Intrusion alert or What happened. If a beat did not pass preflight, say what it would have shown and move on; do not stage it.
 
 Feature gates before admitting a judge:
-- **Found you:** a person standing in the gap for a few seconds is found; nobody is found with the gap empty.
+- **Found you:** a person standing in the gap for a few seconds is found; nobody is found with the gap empty; standing still raises the no-movement alert and stepping aside and back clears it.
 - **Intrusion alert:** stay until the live event arrives, about three seconds after stepping in.
 - **Tamper alert:** rehearse unplugging and replugging Pi B; the alert names it, the witness comes back by itself, and the baseline is taken again.
 - **What happened:** the answer cites the board's records; show those records if the wording fails.
@@ -127,9 +135,7 @@ Feature gates before admitting a judge:
 
 ## Five-minute finalist round
 
-Run the same six beats and one-spot kit. Add only what passed preflight: the no-movement alert, a second question, the incident report and more of the measured sentences.
-
-For the no-movement alert, the judge stands still until it fires. For the “I'm okay” check, ask the judge to step aside and back and wait for "Check-in received". Do not claim success before that confirmation. If generation is unavailable, use factual template wording; never invent an event.
+Run the same six beats and one-spot kit. Add only what passed preflight: a second question, the incident report and more of the measured sentences. If generation is unavailable, use factual template wording; never invent an event.
 
 ## If asked
 

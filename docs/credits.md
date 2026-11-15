@@ -31,7 +31,7 @@ As implementation dependencies land, this table should list every direct third-p
 
 ## Research
 
-Echo draws on radio tomographic imaging: using changes in received signal strength across multiple wireless links to estimate attenuation within an area.
+Echo is built on the physics behind radio tomographic imaging, on a single link: a body in the path of a wireless link weakens the received signal.
 
 Joey Wilson and Neal Patwari, ["Radio Tomographic Imaging with Wireless Networks"](https://span.ece.utah.edu/uploads/RTI_version_3.pdf), *IEEE Transactions on Mobile Computing*, vol. 9, no. 5, pp. 621–632, 2010.
 

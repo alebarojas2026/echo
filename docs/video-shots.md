@@ -7,7 +7,7 @@ Use the one-spot kit: Arduino UNO Q and Pi A on the desk, Pi B across the gap at
 ## 0:00–0:30 — Found you
 
 **Source:** Desk view of the three labelled devices and Screen capture of the main laptop.
-**Picture:** Start on the problem: a room that needs a record and cannot have anything watching it. A person steps onto the spot and stands; the figure appears, then the still or moving word changes as they shift.
+**Picture:** Start on the problem: a room that needs a record and cannot have anything watching it. A person steps onto the spot and stands still; the figure appears, the no-movement alert comes, and they step aside and back for the check-in.
 **Voiceover:** Stand between two small computers and your body weakens the Wi-Fi signal between them. Found you: the Arduino UNO Q decides on device, on its Qualcomm Dragonwing CPU.
 **On screen:** `Found you` · `Live` · `No camera, no microphone`.
 

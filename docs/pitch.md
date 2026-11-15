@@ -8,9 +8,9 @@ The kit is one spot and three devices: the Arduino UNO Q and Pi A on one desk, P
 
 ### Found you
 
-**0:00–0:30 (30 seconds). Speaker: Talker. Action:** Judge steps onto the spot between the desk and Pi B and stands for a few seconds, then shifts about. **Screen:** Main laptop: the figure appears, with the headline and the still or moving word.
+**0:00–0:30 (30 seconds). Speaker: Talker. Action:** Judge steps onto the spot between the desk and Pi B and stands still until the no-movement alert, then steps aside and back for the check-in. **Screen:** Main laptop: the figure appears with the headline and the still or moving word; the no-movement alert, then "Check-in received".
 
-> Stand between these two devices for a few seconds. Your body weakens the Wi-Fi signal between them. Found you. This Arduino UNO Q decides on device, on its Qualcomm Dragonwing CPU. No camera, no microphone. It knows you arrived and whether you are still or moving. It does not know who you are.
+> Stand between these two devices. Your body weakens the Wi-Fi signal between them. Found you. This Arduino UNO Q decides on device, on its Qualcomm Dragonwing CPU, with no camera and no microphone. Stay still and it asks if you're okay; step aside and back to answer. It does not know who you are.
 
 ### Intrusion alert
 
@@ -34,7 +34,7 @@ The kit is one spot and three devices: the Arduino UNO Q and Pi A on one desk, P
 
 **2:00–2:30 (30 seconds). Speaker: Talker. Action:** Talker points to the second laptop; Operator presses Prove it. **Screen:** The three devices, the record counting up, the signatures arriving, and the check naming the altered record.
 
-> This is the engine room. Two other machines sign the record every five seconds. Prove it changes one record in a copy, and the board names it. The real record is never touched.
+> Two other machines sign the record every five seconds. Prove it changes one record in a copy, and the board names it. The real record is never touched.
 
 ### Proof
 
@@ -46,13 +46,10 @@ The kit is one spot and three devices: the Arduino UNO Q and Pi A on one desk, P
 
 Answer briefly, then resume at the next safe action. Cut the Tamper alert first, then the Engine room, then shorten Proof to its closing line. Never drop Found you, and keep at least one of Intrusion alert or What happened. If a beat did not pass preflight, say what it would have shown and move on; do not stage it.
 
-If only a minute remains: Found you, then "What happened?", then the closing line. Skip any beat that needs a device unplugged.
-
 ## Five-minute finalist extension
 
 Keep the same one-spot kit and six-beat order. Add only what passed preflight:
 
-- **No-movement alert:** the judge stands still until the alert, then steps aside and back for the check-in and waits for "Check-in received".
 - **Was anyone here?:** ask a second question about an earlier stretch and open the records it cites.
 - **Incident report:** read the armed stretch from the sealed record; the language model may word facts but cannot add any.
 - **More of the measured sentences:** the backpack result, the delay after the signal drops, and the chair-seat limit, each word for word from numbers-to-say.md.
