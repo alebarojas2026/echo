@@ -4,8 +4,11 @@ every number in it is in a row (or is the number of minutes that was asked for).
 """
 import statistics
 import time
+import json
+from pathlib import Path
 
 GAP_MS = 2000   # saved seconds this close together are one span
+NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 
 
 def clock(t_ms: int) -> str:
@@ -55,6 +58,67 @@ def _window(store, now_ms, minutes):
 
 def _person(r, zone=None) -> bool:
     return r["present"] == 1 and r["kind"] == "person" and (zone is None or r["zone"] == zone)
+
+
+def current_spot(store, now_ms, zones):
+    """The latest decision, without turning a missing decision into an empty desk."""
+    row = store.latest()
+    if not row or not 0 <= now_ms - row["t"] <= 5000 or row["present"] is None or row["health"] == "blind":
+        return {"answer": "I have no current decision for the desk.", "rows": []}
+    where = _where(next(iter(zones)), zones)
+    if _person(row):
+        motion = {"still": "standing still", "moving": "moving"}.get(row["motion"])
+        text = f"Someone is {where}" + (f", {motion}." if motion else ".")
+    elif row["kind"] == "object" and row["present"] == 0 and _wifi_drop(row):
+        text = "Something was left in the Wi-Fi line; nobody is detected at the desk."
+    elif row["present"] != 0:
+        text = "I have no current decision for the desk."
+    else:
+        text = f"Nobody is detected {where}."
+    return {"answer": text, "rows": [{k: row[k] for k in ("t", "present", "kind", "zone", "motion")} ]}
+
+
+def _wifi_drop(row, link=None):
+    try:
+        crossing = {item["id"] for item in json.loads(NODES_JSON.read_text())["links"]
+                    if item.get("kind") == "wifi" and item.get("crosses_spot") is True}
+    except (OSError, ValueError, KeyError):
+        crossing = set()
+    return any(key in crossing and (link is None or key == link) and reading.get("status") == "ok"
+               and isinstance(reading.get("drop_db"), (int, float)) and reading["drop_db"] >= 3
+               for key, reading in row["links"].items())
+
+
+def spot_advice(store, now_ms, zones, minutes=10):
+    """An object decision and a weak Wi-Fi line must agree before calling it an obstruction."""
+    rows = [r for r in store.seconds(now_ms - minutes * 60_000) if r["t"] <= now_ms]
+    told = [r for r in rows if r["kind"] == "object" and r["present"] == 0 and r["advice"] and r["advice"].get("link")
+            and _wifi_drop(r, r["advice"].get("link"))]
+    if not told:
+        return {"answer": "No object blocking the Wi-Fi line was recorded in that time.", "rows": []}
+    last = told[-1]
+    advice = last["advice"]
+    link = advice["link"]
+    receiver = link.split(">", 1)[-1].split(":", 1)[0]
+    try:
+        names = {node["id"]: node["name"] for node in json.loads(NODES_JSON.read_text())["nodes"]}
+    except (OSError, ValueError, KeyError):
+        names = {}
+    receiver = names.get(receiver, "the receiving device")
+    row = {"t": last["t"], "link": link, "receiver": receiver, "drop_db": last["links"][link]["drop_db"],
+           "before_dbm": advice.get("before_dbm"), "after_dbm": advice.get("after_dbm")}
+    results = [r["advice"] for r in rows if r["advice"] and r["advice"].get("id") == advice.get("id")
+               and r["advice"].get("link") == link and r["t"] >= last["t"] and r["advice"].get("after_dbm") is not None]
+    if results:
+        row.update({k: results[-1].get(k) for k in ("before_dbm", "after_dbm")})
+    text = "Something was left in the Wi-Fi line."
+    if all(isinstance(row[k], (int, float)) for k in ("before_dbm", "after_dbm")):
+        row["gain_db"] = round(row["after_dbm"] - row["before_dbm"], 2)
+        text += (f" The recorded signal changed from {row['before_dbm']} to {row['after_dbm']} dBm, "
+                 f"a gain of {row['gain_db']} dB.")
+    else:
+        text += f" Clear the obstruction or move {receiver}; the gain has not been measured yet."
+    return {"answer": text, "rows": [row]}
 
 
 def _unknown(rows) -> tuple:
@@ -149,6 +213,8 @@ def link_history(store, now_ms, zones, minutes=10, link=None, **_):
 
 def explain_advice(store, now_ms, zones, minutes=10, **_):
     """the last router advice and what the move changed"""
+    if len(zones) == 1:
+        return spot_advice(store, now_ms, zones, minutes=minutes)
     told = [r for r in store.seconds(now_ms - minutes * 60_000, now_ms) if r["advice"]]
     if not told:
         return {"answer": "No router advice has been given.", "rows": []}
