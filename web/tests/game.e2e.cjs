@@ -83,7 +83,8 @@ for (const [mock, source, found, hidden] of [
 test('game with no board says NO DATA and a tap is not counted', async ({ page }) => {
   await open(page, '/src/game/index.html?ws=ws://127.0.0.1:9/ws', 1920, 1080)
   await expect(page.getByTestId('game-source')).toHaveText('NO DATA')
-  await page.getByRole('button', { name: /Chair/ }).click()
+  // Whichever zones the layout file has: the first one on the floor.
+  await page.locator('#floor button').first().click()
   await expect(page.locator('#result')).toContainText('No data from the board')
   await expect(page.locator('#found')).toHaveText('__')
   await shot(page, 'game-nodata')
