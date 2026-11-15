@@ -3,6 +3,7 @@ import {
   BufferGeometry,
   Float32BufferAttribute,
   Group,
+  Matrix4,
   LineBasicMaterial,
   LineDashedMaterial,
   LineSegments,
@@ -200,6 +201,16 @@ export class Stage {
       if (moving) this.putNodes()
       return moving
     })
+    const cameraMatrix = new Matrix4(), projection = new Matrix4()
+    view.addAnimator(() => {
+      view.camera.updateMatrixWorld()
+      if (!cameraMatrix.equals(view.camera.matrixWorld) || !projection.equals(view.camera.projectionMatrix)) {
+        cameraMatrix.copy(view.camera.matrixWorld)
+        projection.copy(view.camera.projectionMatrix)
+        this.putNodes()
+      }
+      return false
+    })
     view.scene.add(this.group)
   }
 
@@ -218,7 +229,7 @@ export class Stage {
       n.device.rotation.y = Math.atan2(-base.x, -base.z)
       const offset = v3(p).sub(base).applyAxisAngle(Y_AXIS, -n.device.rotation.y)
       setDeviceHeight(n.device, offset.y, offset)
-      this.view.moveLabel(n.label, deviceLabelPoint(n.device, nodeLabelSide(n.id)))
+      this.view.moveLabel(n.label, deviceLabelPoint(n.device, nodeLabelSide(n.id), this.view.camera))
     }
     this.view.requestRender()
   }

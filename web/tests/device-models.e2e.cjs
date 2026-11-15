@@ -5,6 +5,15 @@ for (const [width,height] of [[1920,1080],[1440,900]]) test(`five desk models re
   const errors = []
   page.on('pageerror', e => errors.push(e.message))
   page.on('console', e => { if (e.type() === 'warning' && e.text().includes('could not load')) errors.push(e.text()) })
+  // The feed is local; development reload messages must not replace it mid-test.
+  await page.routeWebSocket('**', socket => {
+    const server = socket.connectToServer()
+    server.onMessage(message => {
+      const type = typeof message === 'string' ? JSON.parse(message).type : ''
+      if (type !== 'full-reload' && type !== 'update') socket.send(message)
+    })
+    socket.onMessage(message => server.send(message))
+  })
   await page.setViewportSize({ width, height })
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') })
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'))
@@ -18,6 +27,24 @@ for (const [width,height] of [[1920,1080],[1440,900]]) test(`five desk models re
   await page.clock.runFor(6000)
   expect((await models()).every(o => o.visible)).toBe(true)
   await expect(page.locator('#room')).toHaveAttribute('data-devices', desk.nodes.map(n => n.id).join(','))
+  const top = await page.evaluate(() => {
+    const device = window.room.stage.group.children.find(o => o.name === 'device-pi5')
+    const canvas = document.querySelector('#room canvas').getBoundingClientRect()
+    let top = Infinity
+    device.getObjectByName('head').traverse(m => {
+      if (!m.geometry) return
+      m.geometry.computeBoundingBox()
+      const { min, max } = m.geometry.boundingBox
+      for (let i = 0; i < 8; i++) {
+        const p = min.clone().set(i & 1 ? max.x : min.x, i & 2 ? max.y : min.y, i & 4 ? max.z : min.z)
+        m.localToWorld(p).project(window.room.view.camera)
+        top = Math.min(top, canvas.y + (1 - p.y) / 2 * canvas.height)
+      }
+    })
+    return top
+  })
+  const label = await page.locator('.room-label--node').filter({ hasText: /^Pi A$/ }).boundingBox()
+  expect(label.y + label.height).toBeLessThan(top)
   if (process.env.HUD_SCREENSHOTS) {
     fs.mkdirSync(process.env.HUD_SCREENSHOTS, { recursive: true })
     for (const scene of ['still','object','blind','empty']) {

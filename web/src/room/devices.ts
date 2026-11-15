@@ -1,4 +1,4 @@
-import { Color, CylinderGeometry, Group, Object3D, ShaderMaterial, type Material, BoxGeometry, BufferGeometry, Float32BufferAttribute, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, Plane, Raycaster, Vector2, Vector3 } from 'three'
+import { Color, CylinderGeometry, Group, Object3D, ShaderMaterial, type Camera, type Material, BoxGeometry, BufferGeometry, Float32BufferAttribute, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import type { HallLink } from './contract'
 import { HALL_BEACONS, SIZE_M, type HallBeacon, type Vec3 } from './frame'
 import { fade, Held } from './motion'
@@ -488,11 +488,22 @@ const corner = new Vector3()
  * its anchor just past its right or left side as the room's camera sees it (+x or -x). Uses the device's
  * current position, height and turn, and its size from DEVICE_BOUNDS, so it is right before the file loads.
  */
-export function deviceLabelPoint(device: Object3D, side: 'above' | 'right' | 'left'): Vector3 {
+export function deviceLabelPoint(device: Object3D, side: 'above' | 'right' | 'left', camera?: Camera): Vector3 {
   const p = parts(device)
   const { min, max } = DEVICE_BOUNDS[p.kind]
   const at = p.head.position.clone().applyAxisAngle(Y_AXIS, device.rotation.y).add(device.position)
-  if (side === 'above') return at.setY(at.y + max[1] * DISPLAY_SCALE)
+  if (side === 'above') {
+    if (!camera) return at.setY(at.y + max[1] * DISPLAY_SCALE)
+    // Depth also raises the model on screen: clear the full projected box, not just its highest y.
+    camera.updateMatrixWorld()
+    let top = -Infinity
+    for (let i = 0; i < 8; i++) {
+      corner.set(i & 1 ? max[0] : min[0], i & 2 ? max[1] : min[1], i & 4 ? max[2] : min[2])
+        .multiplyScalar(DISPLAY_SCALE).add(p.head.position).applyAxisAngle(Y_AXIS, device.rotation.y).add(device.position).project(camera)
+      top = Math.max(top, corner.y)
+    }
+    return at.project(camera).setY(top).unproject(camera)
+  }
   let reach = side === 'right' ? -Infinity : Infinity
   for (let i = 0; i < 4; i++) {
     corner.set(i & 1 ? max[0] : min[0], 0, i & 2 ? max[2] : min[2]).applyAxisAngle(Y_AXIS, device.rotation.y)
