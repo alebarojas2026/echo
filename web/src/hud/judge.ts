@@ -1,3 +1,4 @@
+import { mountPresenter } from './presenter'
 import { boardNow } from './board-time'
 import { boardAskClient, makeMockAskClient } from './ask-client'
 import { loadHudLayout, linkName } from './layout'
@@ -85,6 +86,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     last.onclick = () => { const end = now(); if (end === null) return; operator.hidden = true; void replay.start({ from_t: end - 120_000, to_t: end }) }
     operator.querySelector('.operator-controls')!.before(last)
   }
+  const disposePresenter = mountPresenter(operator, live)
   let disposed = false
   let lastState: StateMsg | null = null
   let lastStale = true
@@ -131,7 +133,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
