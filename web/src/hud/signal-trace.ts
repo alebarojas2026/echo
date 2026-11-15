@@ -28,7 +28,7 @@ export interface Sample {
 export interface Point { age: number; drop: number; present: boolean }
 
 /**
- * Which links cross which side of the floor, from the layout (radio/nodes.json as the room applied it).
+ * Which Bluetooth links cross which side of the floor, from the layout (radio/nodes.json as the room applied it).
  * A link counts for a side when at least 40% of its run over the floor lies in that side's zone. Links that
  * stay off the floor (along the desk) are left out. Sides with no link are left out too.
  */
@@ -38,7 +38,9 @@ export function signalSides(): Side[] {
   const sides = ZONES.map((zone) => ({ zone: zone.id, name: zone.name, links: [] as string[] }))
   for (const id of LINK_IDS) {
     const parts = parseLinkId(id)
-    if (!parts) continue
+    // People are sensed on the Bluetooth lines. A Wi-Fi link is the router's own story (the Wi-Fi line, #612),
+    // so it never joins a side even when it crosses the floor.
+    if (!parts || parts.kind !== 'ble') continue
     const a = nodePosition(parts.tx, HOME_SPOT)
     const b = nodePosition(parts.rx, HOME_SPOT)
     const counts = new Map<number, number>()
