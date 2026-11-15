@@ -169,6 +169,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
       const d = deviceEls.get(v.id)!
       const quiet = !v.heard || !!v.witness?.silent
       d.card.dataset.state = quiet ? 'quiet' : 'ok'
+      d.card.dataset.heard = v.heard ? 'yes' : 'no'
       say(d.rate, v.hz === null ? (v.hears.length ? '__ readings a second' : 'Sends its signal; hears no line') : `${v.hz} readings a second`)
       const lines = hearsLines(v.hears)
       if (d.hears.dataset.lines !== lines.join('|')) {
@@ -177,6 +178,10 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
       }
       say(d.heard, v.heard ? 'Heard now' : (v.quiet ?? 'not heard'))
       const w = v.witness
+      // The fault colour goes on the words that name the fault and on nothing else: a device whose readings
+      // arrive while its witness is silent still says "Heard now" in the plain colour.
+      d.heard.classList.toggle('eng-fault', !v.heard)
+      d.signed.parentElement!.classList.toggle('eng-fault', !!w && (w.silent || (w.seq !== null && !w.ok)))
       say(d.signed, v.board ? 'Seals every record' : !w ? (chain ? 'Not enrolled as a witness' : 'No word from the board on its signatures') : w.silent ? `Silent witness: ${w.quiet}. The chain goes on.` : w.seq === null ? 'No signature yet' : `Signed record #${count(w.seq)}${w.ago ? `, ${w.ago}` : ''}${w.ok ? '' : ' (signature did NOT check)'}`)
       d.tick.hidden = !w
       // A small tick each time a new signature arrives: lit, then back to rest. Once per signature, never a loop.

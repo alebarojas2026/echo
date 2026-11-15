@@ -49,6 +49,9 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await expect(quiet).toHaveCount(1)
     await expect(quiet).toContainText('Silent witness')
     await expect(quiet).toContainText('The chain goes on')
+    // The fault colour is on the words that name the fault; the devices that are fine carry none of it.
+    await expect(quiet.locator('.eng-signed')).toHaveClass(/eng-fault/)
+    await expect(page.locator('.eng-device[data-state="ok"] .eng-fault')).toHaveCount(0)
     const head = await page.getByTestId('engine-head').textContent()
     await expect.poll(() => page.getByTestId('engine-head').textContent(), { timeout: 8000 }).not.toBe(head)
     await readable(page)

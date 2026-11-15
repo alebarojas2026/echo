@@ -173,18 +173,19 @@ body {
   color: var(--text);
 }
 
-/* A device that is not heard, or a witness that has stopped signing: quiet, with the fault colour on its words. */
+/* A device that is not heard, or a witness that has stopped signing: the card's edge takes the fault colour, and
+   so do the words that name the fault (and only those). The readings dim only when the device is not heard. */
 .eng-device[data-state='quiet'] {
   border-color: var(--fault);
 }
 
-.eng-device[data-state='quiet'] .eng-heard,
-.eng-device[data-state='quiet'] .eng-signed {
+.eng-heard.eng-fault,
+.eng-signed.eng-fault {
   color: var(--fault);
 }
 
-.eng-device[data-state='quiet'] .eng-rate,
-.eng-device[data-state='quiet'] h2 {
+.eng-device[data-heard='no'] .eng-rate,
+.eng-device[data-heard='no'] h2 {
   opacity: 0.55;
 }
 
