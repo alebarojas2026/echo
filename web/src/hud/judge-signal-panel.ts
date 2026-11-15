@@ -146,14 +146,16 @@ export function mountPanel(root: HTMLElement) {
         views.forEach((view) => view.setSides(history))
       }
       const now = performance.now()
-      if (state && !stale) history.push(state, now)
+      // A replay plays saved seconds, and the records hold no link readings: the live trace is not shown over it.
+      const replayed = state?.src === 'replay'
+      if (state && !stale && !replayed) history.push(state, now)
       const status = traceStatus(state, stale, history.sides)
       const latest = history.samples.at(-1)
       const fresh = !stale && !!latest && now - latest.t < 1000
       const numbers = now - numbersAt >= NUMBER_EVERY_MS
       if (numbers) numbersAt = now
       for (const view of views) {
-        view.el.hidden = !history.sides.length
+        view.el.hidden = !history.sides.length || replayed
         view.el.dataset.status = status
         view.setNote(status === 'ok' || status === 'no-data' ? '' : NOTES[status])
         view.rows().forEach((row, i) => {
