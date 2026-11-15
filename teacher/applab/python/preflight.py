@@ -93,7 +93,10 @@ def area_size(text):
 
 
 def check_area(projection, expected):
-    """Refuse a calibration made for another area, e.g. the old square once the layout is the strip."""
+    """Refuse a calibration made for another area, e.g. the old square once the layout is the strip.
+    The desk view has no floor area (left/right only), so there is nothing to compare."""
+    if getattr(projection, "area", None) is None:
+        return
     w, h = projection.area[:2]
     if expected and not all(abs(a - b) <= 1e-6 for a, b in zip((w, h), expected)):
         raise ValueError(f"calibration is for a {w:g} x {h:g} m area but the layout's is "
