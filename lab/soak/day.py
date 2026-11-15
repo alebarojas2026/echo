@@ -146,7 +146,7 @@ class Day:
         self.disk_full = False
         self.offset_s = 0
         self.ctx = type("Ctx", (), {"path": None, "chaos": None, "training": False})()
-        self.lock = threading.Lock()
+        self.lock, self.lock_log = threading.Lock(), threading.Lock()
 
     # ---- problems
 
@@ -199,14 +199,36 @@ class Day:
             log = self._logs[name] = open(self.out / "logs" / f"{name}.log", "a", encoding="utf-8")
         log.write(f"=== day: start #{self.starts[name]} at {time.strftime('%H:%M:%S')}\n")
         log.flush()
-        stdin = stdout = None
         if name == "feeder":
-            stdin, stdout = subprocess.PIPE, subprocess.PIPE
-        p = subprocess.Popen(self.argv(name), cwd=REPO, env=env, stdin=stdin, stdout=stdout or log, stderr=log,
-                             text=name == "feeder", bufsize=1 if name == "feeder" else -1)
+            p = subprocess.Popen(self.argv(name), cwd=REPO, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                 stderr=log, text=True, bufsize=1)
+        else:
+            # Through a pipe, like journald on the board: a full disk doesn't stop a process saying why it died.
+            p = subprocess.Popen(self.argv(name), cwd=REPO, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            threading.Thread(target=self._copy, args=(p.stdout, log), daemon=True).start()
         self.procs[name] = p
         self.run.log("chaos.jsonl", kind="start", proc=name, pid=p.pid)
         return p
+
+    def _copy(self, pipe, log):
+        for raw in iter(pipe.readline, b""):
+            with self.lock_log:
+                log.write(raw.decode("utf-8", "replace"))
+                log.flush()
+
+    def faketime_works(self):
+        """libfaketime, a timestamp file and Python's time.time(): does an offset reach the process?"""
+        if not Path(FAKETIME_LIB).exists():
+            return False
+        f = self.out / "faketime-test"
+        f.write_text("+100000\n")
+        env = dict(os.environ, LD_PRELOAD=FAKETIME_LIB, FAKETIME_TIMESTAMP_FILE=str(f), FAKETIME_DONT_FAKE_MONOTONIC="1")
+        try:
+            t = float(subprocess.run([PY, "-c", "import time; print(time.time())"], env=env, capture_output=True,
+                                     text=True, timeout=20).stdout)
+        except (ValueError, subprocess.SubprocessError):
+            return False
+        return abs(t - now() - 100000) < 60
 
     def kill(self, name, why="chaos"):
         p = self.procs.get(name)
@@ -429,7 +451,7 @@ class Day:
         sz = self.spot(self.still_zone, 0.05)
         self.play(self.seg("walk-still", 3, [(2.5, sz)], cam="off"))
         tq = now()
-        self.play(self.seg("still", limit + (6 if fast else 12), [], cam="off"))
+        self.play(self.seg("still", limit + (15 if fast else 20), [], cam="off"))
         rec["alert_s"] = m.wait_event("alert_on", tq, 0.1)
         if r.random() < 0.5:   # a wave clears it; otherwise the next reset does
             self.play(self.seg("wave", 5, [], cam="off", waves=[{"t_on": 0.5, "t_off": 4.0, "link": "pi5>unoq:wifi",
@@ -798,6 +820,9 @@ class Day:
         a = self.a
         (self.out / "logs").mkdir(parents=True, exist_ok=True)
         self.set_offset(0)
+        if self.a.faketime and not self.faketime_works():
+            self.a.faketime = self.cfg["clock_jumps"] = False
+        self.cfg["faketime"] = bool(self.a.faketime)
         self.run.log("config.jsonl", cfg=self.cfg, feat=self.feat, area=self.area, zones=self.zones,
                      links=len(self.L.links), repo_head=os.environ.get("SOAK_TREE", "?"))
         self.proxyctl = ProxyCtl()
