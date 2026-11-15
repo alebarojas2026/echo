@@ -167,6 +167,48 @@ class CheckIn:
         return True
 
 
+class Armed:
+    """Armed mode (section 6): the space should be empty, so a person appearing is an intrusion.
+
+    One intrusion each time a person appears: present with kind person for the majority of
+    the last 10 decisions (6 of them), after that was not so. A person who stays raises
+    nothing more; they have to be gone for the majority of 10 decisions before the next one
+    counts. Objects never count. Decisions with pred null (blind, recalibrating) are not
+    decisions: the count starts again when pred is back, and whoever was already in stays "in".
+    """
+
+    def __init__(self):
+        self.on = False
+        self._recent: deque = deque(maxlen=SMOOTH_DECISIONS)   # per decision: (a person is present, zone)
+        self._inside = False
+
+    def arm(self, on: bool) -> bool:
+        """Returns True when this changed anything. Arming starts from "nobody in": someone
+        already standing there is an intrusion within the next 6 decisions."""
+        if on == self.on:
+            return False
+        self.on, self._inside = on, False
+        self._recent.clear()
+        return True
+
+    def on_pred(self, pred: Optional[dict]) -> Optional[int]:
+        """One decision. Returns the zone of an intrusion to announce, or None."""
+        if pred is None:
+            self._recent.clear()
+            return None
+        person = bool(pred.get("present")) and pred.get("kind") == "person"
+        self._recent.append((person, pred.get("zone") or 0))
+        inside = sum(1 for p, _ in self._recent if p)
+        if not self._inside and inside >= SMOOTH_MAJORITY:
+            self._inside = True
+            if self.on:
+                zones = [z for p, z in self._recent if p]
+                return max(set(zones), key=zones.count)
+        elif self._inside and len(self._recent) - inside >= SMOOTH_MAJORITY:
+            self._inside = False
+        return None
+
+
 def _majority(values: list, current):
     """The value that holds a real majority of the decisions (6 of 10 once there are 10),
     otherwise the current one stays."""
