@@ -72,7 +72,12 @@ def cmd_trees(a):
     prs = [int(x) for x in a.prs.split(",") if x]
     git("fetch", "-q", "--force", "origin", "main", *[f"+pull/{n}/head:farm-pr{n}" for n in prs], check=False)
     base = git("rev-parse", "origin/main").stdout.strip()   # both trees on the same main
-    out = [build_tree("main", [], a.round, base), build_tree("heroes", prs, a.round, base)]
+    hero_base = base
+    if a.heroes_ref:   # the exact tree going onto the hardware, e.g. a deploy branch
+        git("fetch", "-q", "--force", "origin", f"+{a.heroes_ref}:refs/remotes/origin/{a.heroes_ref}", check=False)
+        hero_base = git("rev-parse", f"origin/{a.heroes_ref}").stdout.strip()
+    out = [build_tree("main", [], a.round, base), build_tree("heroes", prs, a.round, hero_base)]
+    out[1]["ref"] = a.heroes_ref or "main"
     (TREES / a.round / "trees.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
 
@@ -181,6 +186,7 @@ if __name__ == "__main__":
     t = sub.add_parser("trees")
     t.add_argument("--round", required=True)
     t.add_argument("--prs", default="")
+    t.add_argument("--heroes-ref", default="", help="build heroes from this branch instead of main (then --prs on top)")
     f = sub.add_parser("fetch")
     f.add_argument("--round", required=True)
     a = ap.parse_args()
