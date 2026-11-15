@@ -1,5 +1,6 @@
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
+import { routerWords } from './router-words'
 import './judge.css'
 import { mountAskRoom } from './ask-room'
 import { updateProofVisibility } from './proof-visibility'
@@ -81,7 +82,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     set('why-links', state?.pred?.why.map(id => linkName(id)).join('; ') ?? '')
     field('why-links').dataset.links = state?.pred?.why.join(',') ?? ''
     set('health-links', state?.health.status === 'degraded' ? state.links.filter(link => link.status !== 'ok').map(link => linkName(link.id)).join('; ') : '')
-    set('router-spot', state?.router ?? '')
+    set('router-spot', state ? routerWords(state.router) : '')
     set('narrator-source', state?.narration?.source ?? '')
     set('no-data', stale || !state ? 'No data' : '')
     set('sensor-blind', !stale && state?.health.status === 'blind' ? 'Sensor blind' : '')
