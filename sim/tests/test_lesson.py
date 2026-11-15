@@ -26,11 +26,22 @@ def test_the_path_is_the_lesson_then_the_unplug():
     times = [w["t"] for w in path["person"]]
     assert times == sorted(times) and times[-1] <= path["duration_s"]
     assert lesson.RECORD_S < lesson.TRAIN_S < lesson.CAM_OFF_S < lesson.STOP_S < lesson.END_S
-    assert lesson.TRAIN_S - lesson.RECORD_S == 20
     both = {zone for start, end, zone in lesson.stands() if lesson.RECORD_S <= start and end <= lesson.TRAIN_S}
     assert both == {1, 2}                                   # both sides are taught before train
     after = {zone for start, _, zone in lesson.stands() if start >= lesson.CAM_OFF_S + 3}
     assert after == {1, 2}                                  # and both are visited with the camera gone
+
+
+def test_the_lesson_has_empty_time_in_two_pieces_before_train():
+    """Without it the model learns a ghost: it never saw the links with nobody there (#576)."""
+    assert lesson.ARRIVE_S - lesson.RECORD_S >= 5 and lesson.BACK_S - lesson.OUT_S >= 5
+    assert lesson.RECORD_S < lesson.ARRIVE_S < lesson.OUT_S < lesson.BACK_S < lesson.TRAIN_S
+    assert not [s for s in lesson.stands() if s[1] > lesson.OUT_S and s[0] < lesson.BACK_S]   # nobody stands while out
+    labels = [e for e in fake.simulate(lesson.path()) if e["type"] == "label" and lesson.RECORD_S <= e["t"] < lesson.TRAIN_S]
+    empty = [e["t"] for e in labels if e["persons_in_frame"] == 0 and not e["present"] and not e["clipped"]]
+    first = [t for t in empty if t < lesson.ARRIVE_S]
+    second = [t for t in empty if lesson.OUT_S <= t < lesson.BACK_S]
+    assert len(first) >= 20 and len(second) >= 15 and len(first) + len(second) == len(empty)
 
 
 def test_the_feed_has_desk_labels_until_the_camera_goes():
@@ -64,7 +75,7 @@ def at(played, t):
 def test_the_fake_brain_shows_learning_then_carries_on_without_the_camera(played):
     assert at(played, lesson.TRAIN_S - 1)["model"]["training"] is None        # recording, not yet a lesson
     first = at(played, lesson.TRAIN_S + 0.5)["model"]["training"]
-    assert first["lesson"] == {"started_t": 25_000, "agree": 5, "of": 5, "fits": 1, "fitting": False}
+    assert first["lesson"] == {"started_t": round(lesson.TRAIN_S * 1000), "agree": 5, "of": 5, "fits": 1, "fitting": False}
     assert first["sessions"] == [lesson.SESSION] and first["progress"] is None
     seen = [at(played, t)["model"]["training"]["lesson"] for t in (lesson.TRAIN_S + 2, lesson.TRAIN_S + 16, lesson.CAM_OFF_S - 1)]
     assert [(s["agree"], s["of"], s["fits"]) for s in seen] == [(6, 10, 1), (8, 10, 2), (8, 10, 2)]
@@ -86,7 +97,7 @@ def test_the_fake_brain_passes_the_contract(played):
     encode = encoder(1_763_149_500_000)
     count, failures, _ = check_lines(encode(m) for m in played)
     assert count == len(played) and failures == []
-    assert json.loads(encode(at(played, 30)))["model"]["training"]["lesson"]["of"] == 10
+    assert json.loads(encode(at(played, lesson.TRAIN_S + 5)))["model"]["training"]["lesson"]["of"] == 10
 
 
 def test_a_path_without_a_lesson_never_has_a_training_block():

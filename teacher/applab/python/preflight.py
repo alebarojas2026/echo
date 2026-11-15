@@ -14,7 +14,11 @@ except ImportError:
 
 # The desk view's numbers can be tuned on the board without a new file: set one of these and restart the app.
 DESK_ENV = {"TEACHER_DESK_SPLIT": "split", "TEACHER_DESK_DEAD_BAND": "dead_band",
-            "TEACHER_DESK_MIRROR": "mirror", "TEACHER_DESK_SIDE_EDGE": "side_edge"}
+            "TEACHER_DESK_MIRROR": "mirror", "TEACHER_DESK_SIDE_EDGE": "side_edge",
+            "TEACHER_DESK_NEAR_WIDTH": "near_width"}
+NO_NEAR = ("NOT READY FOR A LESSON: calib.json has no near_width, so the desk view can't tell someone in the "
+           "strip from someone standing back, and labels nobody as present. Run "
+           "`python -m teacher.calibrate --near` (stand at the desk edge, then one step back).")
 
 
 def box_size(text):
@@ -134,9 +138,11 @@ def main():
                         help="the layout's area, WIDTHxHEIGHT metres (default TEACHER_AREA)")
     args = parser.parse_args()
     try:
-        check_files(args.calibration, args.mode_file, args.heartbeat, args.box_size, args.area)
+        view = check_files(args.calibration, args.mode_file, args.heartbeat, args.box_size, args.area)
     except ValueError as error:
         parser.exit(1, str(error) + "\n")
+    if isinstance(view, DeskView) and view.near_width is None:
+        parser.exit(1, NO_NEAR + "\n")   # the app still starts, so the calibration can read its heartbeat
     print("Teacher numeric configuration and shared directory are ready; camera and bus remain untested.")
 
 

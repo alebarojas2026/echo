@@ -3,16 +3,19 @@
     python -m sim.fake lesson      # the feed: radio, and desk-view labels until the camera goes
     python -m sim.state lesson     # the fake brain's states, for building the screen
 
-Timeline, in seconds: someone steps up at ARRIVE_S and keeps stepping left and right (STAND_S on
-each side) until the end. The screen starts the recording at RECORD_S and sends train at TRAIN_S;
-the camera is unplugged at CAM_OFF_S and the recording is stopped at STOP_S.
+Timeline, in seconds: the screen starts the recording at RECORD_S with nobody there, so the
+lesson begins with empty time. Someone steps up at ARRIVE_S and steps left and right (STAND_S on
+each side), steps right out of view from OUT_S to BACK_S (a second piece of empty time), and
+comes back and keeps stepping until the end. The screen sends train at TRAIN_S; the camera is
+unplugged at CAM_OFF_S and the recording is stopped at STOP_S. Without the empty time the model
+learns a ghost: it has never seen what the links look like with nobody there.
 
 Where "left" and "right" are comes from the layout in radio/nodes.json: the centres of zones 1
 and 2 (the two sides of the desk strip; on the square, its two northern zones).
 """
 from .layout import LAYOUT
 
-ARRIVE_S, RECORD_S, TRAIN_S, CAM_OFF_S, STOP_S, END_S = 3.0, 5.0, 25.0, 45.0, 62.0, 66.0
+RECORD_S, ARRIVE_S, OUT_S, BACK_S, TRAIN_S, CAM_OFF_S, STOP_S, END_S = 2.0, 10.0, 22.0, 27.0, 31.0, 51.0, 68.0, 72.0
 STAND_S, MOVE_S = 3.0, 1.0
 REFIT_S = 15.0
 DEAD_BAND_M = 0.1         # the camera gives no label this close to the split line
@@ -30,6 +33,9 @@ def stands(layout=LAYOUT):
     """[(from s, to s, zone)]: every stretch the person stands on one side, in order."""
     out, t, i = [], ARRIVE_S, 0
     while t + STAND_S <= END_S:
+        if t + STAND_S > OUT_S and t < BACK_S:      # out of view: nobody is there
+            t = BACK_S
+            continue
         out.append((t, t + STAND_S, sides(layout)[i % 2][0]))
         t, i = t + STAND_S + MOVE_S, i + 1
     return out
@@ -40,10 +46,13 @@ def path(layout=LAYOUT) -> dict:
     person = [{"t": 0, "x": None}]
     for start, end, zone in stands(layout):
         x, y = spot[zone]
+        if start == BACK_S:                          # they stepped out at OUT_S and are back now
+            person += [{"t": OUT_S, "x": None}, {"t": BACK_S - 0.1, "x": None}]
         person += [{"t": start, "x": x, "y": y}, {"t": end, "x": x, "y": y}]
     return {"name": "lesson", "duration_s": END_S, "person": person,
-            "about": "The camera on the desk teaches left and right for 20 s, the model is fit, the camera "
-                     "is unplugged at 45 s and the radio carries on.",
+            "about": "The lesson starts on an empty strip, the camera on the desk teaches left and right with a "
+                     "step out of view in the middle, the model is fit, the camera is unplugged and the radio "
+                     "carries on.",
             "meta": {"session": SESSION, "purpose": "train", "walker": "sim"},
             "teacher": "desk", "dead_band_m": DEAD_BAND_M,
             "camera": [{"t": 0, "state": "on"}, {"t": CAM_OFF_S, "state": "off"}],

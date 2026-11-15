@@ -18,7 +18,7 @@ def box(centre, width=160, y=40, height=440, value=0.9):
 
 
 def teacher(sent=None, clock=None, **config):
-    view = DeskView({**desk_config(STRIP), **config}, SIZE)
+    view = DeskView({**desk_config(STRIP), "near_width": 0.2, **config}, SIZE)
     return Teacher(view, (sent if sent is not None else []).append, clock=clock or (lambda: 1000))
 
 
