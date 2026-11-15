@@ -93,9 +93,9 @@ class DemoRunbookTest(unittest.TestCase):
         finalist = self.lower.split("## five-minute finalist round", 1)[1].split(
             "## if asked", 1
         )[0]
-        self.assertIn("pi5>unoq:wifi", finalist)
-        self.assertIn("drop_db` of at least `3 db`", finalist)
-        self.assertIn("advice does not appear without that live drop", finalist)
+        self.assertIn("pi5>pi5b:wifi", finalist)
+        self.assertIn("configured drop threshold", finalist)
+        self.assertIn("stop this beat if it still targets the short desk link", finalist)
 
     def test_finish_order_clears_optional_hardware_before_reset(self):
         steps = (

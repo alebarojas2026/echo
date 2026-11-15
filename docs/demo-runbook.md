@@ -93,7 +93,7 @@ Run the same one-spot kit: **Found you**, **Teach the room**, **Camera unplug**,
 After the primary path, use only the extensions that passed preflight:
 
 - **No-movement alert and check-in:** Wait for the configured local alert, ask the judge to lean aside for the “I'm okay” check, and confirm `checkin-toast` clears it. Do not claim success before that confirmation.
-- **Tray and router advice:** Ask Alexander to place the tray. Confirm `pi5>unoq:wifi` is dropping with `drop_db` of at least `3 dB`; advice does not appear without that live drop. Wait for `advice-text`, move only to a spot from `/nodes.json`, send `router_moved`, and report the before/after result only if proof contains it.
+- **Tray and router advice:** Ask Alexander to place the tray across the gap. Confirm the deployed advisor uses the cross-gap Wi-Fi link `pi5>pi5b:wifi` and its configured drop threshold; stop this beat if it still targets the short desk link. Wait for `advice-text`, move only to a spot from `/nodes.json`, send `router_moved`, and report the before/after result only if proof contains it.
 - **Recap:** Show the fact-based local recap. If generation is unavailable, use the template recap; never invent an event.
 - **Game:** Invite interaction without saying the system counts or identifies the crowd.
 
