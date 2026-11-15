@@ -35,7 +35,8 @@ Ports:
   - the App Lab camera teacher sends to msgpack-rpc-router:5600 (App Lab's host alias; gate 3 confirms it).
 - bus -> brain: UDP 127.0.0.1:5601.
 - brain: WebSocket ws://192.168.77.2:8765/ws (bound to 127.0.0.1 and 192.168.77.2 only).
-- web: http://192.168.77.2:8080. board/serve.py serves web/dist, /nodes.json and /proof.json.
+- web: http://192.168.77.2:8080. board/serve.py serves web/dist, /nodes.json and /proof.json, and answers POST /ask
+  (section 10).
 - llm: http://127.0.0.1:8091 (llama-server).
 ```
 
@@ -323,4 +324,25 @@ Pi A: python -m pi.radio_node --node pi5 (root) | the hotspot profile from pi/ap
 Pi B: python -m pi.radio_node --node pi5b (root) | WIFI_LINK=pi5>pi5b:wifi python -m radio.wifi_rssi |
       joined to the sensing hotspot, with BUS_HOST=192.168.77.2 for both programs. No hotspot, no Ethernet, no model.
 Every folder that's run as a module has an __init__.py.
+```
+
+## 10. Ask the room (POST /ask on the board's web server)
+```jsonc
+POST http://192.168.77.2:8080/ask      {"question":"was anyone here in the last 10 minutes?"}
+   // The body is at most 2048 bytes. The first 200 characters of the question are used.
+200 {"answer":"Yes. Someone was here for 43 s of the last 10 minutes, most recently in Right from 18:21:49 to 18:22:09.",
+     "rows":[{"row":"summary","seconds_with_someone":43},{"zone":2,"name":"Right","from":"18:21:49","to":"18:22:09","seconds":21}],
+     "tool":"presence","args":{"minutes":10,"zone":null,"link":null},
+     "picked_by":"llm","src":"sim","ms":5210}
+   // tool = presence | still_spans | alerts | intrusions | link_history | explain_advice | model_card, or null when the
+   //   question fits none of them; then answer starts "I can answer: " and lists what can be asked, rows is [] and args is {}.
+   // args = what the tool was run with: minutes (1-1440, 10 when the question names none), zone (a zone id in
+   //   nodes.json, or null for anywhere) and link (a core link id, or null for any).
+   // rows = the stored records the answer was filled from. Every number in answer is in a row, or is args.minutes.
+   // picked_by = llm (the on-board model chose the tool) | rules (the model was down or slow; keywords chose it).
+   //   The model only picks the tool and its args. It never writes the answer.
+   // src = the src of the newest stored record (live | sim | replay), or null when nothing is stored.
+   // ms = the whole time for the answer on the board.
+400 {"error":"..."} for a body that isn't {"question": non-empty string}; 503 when the agent isn't installed; 500 when it fails.
+   // One question is answered at a time: llama-server has one slot, shared with the narrator.
 ```

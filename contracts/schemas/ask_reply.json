@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/ask_reply.json",
+  "$comment": "Section 10: the 200 answer of POST /ask. Not a bus message: no envelope. With tool null the answer lists what can be asked, rows is [] and args is {}.",
+  "type": "object",
+  "properties": {
+    "answer": {"type": "string", "minLength": 1},
+    "rows": {"$comment": "The stored records the answer was filled from.", "type": "array", "items": {"type": "object"}},
+    "tool": {"enum": ["presence", "still_spans", "alerts", "intrusions", "link_history", "explain_advice", "model_card", null]},
+    "args": {"type": "object",
+             "properties": {"minutes": {"type": "integer", "minimum": 1, "maximum": 1440},
+                            "zone": {"$comment": "A zone id in radio/nodes.json, or null for anywhere.", "type": ["integer", "null"], "minimum": 1, "maximum": 2},
+                            "link": {"anyOf": [{"$ref": "common.json#/$defs/link"}, {"type": "null"}]}},
+             "additionalProperties": false},
+    "picked_by": {"enum": ["llm", "rules"]},
+    "src": {"enum": ["live", "sim", "replay", null]},
+    "ms": {"type": "integer", "minimum": 0}
+  },
+  "required": ["answer", "rows", "tool", "args", "picked_by", "src", "ms"],
+  "additionalProperties": false,
+  "if": {"properties": {"tool": {"type": "null"}}, "required": ["tool"]},
+  "then": {"properties": {"answer": {"pattern": "^I can answer: "}, "rows": {"maxItems": 0}, "args": {"maxProperties": 0}}},
+  "else": {"properties": {"args": {"required": ["minutes", "zone", "link"]}}}
+}
