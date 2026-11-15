@@ -63,13 +63,51 @@ def test_recap_reaches_the_screen_through_bus_and_brain():
     assert "no-movement alert" in text and "dBm" in text
 
 
-def test_the_desk_visit_fits_its_script():
-    results = rehearse.rehearse(rehearse.desk_script())
-    failed = [name for name, passed, _ in results if not passed]
+HERO = ["found:", "lesson:", "unplug:", "still:", "armed,", "intrusion while armed", "disarmed"]   # in order
+
+
+@pytest.fixture(scope="module")
+def desk():
+    return rehearse.rehearse(rehearse.desk_script())
+
+
+def test_the_desk_visit_plays_the_hero_path_in_order(desk):
+    names = [name for name, _, _ in desk]
+    first = [next(i for i, n in enumerate(names) if n.startswith(beat)) for beat in HERO]
+    assert first == sorted(first), names
+    path, commands, beats = rehearse.desk_script()
+    # the lesson as the screen sends it: train while the lesson's recording is still open
+    assert [c[1] for c in commands] == ["label_mode", "record_start", "train", "record_stop", "label_mode", "arm", "arm"]
+    assert path["duration_s"] <= 180                                          # it fits the 3-minute visit
+
+
+def test_every_desk_beat_shows_up(desk):
+    failed = [name for name, passed, _ in desk if not passed]
     assert failed == [], failed
-    shown = {name: s for name, _, s in results}
-    assert 45 + shown["no-movement alert"] <= 70          # the alert shows inside 0:45-1:10 of docs/desk-demo.md
-    assert shown["intrusion while armed"] <= 2.0          # armed, then the judge steps back in
+
+
+def test_desk_beats_show_in_good_time(desk):
+    shown = {name: s for name, _, s in desk}
+    assert shown["found: the judge steps up"] <= 2.0
+    assert shown["lesson: a model within 5 s of train"] <= 5.0
+    assert 10.0 <= shown["still: no-movement alert"] <= 13.0                  # the 10 s limit, then the smoothing
+    assert shown["intrusion while armed"] <= 2.0                              # armed, then the judge steps back in
+
+
+def test_nobody_stands_long_enough_to_alert_before_the_still_beat():
+    """On the desk both zones alert after 10 s, so an early long stand would raise the alert too soon."""
+    path, _, beats = rehearse.desk_script()
+    still_from = next(b[1] for b in beats if b[0] == "still: no-movement alert")
+    stops = [p for p in path["person"] if p.get("x") is not None and p["t"] <= still_from]
+    stands = [b["t"] - a["t"] for a, b in zip(stops, stops[1:]) if (a["x"], a["y"]) == (b["x"], b["y"])]
+    assert max(stands) <= 5
+
+
+def test_a_command_lands_at_its_own_time(tmp_path):
+    stack = rehearse.Stack(str(tmp_path))
+    t0 = stack.play({"name": "empty", "duration_s": 3, "person": None}, [(2.0, "arm", {"on": True})])
+    armed = [e for e in stack.events if e["kind"] == "armed"]
+    assert len(armed) == 1 and 2.0 <= (armed[0]["t"] - t0) / 1000 < 2.2
 
 
 def test_desk_flag_runs_the_desk_visit(capsys, monkeypatch):
