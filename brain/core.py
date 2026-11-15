@@ -445,6 +445,8 @@ class Brain:
         tmp = self.sessions_dir / "model.pkl.tmp"
         with open(tmp, "wb") as f:
             pickle.dump({"ver": self.model.ver, "base": self.model.base, "place_t": self.place_t,
+                         "train_sessions": self.model.train_sessions,
+                         "train_walkers": self.model.train_walkers,   # None = unknown
                          "model": self.model}, f)
         os.replace(tmp, self.sessions_dir / "model.pkl")   # never a half-written file
 

@@ -68,6 +68,13 @@ def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS) -> dict
 
 
 class Model:
+    # The walkers whose windows the forests were fit on (pseudonyms from the sessions' meta).
+    # None = unknown: not fit yet, a model file from before this was kept, or a fit in which some
+    # window with a person in it had no walker id (a partial list would look complete). That is not the
+    # same as [], a fit whose windows had no walker at all (empty room and object sessions only).
+    # A class default, so an older pickle without the attribute reads as unknown.
+    train_walkers: Optional[List[str]] = None
+
     def __init__(self, base: Dict[str, float], ver: str = "m1", links=F.LINKS, zones=ZONES[1:], motion_links=None):
         """links and zones come from radio/nodes.json (the brain passes them); the defaults are
         the 2 x 2 m square's. probs has one entry for empty, then one per zone, in that order.
@@ -109,6 +116,13 @@ class Model:
         self.train_s = time.monotonic() - t0
         self.windows = len(d["X"])
         self.train_sessions = sorted({s for s in d["session"] if s})
+        names = [str(w).strip() if w is not None else "" for w in d["walker"]]
+        if any(not name for name, z in zip(names, d["zone"]) if z != 0):
+            # A person window with no walker id: we can't say who was trained on, and a partial
+            # list must never read as the whole of it.
+            self.train_walkers = None
+        else:
+            self.train_walkers = sorted({name for name in names if name})
         return self
 
     def predict(self, window: dict) -> dict:
@@ -161,7 +175,10 @@ class Model:
         return [self.links[i] for i in order[:top] if score[i] > 0]
 
     def info(self) -> dict:
-        """The contract's model block (ms_per_decision is measured by the live loop)."""
+        """The contract's model block (ms_per_decision is measured by the live loop).
+
+        train_walkers is kept on the model and in model.pkl but is not in this block: section 5's
+        model block has no field for it yet."""
         return {"trained": self.trained, "ver": self.ver,
                 "train_s": None if self.train_s is None else round(self.train_s, 1),
                 "windows": self.windows, "train_sessions": self.train_sessions}

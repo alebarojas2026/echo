@@ -124,3 +124,46 @@ def test_zone_set_is_empty_when_nobody_is_present(model, base):
     preds = [model.predict(w) for w in F.windows(sim_to_v2("empty_room", seed=12), base)]
     assert all(p["zone_set"] == [] for p in preds if not p["present"])
     assert any(not p["present"] for p in preds)
+
+
+# ---- which walkers a model was fit on (#580) ----
+
+def test_fit_keeps_the_walkers_whose_windows_it_used(model):
+    assert model.train_walkers == ["w1", "w2", "w3"]        # the empty-room and object sessions have none
+
+
+def test_walkers_unknown_is_not_the_same_as_no_walkers(base):
+    assert T.Model(base).train_walkers is None               # not fit yet: unknown
+    only_empty = T.Model(base).fit([session("s01", "empty_room", seed=10)])
+    assert only_empty.train_walkers == []                    # fit, and known to have no walker
+
+
+def test_a_person_window_without_a_walker_id_makes_the_whole_list_unknown(base):
+    unnamed = session("a", "zone_tour", walker="  ", seed=1)
+    named = session("b", "zone_tour", walker=" w9 ", seed=2)
+    assert T.Model(base).fit([unnamed]).train_walkers is None             # nobody named at all
+    assert T.Model(base).fit([unnamed, named]).train_walkers is None      # a partial list is not the whole of it
+    assert T.Model(base).fit([session("c", "zone_tour", walker=None, seed=3), named]).train_walkers is None
+    assert T.Model(base).fit([named]).train_walkers == ["w9"]             # ids are stripped
+    # No person in the unnamed session (an empty room): the list stays known.
+    assert T.Model(base).fit([session("e", "empty_room", seed=4), named]).train_walkers == ["w9"]
+
+
+def test_a_session_without_fitted_windows_adds_no_walker(base):
+    clipped = session("c", "zone_tour", walker="w5", seed=3)
+    for m in clipped["messages"]:
+        if m["type"] == "label":
+            m["clipped"] = True                              # every window is dropped
+    fit = T.Model(base).fit([session("a", "zone_tour", walker="w1", seed=1), clipped])
+    assert fit.train_walkers == ["w1"] and "c" not in fit.train_sessions
+
+
+def test_walkers_survive_pickling_and_an_older_file_reads_as_unknown(model):
+    import pickle
+    again = pickle.loads(pickle.dumps(model))
+    assert again.train_walkers == ["w1", "w2", "w3"]
+    legacy = pickle.loads(pickle.dumps(model))
+    del legacy.__dict__["train_walkers"]                      # a model file from before this was kept
+    legacy = pickle.loads(pickle.dumps(legacy))
+    assert legacy.train_walkers is None and legacy.trained    # still usable, but never walker-independent
+    assert "train_walkers" not in model.info()                # section 5's model block has no field for it
