@@ -1,5 +1,6 @@
 import type { LinkState, StateMsg } from '../room/contract'
 import { HOME_SPOT, LINK_IDS, ZONES, floorSize, nodePosition, parseLinkId, zoneAt } from '../room/frame'
+import { hudLayout, type HudLayout } from './layout'
 
 // The live signal trace: how far each side's radio links have dropped from their baseline over the last 10 s.
 // Every point is a reading the board sent (state.links[].drop_db). The drawing moves between two readings so the
@@ -31,8 +32,15 @@ export interface Point { age: number; drop: number; present: boolean }
  * Which links cross which side of the floor, from the layout (radio/nodes.json as the room applied it).
  * A link counts for a side when at least 40% of its run over the floor lies in that side's zone. Links that
  * stay off the floor (along the desk) are left out. Sides with no link are left out too.
+ *
+ * A layout with one zone whose links say crosses_spot is one spot: a single row, named as the zone, made of the
+ * Bluetooth lines that cross it. Nothing is worked out from positions there, and there are no sides.
  */
-export function signalSides(): Side[] {
+export function signalSides(layout: HudLayout = hudLayout): Side[] {
+  if (layout.zones.length === 1 && layout.links.some((link) => typeof link.crosses_spot === 'boolean')) {
+    const links = layout.links.filter((link) => link.crosses_spot === true && link.kind === 'ble').map((link) => link.id)
+    return links.length ? [{ zone: layout.zones[0].id, name: layout.zones[0].name, links }] : []
+  }
   const [fw, fh] = floorSize()
   const steps = 200
   const sides = ZONES.map((zone) => ({ zone: zone.id, name: zone.name, links: [] as string[] }))
@@ -94,8 +102,8 @@ export class SignalHistory {
   private last = ''
 
   /** Reads the sides again when the layout has changed (it loads after the page does). */
-  refreshSides() {
-    const sides = signalSides()
+  refreshSides(layout: HudLayout = hudLayout) {
+    const sides = signalSides(layout)
     const key = JSON.stringify(sides)
     if (key === this.key) return
     this.key = key
