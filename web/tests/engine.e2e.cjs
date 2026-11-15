@@ -29,6 +29,8 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await expect(page.getByTestId('engine-witnesses')).toHaveText('2 of 2')
     await expect(page.locator('.eng-device')).toHaveCount(3)
     await expect(page.locator('.eng-device h2')).toHaveText(['Board', 'Pi A', 'Pi B'])
+    await expect(page).toHaveTitle('Echo: engine room')
+    await expect(page.locator('.eng-top h1')).toHaveText('EchoEngine room')
     const head = () => page.getByTestId('engine-head').textContent()
     const first = await head()
     await expect.poll(head, { timeout: 8000 }).not.toBe(first) // the record grows while we watch

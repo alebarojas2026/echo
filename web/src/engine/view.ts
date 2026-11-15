@@ -47,7 +47,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
 
   // ---- top: what this is, where the data comes from, and what is not watching
   const top = el('header', 'eng-top')
-  const title = el('h1', '', 'Radio Sight')
+  const title = el('h1', '', 'Echo')
   title.append(el('span', '', 'Engine room'))
   const badge = el('p', 'eng-source')
   badge.dataset.testid = 'engine-source'
