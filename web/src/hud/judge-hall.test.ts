@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest'
 import desk from '../../tests/fixtures/desk-layout.json'
 import gate from '../../tests/fixtures/gate-layout.json'
 import type { StateMsg } from '../room/contract'
-import { CHECKIN_WORDS, NOBODY, WALKED, WALKED_MS, hallFirst, hallMoment, heldMoment, walkedThrough } from './judge-hall'
+import { CHECKIN_WORDS, NOBODY, WALKED, WALKED_MS, earlyMoment, hallFirst, hallMoment, walkedThrough } from './judge-hall'
 import type { HudLayout } from './layout'
 import { alignMockState, mockState } from './mock-layout'
 
@@ -150,33 +150,31 @@ test('an enter event and its exit within 1.5 s is a walk through too; only the b
   }
 })
 
-test('the words wait 1.5 s before "Someone is here.", and "for 0 s" is never said', () => {
+test('"Someone is here." is said at once; the line under it waits 1.5 s, and "for 0 s" is never said', () => {
   const still = (still_s: number) => hallMoment(here('still', { alert: { state: 'counting', zone: 1, still_s, limit_s: 10 } }), false, layout)
   const someone = still(0.4)
   expect(someone).toEqual({ headline: 'Someone is here.', detail: 'Standing still', tone: '' }) // no "for 0 s"
   expect(still(0.99).detail).toBe('Standing still')
   expect(still(1).detail).toBe('Standing still for 1 s') // the board's count, from the true arrival
   expect(still(2.7).detail).toBe('Standing still for 2 s')
-  // Inside the window the page keeps saying what it said with nobody there.
-  expect(heldMoment(someone, 0, NOBODY, false)).toEqual(NOBODY)
-  expect(heldMoment(someone, 1499, NOBODY, false)).toEqual(NOBODY)
-  expect(heldMoment(someone, 800, WALKED, true)).toEqual(WALKED) // a walk through just before is still being said
-  expect(heldMoment(someone, 800, WALKED, false)).toEqual(NOBODY) // and has run out
-  expect(heldMoment(someone, 800, NOBODY, true)).toEqual(WALKED) // the exit came before the state changed
-  // At 1.5 s the words are said, and from then on.
-  expect(heldMoment(someone, 1500, NOBODY, false)).toBeNull()
-  expect(heldMoment(someone, 9000, NOBODY, false)).toBeNull()
-  // Nothing else waits: an armed space, an alert, a check-in, nobody, and a page that was not saying "Nobody is here.".
+  // Inside the window: the headline as it is, nothing under it.
+  expect(earlyMoment(someone, 0)).toEqual({ headline: 'Someone is here.', detail: '', tone: '' })
+  expect(earlyMoment(still(1.2), 1499)).toEqual({ headline: 'Someone is here.', detail: '', tone: '' })
+  const moving = hallMoment(here('moving', { alert: quiet }), false, layout)
+  expect(earlyMoment(moving, 700)).toEqual({ headline: 'Someone is here.', detail: '', tone: '' })
+  // At 1.5 s the line is said, and from then on.
+  expect(earlyMoment(still(1.5), 1500)).toBeNull()
+  expect(earlyMoment(someone, 9000)).toBeNull()
+  // Nothing else changes: an armed space, an alert, a check-in, nobody, a walk through, no clock to go by.
   const armed = hallMoment(here('still', { armed: true, alert: quiet }), false, layout)
-  expect(heldMoment(armed, 200, NOBODY, false)).toBeNull()
+  expect(earlyMoment(armed, 200)).toBeNull()
   const alert = hallMoment(here('still', { alert: { state: 'check_on', zone: 1, still_s: 13.4, limit_s: 10 } }), false, layout)
-  expect(heldMoment(alert, 200, NOBODY, false)).toBeNull()
+  expect(earlyMoment(alert, 200)).toBeNull()
   const state = here('moving', { alert: quiet })
   const checkin = hallMoment({ ...state, checkin: { t: state.t - 1000, link: 'pi5>pi5b:wifi' } }, false, layout)
-  expect(heldMoment(checkin, 200, NOBODY, false)).toBeNull()
-  expect(heldMoment(NOBODY, null, NOBODY, false)).toBeNull()
-  expect(heldMoment(someone, null, NOBODY, false)).toBeNull()
-  expect(heldMoment(someone, 200, null, false)).toBeNull() // the page opened with somebody already there
-  expect(heldMoment(someone, 200, { headline: 'No data', detail: '', tone: '' }, false)).toBeNull()
-  expect(heldMoment(someone, 200, { headline: 'Sensor blind', detail: '', tone: '' }, false)).toBeNull()
+  expect(earlyMoment(checkin, 200)).toBeNull()
+  expect(earlyMoment(NOBODY, null)).toBeNull()
+  expect(earlyMoment(NOBODY, 200)).toBeNull()
+  expect(earlyMoment(WALKED, 200)).toBeNull()
+  expect(earlyMoment(someone, null)).toBeNull()
 })

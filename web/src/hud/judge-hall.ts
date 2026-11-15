@@ -66,16 +66,15 @@ export function walkedThrough(feed: { onEvent(fn: (event: { kind: string; t?: nu
 export const NOBODY: Moment = { headline: 'Nobody is here.', detail: 'Step up to the desk.', tone: '' }
 
 /**
- * On the one spot the words wait: "Someone is here." is not said until the board has said so for SHORT_VISIT_MS,
- * so a walk through never flashes it (the figure walks on at once; only the words wait). Until then the page
- * keeps saying what it said with nobody there. `presentMs`: how long a person has been here by the board's clock
- * (null: nobody, or nothing to go by). `before`: what the page last said with nobody there. An armed space, an
- * alert and a check-in never wait, and neither does a page that had not been saying "Nobody is here.".
+ * On the one spot "Someone is here." is said the moment the board says so, and the line under it waits: for the
+ * first SHORT_VISIT_MS of a presence it is empty, so a walk through never flashes "Standing still" on its way to
+ * "Someone walked through.". From then on it is the still or moving line with the board's count, which runs from
+ * the true arrival. `presentMs`: how long a person has been here by the board's clock (null: nobody, or nothing
+ * to go by). An armed space, an alert and a check-in say what they always said.
  */
-export function heldMoment(moment: Moment, presentMs: number | null, before: Moment | null, walked: boolean): Moment | null {
+export function earlyMoment(moment: Moment, presentMs: number | null): Moment | null {
   if (moment.headline !== 'Someone is here.' || moment.tone !== '' || presentMs === null || presentMs >= SHORT_VISIT_MS) return null
-  if (before?.headline !== NOBODY.headline && before?.headline !== WALKED.headline) return null
-  return walked ? WALKED : NOBODY
+  return { ...moment, detail: '' }
 }
 
 /** The layout the hall-first page is for: one spot (the same test the spot's own headline uses). */

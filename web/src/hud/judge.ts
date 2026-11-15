@@ -22,7 +22,7 @@ import { fetchProof } from '../room/hud-host'
 import type { Proof } from './state'
 import { presenceTile } from './proof-visibility'
 import { judgeMoment } from './judge-moment'
-import { hallFirst, hallMoment, heldMoment, walkedThrough, type Moment } from './judge-hall'
+import { earlyMoment, hallFirst, hallMoment, walkedThrough, type Moment } from './judge-hall'
 import { SHORT_VISIT_MS } from '../room/motion'
 import { mountReplay } from './replay'
 import { recordsClient } from './records'
@@ -123,10 +123,9 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   let lastState: StateMsg | null = null
   let lastStale = true
   const walked = walkedThrough(live, () => { if (!disposed) render(lastState, lastStale) })
-  // How long a person has been here by the board's clock, what the page last said with nobody there, and a
-  // wake-up for the moment the words are due (judge-hall.ts, heldMoment).
+  // How long a person has been here by the board's clock, and a wake-up for the moment the line under the
+  // headline is due (judge-hall.ts, earlyMoment).
   const present = new PresentSince()
-  let before: Moment | null = null
   let dueWake: ReturnType<typeof setTimeout> | undefined
   const render = (state: StateMsg | null, stale: boolean) => {
     lastState = state
@@ -143,12 +142,12 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     const presentMs = present.update(here, known ? boardNow(feed?.current() ?? null) ?? state!.t : null)
     let moment: Moment = hall ? hallMoment(state, stale, undefined, walked.active()) : { headline: railHeadline, detail: railDetail, tone: '' }
     clearTimeout(dueWake)
-    const held = hall && known ? heldMoment(moment, presentMs, before, walked.active()) : null
-    if (held) {
-      moment = held
-      // The words are due when the presence has lasted long enough, also on a feed that has gone quiet.
+    const early = hall && known ? earlyMoment(moment, presentMs) : null
+    if (early) {
+      moment = early
+      // The line is due when the presence has lasted long enough, also on a feed that has gone quiet.
       dueWake = setTimeout(() => { if (!disposed) render(lastState, lastStale) }, Math.max(20, SHORT_VISIT_MS - presentMs! + 20))
-    } else if (hall && !here) before = known ? moment : null
+    }
     const { headline, detail, tone } = moment
     field('judge-headline').parentElement!.dataset.tone = tone
     // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
