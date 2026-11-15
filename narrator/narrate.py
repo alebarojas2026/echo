@@ -35,6 +35,7 @@ MAX_AGE_MS = 3000     # only for events up to 3 s old
 LLM_TIMEOUT_S = float(os.environ.get("NARRATE_MODEL_S") or 2.0)
 WARM_TIMEOUT_S = 120.0  # the warm-up writes the whole prompt into the cache; it may take longer
 MAX_WORDS = 16
+COMES_AND_GOES = ("enter", "zone_change", "exit")   # the events whose sentence says somebody is, or is not, there
 
 EVENT_KINDS = ("enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice",
                "advice_result", "router_moved", "router_home", "recalibrating", "cam_off", "cam_on",
@@ -447,6 +448,7 @@ class Narrator:
         self.cam = None           # on | off | stalled, from the brain
         self.seq = 0
         self.last_start_ms = None   # when the last sentence started being written
+        self.said_here = None       # one spot: what the line on the screen says, somebody (True) or nobody (False)
         self.last_sent_ms = None
         # narrate() and the recap (narrator/recap.py) run on their own threads and share the
         # gap, seq and socket: whoever sends holds this from the gap wait through the send.
@@ -462,6 +464,7 @@ class Narrator:
                 self.pending = None
         elif msg.get("type") == "event" and msg.get("kind") == "reset":
             self.pending = None   # a new judge: the last demo's waiting event is not said, the recap is next
+            self.said_here = None
             self.state = None
         elif msg.get("type") == "event" and msg.get("kind") in EVENT_KINDS:
             if spot() and msg["kind"] == "object_on" and self._current_person(msg.get("t")):
@@ -493,6 +496,16 @@ class Narrator:
                         and isinstance(link.get("drop_db"), (int, float)) and link["drop_db"] >= 3
                         for link in state.get("links", [])))
 
+    def _here_now(self, now):
+        """One spot: True when the latest state says a person is there, False when it says not, None
+        when there is no state recent enough to go by."""
+        state = self.state or {}
+        t = state.get("t")
+        if not (isinstance(t, (int, float)) and isinstance(now, (int, float)) and 0 <= now - t <= self.max_age_ms):
+            return None
+        pred = state.get("pred") or {}
+        return pred.get("present") is True and pred.get("kind") == "person"
+
     def _fresh(self, event: dict, now) -> bool:
         t = event.get("t")
         return isinstance(t, (int, float)) and isinstance(now, (int, float)) and now - t <= self.max_age_ms
@@ -505,7 +518,18 @@ class Narrator:
         if spot() and event["kind"] == "object_on" and not self._current_object(now):
             self.pending = None
             return None
-        if not self._fresh(event, now):
+        corrects = False
+        if spot() and event["kind"] in COMES_AND_GOES:
+            # The line must never say the opposite of the headline. An arrival or a leaving that the
+            # state no longer bears out (they stepped back on, or off again, while it waited its turn)
+            # is not said. One that is still true, while the line on the screen says the opposite, is
+            # said at the next turn however long it has waited: until then the screen contradicts itself.
+            here, wants = self._here_now(now), event["kind"] != "exit"
+            if here is not None and here != wants:
+                self.pending = None
+                return None
+            corrects = here == wants and self.said_here is not None and self.said_here != wants
+        if not corrects and not self._fresh(event, now):
             self.pending = None
             return None
         # The gap runs from when the last sentence started being written, so a slow model
@@ -552,6 +576,8 @@ class Narrator:
         timeout_s (2 s) to word it better; if its sentence is back by then and passes the checks, it is
         sent as the same event's line (same event_id) and replaces the template on the screen."""
         facts = self.facts(event)
+        if spot() and event["kind"] in COMES_AND_GOES:
+            self.said_here = event["kind"] != "exit"
         common = {"event_id": event.get("id"), "event_kind": event["kind"], "src": event.get("src", "live")}
         msg = self.send_spaced(text=facts, gen_ms=0, source="template", model=None, **common)
         start = self.monotonic()
