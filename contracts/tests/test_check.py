@@ -104,6 +104,18 @@ def test_proof():
     assert "$.zone.correct" in check.check_lines([read("invalid_proof.json")], "proof")[1][0][1]
 
 
+def test_proof_presence_is_optional_and_carries_its_always_empty_score():
+    proof = json.loads(read("valid_proof.json"))
+    assert "presence" not in proof                              # older proof files still pass
+    presence = {"correct": 171, "total": 180, "always_empty_correct": 96, "cycles": 6, "method": "held-out cycles, see PROOF.md"}
+    assert check.check_lines([json.dumps({**proof, "presence": presence})], "proof")[1] == []
+    assert check.check_lines([json.dumps({**proof, "presence": {**presence, "correct": None, "total": None, "cycles": None}})], "proof")[1] == []
+    del presence["always_empty_correct"]                        # the score never goes out without its comparison
+    assert "'always_empty_correct' is a required property" in check.check_lines([json.dumps({**proof, "presence": presence})], "proof")[1][0][1]
+    zone = {**proof["zone"], "majority_class_correct": 30}
+    assert check.check_lines([json.dumps({**proof, "zone": zone})], "proof")[1] == []
+
+
 def test_proof_security_is_optional_and_names_real_links():
     proof = json.loads(read("valid_proof.json"))
     assert proof["security"]["detection"]["within_s"] == 2

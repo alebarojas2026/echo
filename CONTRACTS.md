@@ -398,8 +398,17 @@ Screen: NO DATA (grey) when the last state is > 1 s old (the feed is stale). SEN
 ## 7. proof.json (served as /proof.json)
 The values below show the format only; they are not results.
 ```jsonc
-{"zone":{"correct":47,"total":52,"ci95":[0.79,0.96],"sessions":["s21","s22"],"walkers":5,"method":"held-out, see PROOF.md"},
+   // These values show the format only. They are not results.
+{"zone":{"correct":47,"total":52,"ci95":[0.79,0.96],"sessions":["s21","s22"],"walkers":5,"method":"held-out, see PROOF.md",
+         "majority_class_correct":null},
  "threshold_zone":{"correct":38,"total":52},
+ "presence":{"correct":null,"total":null,"always_empty_correct":null,"cycles":null,"method":"held-out cycles, see PROOF.md"},
+   // presence is optional. It is somebody there or nobody, scored per second on held-out empty and occupied cycles,
+   // against a written enter/leave log or the camera. always_empty_correct = how many of the same seconds a model
+   // that always says "nobody" would get right: shown beside the score, so a lopsided set can't flatter it.
+   // cycles is null when the truth came from the camera (it cannot count cycles).
+   // zone.majority_class_correct is optional: how many of zone.total a model that always names the commonest
+   // zone would get right. Shown beside the zone score for the same reason.
  "person_vs_object":{"correct":null,"total":null,"tray_placements":null},
  "false_alarms_per_min":null, "train_s":8.4, "ms_per_decision":{"p50":3.1,"p95":4.0},
  "watts":{"idle":null,"teaching":null,"radio_only":null,"source":null},
@@ -429,7 +438,7 @@ The values below show the format only; they are not results.
 source-badge, cam-status, pred-zone, pred-zone-set, pred-kind, pred-motion, why-links, sensor-blind, no-data,
 alert-banner, alert-zone, checkin-toast, narrator-text, narrator-source, advice-text, before-dbm, after-dbm,
 router-spot, train-button, train-seconds, zone-score, person-object-score, ms-per-decision, watts, bytes-out,
-models-count, hide-tally
+models-count, hide-tally, presence-score
 3D mirror (web/src/room): xray (data-max-db, data-max-xy) and beam-<link id> (data-drop-db, data-status, data-why),
   inside a visually hidden <ul data-testid="beams">.
 Arrival: "Found you." is shown once pred has been present for 1.5 s, then held 3 s. Someone walking past the desk

@@ -13,8 +13,14 @@
     "zone": {
       "$ref": "#/$defs/score",
       "properties": {"ci95": {"type": ["array", "null"], "items": {"type": "number", "minimum": 0, "maximum": 1}, "minItems": 2, "maxItems": 2},
-                     "sessions": {"type": "array", "items": {"type": "string"}}, "walkers": {"$ref": "#/$defs/count"}, "method": {"type": "string"}},
+                     "sessions": {"type": "array", "items": {"type": "string"}}, "walkers": {"$ref": "#/$defs/count"}, "method": {"type": "string"},
+                     "majority_class_correct": {"$comment": "Optional: what always naming the commonest zone would score, of the same total.", "$ref": "#/$defs/count"}},
       "required": ["ci95", "sessions", "walkers", "method"], "unevaluatedProperties": false},
+    "presence": {
+      "$comment": "Optional. Somebody there or nobody, per second on held-out cycles. always_empty_correct is what always saying nobody would score, of the same total.",
+      "$ref": "#/$defs/score",
+      "properties": {"always_empty_correct": {"$ref": "#/$defs/count"}, "cycles": {"$ref": "#/$defs/count"}, "method": {"type": "string"}},
+      "required": ["always_empty_correct", "cycles", "method"], "unevaluatedProperties": false},
     "threshold_zone": {"$ref": "#/$defs/score", "unevaluatedProperties": false},
     "person_vs_object": {"$ref": "#/$defs/score", "properties": {"tray_placements": {"$ref": "#/$defs/count"}},
                          "required": ["tray_placements"], "unevaluatedProperties": false},
