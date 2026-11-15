@@ -30,3 +30,8 @@ def test_args_default_to_each_and_need_something_to_test():
     assert modal_ci.parse_args(["--main"]).pr_list == []
     with pytest.raises(SystemExit):
         modal_ci.parse_args([])
+
+
+def test_refs_alone_are_enough():
+    args = modal_ci.parse_args(["--refs", "my-fix, other"])
+    assert args.ref_list == ["my-fix", "other"] and args.pr_list == []
