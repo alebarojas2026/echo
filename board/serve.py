@@ -40,7 +40,7 @@ running or its reading is more than 3 s old. Never zeros in place of an unknown.
 GET /clock and POST /clock {"t": epoch ms} let the operator's laptop set the board's clock
 (board/clock.py, contract issue #632). Both answer only on the same networks.
 
-GET /chain, GET /chain/verify?from=&to= and POST /chain/prove are the sealed record (board/chain.py,
+GET /chain, GET /chain/verify?from=&to=, GET /chain/tail?n= and POST /chain/prove are the sealed record (board/chain.py,
 CONTRACTS.md section 13), mounted the same way. With them the server also checks the chain every
 30 s, sends its head to the bus every 5 s and stores the witnesses' signatures.
 
