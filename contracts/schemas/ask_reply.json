@@ -6,7 +6,7 @@
   "properties": {
     "answer": {"type": "string", "minLength": 1},
     "rows": {"$comment": "The stored records the answer was filled from.", "type": "array", "items": {"type": "object"}},
-    "tool": {"enum": ["presence", "still_spans", "alerts", "intrusions", "link_history", "explain_advice", "model_card", null]},
+    "tool": {"enum": ["presence", "still_spans", "alerts", "intrusions", "link_history", "explain_advice", "model_card", "story", null]},
     "args": {"type": "object",
              "properties": {"minutes": {"type": "integer", "minimum": 1, "maximum": 1440},
                             "zone": {"$comment": "A zone id in radio/nodes.json, or null for anywhere.", "type": ["integer", "null"], "minimum": 1, "maximum": 2},
