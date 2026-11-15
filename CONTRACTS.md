@@ -347,7 +347,7 @@ Presence line (only on a layout whose nodes.json has "presence"; every number is
   under 0.8 x the boundary. The boundary is moving_spread_db (2 dB) until a lesson has given 20 or more windows of
   each kind on this line; then it is the value that best splits that lesson's moving and still windows, kept
   with the model. The Bluetooth lines have no say in it.
-- A thing left in the line: the 2 s median drop is object_db (3 dB) or more and under object_max_db (12 dB; null
+- A thing left in the line: the 2 s median drop is object_db (3 dB) or more and under object_max_db (10 dB; null
   in the file = no upper limit), and the spread is at most object_spread_db (1 dB: the empty level's own jitter),
   for object_hold_s (3 s). Then pred is present false, zone 0, kind "object": no enter, no still timer and no
   intrusion. It ends 1 s after either stops holding. A drop of a person's depth (object_max_db or more), or one

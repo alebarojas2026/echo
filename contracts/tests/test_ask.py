@@ -147,7 +147,7 @@ def test_the_repo_nodes_json_passes_and_its_optional_parts_may_be_missing():
 def test_the_presence_block_names_a_line_and_its_numbers():
     doc = json.loads((FIXTURES.parent.parent / "radio" / "nodes.json").read_text(encoding="utf-8"))
     line = {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble"}
-    numbers = {"on_db": 7, "off_db": 4, "second_hold_s": 5, "object_db": 3, "object_max_db": 12,
+    numbers = {"on_db": 7, "off_db": 4, "second_hold_s": 5, "object_db": 3, "object_max_db": 10,
                "object_spread_db": 1.0, "object_hold_s": 3, "moving_spread_db": 2.0}
     for presence in (line, {"line": line["line"]}, {**line, **numbers}, {**line, "object_max_db": None}):
         assert check.errors({**doc, "presence": presence}, "nodes") == [], presence
