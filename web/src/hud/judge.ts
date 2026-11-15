@@ -14,7 +14,7 @@ import { judgeMoment } from './judge-moment'
 type Panel = { update(state: StateMsg | null, stale: boolean): void; dispose?(): void }
 type PanelModule = { mountPanel(root: HTMLElement): Panel }
 const extraPanels = import.meta.glob<PanelModule>('./judge-*-panel.ts', { eager: true })
-const controlModule = import.meta.glob<{ mountHudControls(root: HTMLElement, send: (message: { cmd: Parameters<Feed['send']>[0]; args: Record<string, string> }) => void): void }>('./controls.ts', { eager: true })
+const controlModule = import.meta.glob<{ mountHudControls(root: HTMLElement, send: (message: { cmd: Parameters<Feed['send']>[0]; args: Record<string, string | boolean> }) => void): void }>('./controls.ts', { eager: true })
 
 export function mountHud(root: HTMLElement, feed: Feed | null) {
   root.classList.add('judge')
