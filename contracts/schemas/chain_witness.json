@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain_witness.json",
+  "$comment": "Section 13: a signature by one witness over the bytes node|seq|hash|t of a chain head it was given. seq, hash and t are that head's, not the sender's own counter or clock.",
+  "$ref": "common.json#/$defs/envelope",
+  "properties": {
+    "type": {
+      "const": "chain_witness"
+    },
+    "node": {
+      "$ref": "common.json#/$defs/node"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "sig": {
+      "$comment": "The 64 signature bytes in base64 (88 characters); 128 hex characters are read too.",
+      "type": "string",
+      "pattern": "^([A-Za-z0-9+/]{86}==|[0-9a-fA-F]{128})$"
+    }
+  },
+  "required": [
+    "node",
+    "hash",
+    "sig"
+  ],
+  "unevaluatedProperties": false
+}

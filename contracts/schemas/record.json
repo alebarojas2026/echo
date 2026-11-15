@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/record.json",
+  "$comment": "Section 13: one sealed record of the store. Not a bus message. kind is second (the once-a-second summary), an event kind of section 5, or one of the witness kinds. hash = SHA-256 of the canonical JSON of {seq, t, kind, body, prev}; prev is 64 zeros for seq 1.",
+  "type": "object",
+  "properties": {
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "t": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "body": {
+      "type": "object"
+    },
+    "prev": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "seq",
+    "t",
+    "kind",
+    "body",
+    "prev",
+    "hash"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "witness"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "node": {
+                "$ref": "common.json#/$defs/node"
+              },
+              "seq": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "t": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sig": {
+                "$comment": "The 64 signature bytes in base64 (88 characters); 128 hex characters are read too.",
+                "type": "string",
+                "pattern": "^([A-Za-z0-9+/]{86}==|[0-9a-fA-F]{128})$"
+              }
+            },
+            "required": [
+              "node",
+              "seq",
+              "hash",
+              "t",
+              "sig"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "witness_bad"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "node": {
+                "$ref": "common.json#/$defs/node"
+              },
+              "seq": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "why": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "node",
+              "why"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "witness_silent",
+              "witness_back"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "node": {
+                "$ref": "common.json#/$defs/node"
+              }
+            },
+            "required": [
+              "node"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "$ref": "common.json#/$defs/event_kind"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "src": {
+                "enum": [
+                  "live",
+                  "sim",
+                  "replay",
+                  null
+                ]
+              },
+              "info": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "src",
+              "info"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ]
+}

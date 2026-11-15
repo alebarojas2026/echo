@@ -37,3 +37,14 @@ test('link words use every configured node and retain an unnamed fallback', () =
   expect(linkName('pi5>unoq:wifi', { ...old, nodes: old.nodes.map(n => ({ ...n, name: undefined })) })).toBe('pi5 to unoq, Wi-Fi')
   expect(zonePlace(999, desk)).toBe('at the desk')
 })
+
+test('the one-spot layout never asks for training when there is no decision', () => {
+  const spot = { ...desk, zones: [desk.zones[0]] }
+  const state = mockState('still', 0, 7000)
+  state.pred = null
+  state.model!.trained = false
+  state.links = state.links.map(link => ({ ...link, drop_db: null }))
+  expect(judgeMoment(state, false, spot)).toEqual(['Getting ready', 'Keep the spot clear while the empty space is measured'])
+  state.links = state.links.map(link => ({ ...link, drop_db: 0.2 }))
+  expect(judgeMoment(state, false, spot)).toEqual(['One moment', 'Checking the radio line'])
+})

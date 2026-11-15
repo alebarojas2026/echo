@@ -17,6 +17,7 @@ import time
 from collections import Counter, deque
 from statistics import mean, median, pstdev
 
+from . import chain as sealed
 from . import fake
 from .layout import LAYOUT
 from .lesson import fit_times as lesson_fit_times
@@ -110,6 +111,7 @@ class Brain:
         self.demo = []   # every event since the last reset, for the recap
         # optional hall links (issue #358): their readings are kept apart from the core links'
         self.hall = {fake.link_id(tx, rx, "ble"): deque() for tx, rx in fake.hall_links(path)}
+        self.chain = sealed.of(path, start_ms)   # a path with a "chain" block: the sealed record in short
 
     def see(self, event: dict) -> None:
         if event["type"] == "rssi":
@@ -493,6 +495,7 @@ class Brain:
                 "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None},
                 **({"armed": True} if self.armed else {}),   # section 5: missing means false
                 **({"tamper": list(self.tamper)} if self.tamper else {}),   # only while a node is listed
+                **({"chain": self.chain.state(t)} if self.chain else {}),   # only on a path with a chain block
                 **hall}
 
     def _lesson(self, t: float, cam: str):
