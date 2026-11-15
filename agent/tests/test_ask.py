@@ -8,7 +8,10 @@ from store import Store
 from store.__main__ import fill_from_sim
 
 NOW = 1_763_149_500_000
-ZONES = {1: "Bed", 2: "Chair", 3: "Hall", 4: "Bathroom"}
+# Names for whatever zone ids the sim's demo path visits on the repo's layout (the square has 1-4, the
+# desk strip 1-2), and one zone no path ever visits. What the answers must say is read from the store.
+ZONES = {1: "Bed", 2: "Chair", 3: "Hall", 4: "Bathroom", 9: "Attic"}
+NEVER_VISITED = 9
 LINKS = ["pi5>unoq:wifi", "east>pi5:ble"]
 NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
@@ -39,8 +42,18 @@ def numbers_in(value) -> set:
     return set(NUMBER.findall(str(value)))
 
 
+def alerts_in(store) -> int:
+    return len(store.events(kinds=("alert_on",)))
+
+
+def visited(store) -> int:
+    """The zone the stored demo spent the most seconds in."""
+    seen = [r["zone"] for r in store.seconds() if r["present"] == 1 and r["kind"] == "person"]
+    return max(set(seen), key=seen.count)
+
+
 EXPECT = {"presence": "Yes. Someone was here for", "still_spans": "The longest time without movement was",
-          "alerts": "No-movement alerts in the last 10 minutes: 1.", "intrusions": "Intrusion alerts in the last 10 minutes: 1.",
+          "alerts": "No-movement alerts in the last 10 minutes: {alerts}.", "intrusions": "Intrusion alerts in the last 10 minutes: 1.",
           "link_history": "In the last 10 minutes: east>pi5:ble read", "explain_advice": "The last advice was: ",
           "model_card": "Model sim runs on this board"}
 
@@ -48,20 +61,24 @@ EXPECT = {"presence": "Yes. Someone was here for", "still_spans": "The longest t
 @pytest.mark.parametrize("tool", list(TOOLS))
 def test_each_tool_answers_from_its_rows(store, tool):
     reply = run(store, tool)
-    assert EXPECT[tool] in reply["answer"], reply["answer"]
+    assert alerts_in(store) >= 1                      # the demo path has an alert on every layout
+    assert EXPECT[tool].format(alerts=alerts_in(store)) in reply["answer"], reply["answer"]
     assert reply["tool"] == tool and reply["picked_by"] == "llm" and reply["src"] == "sim" and reply["rows"]
     # no number that isn't in a row (or the minutes that were asked for)
     assert numbers_in(reply["answer"]) <= numbers_in(reply["rows"]) | {str(reply["args"]["minutes"])}
 
 
 def test_a_zone_and_a_link_narrow_the_answer(store):
-    assert "Nobody was seen in Bed" in run(store, "presence", zone=1)["answer"]
-    assert {r.get("zone", 4) for r in run(store, "presence", zone=4)["rows"]} == {4}
+    assert "Nobody was seen in Attic" in run(store, "presence", zone=NEVER_VISITED)["answer"]
+    zone = visited(store)
+    here = run(store, "presence", zone=zone)
+    assert f"Yes. Someone was in {ZONES[zone]} for" in here["answer"]
+    assert {r.get("zone", zone) for r in here["rows"]} == {zone}
     assert [r["link"] for r in run(store, "link_history", link="pi5>unoq:wifi")["rows"]] == ["pi5>unoq:wifi"]
 
 
 def test_no_prediction_is_never_reported_as_nobody(store):
-    assert "there was no prediction, so I can't say" in run(store, "presence", zone=1)["answer"]
+    assert "there was no prediction, so I can't say" in run(store, "presence", zone=NEVER_VISITED)["answer"]
 
 
 def test_an_empty_store_says_it_has_no_records():
@@ -79,7 +96,7 @@ def test_a_question_that_fits_no_tool_gets_the_list(store, pick):
 
 
 def test_arguments_outside_the_lists_never_reach_a_tool():
-    tool, args = A.checked({"tool": "presence", "minutes": 10**9, "zone": 9, "link": "x; drop table"}, ZONES, LINKS)
+    tool, args = A.checked({"tool": "presence", "minutes": 10**9, "zone": 7, "link": "x; drop table"}, ZONES, LINKS)
     assert (tool, args) == ("presence", {"minutes": 1440, "zone": None, "link": None})
     assert A.checked({"tool": "presence", "minutes": "ten", "zone": 0, "link": "any"}, ZONES, LINKS)[1]["minutes"] == 10
 
@@ -87,7 +104,7 @@ def test_arguments_outside_the_lists_never_reach_a_tool():
 def test_the_schema_holds_the_model_to_the_tools_and_the_layout():
     props = A.schema(ZONES, LINKS)["properties"]
     assert props["tool"]["enum"] == list(TOOLS) + ["none"]
-    assert props["zone"]["enum"] == [0, 1, 2, 3, 4] and props["link"]["enum"] == ["any"] + LINKS
+    assert props["zone"]["enum"] == [0] + sorted(ZONES) and props["link"]["enum"] == ["any"] + LINKS
     system = A.messages("q", ZONES, LINKS)[0]["content"]
     assert all(name in system for name in TOOLS) and "4 for Bathroom" in system
 
