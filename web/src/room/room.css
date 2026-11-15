@@ -37,6 +37,12 @@
   transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+/* Replay, a second with no record (or one the sensor did not know): greyed under its notice, never an empty room. */
+.room--norecord .room-canvas,
+.room--norecord .room-labels {
+  opacity: 0.3;
+}
+
 /* NO DATA: the feed is stale, so nothing on the room is current. */
 .room--stale .room-canvas {
   opacity: 0.3;
@@ -123,6 +129,13 @@
 }
 
 /* A device that has gone quiet: its name in the secondary colour, "not heard" on a second line under it. */
+/* A device silent while armed (tamper): its name and "not heard" in the fault colour. */
+.room-label--node-tamper {
+  color: var(--fault);
+  white-space: pre;
+  line-height: 1.15;
+}
+
 .room-label--node-lost {
   color: var(--text-2);
   white-space: pre;

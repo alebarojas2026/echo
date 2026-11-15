@@ -135,6 +135,8 @@ export interface StateMsg extends Envelope {
   hall?: HallLink[]
   /** Optional: true after arm {on: true}; missing means false. */
   armed?: boolean
+  /** Optional (contract #533): node ids silent while armed; absent or [] when none. */
+  tamper?: string[]
 }
 
 export interface EventMsg extends Envelope {

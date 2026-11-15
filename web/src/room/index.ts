@@ -8,6 +8,7 @@ import { HallBeacons } from './devices'
 import { Fly, HallMarks, hallShot, pinnedFraming } from './fly'
 import { Presence } from './ghost'
 import { HeardNodes } from './heard'
+import { Replay, rowAlert, rowPred, secondKind, type HistoryRow, type ReplayFrame } from './replay'
 import { NODES } from './frame'
 import { DEFAULT_CUT_M, loadScan } from './scan'
 import { Mirror } from './mirror'
@@ -70,14 +71,66 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     notice.querySelector('p')!.textContent = line
   }
 
+  // Replay (replay.ts, #537): recorded seconds drive the figure, zone and alert tints; devices and links stay live.
+  // The figure's holds run on the replay's own clock, kept ahead of real time so it only moves forward.
+  let replayBase = 0
+  const showRecorded = (f: ReplayFrame) => {
+    const { row } = f.second
+    const kind = secondKind(f.second)
+    host.dataset.replay = 'on'
+    host.dataset.replayT = String(f.second.t)
+    host.classList.remove('room--stale')
+    host.classList.toggle('room--norecord', kind !== 'record')
+    if (kind === 'none') say('No record', 'Nothing was saved for this second.')
+    else if (kind === 'unknown') say('Sensor did not know', 'The radio could not tell at this moment.')
+    else say('', '')
+    presence.wave = false
+    beams.setWave(null)
+    alertMarks.update(rowAlert(row))
+    stage.setTamper(row?.tamper ?? [])
+    xray.update(null, false)
+    window.dispatchEvent(new CustomEvent('room:replay-frame', { detail: { t: f.second.t, index: f.index, count: f.count, kind } }))
+    view.requestRender()
+  }
+  const replay = new Replay(showRecorded, (reason) => {
+    // Back to live: the figure starts fresh where live puts it, and the next state redraws the rest.
+    presence.update(null, [], null)
+    host.classList.remove('room--norecord')
+    host.dataset.replay = ''
+    say('', '')
+    window.dispatchEvent(new CustomEvent('room:replay-end', { detail: { reason } }))
+    view.requestRender()
+  })
+  // The figure and the zone names are refreshed every frame on the replay clock, so their holds (200 ms) pass at
+  // the replay's speed instead of waiting for the next recorded second.
+  view.addAnimator((dt) => {
+    const busy = replay.step(dt)
+    const now = replay.now
+    if (now) {
+      presence.update(rowPred(now.second.row), [], null, replayBase + now.clockMs)
+      stage.markZones(presence.shownZones(), rowAlert(now.second.row)?.zone ?? null)
+    }
+    return busy
+  })
+  window.addEventListener('room:replay', (e) => {
+    const detail = (e as CustomEvent<{ rows?: HistoryRow[]; speed?: number }>).detail ?? {}
+    replayBase = performance.now()
+    presence.update(null, [], null, replayBase) // the figure starts fresh, in place, with the first recorded second
+    replay.play(detail.rows ?? [], detail.speed)
+    view.requestRender()
+  })
+  window.addEventListener('room:live', () => replay.stop('live'))
+
   let router: string | null = null
   const heard = new HeardNodes()
   feed.subscribe(({ state, stale }) => {
-    // NO DATA: the last state is more than 1 s old. The room greys out and holds still.
-    host.classList.toggle('room--stale', stale)
-    if (stale) say('No data', 'The feed has paused. Nothing here is current.')
-    else if (state?.health?.status === 'blind') say('Sensor blind', 'A radio link failed, so predictions pause.')
-    else say('', '')
+    // NO DATA: the last state is more than 1 s old. The room greys out and holds still (not while replaying).
+    if (!replay.playing) {
+      host.classList.toggle('room--stale', stale)
+      if (stale) say('No data', 'The feed has paused. Nothing here is current.')
+      else if (state?.health?.status === 'blind') say('Sensor blind', 'A radio link failed, so predictions pause.')
+      else say('', '')
+    }
     host.dataset.feed = stale ? 'stale' : 'live'
     if (stale || !state) return
     // Devices are drawn only while the board hears them (heard.ts).
@@ -87,14 +140,16 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
       router = state.router
       stage.placeNodes(router)
     }
+    beams.update(state)
+    spots.update(state.router, state.advice)
+    if (replay.playing) return // the person, zones and alert come from the recording until it hands back
+    stage.setTamper(state.tamper ?? [])
     // A wave check-in shows for 6 s: its link goes green and wide, and the ghost says "Wave seen".
     const waving = wave.update(state.checkin, performance.now())
     host.dataset.checkin = waving ? '1' : ''
     beams.setWave(waving ? wave.link : null)
     presence.wave = waving
     alertMarks.update(state.alert)
-    beams.update(state)
-    spots.update(state.router, state.advice)
     // The advice's words sit just south of the square, where the X-ray caption goes: one at a time.
     xray.update(state.xray, state.health?.status === 'blind', spots.tagShown)
     presence.update(state.pred, state.objects ?? [], state.xray)
