@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain.json",
+  "$comment": "Section 13: the answer of GET /chain. Not a bus message: no envelope. An empty chain has head.seq 0, head.hash 64 zeros, records 0 and since_t null. head.t, first_seq, anchor and unsealed are optional.",
+  "type": "object",
+  "properties": {
+    "head": {
+      "type": "object",
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "t": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "seq",
+        "hash"
+      ],
+      "additionalProperties": false
+    },
+    "records": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "since_t": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "verified": {
+      "enum": [
+        true,
+        false,
+        "checking"
+      ]
+    },
+    "last_verify_t": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "first_bad_seq": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "witnesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "$ref": "common.json#/$defs/node"
+          },
+          "last_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "last_t": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "sig_ok": {
+            "type": "boolean"
+          },
+          "silent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "node",
+          "last_seq",
+          "last_t",
+          "sig_ok",
+          "silent"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "first_seq": {
+      "$comment": "Optional: the oldest record still kept.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "anchor": {
+      "$comment": "Optional: the last pruned record, which the oldest kept record's prev points at; null when nothing was pruned.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "seq",
+        "hash"
+      ],
+      "additionalProperties": false
+    },
+    "unsealed": {
+      "$comment": "Optional: rows saved before the record was sealed. They are not in the chain.",
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "head",
+    "records",
+    "since_t",
+    "verified",
+    "last_verify_t",
+    "first_bad_seq",
+    "witnesses"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "verified": {
+            "const": true
+          }
+        },
+        "required": [
+          "verified"
+        ]
+      },
+      "then": {
+        "properties": {
+          "first_bad_seq": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verified": {
+            "const": false
+          }
+        },
+        "required": [
+          "verified"
+        ]
+      },
+      "then": {
+        "properties": {
+          "first_bad_seq": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  ]
+}

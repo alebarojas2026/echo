@@ -6,7 +6,7 @@
   "properties": {
     "answer": {"type": "string", "minLength": 1},
     "rows": {"$comment": "The stored records the answer was filled from.", "type": "array", "items": {"type": "object"}},
-    "tool": {"enum": ["presence", "still_spans", "alerts", "intrusions", "link_history", "explain_advice", "model_card", null]},
+    "tool": {"enum": ["presence", "still_spans", "alerts", "intrusions", "link_history", "explain_advice", "model_card", "story", null]},
     "args": {"type": "object",
              "properties": {"minutes": {"type": "integer", "minimum": 1, "maximum": 1440},
                             "zone": {"$comment": "A zone id in radio/nodes.json, or null for anywhere.", "type": ["integer", "null"], "minimum": 1, "maximum": 2},
@@ -15,6 +15,9 @@
     "picked_by": {"enum": ["llm", "rules"]},
     "src": {"enum": ["live", "sim", "replay", null]},
     "ms": {"type": "integer", "minimum": 0},
+    "steps": {"$comment": "Optional (section 13): what was run to answer, in order.", "type": "array", "items": {"type": "object", "properties": {"tool": {"type": "string", "minLength": 1}, "ms": {"type": "number", "minimum": 0}, "rows": {"type": "integer", "minimum": 0}}, "required": ["tool", "ms", "rows"], "additionalProperties": false}},
+    "cites": {"$comment": "Optional (section 13): the seq of every sealed record the answer rests on.", "type": "array", "items": {"type": "integer", "minimum": 1}},
+    "chain_ok": {"$comment": "Optional (section 13): the chain verified over the cited records before answering.", "type": "boolean"},
     "span": {"$comment": "Optional: the stretch of time the answer is about.", "$ref": "common.json#/$defs/span"}
   },
   "required": ["answer", "rows", "tool", "args", "picked_by", "src", "ms"],

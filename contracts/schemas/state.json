@@ -83,6 +83,7 @@
     "armed": {"$comment": "Optional (section 6, Armed): true after arm {on: true}; missing means false.", "type": "boolean"},
     "tamper": {"$comment": "Optional (section 6, Tamper): the nodes silent while armed; missing means [].", "type": "array",
                "items": {"$ref": "common.json#/$defs/any_node"}, "uniqueItems": true},
+    "chain": {"$comment": "Optional (section 13): the sealed record in short. Missing when the brain has heard no chain head in the last 15 s.", "type": "object", "properties": {"seq": {"type": "integer", "minimum": 0}, "hash8": {"type": "string", "pattern": "^[0-9a-f]{8}$"}, "verified": {"type": "boolean"}, "witnesses_ok": {"type": "integer", "minimum": 0}, "witnesses": {"type": "integer", "minimum": 0}}, "required": ["seq", "hash8", "verified", "witnesses_ok", "witnesses"], "additionalProperties": false},
     "model": {
       "$comment": "ver, train_s and ms_per_decision are null before training. Once trained, ver is set; train_s and ms_per_decision stay null when nothing was measured (the fake brain).",
       "type": "object",
