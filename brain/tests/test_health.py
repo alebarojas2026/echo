@@ -199,7 +199,7 @@ def test_dropped_link_in_the_sim_feed():
 
 
 def test_builds_from_radio_nodes_json():
-    doc = json.loads((Path(__file__).parents[2] / "radio" / "nodes.json").read_text())
+    doc = json.loads(Path(__file__).with_name("square_nodes.json").read_text())   # this folder's own layout
     for link in doc["links"]:
         link["expected_hz"] = 12.0
     hm = health.Health.from_nodes(doc, base_dbm=BASE)
