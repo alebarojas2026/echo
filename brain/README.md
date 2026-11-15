@@ -91,6 +91,19 @@ The automatic baseline after `router_home` also runs with the camera unplugged; 
 
 The constants at the top of the file are what gate 8 tunes.
 
+## The live lesson (`brain/lesson.py`)
+
+The camera teaches the radio on whoever is standing there, and is then unplugged. The screen sends commands that already exist:
+
+1. `label_mode` person, then `record_start` with purpose `train`: the person steps left and right for about 20 s.
+2. `train`, with the recording still open. That fit reads the recording as far as it has got (plus this place's earlier recordings, so an empty-room recording made at setup still teaches "nobody"), and it starts the lesson.
+3. While the camera is on, the brain fits again every 15 s from the growing recording.
+4. When the camera goes off, or on `record_stop`, there is one last fit. The model carries on; nothing else changes.
+
+During the lesson `model.training` stays set and carries `lesson: {started_t, agree, of, fits, fitting}`: of the last `of` (10 at most) decisions that had a fresh, non-clipped camera label, `agree` gave the camera's answer. That is the screen's "learning: 6 of 10". Wording for CONTRACTS.md is in #482.
+
+A `train` with no recording open, or after `record_stop`, is the plain one-off fit it always was. `python -m proof.lesson <session> <walker>` runs a lesson from a terminal and times it.
+
 ## Recording steps for training
 
 How the sessions are walked decides what the model can learn. These steps come from the simulation lab (#221, #224), not from measurements; the held-out score in PROOF.md is what counts. Redo all of it in the presentation room, after the baseline there.

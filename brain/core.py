@@ -25,6 +25,7 @@ from advisor.advise import advise
 from brain import features as F
 from brain.alert import Armed, Watch
 from brain.health import Health
+from brain.lesson import Lesson
 from brain.train import Model
 from brain.xray import Xray
 
@@ -148,6 +149,7 @@ class Brain:
         self.model: Optional[Model] = None
         self.model_n = 0
         self.training: Optional[dict] = None
+        self.lesson = Lesson()                # the live lesson (brain/lesson.py)
         self.decision_ms: deque = deque(maxlen=200)
         self.pred: Optional[dict] = None
         self.sessions: Dict[str, dict] = {}
@@ -244,8 +246,12 @@ class Brain:
             return
         self._find_sessions()
         sessions = [dict(s) for s in self.sessions.values() if s["meta"].get("purpose") in TRAIN_PURPOSES]
+        teaching = self._open_train_session()   # a train recording still open: fit from it as far as it has got
+        if teaching:
+            sessions.append(teaching)
         if not sessions:
             return
+        self.lesson.train_cmd(self.now(), teaching and teaching["meta"].get("session"))
         self.training = {"started_t": self.now(), "progress": None,
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
@@ -258,6 +264,7 @@ class Brain:
 
         def done(model):   # back on the loop; model None = the fit failed
             self.training = None
+            self.lesson.fitted(self.now(), model is not None)
             if model is None or place != self.place_t:
                 return   # the fit failed, or the place changed while it ran: that model is for the old one
             self.model, self.model_n = model, self.model_n + 1
@@ -268,6 +275,17 @@ class Brain:
             self.emit("trained", {"ver": ver, "train_s": model.info()["train_s"]})
 
         self.spawn(fit, done)
+
+    def _open_train_session(self) -> Optional[dict]:
+        """The open recording as a session to fit from, if its purpose is train; else None.
+        On the board the bus has it on disk and the fit reads the file as far as it has got."""
+        s = self.open_session
+        if not s or s["meta"].get("purpose") != "train":
+            return None
+        if s["messages"] is not None:
+            return {"meta": s["meta"], "messages": list(s["messages"])}
+        path = self._session_path(s["meta"].get("session"))
+        return {"meta": s["meta"], "messages": None, "path": path} if path else None
 
     def _cmd_relearn(self, args):
         """Forget the current model and train again from this place's recorded sessions."""
@@ -628,6 +646,7 @@ class Brain:
         self.watch.on_pred(self.window["end"], pred)
         pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
+        self.lesson.saw(now, pred, self.label)
         self._announce(pred["zone"] if pred["present"] else 0)
         intruder = self.armed.on_pred(pred)
         if intruder is not None:
@@ -715,6 +734,9 @@ class Brain:
         if cam != self._said_cam and cam in ("on", "off", "stalled"):
             self._said_cam = cam
             self.emit(f"cam_{cam}", {})
+        teaching = self._open_train_session()
+        if self.lesson.due(now, teaching and teaching["meta"].get("session"), cam, self.training is not None):
+            self._cmd_train({})   # the lesson's next fit, or its last one
         self._seq += 1
         lb = self.label
         teacher = None
@@ -723,7 +745,7 @@ class Brain:
         model = self.model.info() if self.model else {"trained": False, "ver": None, "train_s": None,
                                                       "windows": 0, "train_sessions": []}
         model["ms_per_decision"] = round(statistics.median(self.decision_ms), 2) if self.decision_ms else None
-        model["training"] = self.training
+        model["training"] = self.lesson.block(self.training)
         state = {"v": 2, "type": "state", "t": now, "seq": self._seq, "src": self.src,
                  "cam": cam, "router": self.router, "links": links,
                  "health": health["health"],
