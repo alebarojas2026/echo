@@ -5,7 +5,7 @@
     text = story.tell(items)          # "2:14 AM. Somebody stepped in at the desk and stood still for 40 seconds. ..."
 
 Each item is one sentence about one thing that happened, with the clock time it happened and the
-records it came from (their `seq` when the store seals records, else their time t). The sentences are
+records it came from (their `seq`, or "t<epoch ms>" for a record that is not sealed). The sentences are
 fixed templates filled from the rows: every number and every time in them is read from a record.
 The on-board model may only smooth the wording (`smooth`), and its text is used only when it keeps
 every number and time exactly and adds none; otherwise the template story is the answer.
@@ -35,8 +35,8 @@ def hm(t_ms: int) -> str:
 
 
 def ref(record: dict):
-    """The record's number in the sealed chain, or its time (t, epoch ms) when the store does not seal records yet."""
-    return record.get("seq") if record.get("seq") is not None else record.get("t")
+    """The record's number in the sealed chain (an int), or "t<epoch ms>" for a record saved before the store sealed."""
+    return record["seq"] if record.get("seq") is not None else f"t{record['t']}"
 
 
 def where(zone, zones: dict) -> str:

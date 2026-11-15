@@ -99,14 +99,13 @@ def asked(store, question, path=GATE, now_ms=NOW, **kw):
     return A.ask(question, store, now_ms=now_ms, zones=z, links=links, nodes_path=path, **kw)
 
 
-# What #866 adds to POST /ask's reply, on top of section 10, until the contract PR puts it in CONTRACTS.md.
+# What section 13 (the contract branch for #866) adds to POST /ask's reply, plus the tool "story" asked for on #866.
 ADDED = {"steps": {"type": "array", "minItems": 1, "items": {
             "type": "object", "required": ["tool", "ms", "rows"], "additionalProperties": False,
             "properties": {"tool": {"type": "string", "minLength": 1}, "ms": {"type": "number", "minimum": 0},
                            "rows": {"type": "integer", "minimum": 0}}}},
          "cites": {"type": "array", "items": {"type": "integer", "minimum": 1}},
-         "cites_t": {"type": "array", "items": {"type": "integer", "minimum": 0}},
-         "chain_ok": {"type": ["boolean", "null"]}}
+         "chain_ok": {"type": "boolean"}}
 
 
 def story_errors(reply):
@@ -117,7 +116,7 @@ def story_errors(reply):
     schema["properties"].update(ADDED)
     registry = Registry().with_resources((s["$id"], Resource.from_contents(s)) for s in schemas.values())
     out = [e.message for e in Draft202012Validator(schema, registry=registry).iter_errors(reply)]
-    return out + [k for k in ("steps", "chain_ok") if k not in reply] + ([] if ("cites" in reply) != ("cites_t" in reply) else ["cites"])
+    return out + ([] if "steps" in reply else ["steps"]) + ([] if ("cites" in reply) == ("chain_ok" in reply) else ["cites"])
 
 
 def sentences(reply):
@@ -159,7 +158,7 @@ def test_the_answer_shows_its_steps_cites_records_and_verifies_the_cited_range(g
     assert set(reply["cites"]) <= set(in_range)
     assert sealed.asked == (reply["cites"][0], reply["cites"][-1]) and reply["chain_ok"] is True
     assert reply["steps"][3]["rows"] == reply["cites"][-1] - reply["cites"][0] + 1
-    assert "cites_t" not in reply and not reply["answer"].startswith("Warning")
+    assert not reply["answer"].startswith("Warning")
 
 
 def test_a_broken_chain_is_said_first_and_names_the_record(gate):
@@ -169,7 +168,7 @@ def test_a_broken_chain_is_said_first_and_names_the_record(gate):
     sealed.log[bad - 1]["body"] = {**sealed.log[bad - 1]["body"], "present": 0}   # edited after it was sealed
     reply = asked(sealed, "tell me the story of the last 20 minutes")
     assert reply["chain_ok"] is False and story_errors(reply) == []
-    assert reply["answer"].startswith(f"Warning: the sealed record does not check out at record {bad};")
+    assert reply["answer"].startswith(f"Warning: the sealed record does not check out at record {bad}, ")
     assert good["answer"] in reply["answer"]   # the story is still told, after the warning
 
 
@@ -181,13 +180,15 @@ def test_an_empty_stretch_is_said_plainly(gate):
     assert quiet["answer"] == f"Nothing happened between {hm(T0 + 872_000)} and {hm(T0 + 898_000)}. Nobody was seen.{note}"
     gap = asked(gate, "what happened in the last 3 minutes?", now_ms=T0 + 840_000)
     assert gap["answer"] == f"I have no records between {hm(T0 + 660_000)} and {hm(T0 + 840_000)}."
-    assert sentences(gap) == [] and gap["chain_ok"] is None and story_errors(gap) == []
+    assert sentences(gap) == [] and "chain_ok" not in gap and story_errors(gap) == []
 
 
+@pytest.mark.skipif(hasattr(Store, "verify"), reason="the store seals every record")
 def test_without_a_sealed_record_it_cites_record_times_and_does_not_claim_a_check(gate):
     reply = asked(gate, "what happened?")
-    assert reply["chain_ok"] is None and "cites" not in reply and reply["cites_t"]
-    assert set(reply["cites_t"]) <= {r["t"] for r in gate.seconds(0) + gate.events(0)}
+    assert "chain_ok" not in reply and "cites" not in reply
+    cited = {c for r in sentences(reply) for c in r["cites"]}
+    assert cited and cited <= {f"t{r['t']}" for r in gate.seconds(0) + gate.events(0)}
     assert reply["steps"][3] == {"tool": "verify the chain", "ms": reply["steps"][3]["ms"], "rows": 0}
     assert story_errors(reply) == []
 
@@ -245,6 +246,18 @@ def test_between_two_clock_times_is_the_latest_such_stretch():
     assert detective.between_said("between 25:00 and 2", now) is None
     a, b = detective.between_said("what happened from 1 to 2 am", now + 86_400_000)
     assert hm(a) == "1:00 AM" and hm(b) == "2:00 AM" and b - a == 3_600_000 + 59_999
+
+
+@pytest.mark.skipif(not hasattr(Store, "verify"), reason="the store does not seal records yet")
+def test_on_the_real_sealed_store_the_chain_is_checked_and_an_edit_is_named(gate):
+    reply = asked(gate, "what happened in the last 20 minutes?")
+    assert reply["chain_ok"] is True and reply["cites"] and story_errors(reply) == []
+    bad = reply["cites"][len(reply["cites"]) // 2]
+    gate.db.execute("update chain set body = replace(body, '\"present\": 0', '\"present\": 1') where seq = ?", (bad,))
+    gate.db.execute("update chain set t = t + 1 where seq = ?", (bad,))
+    broken = asked(gate, "what happened in the last 20 minutes?")
+    gate.db.execute("update chain set t = t - 1 where seq = ?", (bad,))
+    assert broken["chain_ok"] is False and broken["answer"].startswith(f"Warning: the sealed record does not check out at record {bad}, ")
 
 
 def test_the_desk_strip_still_gets_its_story_with_its_sides(tmp_path_factory):

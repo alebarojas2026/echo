@@ -372,7 +372,7 @@ def main(argv=None) -> None:
     for step in reply.get("steps", []):
         print(f"   step {step['tool']}: {step['rows']} rows, {step['ms']} ms")
     if "chain_ok" in reply:
-        print(f"   chain_ok {reply['chain_ok']}, cites {reply.get('cites', reply.get('cites_t'))}")
+        print(f"   chain_ok {reply['chain_ok']}, cites {reply['cites']}")
     print(f"tool {reply['tool']} {json.dumps(reply['args'])}, picked by {reply['picked_by']}, "
           f"records {reply['src']}, {reply['ms']} ms")
 

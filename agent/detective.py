@@ -8,7 +8,8 @@ is used only when every time and number is kept exactly. The answer carries `ste
 
 The chain check goes through `verify(store, from_seq, to_seq)` below, which calls the store's own verify
 function (the sealed record, #866 section 1) when the store has one. A store that does not seal records
-yet has no `seq`: then the answer cites each record by its time (epoch ms) in `cites_t`, and chain_ok is None.
+yet has no `seq`: then there is no `cites` or `chain_ok`, and each sentence row cites its records by time
+("t" and the epoch ms, e.g. "t1763149515000").
 """
 import math
 import re
@@ -82,7 +83,7 @@ def window(question: str, now_ms: int, minutes_said):
 
 
 def investigate(store, from_t: int, to_t: int, zones: dict, devices: dict, writer=None, timer=time.perf_counter) -> dict:
-    """{"answer", "rows", "steps", "cites" (or "cites_t"), "chain_ok", "span"} for one stretch."""
+    """{"answer", "rows", "steps", "span"}, and "cites" and "chain_ok" when the records are sealed."""
     steps = []
 
     def step(tool, fn):
@@ -97,11 +98,8 @@ def investigate(store, from_t: int, to_t: int, zones: dict, devices: dict, write
     steps[-1]["rows"] = len(seconds)
     items = step("line up the timeline", lambda: story.timeline(events, seconds, zones, devices, from_t, to_t))
     steps[-1]["rows"] = len(items)
-    cited = sorted({c for it in items for c in it["cites"]})
-    sealed = any(r.get("seq") is not None for r in events + seconds)
-    seqs = cited if sealed else []
-    if sealed and not seqs:   # nothing to cite: still check the stretch that was read
-        seqs = sorted(r["seq"] for r in events + seconds if r.get("seq") is not None)
+    cited = sorted({c for it in items for c in it["cites"] if isinstance(c, int)})
+    seqs = cited or sorted(r["seq"] for r in events + seconds if r.get("seq") is not None)
     chain = step("verify the chain", lambda: verify(store, seqs[0] if seqs else None, seqs[-1] if seqs else None))
     steps[-1]["rows"] = chain["checked"]
 
@@ -112,14 +110,14 @@ def investigate(store, from_t: int, to_t: int, zones: dict, devices: dict, write
     steps[-1]["rows"] = len(items)
     if chain["ok"] is False:
         bad = chain["first_bad_seq"]
-        text = (f"Warning: the sealed record does not check out at record {bad}; it was changed after it was "
-                "sealed, so this story can't be trusted from there on. " if bad is not None else
+        text = (f"Warning: the sealed record does not check out at record {bad}, so this story can't be trusted "
+                "from there on. " if bad is not None else
                 "Warning: the sealed record does not check out, so this story can't be trusted. ") + text
     rows = [{"row": "sentence", "at": story.hm(it["t"]), "t": it["t"], "text": it["text"], "cites": it["cites"]}
             for it in items]
     rows.append({"row": "chain", "ok": chain["ok"], "checked": chain["checked"], "first_bad_seq": chain["first_bad_seq"],
                  "from": story.hm(from_t), "to": story.hm(to_t)})
-    out = {"answer": text, "rows": rows, "steps": steps, "chain_ok": chain["ok"],
-           "span": {"from_t": from_t, "to_t": max(from_t, to_t)}}
-    out["cites" if sealed else "cites_t"] = cited
+    out = {"answer": text, "rows": rows, "steps": steps, "span": {"from_t": from_t, "to_t": max(from_t, to_t)}}
+    if chain["ok"] is not None:   # section 13: cites and chain_ok only when there is a sealed record to check
+        out.update(cites=cited, chain_ok=chain["ok"])
     return out

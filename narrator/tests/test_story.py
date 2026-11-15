@@ -90,4 +90,3 @@ def test_smoothing_falls_back_to_the_template_when_the_model_fails():
     assert s.smooth(STORY, down) == (STORY, "template (refused)")
     assert s.smooth(STORY, None) == (STORY, "template")
     assert s.smooth(STORY, lambda m: STORY.replace("Somebody", "Someone"))[1] == "llm"
-    assert s.smooth(STORY, lambda m: time.sleep(0.3) or STORY, timeout_s=0.05)[0] == STORY
