@@ -220,12 +220,19 @@ def test_an_optional_lines_empty_level_follows_drift_while_nobody_is_there():
     kit = FanKit(seed=8).teach()
     link = LINES[0]
     base = kit.brain.base[link]
-    kit.laptops["laptop1"].level -= 3.0                                  # its empty level sinks 3 dB
-    kit.play([(150, "nobody")])
+    for _ in range(3):
+        kit.laptops["laptop1"].level -= 1.0                              # its empty level sinks 3 dB in three minutes
+        kit.play([(60, "nobody")])
     assert abs(kit.brain.base[link] - (base - 3.0)) <= 1.0
     held = kit.brain.base[link]
     kit.play([(30, "still")])
     assert abs(kit.brain.base[link] - held) <= 0.5                       # frozen while somebody is there
+    kit.play([(10, "nobody")])
+    held = kit.brain.base[link]
+    kit.laptops["laptop1"].level -= 8.0                                  # somebody stands in this line alone, beside the spot
+    _, rows, events = kit.play([(90, "nobody")])
+    assert abs(kit.brain.base[link] - held) <= 0.5                       # that is not its empty level either
+    assert row(rows[-1][1], link)["drop_db"] >= 6 and comings(events) == []
     assert alarms(kit.events) == []
 
 

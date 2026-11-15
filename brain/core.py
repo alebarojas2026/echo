@@ -1142,9 +1142,11 @@ class Brain:
             if stats.get("n") and link in self.base:
                 self.base[link] += (stats["median"] - self.base[link]) * share
                 self.windower.base[link] = self.base[link]
-        for link in self.presence_also:   # an optional line's empty level follows the same way, while it has readings
+        # An optional line's empty level follows the same way while it has readings, but never down a dip of
+        # its own: somebody standing in that line alone (beside the spot) is not its empty level.
+        for link in self.presence_also:
             down = self._optional_drop(link, now)
-            if down is not None:
+            if down is not None and down < SUSPECT_DB:
                 self.base[link] -= down * share
         self.health.set_base({k: self.base[k] for k in self.crossing + self.presence_also if k in self.base})
         noted_t, noted = self._noted
