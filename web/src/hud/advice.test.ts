@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { mockState } from '../room/mock'
+import { mockState } from './mock-layout'
 import { adviceResult } from './judge-advice-panel'
 test('hides absent advice and distinguishes measured gain from missing results', () => {
   expect(adviceResult(mockState('empty', 0, 0), false)).toBeNull()

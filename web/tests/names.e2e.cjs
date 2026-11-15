@@ -1,0 +1,21 @@
+const { test, expect } = require('@playwright/test')
+const { layout } = require('./layout-fixture.cjs')
+test('configured names survive degraded links and raw ids stay in attributes', async ({ page }) => {
+  await page.goto('/?mock=still&op=1')
+  await page.evaluate(async layout => {
+    const { mountHud } = await import('/src/hud/index.ts')
+    const { mockState } = await import('/src/hud/mock-layout.ts')
+    const state = mockState('still', 0, 7000)
+    state.health.status = 'degraded'
+    state.links = layout.links.map(link => ({ ...link, status: 'stale', rate_hz: 1 }))
+    state.pred.why = layout.links.map(link => link.id)
+    document.body.replaceChildren(Object.assign(document.createElement('main'), { id: 'hud' }))
+    mountHud(document.querySelector('#hud'), { source: 'ws', subscribe(fn) { fn({state,stale:false}); return () => {} }, send() {}, onEvent() { return () => {} } })
+  }, layout)
+  await expect(page.getByTestId('judge-headline')).not.toHaveText('Sensor blind')
+  await expect(page.getByTestId('why-links')).toHaveAttribute('data-links', layout.links.map(link => link.id).join(','))
+  await expect(page.getByTestId('why-links')).not.toContainText('>')
+  await expect(page.getByTestId('health-links')).toContainText('Bluetooth')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('why-links')).toBeHidden()
+})

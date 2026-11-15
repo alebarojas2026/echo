@@ -1,3 +1,4 @@
+const layoutFixture = require('./layout-fixture.cjs')
 const { test, expect } = require('@playwright/test')
 const path = '/src/hud/index.html'
 for (const width of [320, 768, 1024, 1440]) {

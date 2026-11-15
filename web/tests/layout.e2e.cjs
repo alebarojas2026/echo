@@ -1,3 +1,4 @@
+const layoutFixture = require('./layout-fixture.cjs')
 const { test, expect } = require('@playwright/test')
 for (const [width, height] of [[1920, 1080], [1280, 720]]) {
   for (const scene of ['still', 'object', 'blind', 'empty']) {

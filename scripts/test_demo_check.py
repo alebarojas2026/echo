@@ -26,7 +26,7 @@ async def run_checker(http_port, ws_port):
 def test_reachable_board(tmp_path):
     (tmp_path / "index.html").write_text("<html><body>Radio Sight</body></html>", encoding="utf-8")
     nodes = tmp_path / "nodes.json"
-    nodes.write_text('{"nodes":[],"links":[]}', encoding="utf-8")
+    nodes.write_bytes((CHECKER.parent.parent / "radio" / "nodes.json").read_bytes())
 
     async def state(socket):
         await socket.send('{"v":2,"type":"state"}')
@@ -63,3 +63,10 @@ def test_unreachable_board():
     assert [line.split(":", 1)[0] for line in lines] == [
         "FAIL web", "FAIL nodes.json", "FAIL proof.json", "FAIL WebSocket",
     ]
+
+
+def test_layout_counts_reject_a_different_layout():
+    import pytest
+    from scripts.demo_check import layout_counts
+    with pytest.raises(ValueError, match="count differs"):
+        layout_counts(b'{"nodes":[],"links":[]}')
