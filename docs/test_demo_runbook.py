@@ -13,6 +13,7 @@ class DemoRunbookTest(unittest.TestCase):
 
     def test_required_stages_are_present(self):
         for heading in (
+            "At the desk",
             "Preflight",
             "Baseline and training",
             "Three-minute desk round",
@@ -23,6 +24,22 @@ class DemoRunbookTest(unittest.TestCase):
             "After the demo",
         ):
             self.assertIn(f"## {heading}", self.text)
+
+    def test_at_the_desk_assigns_roles_and_failure_words(self):
+        at_desk = self.lower.split("## at the desk", 1)[1].split("## preflight", 1)[0]
+        for role in ("talker", "operator", "hardware", "spotter"):
+            self.assertIn(f"| {role} |", at_desk)
+        for phrase in (
+            "that's the honest failure. a radio link dropped",
+            "the screen lost the board's feed",
+            "the lesson needs a moment with nobody in view",
+            "we'll use the lesson it learned this morning",
+            "the language model on this board is tiny",
+            "this is a recording of the real board from this morning",
+        ):
+            self.assertIn(phrase, at_desk)
+        self.assertIn("at least two people at the desk", at_desk)
+        self.assertNotIn("not ready", self.lower)
 
     def test_contract_v2_failure_states_are_distinct(self):
         self.assertIn("### `NO DATA`", self.text)
