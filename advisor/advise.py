@@ -43,7 +43,8 @@ def advise(xray, links, nodes, objects):
     # Only advise while the Wi-Fi link is actually dropping now. The X-ray can keep an
     # object for a while after it is taken away; the link itself can't.
     wifi = next((lk for lk in links or [] if lk.get("id") == WIFI_LINK), None)
-    if wifi is None or wifi.get("drop_db") is None or wifi["drop_db"] < WHY_DROP_DB:
+    if (wifi is None or wifi.get("drop_db") is None
+            or not np.isfinite(wifi["drop_db"]) or wifi["drop_db"] < WHY_DROP_DB):
         return None
 
     cx, cy, static = _grid(xray)
@@ -62,7 +63,7 @@ def advise(xray, links, nodes, objects):
     best = None
     for obj in objects:
         since = obj.get("since_s")
-        if since is None or since < PERSIST_S or obj.get("xy_m") is None:
+        if since is None or not np.isfinite(since) or since < PERSIST_S or obj.get("xy_m") is None:
             continue
         peak = _peak_near(cx, cy, static, obj["xy_m"])
         if peak is None:
@@ -162,7 +163,7 @@ def _why(links, node_xyz, px, py):
     for link in links or []:
         lid = link.get("id")
         drop = link.get("drop_db")
-        if lid == WIFI_LINK or drop is None or drop < WHY_DROP_DB:
+        if lid == WIFI_LINK or drop is None or not np.isfinite(drop) or drop < WHY_DROP_DB:
             continue
         tx, rx, _ = _parse_link(lid)
         if tx not in node_xyz or rx not in node_xyz:
