@@ -353,3 +353,92 @@ def test_a_baseline_cmd_is_marked_with_its_time_for_the_clock_check(bus, tmp_pat
     bus.handle(cmd("baseline"), B)
     assert json.loads((tmp_path / ".baseline").read_text())["asked_t"] > first
     assert bus.sent == []   # still not forwarded
+
+
+# --- the witnesses (CONTRACTS.md section 13, #866): chain_head, chain_witness, chain_sub ---
+
+STORE = ("127.0.0.1", 40010)
+SIG = "A" * 86 + "=="
+
+
+def chain(type_, **body):
+    return json.dumps({"v": 2, "type": type_, "src": "live", **body}).encode()
+
+
+@pytest.fixture
+def chain_bus(bus):
+    bus.replies = []
+    bus.reply = lambda data, addr: bus.replies.append((json.loads(data), addr))
+    return bus
+
+
+def test_a_head_is_sent_on_to_each_witness_and_still_reaches_the_brain(chain_bus):
+    chain_bus.handle(chain("chain_sub", node="pi5"), A)                      # a witness that has signed nothing yet
+    chain_bus.handle(chain("chain_witness", node="pi5b", seq=4000, hash="a" * 64, t=4, sig=SIG), B)
+    chain_bus.handle(msg(1), ("127.0.0.1", 40003))                           # a radio reader: not a witness
+    chain_bus.sent.clear()
+    chain_bus.handle(chain("chain_head", seq=4012, hash="b" * 64, t=5, verified=True), STORE)
+    assert [addr for _, addr in chain_bus.replies] == [A, B]
+    assert chain_bus.replies[0][0]["seq"] == 4012 and chain_bus.replies[0][0]["hash"] == "b" * 64
+    assert [json.loads(m)["type"] for m in chain_bus.sent] == ["chain_head"]  # the brain copies it into state
+
+
+def test_a_signature_goes_to_the_brain_and_a_chain_sub_goes_nowhere(chain_bus, tmp_path):
+    chain_bus.handle(cmd("record_start", session="s1", purpose="demo"), A)
+    chain_bus.sent.clear()
+    chain_bus.handle(chain("chain_sub", node="pi5"), A)
+    assert chain_bus.sent == [] and chain_bus.producers == {}
+    chain_bus.handle(chain("chain_witness", node="pi5", seq=4012, hash="b" * 64, t=5, sig=SIG), A)
+    assert [json.loads(m)["type"] for m in chain_bus.sent] == ["chain_witness"]
+    assert chain_bus.replies == []                                           # a signature is not sent to the witnesses
+    assert len((tmp_path / "s1.jsonl").read_text().splitlines()) == 2        # the meta line and the signature
+
+
+def test_no_gaps_are_counted_on_the_chains_record_numbers(chain_bus):
+    for seq in (10, 500, 3):
+        chain_bus.handle(chain("chain_head", seq=seq, hash="a" * 64, t=5), STORE)
+        chain_bus.handle(chain("chain_witness", node="pi5", seq=seq, hash="a" * 64, t=5, sig=SIG), A)
+    assert chain_bus.lost() == 0
+    assert [(p.received, p.restarts) for p in chain_bus.producers.values()] == [(3, 0), (3, 0)]
+
+
+def test_a_witness_that_went_quiet_is_forgotten_and_one_that_cannot_be_reached_stops_nothing(chain_bus):
+    from bus.core import SUB_KEEP_S
+    t = [1000]
+    chain_bus.clock = lambda: t[0]
+    chain_bus.handle(chain("chain_sub"), A)
+    t[0] += SUB_KEEP_S * 1000 - 1
+    chain_bus.handle(chain("chain_sub"), B)
+    t[0] += 2
+    chain_bus.handle(chain("chain_head", seq=1, hash="a" * 64, t=5), STORE)
+    assert [addr for _, addr in chain_bus.replies] == [B] and A not in chain_bus.chain_subs
+
+    def unreachable(data, addr):
+        raise OSError("Network is unreachable")
+    chain_bus.reply = unreachable
+    chain_bus.sent.clear()
+    assert chain_bus.handle(chain("chain_head", seq=2, hash="a" * 64, t=5), STORE) is not None
+    assert len(chain_bus.sent) == 1
+
+
+def test_over_real_sockets_the_head_comes_from_the_bus_port(tmp_path):
+    rx, tx, send = open_sockets("127.0.0.1", 0, ("127.0.0.1", 9))
+    b = Bus(sessions=tmp_path, send=send, reply=rx.sendto)
+    stop = threading.Event()
+    thread = threading.Thread(target=serve, args=(b, rx, stop), daemon=True)
+    thread.start()
+    port = rx.getsockname()[1]
+    pi, store = (socket.socket(socket.AF_INET, socket.SOCK_DGRAM) for _ in range(2))
+    try:
+        pi.settimeout(5)
+        pi.sendto(chain("chain_sub", node="pi5"), ("127.0.0.1", port))
+        time.sleep(0.4)
+        store.sendto(chain("chain_head", seq=7, hash="a" * 64, t=5), ("127.0.0.1", port))
+        data, addr = pi.recvfrom(4096)
+        assert json.loads(data)["seq"] == 7 and addr == ("127.0.0.1", port)
+    finally:
+        stop.set()
+        thread.join(5)
+        for s in (pi, store, rx, tx):
+            s.close()
+        b.close()
