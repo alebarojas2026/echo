@@ -33,16 +33,11 @@ class PublicDocsTest(unittest.TestCase):
 
         self.assertEqual(cursor, 180)
 
-    def test_video_proof_card_uses_placeholders(self):
+    def test_video_keeps_unmeasured_results_as_placeholders(self):
         text = (DOCS / "video-shots.md").read_text(encoding="utf-8")
-        for label in (
-            "Person versus object",
-            "Presence accuracy",
-            "Decision latency",
-            "Bytes sent outside local network",
-            "Images stored",
-        ):
+        for label in ("Bytes sent outside local network", "Images stored"):
             self.assertRegex(text, rf"`{re.escape(label)}: __`")
+        self.assertIn("never a bare percentage", text)
 
     def test_video_shots_are_the_demo_beats_in_order(self):
         text = (DOCS / "video-shots.md").read_text(encoding="utf-8")
@@ -71,13 +66,6 @@ class PublicDocsTest(unittest.TestCase):
         self.assertIn("the laptop shows the local interface", text)
         self.assertNotIn("the pi is the router and screen", text)
 
-    def test_devpost_keeps_placeholders_in_its_proof_table(self):
-        text = (DOCS / "devpost-draft.md").read_text(encoding="utf-8")
-        proof = text.split("### Proof", 1)[1].split("### ", 1)[0]
-        outside = text.replace(proof, "")
-        self.assertNotIn("__", outside)
-        self.assertIn("| Presence accuracy | __ |", proof)
-
     def test_research_credit_is_present(self):
         text = (DOCS / "credits.md").read_text(encoding="utf-8")
         for phrase in (
@@ -88,18 +76,27 @@ class PublicDocsTest(unittest.TestCase):
         ):
             self.assertIn(phrase, text)
 
-    def test_new_kit_and_wifi_first_sentence_stay_consistent(self):
-        sentence = "Walk between two devices and the Wi-Fi signal gives you away."
-        for filename in ("pitch.md", "judge-faq.md", "devpost-draft.md", "video-shots.md"):
-            text = (DOCS / filename).read_text()
-            self.assertIn(sentence, text)
+    def test_the_one_line_and_the_one_spot_kit_stay_consistent(self):
+        line = "it can't see you, it can't be edited, and it still tells you exactly what happened"
+        for filename in ("pitch.md", "judge-faq.md", "video-shots.md"):
+            text = (DOCS / filename).read_text(encoding="utf-8")
+            self.assertIn(line, text.lower())
             self.assertIn("Pi B", text)
-            self.assertNotRegex(text, r"(?i)left/right|five boards|five nodes|wave a hand")
-        for filename in ("pitch.md", "demo-runbook.md", "judge-faq.md",
-                         "devpost-draft.md", "video-shots.md", "architecture.md"):
-            text = (DOCS / filename).read_text().lower()
-            self.assertIn("pi a stays beside the cabled hub", text)
-            self.assertNotIn("30 cm", text)
+        for filename in ("pitch.md", "demo-runbook.md", "judge-faq.md", "devpost-draft.md", "video-shots.md"):
+            text = (DOCS / filename).read_text(encoding="utf-8").lower()
+            self.assertIn("desk height", text)
+            self.assertNotRegex(text, r"left/right|five boards|five nodes|wave a hand|30 cm")
+
+    def test_judge_facing_docs_claim_nothing_that_was_cut(self):
+        cut = ("taught by", "camera unplug", "unplug the camera", "camera lesson", "the lesson",
+               "dead zone", "dead-zone", "two sides", "which side", "beacon", "second opinion",
+               "move the router", "moving the router", "lean aside", "passed by", "walk-through",
+               "walked through", "tracks", "locates", "pinpoints")
+        for filename in ("pitch.md", "demo-runbook.md", "judge-faq.md", "devpost-draft.md", "video-shots.md"):
+            text = (DOCS / filename).read_text(encoding="utf-8").lower()
+            for phrase in cut:
+                self.assertNotIn(phrase, text, f"{filename}: {phrase}")
+            self.assertNotRegex(text, r"\bzones?\b", filename)
 
     def test_pitch_and_video_time_windows_match(self):
         pitch = (DOCS / "pitch.md").read_text()

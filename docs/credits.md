@@ -35,12 +35,12 @@ Echo draws on radio tomographic imaging: using changes in received signal streng
 
 Joey Wilson and Neal Patwari, ["Radio Tomographic Imaging with Wireless Networks"](https://span.ece.utah.edu/uploads/RTI_version_3.pdf), *IEEE Transactions on Mobile Computing*, vol. 9, no. 5, pp. 621–632, 2010.
 
-The paper establishes the core idea of combining signal-strength changes from many links into a spatial estimate. Echo applies that foundation to local dead-zone mapping, presence and movement sensing, and on-device room feedback.
+The paper establishes the core idea of combining signal-strength changes from many links into a spatial estimate. Echo uses the simplest case of that idea: one Wi-Fi line across one spot, for presence and still or moving, decided on the device.
 
 ## Platform
 
 - Arduino UNO Q with Qualcomm Dragonwing for local processing
-- Raspberry Pi 5 as the demo router
+- Two Raspberry Pi 5 boards: one makes the Wi-Fi signal, the other measures it, and each signs the record
 
 ## Project
 

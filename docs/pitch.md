@@ -1,58 +1,60 @@
 # Echo: Spoken Pitch
 
-Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras during live sensing. This script is a three-minute rehearsal plan, not a measured performance claim; every result awaits PROOF.md. A beat is shown only after it passes preflight.
+A witness that never watches. Echo knows when someone is in a space, keeps a record nobody can edit, and tells you what happened. No camera, no microphone. This script is a three-minute rehearsal plan; the only numbers spoken are the sentences in [numbers-to-say.md](numbers-to-say.md). A beat is shown only after it passes preflight.
+
+The kit is one spot and three devices: the Arduino UNO Q and Pi A on one desk, Pi B across a gap of about a metre at desk height. Pi A stays beside the cabled hub. No webcam is plugged in.
 
 ## Three-minute desk round
 
 ### Found you
 
-**0:00–0:25 (25 seconds). Speaker: Talker. Action:** Judge steps into the one spot between the desk and Pi B; camera starts disconnected. **Screen:** Live signal trace and presence, with Wi-Fi across the gap drawn as the primary link.
+**0:00–0:30 (30 seconds). Speaker: Talker. Action:** Judge steps onto the spot between the desk and Pi B and stands for a few seconds, then shifts about. **Screen:** Main laptop: the figure appears, with the headline and the still or moving word.
 
-> Walk between two devices and the Wi-Fi signal gives you away. Found you. This Arduino UNO Q decides on device, on its Qualcomm Dragonwing CPU. The laptop is only a screen.
-
-### Teach the room
-
-**0:25–1:05 (40 seconds). Speaker: Talker. Action:** Operator connects the temporary teacher and starts the judge's lesson; wait for successful training. **Screen:** Camera teaching, labels and progress, never an image; if learning needs longer, cut optional time instead of claiming completion.
-
-> The camera teaches this room locally, then leaves. Unlike a laser tripwire, this strand learns person versus thing and still versus moving, aiming to reuse compatible building Wi-Fi. A radio could sit in a bag or behind a panel; those placements still need testing.
-
-### Camera unplug
-
-**1:05–1:35 (30 seconds). Speaker: Talker. Action:** Hardware unplugs the cable in one continuous view; judge moves, then stands still. **Screen:** Teacher off, radio only, still-present state and privacy panel.
-
-> Most Wi-Fi sensing only sees movement. Ours sees you standing still. Camera unplugged; Wi-Fi is primary, Bluetooth a second opinion.
+> Stand between these two devices for a few seconds. Your body weakens the Wi-Fi signal between them. Found you. This Arduino UNO Q decides on device, on its Qualcomm Dragonwing CPU. No camera, no microphone. It knows you arrived and whether you are still or moving. It does not know who you are.
 
 ### Intrusion alert
 
-**1:35–2:00 (25 seconds). Speaker: Talker. Action:** Judge steps out; Operator arms, judge returns and stays until a live intrusion event appears. **Screen:** Armed state and phone intrusion card; no alert is staged.
+**0:30–1:00 (30 seconds). Speaker: Talker. Action:** Judge steps out; Operator arms only while the spot is empty; judge steps back in and stays until the live intrusion appears. **Screen:** Armed state on the main laptop; the alarm page turns red with the intrusion. No alert is staged.
 
-> Armed means this spot should be empty. Stay here; the phone shows the board's local intrusion alert.
+> Step out. Now it is armed: this spot should be empty. Step back in and stay. The alarm page shows the intrusion the board raised.
 
-### Dead zone
+### Tamper alert
 
-**2:00–2:30 (30 seconds). Speaker: Talker. Action:** Disarm; everybody leaves the spot; Hardware places the object, then clears it or moves Pi B only after the deployed advice is verified. Pi A stays beside the cabled hub. **Screen:** Object decision, blocked cross-gap Wi-Fi, then verified before-and-after gain.
+**1:00–1:25 (25 seconds). Speaker: Talker. Action:** Still armed, Hardware unplugs Pi B in view, waits for the alert, then plugs it back in. **Screen:** The tamper alert names the device; the engine room shows that witness silent while the record keeps counting.
 
-> Nobody is here; an object blocks Wi-Fi. Clear it or move Pi B. The screen shows the measured change.
+> Now we unplug one of its own devices. Echo says which one went quiet, and the gap goes into the record.
 
-### Ask the room and Proof
+### What happened
 
-**2:30–3:00 (30 seconds). Speaker: Talker. Action:** Operator asks the prepared question and opens its source rows, then proof. **Screen:** Local answer with records and completed proof tiles; no blank is spoken.
+**1:25–2:00 (35 seconds). Speaker: Talker. Action:** Operator disarms and taps "What happened?". **Screen:** The answer in plain words with clock times, its steps and the records it used.
 
-> The board answers from its own records. Every measured result is on the proof screen with its method. Anything unmeasured is left out, not estimated. We dug into a signal every building already has. Taught by a camera. Runs without one. We would like to keep building it.
+> Every second is a record, and each one carries the fingerprint of the one before. Ask it what happened. It answers from that sealed record only, and shows its steps.
+
+### Engine room
+
+**2:00–2:30 (30 seconds). Speaker: Talker. Action:** Talker points to the second laptop; Operator presses Prove it. **Screen:** The three devices, the record counting up, the signatures arriving, and the check naming the altered record.
+
+> This is the engine room. Two other machines sign the record every five seconds. Prove it changes one record in a copy, and the board names it. The real record is never touched.
+
+### Proof
+
+**2:30–3:00 (30 seconds). Speaker: Talker. Action:** Talker points to the slide with the measured sentences. **Screen:** The looping slide: the one line and the sentences from numbers-to-say.md, each with its range.
+
+> One person stood on the spot for ten seconds, ten times, and Echo found them 10 of 10 times; with this few trials the true rate is probably between 69% and 100%. With nobody on the spot it said somebody 0 times in 9.4 empty minutes; with this little time the true rate is probably under 0.4 a minute. Those were replayed from recordings taken on this kit. We dug into a signal every building already has. It can't see you, it can't be edited, and it still tells you exactly what happened. We would like to keep building it.
 
 ## If the judge interrupts
 
-Answer briefly, then resume at the next safe action. Cut optional Replay, Incident report, and Tamper alert first; next cut the extra Ask question, then shorten the teaching explanation without shortening successful training. Never drop Found you, Camera unplug, and at least one of Intrusion alert or Dead zone. If both alert and dead-zone checks fail, explain the limitation and finish on proof; do not stage either.
+Answer briefly, then resume at the next safe action. Cut the Tamper alert first, then the Engine room, then shorten Proof to its closing line. Never drop Found you, and keep at least one of Intrusion alert or What happened. If a beat did not pass preflight, say what it would have shown and move on; do not stage it.
 
-If only a minute remains, use the already trained model for Found you, visibly disconnect the camera if connected, show still presence, then the one rehearsed intrusion or object-clearing result. Do not call that a fresh lesson. Skip any unverified result.
+If only a minute remains: Found you, then "What happened?", then the closing line. Skip any beat that needs a device unplugged.
 
 ## Five-minute finalist extension
 
-Keep the same one-spot kit and six-beat order. Add only the features that passed preflight:
+Keep the same one-spot kit and six-beat order. Add only what passed preflight:
 
-- **Tamper alert:** unplug the rehearsed Pi B device while armed, show the named event, reconnect, and wait for healthy sensing and tamper cleared.
-- **Replay:** open saved local summaries with the recorded banner visible; missing records remain unknown.
-- **Incident report:** read an actual armed stretch from local records; the language model may word facts but cannot invent them.
-- **No-movement alert:** wait for sustained stillness, then ask the person to lean aside for the “I'm okay” check and wait for confirmation.
+- **No-movement alert:** the judge stands still until the alert, then steps aside and back for the check-in and waits for "Check-in received".
+- **Was anyone here?:** ask a second question about an earlier stretch and open the records it cites.
+- **Incident report:** read the armed stretch from the sealed record; the language model may word facts but cannot add any.
+- **More of the measured sentences:** the backpack result, the delay after the signal drops, and the chair-seat limit, each word for word from numbers-to-say.md.
 
-The desk link is one strand of a possible building deployment. The learning aims to distinguish a person from a thing and stillness from movement; unseen objects, bags, panels, multiple people and other rooms need held-out tests. The direction is compatible building Wi-Fi, not a claim that every existing access point already works.
+Say the limits plainly: Echo senses one spot, it does not know who a person is or which part of a room they are in, a person needs a few seconds on the line, and Pi B must sit at about desk height. In this demo our boards stand in for an access point and a device a building already has.
