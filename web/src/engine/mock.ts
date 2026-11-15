@@ -72,7 +72,7 @@ function signs(scene: EngineScene, node: string, witnesses: readonly string[], s
 }
 
 /**
- * Every record sealed from the scene's start to second `upTo`: one summary a second, a signature from each
+ * Every record sealed from the scene's start to second `upTo`: one record a second (kind "second"), a signature from each
  * witness that is signing every 5 s (each vouching for the summary of that second), and "witness silent" /
  * "witness back" once each when one stops and starts.
  */
@@ -84,7 +84,7 @@ export function records(scene: EngineScene, layout: Layout, upTo: number, from =
   const silent = new Set<string>()
   for (let s = from; s <= upTo; s++) {
     const t = START_T + s * 1000
-    out.push({ seq: ++seq, t, kind: 'summary', node: null, for_seq: null })
+    out.push({ seq: ++seq, t, kind: 'second', node: null, for_seq: null })
     const head = seq
     for (const w of witnesses) {
       if (((s % SIGN_EVERY_S) + SIGN_EVERY_S) % SIGN_EVERY_S === 0 && signs(scene, w, witnesses, s)) {
@@ -143,7 +143,7 @@ export function sceneAt(scene: EngineScene, tMs: number, layout: Layout = MOCK_L
     model: { ms_per_decision: 3.1, train_s: null },
     chain: { seq: head.seq, hash8: fakeHash(head.seq).slice(0, 8), verified: chain.verified === true, witnesses_ok: chain.witnesses.filter((w) => !w.silent).length, witnesses: witnesses.length },
   }
-  const summaries = all.filter((r) => r.kind === 'summary').slice(-14, -4)
+  const summaries = all.filter((r) => r.kind === 'second').slice(-14, -4)
   const ask: AskLast | null =
     // Once there are records to cite (the first seconds of a scene have too few).
     scene === 'answer' && summaries.length >= 2

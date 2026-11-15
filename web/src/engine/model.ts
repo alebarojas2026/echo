@@ -182,8 +182,10 @@ export function span(ms: number): string {
 }
 
 const KIND_WORDS: Record<string, string> = {
+  second: 'second', // the once-a-second record (contract section 13)
   summary: 'second',
   witness: 'signature',
+  witness_bad: 'bad signature',
   witness_silent: 'witness silent',
   witness_back: 'witness back',
   enter: 'entered',
@@ -354,6 +356,16 @@ export function blocks(tail: readonly TailRecord[], layout: Layout | null, cites
     cited: cited.has(r.seq),
     bad: firstBad !== null && r.seq >= firstBad,
   }))
+}
+
+/**
+ * Which record the prove-it check should alter, so the result can be drawn: one that is on the strip, a few back
+ * from the head, in a copy of just the records the strip holds. Null with no strip to draw it on (the board then
+ * picks one itself).
+ */
+export function proveAsk(tail: readonly TailRecord[] | null): { n: number; seq: number } | null {
+  if (!tail || tail.length < 8) return null
+  return { n: tail.length, seq: tail[tail.length - 6].seq }
 }
 
 /** With no tail from the board: the heads this page has seen go by, as blocks with no kind (it was not told). */

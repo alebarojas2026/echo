@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ENGINE_SCENES, MOCK_LAYOUT, engineScene, fakeHash, records, sceneAt, witnessIds } from './mock'
-import { ago, blocks, boardId, count, deviceViews, hash8, headlines, heardNow, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveWords, seenHeads, span, timings, watchLine, type ChainInfo } from './model'
+import { mockProve } from './source'
+import { ago, blocks, boardId, count, deviceViews, hash8, headlines, heardNow, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveAsk, proveWords, seenHeads, span, timings, watchLine, type ChainInfo } from './model'
 
 const HASH = 'a3f09c21'.repeat(8)
 const chain = (over: Partial<ChainInfo> = {}): ChainInfo => ({
@@ -50,6 +51,8 @@ describe('words and numbers', () => {
     expect([0, 400, 2000, 89_000, 150_000, 3 * 3600_000].map(ago)).toEqual(['now', 'now', '2 s ago', '89 s ago', '3 min ago', '3 h ago'])
     expect(span(12_000)).toBe('12 s')
     expect(kindWord('summary')).toBe('second')
+    expect(kindWord('second')).toBe('second') // the board's own name for the once-a-second record
+    expect(kindWord('witness_bad')).toBe('bad signature')
     expect(kindWord('witness_silent')).toBe('witness silent')
     expect(kindWord('something_new')).toBe('something new') // an unknown kind is shown as it is
   })
@@ -135,6 +138,16 @@ describe('the strip of records', () => {
     expect(blocks(tail, MOCK_LAYOUT, [], 12).map((b) => b.bad)).toEqual([false, false, true, true, true])
   })
 
+  it('asks the board to alter a record that is on the strip, so the copy can be drawn; nothing to ask with no strip', () => {
+    const long = parseTail(Array.from({ length: 40 }, (_, i) => ({ seq: 100 + i, kind: 'second', hash: fakeHash(100 + i) })))!
+    expect(proveAsk(long)).toEqual({ n: 40, seq: 134 }) // six back from the head, in a copy of what the strip holds
+    expect(proveAsk(tail)).toBeNull() // five records: too few to draw around
+    expect(proveAsk(null)).toBeNull()
+    const scene = sceneAt('running', 20_000)
+    expect(mockProve(scene, { n: 40, seq: 1200 })).toMatchObject({ ok: false, altered_seq: 1200, first_bad_seq: 1200 })
+    expect(mockProve(sceneAt('none', 0), { n: 40, seq: 1200 })).toBeNull()
+  })
+
   it('keeps the heads it has seen when the board gives no list, and starts again when the log does', () => {
     let seen = seenHeads([], { seq: 5, hash: HASH })
     seen = seenHeads(seen, { seq: 5, hash: HASH })
@@ -156,10 +169,10 @@ describe('the simulated kit', () => {
   it('seals one record a second with no gaps, each witness signing the head every 5 s', () => {
     const all = records('running', MOCK_LAYOUT, 30)
     expect(all.map((r) => r.seq)).toEqual(all.map((_, i) => all[0].seq + i))
-    expect(all.filter((r) => r.kind === 'summary')).toHaveLength(31)
+    expect(all.filter((r) => r.kind === 'second')).toHaveLength(31)
     const signed = all.filter((r) => r.kind === 'witness')
     expect(signed).toHaveLength(14) // 7 rounds, two witnesses
-    for (const s of signed) expect(all.find((r) => r.seq === s.for_seq)!.kind).toBe('summary')
+    for (const s of signed) expect(all.find((r) => r.seq === s.for_seq)!.kind).toBe('second')
     expect(witnessIds(MOCK_LAYOUT)).toEqual(['pi5', 'pi5b'])
     // The same record number always has the same made-up hash, 64 hex characters.
     expect(fakeHash(1187)).toMatch(/^[0-9a-f]{64}$/)
