@@ -1,3 +1,4 @@
+const layoutFixture = require('./layout-fixture.cjs')
 const { test, expect } = require('@playwright/test')
 const path = '/src/hud/index.html'
 for (const width of [320, 768, 1024, 1440]) {
@@ -13,6 +14,7 @@ for (const width of [320, 768, 1024, 1440]) {
       'ms-per-decision', 'watts', 'bytes-out', 'images-stored', 'models-count', 'pred-kind', 'pred-zone']) {
       await expect(page.getByTestId(id)).toHaveText('__')
     }
+    await expect(page.locator('.hud-proof')).toBeHidden()
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
   })
 }
@@ -46,6 +48,8 @@ test('reads proof.json and preserves missing metrics and measured zero', async (
   } }))
   await page.goto(path)
   await expect(page.getByTestId('models-count')).toHaveText('0')
+  await expect(page.getByTestId('models-count')).toBeVisible()
+  await expect(page.getByTestId('watts')).toBeHidden()
   for (const id of ['zone-score', 'person-object-score', 'train-seconds', 'ms-per-decision',
     'watts', 'bytes-out', 'images-stored']) await expect(page.getByTestId(id)).toHaveText('__')
 })
@@ -56,7 +60,8 @@ test('controls emit v2 commands with selected arguments', async ({ page }) => {
   })
   await page.goto(path)
   await page.getByTestId('train-button').click()
-  await page.getByRole('button', { name: 'Baseline', exact: true }).click()
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'New place: baseline and forget the model', exact: true }).click()
   await page.getByLabel('Session').fill('demo-session')
   await page.getByLabel('Purpose').selectOption('demo')
   await page.getByLabel('Walker').fill('demo-walker')

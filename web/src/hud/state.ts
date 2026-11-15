@@ -53,6 +53,7 @@ export function adaptHudState(state: ScreenState, proof: Proof | null, receivedA
     camera: cameraLabels[state.cam],
     movement: state.alert.state,
     alert: alertLabels[state.alert.state],
+    alertLimit: state.alert.limit_s,
     alertZone: state.alert.state === 'none' ? null : state.alert.zone,
     checkin: state.alert.state === 'none' && state.checkin !== null,
     narration: state.narration,

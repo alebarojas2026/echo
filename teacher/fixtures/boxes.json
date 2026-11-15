@@ -9,5 +9,20 @@
     {"box": [240, 180, 260, 250], "foot_m": [1.5, 0.5], "zone": 4},
     {"box": [190, 100, 210, 200], "foot_m": [1.0, 1.0], "zone": 2},
     {"box": [310, 180, 330, 250], "foot_m": [2.2, 0.5], "zone": 0}
-  ]
+  ],
+  "strip": {
+    "source": "synthetic coordinate fixture for the desk layout's strip, 100 px per metre; not a measured camera session",
+    "image_size": [400, 400],
+    "area_m": [1.6, 0.6],
+    "zone_split_m": [0.8, null],
+    "corners_px": [[100, 300], [260, 300], [260, 240], [100, 240]],
+    "cases": [
+      {"box": [130, 200, 150, 270], "foot_m": [0.4, 0.3], "zone": 1},
+      {"box": [210, 200, 230, 270], "foot_m": [1.2, 0.3], "zone": 2},
+      {"box": [170, 200, 190, 270], "foot_m": [0.8, 0.3], "zone": 2},
+      {"box": [80, 200, 100, 270], "foot_m": [-0.1, 0.3], "zone": 0},
+      {"box": [260, 200, 280, 270], "foot_m": [1.7, 0.3], "zone": 0},
+      {"box": [130, 160, 150, 230], "foot_m": [0.4, 0.7], "zone": 0}
+    ]
+  }
 }

@@ -197,3 +197,43 @@ def test_score_refuses_sessions_recorded_before_the_current_place(tmp_path, monk
     (tmp_path / "place.json").unlink()                     # no place.json: baseline.json's t decides
     assert score_module.place_start(baseline) == (9000, None)
     assert score_module.place_start(tmp_path / "nothing.json") == (None, None)
+
+
+def test_each_session_is_read_against_the_baseline_it_was_recorded_on(tmp_path):
+    from proof.score import base_for, read_baselines
+
+    baseline = tmp_path / "baseline.json"
+    assert read_baselines(baseline) == []                              # no history: baseline.json alone, as before
+    (tmp_path / "baselines.jsonl").write_text(
+        json.dumps({"t": 1000, "base": {"pi5>unoq:wifi": -50}}) + "\n"
+        + "cut short\n"
+        + json.dumps({"t": 5000, "base": {"pi5>unoq:wifi": -57}}) + "\n")
+    history = read_baselines(baseline)
+    assert [e["t"] for e in history] == [1000, 5000]
+
+    def session(recv_t):
+        return {"meta": {"session": "s", "recv_t": recv_t}}
+
+    assert base_for(session(3000), history) == {"pi5>unoq:wifi": -50}    # before the move
+    assert base_for(session(6000), history) == {"pi5>unoq:wifi": -57}    # after it
+    assert base_for(session(500), history) is None                       # older than any: the caller's default
+
+
+def test_replay_windows_a_held_out_session_on_its_own_baseline(monkeypatch):
+    from brain import features
+
+    seen = []
+    real = features.Windower
+
+    def windower(base, *args, **kwargs):
+        seen.append(dict(base))
+        return real(base, *args, **kwargs)
+
+    monkeypatch.setattr(features, "Windower", windower)
+    link = features.LINKS[0]
+    history = [{"t": 1000, "base": {link: -50.0}}, {"t": 5000, "base": {link: -57.0}}]
+    adapter = BrainReplay.__new__(BrainReplay)
+    adapter.model, adapter.base, adapter.expected_hz, adapter.history = None, {link: -60.0}, {}, history
+    for recv_t in (3000, 6000, 10):
+        list(adapter.replay({"meta": {"session": "s", "recv_t": recv_t}, "messages": []}))
+    assert [b[link] for b in seen if link in b][-3:] == [-50.0, -57.0, -60.0]

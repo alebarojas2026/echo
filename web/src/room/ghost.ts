@@ -13,7 +13,7 @@ import {
 import type { ObjectMark, Pred, Xray } from './contract'
 import { createFigure, FIGURE_HEIGHT_M, type Figure } from './figure'
 import { EASE_CSS, fade, GHOST_OMEGA, Held, MOTION, springStep } from './motion'
-import { SQUARE_M, zoneAt, zoneCenter } from './frame'
+import { SIZE_M, ZONES, floorSize, toScene, zoneAt, zoneCenter, zoneRect } from './frame'
 import { OBJECT, PERSON } from './palette'
 import { v3 } from './stage'
 import { shadowCentre } from './xray'
@@ -53,9 +53,9 @@ export function ghostSpots(pred: Pred | null): GhostSpot[] {
 export function ghostFloor(zone: number, shadow: [number, number] | null): [number, number] {
   const centre = zoneCenter(zone)!
   if (!shadow || zoneAt(shadow[0], shadow[1]) !== zone) return centre
-  const half = SQUARE_M / 4 - TILE_INSET_M
-  const clamp = (v: number, c: number) => Math.min(c + half, Math.max(c - half, v))
-  return [clamp(shadow[0], centre[0]), clamp(shadow[1], centre[1])]
+  const [x0, y0, x1, y1] = zoneRect(zone)!
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi - TILE_INSET_M, Math.max(lo + TILE_INSET_M, v))
+  return [clamp(shadow[0], x0, x1), clamp(shadow[1], y0, y1)]
 }
 
 /**
@@ -96,7 +96,7 @@ const zonesKey = (spots: GhostSpot[]) => spots.map((s) => s.zone).sort().join(',
  * into the square, as seen from the camera), so this lane between them stays clear on any canvas size.
  */
 export function objectTagAt([x, y]: [number, number]): [number, number, number] {
-  return [x, y + 0.3 <= SQUARE_M - 0.45 ? y + 0.3 : y - 0.3, 0.08]
+  return [x, y + 0.3 <= SIZE_M[1] - 0.45 ? y + 0.3 : y - 0.3, 0.08]
 }
 
 export class Presence {
@@ -109,6 +109,8 @@ export class Presence {
   private labelText = ''
   private readonly at = new Vector3()
   private readonly vel = new Vector3()
+  /** Walking (one zone, moving) or standing, as the held motion says. */
+  private walking = false
   private readonly to = new Vector3()
   private alpha = 0
   private alphaTo = 0
@@ -116,19 +118,18 @@ export class Presence {
   private readonly zones = new Held<string>('', ZONE_HOLD_MS)
   private readonly motion = new Held<string>('', MOTION_HOLD_MS)
   private probs: number[] | undefined
-  private readonly tiles: { mesh: Mesh<PlaneGeometry, MeshBasicMaterial>; to: number }[] = []
+  private readonly tiles: { zone: number; mesh: Mesh<PlaneGeometry, MeshBasicMaterial>; to: number }[] = []
   private readonly boxes: { mesh: LineSegments<EdgesGeometry, LineBasicMaterial>; label: HTMLElement; to: number }[] = []
 
   constructor(private readonly view: RoomView) {
-    const half = SQUARE_M / 4
-    for (let zone = 1; zone <= 4; zone++) {
-      const [x, y] = zoneCenter(zone)!
-      const mesh = new Mesh(new PlaneGeometry(half * 2, half * 2), new MeshBasicMaterial({ color: PERSON, transparent: true, opacity: 0, depthWrite: false }))
+    for (const { id: zone } of ZONES) {
+      const [x0, y0, x1, y1] = zoneRect(zone)!
+      const mesh = new Mesh(new PlaneGeometry(x1 - x0, y1 - y0), new MeshBasicMaterial({ color: PERSON, transparent: true, opacity: 0, depthWrite: false }))
       mesh.rotation.x = -Math.PI / 2
-      mesh.position.copy(v3([x, y, 0.001]))
+      mesh.position.copy(v3([(x0 + x1) / 2, (y0 + y1) / 2, 0.001]))
       mesh.renderOrder = -2
       view.scene.add(mesh)
-      this.tiles.push({ mesh, to: 0 })
+      this.tiles.push({ zone, mesh, to: 0 })
     }
 
     // One figure only: two half-strength figures read as two people from across the room.
@@ -169,6 +170,7 @@ export class Presence {
       this.placed = false
       this.zones.set('')
       this.motion.set('')
+      this.walking = false
     } else {
       const key = zonesKey(spots)
       if (!this.placed) {
@@ -187,7 +189,7 @@ export class Presence {
       }
       this.alphaTo = 1
       const motion = this.motion.update(pred!.motion ?? 'still', nowMs)
-      this.figure.setMoving(zones.length === 1 && motion === 'moving')
+      this.walking = zones.length === 1 && motion === 'moving' // the pace is set every frame in ease()
       // Very little text (AGENTS.md Style): the walk already shows moving or still, and the lit zone names and
       // tiles show which zones the radio is weighing. The figure only speaks for the check-in, because green
       // always comes with a word.
@@ -196,7 +198,7 @@ export class Presence {
       this.label.classList.toggle('room-label--wave', waving)
     }
     const lit = new Set(this.shownZones())
-    this.tiles.forEach((t, i) => (t.to = lit.has(i + 1) ? TILE_ALPHA : 0))
+    for (const t of this.tiles) t.to = lit.has(t.zone) ? TILE_ALPHA : 0
     this.placeObjects(objects)
     this.view.host.dataset.ghost = this.shownZones().join(',')
     this.view.host.dataset.ghostXy = lone ? `${lone[0].toFixed(2)},${lone[1].toFixed(2)}` : ''
@@ -249,8 +251,11 @@ export class Presence {
     ;[this.at.x, this.vel.x] = springStep(this.at.x, this.vel.x, this.to.x, GHOST_OMEGA, dt)
     ;[this.at.z, this.vel.z] = springStep(this.at.z, this.vel.z, this.to.z, GHOST_OMEGA, dt)
     busy ||= this.at.distanceTo(this.to) > 0.002 || this.vel.length() > 0.002
-    // Face the way the figure is gliding; hold the heading while it stands.
-    if (Math.hypot(this.vel.x, this.vel.z) > TURN_SPEED_MPS) this.figure.setHeading(Math.atan2(this.vel.x, this.vel.z))
+    // Face the way the figure is gliding; hold the heading while it stands. The walk takes the glide's speed, so
+    // its stride and cadence match how fast the floor point travels and the planted foot doesn't slide.
+    const speed = Math.hypot(this.vel.x, this.vel.z)
+    if (speed > TURN_SPEED_MPS) this.figure.setHeading(Math.atan2(this.vel.x, this.vel.z))
+    this.figure.setMoving(this.walking, speed)
 
     this.alpha = fade(this.alpha, this.alphaTo, dt)
     busy ||= this.alpha !== this.alphaTo
@@ -258,14 +263,16 @@ export class Presence {
     this.figure.object.scale.setScalar(0.94 + 0.06 * this.alpha) // arrives with a small settle, leaves the same way
     this.figure.object.visible = this.alpha > 0
     this.figure.setOpacity(this.alpha)
-    busy ||= this.figure.update(dt) && this.figure.object.visible
+    // Called every frame: inside `busy ||= ...` it was skipped whenever the glide was busy, freezing the walk.
+    const figureBusy = this.figure.update(dt)
+    busy ||= figureBusy && this.figure.object.visible
     // The label fades with the figure rather than popping in at full strength.
     this.label.style.opacity = this.alpha.toFixed(3)
     this.label.hidden = this.alpha === 0 || !this.labelText
     if (!this.label.hidden) {
       // Beside the chest, not over the head, so it never reaches up into a zone name. It goes on the east side
       // unless the figure is near the east edge, then on the west.
-      const west = this.at.x > SQUARE_M / 2 - 0.35
+      const west = this.at.x > toScene([floorSize()[0], 0, 0])[0] - 0.35
       this.label.classList.toggle('room-label--ghost-west', west)
       this.view.moveLabel(this.label, this.at.clone().set(this.at.x + (west ? -0.2 : 0.2), FIGURE_HEIGHT_M * 0.62, this.at.z))
     }

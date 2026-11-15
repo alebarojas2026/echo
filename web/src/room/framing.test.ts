@@ -1,6 +1,6 @@
 import { PerspectiveCamera, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
-import { NODES, SQUARE_M, toScene, type Vec3 } from './frame'
+import { NODES, SIZE_M, toScene, type Vec3 } from './frame'
 import { FOV_DEG, fitCamera, roomShot } from './view'
 
 // The room's canvas on the 1920x1080 kiosk: everything right of the panels' 640 px rail.
@@ -20,7 +20,7 @@ function px(cam: PerspectiveCamera, p: Vec3): [number, number] {
 
 describe('room framing at 1280 x 1080', () => {
   const cam = camera()
-  const s = SQUARE_M
+  const s = SIZE_M[0]
   const [sw, se, nw, ne] = ([[0, 0, 0], [s, 0, 0], [0, s, 0], [s, s, 0]] as Vec3[]).map((p) => px(cam, p))
 
   it('shows north straight up: the square is not turned', () => {
@@ -51,7 +51,7 @@ describe('room framing on a laptop, beside the panels rail', () => {
   const canvases: [number, number][] = [[872, 982], [800, 900], [640, 800]]
 
   it('keeps 200 px beside each beacon and the no-movement word, so their words stay on the canvas', () => {
-    const s = SQUARE_M
+    const s = SIZE_M[0]
     const anchors: Vec3[] = [[0, s / 2, 1], [s, s / 2, 1], [-0.08, 0.2, 0], [s + 0.08, 0.2, 0]]
     for (const [w, h] of canvases) {
       const cam = new PerspectiveCamera(FOV_DEG, 1, 0.1, 60)
@@ -66,6 +66,6 @@ describe('room framing on a laptop, beside the panels rail', () => {
 
   it("doesn't change the 1920 x 1080 screen's framing", () => {
     expect(roomShot(W, H).radiusM).toBeCloseTo(roomShot().radiusM)
-    expect(roomShot(W, H).radiusM).toBeCloseTo(1.45 * (SQUARE_M / 2))
+    expect(roomShot(W, H).radiusM).toBeCloseTo(1.45 * (SIZE_M[0] / 2))
   })
 })

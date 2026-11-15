@@ -19,8 +19,12 @@ from statistics import mean, median, pstdev
 
 from . import fake
 from .layout import LAYOUT
+from .lesson import fit_times as lesson_fit_times
 from .wire import encoder
+from narrator import narrate
 from narrator.recap import template as recap_template
+
+narrate.set_zones(narrate.load_zones())   # the zone words the board's narrator uses
 
 STILL_ALERT_S = dict(LAYOUT.zones)   # zone -> still_alert_s, from radio/nodes.json (section 3)
 GRID = LAYOUT.grid                   # section 6: the layout plus 0.2 m on each side
@@ -91,6 +95,7 @@ class Brain:
                        "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
         self.armed, self.intruded = False, False   # section 6, Armed: the space should be empty
+        self.fits = 0    # fits of a scripted lesson so far (path["lesson"])
         self.demo = []   # every event since the last reset, for the recap
 
     def see(self, event: dict) -> None:
@@ -169,7 +174,8 @@ class Brain:
             out.append({"id": link, "dbm": dbm, "base_dbm": base,
                         "drop_db": round(base - dbm, 1) if baseline else None,
                         "rate_hz": round(rate, 1), "expected_hz": self.rate if baseline else None,
-                        "status": "blind" if link in self.blind else "stale" if link in self.stale_since else "ok",
+                        "status": ("blind" if link in self.blind and rx != "pi5b" else
+                                   "stale" if link in self.stale_since or link in self.blind else "ok"),
                         "why": 0.0})
         return out
 
@@ -222,7 +228,8 @@ class Brain:
         if self.advice is None and close and dropping and spot == "S-home" and not self.advice_off:
             o = close[0]
             # the spot whose new link the object blocks least; west wins a tie
-            to = min(("S-W30", "S-E30"), key=lambda s: round(object_drop(o, fake.ROUTER_SPOTS[s], home["unoq"]), 3))
+            spots = [s for s in fake.ROUTER_SPOTS if s != "S-home"]   # every spot in the layout but home
+            to = min(spots, key=lambda s: round(object_drop(o, fake.ROUTER_SPOTS[s], home["unoq"]), 3))
             dx, dy = (round(a - b, 2) for a, b in zip(fake.ROUTER_SPOTS[to], home["pi5"]))
             node = near(home, (o["x"], o["y"]))
             where = {None: "On the router's link, an obstruction", "pi5": "An obstruction next to the router"}.get(
@@ -252,6 +259,8 @@ class Brain:
         self.last_t = t
         baseline, trained = t >= BASELINE_AT_S, t >= TRAINED_AT_S
         pos = fake.position(path.get("person") or [], t)
+        if pos and fake.zone_of(*pos) == 0:
+            pos = None   # past the area's end: nobody in it (section 4)
         moving = fake.is_moving(path.get("person") or [], t)
         zone = fake.zone_of(*pos) if pos else 0
         spot = fake.latest(path.get("router"), t, "spot", "S-home")
@@ -267,7 +276,8 @@ class Brain:
         stale = [l["id"] for l in links if l["status"] != "ok"]
         if baseline:
             self._jumps(t, links, kind, spot == "S-home")
-        blind = sorted(self.blind | self.jumped) if baseline else []
+        # Section 6 (desk layout): the links Pi B hears can make health degraded, never blind.
+        blind = sorted(l for l in self.blind | self.jumped if not l.split(">")[1].startswith("pi5b:")) if baseline else []
         health = {"status": "blind" if blind else "degraded" if stale else "ok", "blind": blind,
                   "reason": "rate" if stale else "jump" if blind else None}
 
@@ -344,9 +354,31 @@ class Brain:
                 "teacher": {"present": bool(pos), "zone": zone,
                             "motion": ("moving" if moving else "still") if pos else None} if cam == "on" else None,
                 "model": {"trained": trained, "ver": "sim" if trained else None, "train_s": None,
-                          "ms_per_decision": None, "windows": 0, "train_sessions": [], "training": None},
+                          "ms_per_decision": None, "windows": 0, "train_sessions": [],
+                          "training": self._lesson(t, cam)},
                 "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None},
                 **({"armed": True} if self.armed else {})}   # section 5: missing means false
+
+    def _lesson(self, t: float, cam: str):
+        """model.training for a path with a scripted lesson (sim/lesson.py): null outside the lesson;
+        inside it, the learning signal the real brain sends (brain/lesson.py). The agreement is
+        scripted, not worked out: path["lesson"]["agree"] gives it after each fit."""
+        lesson = self.path.get("lesson")
+        if not lesson:
+            return None
+        cam_off = min([c["t"] for c in self.path.get("camera") or [] if c["state"] == "off"] or [math.inf])
+        fits = sum(1 for at in lesson_fit_times(lesson, cam_off) if at <= t)
+        for _ in range(fits - self.fits):
+            self._event(t, "trained")
+        self.fits = fits
+        start = lesson["train_at"]
+        if not (start <= t < lesson.get("stop_at", math.inf) and cam == "on"):
+            return None
+        of = min(RECENT, int((t - start) * 10))
+        agree = min(of, lesson["agree"][min(fits, len(lesson["agree"])) - 1])
+        session = (self.path.get("meta") or {}).get("session", "sim-" + self.path.get("name", "path"))
+        return {"started_t": self._ms(start), "progress": None, "sessions": [session],
+                "lesson": {"started_t": self._ms(start), "agree": agree, "of": of, "fits": fits, "fitting": False}}
 
     def _event(self, t: float, kind: str, **info) -> None:
         info = {k: v for k, v in info.items() if v is not None}   # an unknown node is left out, not sent as null
@@ -360,8 +392,12 @@ class Brain:
             self.demo.append({"kind": kind, "info": info, "t": self._ms(t)})
             return
         self.demo.append({"kind": kind, "info": info, "t": self._ms(t)})
-        sentence = NO_NODE[kind] if kind in NO_NODE and info.get("node") is None else SENTENCES[kind]
-        self.narration = {"text": sentence.format(**info), "event_id": f"e{self.n_events}",
+        # The narrator's own template sentence (zone names from nodes.json: "zone 2 (Chair)", or "on
+        # the left" on the desk strip), as the board sends when its model is slow; ours if it has none.
+        sentence = narrate.template(kind, info)
+        if not sentence:
+            sentence = (NO_NODE[kind] if kind in NO_NODE and info.get("node") is None else SENTENCES[kind]).format(**info)
+        self.narration = {"text": sentence, "event_id": f"e{self.n_events}",
                           "t": self._ms(t), "source": "template", "gen_ms": 0}
 
     def _diff(self, t: float, now: dict, has_pred: bool) -> None:

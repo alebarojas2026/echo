@@ -11,9 +11,10 @@ import {
   PlaneGeometry,
   Vector3,
 } from 'three'
-import { HOME_SPOT, NODES, SQUARE_M, ZONES, nodePosition, toScene, type NodeId, type Vec3 } from './frame'
-import { Glide3 } from './motion'
-import { EDGE, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
+import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, type NodeId, type Vec3 } from './frame'
+import type { Hearing } from './heard'
+import { fade, Glide3 } from './motion'
+import { EDGE, FAULT, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
 import { at, mix, shadedGeometry, type Part } from './shade'
 import type { RoomView } from './view'
 
@@ -43,17 +44,20 @@ export function segments(pairs: Vec3[], material: LineBasicMaterial | LineDashed
   return lines
 }
 
-/** The plinth, low walls and slab shadow (replaced by a room scan when there is one), and the square. */
+/** The desk's top, metres above the floor (CONTRACTS.md section 3: every antenna is 1 m up, a 25 cm box on it). */
+export const DESK_TOP_M = 0.75
+
+/** The plinth, low walls and slab shadow (replaced by a room scan when there is one), the floor area with its
+ *  zone lines, and on the desk layout the desk top behind the strip. */
 function buildShell(): { room: Group; square: Group } {
   const g = new Group()
   const sq = new Group()
   const west = -MARGIN_M
-  const east = SQUARE_M + MARGIN_M
-  const north = SQUARE_M + MARGIN_M
+  const east = SIZE_M[0] + MARGIN_M
+  const north = SIZE_M[1] + MARGIN_M
   const south = -SOUTH_M
   const sizeX = east - west
   const sizeY = north - south
-  const mid = SQUARE_M / 2
   const [cx, , cz] = toScene([(west + east) / 2, (south + north) / 2, 0])
 
   // The slab: floor-coloured top, its sides falling off toward the wall shade, a hard shadow under it.
@@ -82,8 +86,9 @@ function buildShell(): { room: Group; square: Group } {
   wall(t, sideLen, ex, ez)
   g.add(new Mesh(shadedGeometry(walls), new MeshBasicMaterial({ vertexColors: true })))
 
-  // The sensing square and its zone lines as thin strips, so they hold up at 0.85 render scale and 3 m.
-  const s = SQUARE_M
+  // The floor area (the square, or the strip) and its zone lines as thin strips, so they hold up at 0.85 render
+  // scale and 3 m.
+  const [fw, fh] = floorSize()
   const lines: Part[] = []
   const strip = (a: Vec3, b: Vec3, wide: number, color: number) => {
     const [ax, , az] = toScene(a)
@@ -93,15 +98,27 @@ function buildShell(): { room: Group; square: Group } {
     lines.push({ geom: new PlaneGeometry(len + wide, wide), light: color, dark: color, at: at((ax + bx) / 2, 0.001, (az + bz) / 2, -Math.PI / 2, ang) })
   }
   const edges: [Vec3, Vec3][] = [
-    [[0, 0, 0], [s, 0, 0]],
-    [[s, 0, 0], [s, s, 0]],
-    [[s, s, 0], [0, s, 0]],
-    [[0, s, 0], [0, 0, 0]],
+    [[0, 0, 0], [fw, 0, 0]],
+    [[fw, 0, 0], [fw, fh, 0]],
+    [[fw, fh, 0], [0, fh, 0]],
+    [[0, fh, 0], [0, 0, 0]],
   ]
   for (const [a, b] of edges) strip(a, b, 0.014, SQUARE)
-  strip([mid, 0, 0], [mid, s, 0], 0.007, EDGE)
-  strip([0, mid, 0], [s, mid, 0], 0.007, EDGE)
+  if (STRIP_M && ZONE_SPLIT_X_M !== null) {
+    strip([ZONE_SPLIT_X_M, 0, 0], [ZONE_SPLIT_X_M, fh, 0], 0.007, EDGE) // one line between the strip's two zones
+  } else {
+    strip([fw / 2, 0, 0], [fw / 2, fh, 0], 0.007, EDGE)
+    strip([0, fh / 2, 0], [fw, fh / 2, 0], 0.007, EDGE)
+  }
   sq.add(new Mesh(shadedGeometry(lines), new MeshBasicMaterial({ vertexColors: true })))
+
+  // The desk behind the strip: a plain top from the strip's back edge to the layout's, at desk height.
+  if (STRIP_M) {
+    const depth = SIZE_M[1] - STRIP_M[1]
+    const [dx, , dz] = toScene([SIZE_M[0] / 2, STRIP_M[1] + depth / 2, 0])
+    const top: Part = { geom: new BoxGeometry(SIZE_M[0], 0.03, depth), light: mix(FLOOR, EDGE, 0.5), dark: mix(FLOOR, WALL_SHADE, 0.6), at: at(dx, DESK_TOP_M - 0.015, dz) }
+    sq.add(new Mesh(shadedGeometry([top]), new MeshBasicMaterial({ vertexColors: true })))
+  }
   return { room: g, square: sq }
 }
 
@@ -113,20 +130,27 @@ function outline(pts: Vec3[]): Vec3[] {
 const HEAD_M = 0.08
 const ZONE_IN_X = 0.1 // zone names start (west zones) or end (east zones) this far in from the side
 
-/** What each node is called on screen and which side of its cube the name goes. */
-const NODE_LABELS: Record<NodeId, { text: string; side: 'above' | 'right' | 'left' }> = {
-  unoq: { text: 'UNO Q', side: 'above' },
-  pi5: { text: 'Pi 5 router', side: 'right' },
-  east: { text: 'East beacon', side: 'right' },
-  west: { text: 'West beacon', side: 'left' },
+/**
+ * Where a node's stand meets something: the floor on the square; on the desk layout the desk top for a node on
+ * the desk, or the desk's edge for a beacon on an arm over the aisle (the arm runs level to its tip).
+ */
+export function standBase([x, y, z]: Vec3): Vec3 {
+  if (!STRIP_M) return [x, y, 0]
+  return y >= STRIP_M[1] - 0.01 ? [x, y, DESK_TOP_M] : [x, STRIP_M[1], z]
 }
 
 interface NodeMesh {
   id: NodeId
-  head: Mesh
-  post: LineSegments
+  head: Mesh<BoxGeometry, MeshBasicMaterial>
+  post: LineSegments<BufferGeometry, LineBasicMaterial>
   label: HTMLElement
+  /** 0..1 as drawn, and where it is heading: 1 heard, LOST_ALPHA heard before but quiet now, 0 never heard. */
+  alpha: number
+  alphaTo: number
 }
+
+/** How faint a device that has gone quiet is drawn, beside its name and "not heard". */
+const LOST_ALPHA = 0.25
 
 export class Stage {
   readonly group = new Group()
@@ -134,37 +158,41 @@ export class Stage {
   readonly drawnRoom: Group
   private readonly nodes: NodeMesh[] = []
   private readonly zoneLabels = new Map<number, HTMLElement>()
-  private readonly routerGlide = new Glide3(nodePosition('pi5', HOME_SPOT))
+  private readonly routerGlide = new Glide3(nodePosition(routerId(), HOME_SPOT))
+  private hearing: ReadonlyMap<string, Hearing> = new Map()
+  private tamper = new Set<string>()
 
   constructor(private readonly view: RoomView) {
     const { room, square } = buildShell()
     this.drawnRoom = room
     this.group.add(room, square)
 
-    // Zone names sit in each zone's outer corner, clear of the links that cross the middle. West zones read
-    // from their west edge, east zones end at their east edge.
+    // Zone names sit in each zone's outer corner (on the strip, its aisle side), clear of the links that cross
+    // the middle. West zones read from their west edge, east zones end at their east edge.
     const inX = ZONE_IN_X
     const inY = 0.2
     for (const z of ZONES) {
-      const east = z.id === 2 || z.id === 4
-      const north = z.id === 1 || z.id === 2
-      const at = v3([east ? SQUARE_M - inX : inX, north ? SQUARE_M - inY : inY, 0])
+      const [x0, y0, x1, y1] = zoneRect(z.id)!
+      const { east, north } = zoneSide(z.id)
+      const at = v3([east ? x1 - inX : x0 + inX, north ? y1 - inY : y0 + inY, 0])
       this.zoneLabels.set(z.id, view.addLabel(`${z.id} ${z.name}`, at, `room-label--zone${east ? ' room-label--zone-east' : ''}`))
     }
 
+    // Devices are live (heard.ts): each starts unseen and fades in once the board hears it.
     const headGeom = new BoxGeometry(HEAD_M, HEAD_M, HEAD_M)
-    const ink = new MeshBasicMaterial({ color: TEXT })
-    const postMat = new LineBasicMaterial({ color: EDGE })
-    const postGeom = new BufferGeometry()
-    postGeom.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3))
     for (const info of Object.values(NODES)) {
-      const head = new Mesh(headGeom, ink)
-      const post = new LineSegments(postGeom, postMat)
+      const head = new Mesh(headGeom, new MeshBasicMaterial({ color: TEXT, transparent: true, opacity: 0 }))
+      const postGeom = new BufferGeometry()
+      postGeom.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3))
+      const post = new LineSegments(postGeom, new LineBasicMaterial({ color: EDGE, transparent: true, opacity: 0 }))
+      head.visible = post.visible = false
       this.group.add(head, post)
-      const label = view.addLabel(NODE_LABELS[info.id].text, new Vector3(), `room-label--node room-label--${NODE_LABELS[info.id].side}`)
-      this.nodes.push({ id: info.id, head, post, label })
+      const label = view.addLabel(info.name, new Vector3(), `room-label--node room-label--${nodeLabelSide(info.id)}`)
+      label.hidden = true
+      this.nodes.push({ id: info.id, head, post, label, alpha: 0, alphaTo: 0 })
     }
     this.putNodes()
+    view.addAnimator((dt) => this.fadeNodes(dt))
     view.addAnimator((dt) => {
       const moving = this.routerGlide.step(dt)
       if (moving) this.putNodes()
@@ -175,22 +203,74 @@ export class Stage {
 
   /** Puts every node at its spot; the router glides (600 ms) to the spot in state.router. */
   placeNodes(router: string | null | undefined) {
-    this.routerGlide.set(nodePosition('pi5', router))
+    this.routerGlide.set(nodePosition(routerId(), router))
     this.view.requestRender()
   }
 
   private putNodes() {
+    const router = routerId()
     for (const n of this.nodes) {
-      const p = n.id === 'pi5' ? this.routerGlide.now() : nodePosition(n.id, null)
+      const p = n.id === router ? this.routerGlide.now() : nodePosition(n.id, null)
       const top = v3(p)
       n.head.position.copy(top)
-      n.post.position.copy(v3([p[0], p[1], 0]))
-      n.post.scale.y = p[2]
+      // The stand: a line from the floor, the desk top, or the desk's edge (an arm) up to the head.
+      const base = v3(standBase(p))
+      const stand = n.post.geometry.getAttribute('position') as Float32BufferAttribute
+      stand.set([base.x, base.y, base.z, top.x, top.y, top.z])
+      stand.needsUpdate = true
+      n.post.geometry.computeBoundingSphere()
       // Each label hangs off the cube's face on its side, so the cube never sits on its own label.
-      const [dx, dz] = { above: [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0] }[NODE_LABELS[n.id].side]
+      const [dx, dz] = { above: [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0] }[nodeLabelSide(n.id)]
       this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))
     }
     this.view.requestRender()
+  }
+
+  /** Shows each device as the board hears it: in full while heard, faint with "not heard" once it goes quiet,
+   *  and not at all before it has ever been heard. */
+  setHearing(hearing: ReadonlyMap<string, Hearing>) {
+    this.hearing = hearing
+    for (const n of this.nodes) {
+      const h = hearing.get(n.id) ?? 'never'
+      // Tamper (contract #533): a device that went silent while armed is drawn in full, in the fault colour,
+      // with its "not heard" label, however long it has been quiet.
+      const tampered = this.tamper.has(n.id)
+      const quiet = tampered || h === 'lost'
+      n.alphaTo = tampered || h === 'heard' ? 1 : h === 'lost' ? LOST_ALPHA : 0
+      const name = NODES[n.id]?.name ?? n.id
+      const text = quiet ? `${name}\nnot heard` : name // a second line: as wide as the name alone
+      if (n.label.textContent !== text) n.label.textContent = text
+      n.label.classList.toggle('room-label--node-lost', quiet && !tampered)
+      n.label.classList.toggle('room-label--node-tamper', tampered)
+      n.head.material.color.setHex(tampered ? FAULT : TEXT)
+    }
+    this.view.host.dataset.tamper = [...this.tamper].join(',')
+    this.view.host.dataset.devices = this.nodes.filter((n) => n.alphaTo === 1).map((n) => n.id).join(',')
+    this.view.host.dataset.devicesLost = this.nodes.filter((n) => n.alphaTo === LOST_ALPHA).map((n) => n.id).join(',')
+    this.view.requestRender()
+  }
+
+  /** The devices state.tamper lists (silent while armed), or a replayed second's. */
+  setTamper(nodes: readonly string[]) {
+    const next = new Set(nodes)
+    if (next.size === this.tamper.size && [...next].every((id) => this.tamper.has(id))) return
+    this.tamper = next
+    this.setHearing(this.hearing)
+  }
+
+  /** Fades each device toward how it is heard (140 ms in, 100 ms out). Returns true while any is still fading. */
+  private fadeNodes(dt: number): boolean {
+    let busy = false
+    for (const n of this.nodes) {
+      n.alpha = fade(n.alpha, n.alphaTo, dt)
+      busy ||= n.alpha !== n.alphaTo
+      n.head.material.opacity = n.post.material.opacity = n.alpha
+      n.head.visible = n.post.visible = n.alpha > 0
+      // The name stays readable on a quiet device: "not heard" is the point of showing it at all.
+      n.label.style.opacity = String(n.alphaTo === LOST_ALPHA ? Math.min(1, n.alpha / LOST_ALPHA) : n.alpha)
+      n.label.hidden = n.alpha === 0 && n.alphaTo === 0
+    }
+    return busy
   }
 
   /** Amber zone names for the zones the radio is weighing (pred.zone_set); red for a fired alert's zone. */

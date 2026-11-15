@@ -1,3 +1,4 @@
+import { hudLayout } from './layout'
 import type { Proof, ScreenState } from './state'
 
 export function mockFeed(params: URLSearchParams) {
@@ -6,6 +7,7 @@ export function mockFeed(params: URLSearchParams) {
   const movement = params.get('movement')
   const checkedIn = movement === 'check-in'
   const t = Date.now()
+  const zone = hudLayout.zones.at(-1)!
   const state: ScreenState = {
     v: 2, type: 'state', t, seq: 0,
     src: source === 'live' || source === 'replay' ? source : 'sim',
@@ -15,7 +17,7 @@ export function mockFeed(params: URLSearchParams) {
     pred: null,
     alert: {
       state: checkedIn ? 'none' : movement === 'counting' ? 'counting' : 'check_on',
-      zone: null, still_s: null, limit_s: null,
+      zone: params.has('layout') ? zone.id : null, still_s: null, limit_s: params.has('layout') ? zone.still_alert_s : null,
     },
     checkin: checkedIn ? { t, link: 'pi5>unoq:wifi' } : null,
     advice: params.has('no-advice') ? null : {

@@ -17,6 +17,8 @@ trying and says so once in the log, instead of exiting.
 
 Settings come from the environment. The service loads the repo's .env; a manual run reads it too,
 without overriding anything already set:
+    WIFI_LINK        which link this reader is (default pi5>unoq:wifi); tx and rx come from
+                     radio/nodes.json, so a second receiver only changes this
     WIFI_IFACE       the interface joined to the sensing hotspot (default wlan0)
     WIFI_BSSID       the Pi hotspot's BSSID (SENSING_BSSID also works). Never commit it.
     WIFI_PING_HOST   what to ping (default 10.42.0.1)
@@ -42,6 +44,8 @@ import sys
 import time
 from pathlib import Path
 
+from .nodes import DOC, LINKS
+
 LINK_ID = "pi5>unoq:wifi"
 TX = "pi5"
 RX = "unoq"
@@ -57,6 +61,25 @@ _LINK_RE = re.compile(r"Connected to ([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})")
 REPO = Path(__file__).resolve().parent.parent
 GATE_MIN_HZ = 20.0
 GATE_MIN_DROP_DB = 3.0
+
+
+def set_link(link_id: str) -> None:
+    """Which wifi link this reader is (WIFI_LINK). tx, rx and kind come from radio/nodes.json."""
+    global LINK_ID, TX, RX, KIND
+    link = LINKS.get(link_id)
+    if link is None or link.get("kind") != "wifi":
+        wifi = ", ".join(lid for lid, entry in LINKS.items() if entry.get("kind") == "wifi")
+        raise ValueError(f"WIFI_LINK={link_id!r} isn't a wifi link in radio/nodes.json ({wifi})")
+    LINK_ID, TX, RX, KIND = link_id, link["tx"], link["rx"], link["kind"]
+
+
+def line_ends() -> str:
+    """The link's two ends in plain words for the gate's prompts: "the board and the Pi" for
+    pi5>unoq:wifi, "Pi B and Pi A" for Pi B's link (the names in nodes.json)."""
+    if (TX, RX) == ("pi5", "unoq"):
+        return "the board and the Pi"
+    names = {node["id"]: node.get("name") or node["id"] for node in DOC["nodes"]}
+    return f"{names.get(RX, RX)} and {names.get(TX, TX)}"
 
 
 def log(text: str) -> None:
@@ -90,6 +113,7 @@ def load_env_file(path, environ=os.environ) -> None:
 
 def settings(environ=os.environ) -> dict:
     return {
+        "link": environ.get("WIFI_LINK") or "pi5>unoq:wifi",
         "iface": environ.get("WIFI_IFACE") or "wlan0",
         "bssid": environ.get("WIFI_BSSID") or environ.get("SENSING_BSSID") or "",
         "bus_host": environ.get("BUS_HOST") or "127.0.0.1",
@@ -174,20 +198,35 @@ def _make_message(dbm: int, seq: int) -> bytes:
 
 
 class Reader:
-    """Turns polls into fresh readings: a poll counts only when rx packets went up since the last one."""
+    """Turns polls into fresh readings: a poll counts only when rx packets went up since the last one.
 
-    def __init__(self, iface: str, bssid: str, read=_read_station_info, say=log, link=_iw_link):
+    A poll that reads nothing (iw timed out on a busy radio, or the station is gone) sends nothing.
+    Once joined, it says "no signal" only after MISS_S of polls that read nothing, so a crowded hall
+    where iw sometimes misses doesn't fill the log. The rx counter is kept across misses: a rejoin
+    restarts it lower, which just costs one reading.
+    """
+
+    MISS_S = 1.0
+
+    def __init__(self, iface: str, bssid: str, read=_read_station_info, say=log, link=_iw_link,
+                 clock=time.monotonic):
         self.iface, self.bssid, self.read, self.say, self.link = iface, bssid, read, say, link
+        self.clock = clock
         self.prev_rx: int | None = None
         self.joined: bool | None = None
+        self.missing_since: float | None = None
 
     def poll(self) -> int | None:
         """The signal of a frame heard since the last poll, or None."""
         dbm, rx = self.read(self.iface, self.bssid)
         if dbm is None or rx is None:
-            self._joined(False)
-            self.prev_rx = None  # a rejoin starts the station's counters again
+            now = self.clock()
+            if self.missing_since is None:
+                self.missing_since = now
+            if self.joined is None or now - self.missing_since >= self.MISS_S:
+                self._joined(False)
             return None
+        self.missing_since = None
         self._joined(True)
         fresh = self.prev_rx is not None and rx > self.prev_rx
         self.prev_rx = rx
@@ -409,6 +448,7 @@ def gate(reader: Reader, pinger: Pinger, rate_hz: float, runs: int = 3, window_s
     """
     pairs = []
     total_n, total_s = 0, 0.0
+    between = line_ends()
 
     def measure(what: str) -> list[int]:
         nonlocal total_n, total_s
@@ -423,9 +463,9 @@ def gate(reader: Reader, pinger: Pinger, rate_hz: float, runs: int = 3, window_s
     pinger.check()
     try:
         for i in range(1, runs + 1):
-            ask(f"Run {i} of {runs}: nobody between the board and the Pi. Press Enter.")
+            ask(f"Run {i} of {runs}: nobody between {between}. Press Enter.")
             clear = measure("line clear")
-            ask(f"Run {i} of {runs}: stand in the middle of the line between the board and the Pi. Press Enter.")
+            ask(f"Run {i} of {runs}: stand in the middle of the line between {between}. Press Enter.")
             blocked = measure("person in the line")
             pairs.append((clear, blocked))
     finally:
@@ -451,6 +491,10 @@ def main(argv=None) -> None:
     if find_tool("iw") is None:
         sys.exit("wifi_rssi: iw isn't installed. Run: sudo apt install iw "
                  "(before the board joins the hotspot: there's no internet after)")
+    try:
+        set_link(cfg["link"])
+    except ValueError as e:
+        sys.exit(f"wifi_rssi: {e}")
     if not cfg["bssid"]:
         sys.exit("wifi_rssi: WIFI_BSSID (or SENSING_BSSID) isn't set. Put it in the repo's .env, "
                  "never in the repo")

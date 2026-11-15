@@ -13,9 +13,11 @@
       import { loadHudProof } from './proof.ts'
       import { renderHud } from './index.ts'
       import { adaptHudState } from './state.ts'
+      import { loadHudLayout } from './layout.ts'
       import { mockFeed } from './mock.ts'
 
       mountHudControls(document.querySelector('#controls'), detail => document.dispatchEvent(new CustomEvent('hud-command', { detail })))
+      await loadHudLayout()
       const params = new URLSearchParams(location.search)
       const { state, proof } = mockFeed(params)
       const root = document.querySelector('#hud')

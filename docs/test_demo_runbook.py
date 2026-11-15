@@ -15,8 +15,9 @@ class DemoRunbookTest(unittest.TestCase):
         for heading in (
             "Preflight",
             "Baseline and training",
+            "Three-minute desk round",
             "Camera-unplug proof",
-            "Live demo sequence",
+            "Five-minute finalist round",
             "Proof check",
             "Recovery",
             "After the demo",
@@ -27,16 +28,30 @@ class DemoRunbookTest(unittest.TestCase):
         self.assertIn("### `NO DATA`", self.text)
         self.assertIn("### `SENSOR BLIND`", self.text)
         self.assertIn("last state is stale", self.lower)
-        self.assertIn("classifier link is unhealthy", self.lower)
+        self.assertIn("required classifier link is unhealthy", self.lower)
+
+    def test_primary_beats_are_in_order(self):
+        beats = (
+            "**found you:**",
+            "**teach the room:**",
+            "**camera unplug:**",
+            "**still follows:**",
+            "**arm the space:**",
+            "**intrusion alert:**",
+            "**ask the room:**",
+            "**proof:**",
+        )
+        positions = [self.lower.index(beat) for beat in beats]
+        self.assertEqual(positions, sorted(positions))
 
     def test_demo_includes_privacy_and_proof_moments(self):
         for phrase in (
             "unplug the camera",
             "teacher` becomes null",
-            "checkin-toast",
-            "advice-text",
-            "router_moved",
-            "router_home",
+            "lesson time: __ s",
+            "images stored: __",
+            "bytes sent outside local network: __",
+            "go directly to **proof**",
             "no-movement alert",
             "json `null` must render as `__`",
         ):
@@ -52,27 +67,28 @@ class DemoRunbookTest(unittest.TestCase):
             "join the demo laptop",
             "http://192.168.77.2:8080/?src=ws",
             "ws://192.168.77.2:8765/ws",
+            "radio/nodes.json",
             "do not copy files or bundles",
         ):
             self.assertIn(phrase, self.lower)
 
-    def test_advice_waits_for_the_live_wifi_drop(self):
-        advice = self.lower.split("**router advice:**", 1)[1].split(
-            "**camera unplug:**", 1
+    def test_finalist_advice_waits_for_the_live_wifi_drop(self):
+        finalist = self.lower.split("## five-minute finalist round", 1)[1].split(
+            "## if asked", 1
         )[0]
-        self.assertIn("pi5>unoq:wifi", advice)
-        self.assertIn("drop_db` of at least `3 db`", advice)
-        self.assertIn("advice does not appear without that live drop", advice)
+        self.assertIn("pi5>unoq:wifi", finalist)
+        self.assertIn("drop_db` of at least `3 db`", finalist)
+        self.assertIn("advice does not appear without that live drop", finalist)
 
-    def test_finish_order_clears_tray_before_router_home(self):
+    def test_finish_order_clears_optional_hardware_before_reset(self):
         steps = (
-            "remove the tray",
-            "object marker and static change clear",
-            "return the pi to `s-home`",
+            "remove it",
+            "object marker and static change to clear",
+            "return the pi to its home spot",
             "send `router_home`",
-            "wait until prediction resumes",
+            "everyone steps away from the sensing area and its edge",
+            "stays out until a prediction returns or `baseline_done` appears",
             "send `reset`",
-            "end-of-demo recap appears",
         )
         positions = [self.lower.index(step) for step in steps]
         self.assertEqual(positions, sorted(positions))
@@ -84,9 +100,10 @@ class DemoRunbookTest(unittest.TestCase):
             "the template path remains available",
             "warms its normal sentence prompt again in the background after the recap",
             "do not hold the next judge for that warmup",
-            "fact-based template recap",
+            "template recap",
         ):
             self.assertIn(phrase, self.lower)
+
 
 if __name__ == "__main__":
     unittest.main()

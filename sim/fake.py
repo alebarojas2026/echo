@@ -120,6 +120,9 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
     meta = {"session": "sim-" + path.get("name", "path"), "purpose": "demo", "walker": "sim"}
     yield {"type": "meta", "t": 0.0, **meta, **path.get("meta", {})}
     cam_was = None
+    # "teacher": "desk" = the webcam on the desk (teacher/DESK.md): no foot point, and no usable
+    # label within dead_band_m of the line between left and right.
+    desk, split = path.get("teacher") == "desk", LAYOUT.split_x_m if LAYOUT.strip_m else SIZE / 2
     for i in range(int(path["duration_s"] * rate)):
         t = round(i / rate, 3)
         pos = position(waypoints, t)
@@ -152,13 +155,15 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
         cam = latest(path.get("camera"), t, "state", "on")
         if cam == "on" and i % label_every == 0:  # one label per camera frame, empty frames too
             # clipped: the camera sees the person but not their feet, so no zone, foot point or motion
-            clipped = bool(pos) and any(active(c, t) for c in path.get("clipped") or [])
+            inside = bool(pos) and zone_of(*pos) != 0   # section 4: present only with a foot point inside the area
+            clipped = inside and (any(active(c, t) for c in path.get("clipped") or [])
+                                  or (desk and abs(pos[0] - split) < path.get("dead_band_m", 0.0)))
             yield {"type": "label", "t": t, "frame": i // label_every,
                    "mode": path.get("label_mode", "person"),
-                   "persons_in_frame": int(pos is not None), "present": pos is not None,
-                   "zone": None if clipped else zone_of(*pos) if pos else 0,
-                   "foot_m": [round(pos[0], 2), round(pos[1], 2)] if pos and not clipped else None,
-                   "motion": ("moving" if moving else "still") if pos and not clipped else None,
+                   "persons_in_frame": int(pos is not None), "present": inside,
+                   "zone": None if clipped else zone_of(*pos) if inside else 0,
+                   "foot_m": [round(pos[0], 2), round(pos[1], 2)] if inside and not clipped and not desk else None,
+                   "motion": ("moving" if moving else "still") if inside and not clipped else None,
                    "conf": round(rng.uniform(0.75, 0.95), 2), "clipped": clipped}
         if i % round(rate) == 0 or cam != cam_was:  # camera watch: every second and on any change
             yield {"type": "cam", "t": t, "state": cam,
@@ -167,11 +172,15 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
 
 
 def load_path(name_or_file: str) -> dict:
-    """Load a path by file name, or by short name from sim/paths/."""
+    """Load a path by file name, or by short name from sim/paths/. "lesson" is built from the
+    layout (sim/lesson.py), not read from a file."""
+    if name_or_file == "lesson":
+        from . import lesson
+        return lesson.path()
     p = Path(name_or_file)
     if not p.exists():
         p = PATHS_DIR / f"{name_or_file}.json"
-    return json.loads(p.read_text())
+    return LAYOUT.resolve(json.loads(p.read_text()))   # zone-relative points become metres for this layout
 
 
 def lossy(timed_lines, loss: float, seed: int = 0):

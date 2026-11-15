@@ -33,7 +33,7 @@ export interface Pred {
   kind: 'person' | 'object' | 'none'
   zone: number
   zone_set: number[]
-  probs: number[] // [empty, z1, z2, z3, z4]
+  probs: number[] // [empty, then one per zone in nodes.json]: 5 entries on the square, 3 on the desk
   motion: 'moving' | 'still' | null // null when present is false
   still_s: number
   why: string[]
@@ -102,6 +102,19 @@ export interface Model {
 
 export interface Board { cpu_temp_c: number | null; cpu_mhz: number | null; cpu_pct: number | null }
 
+/** A hall link: "movement on this path" between a far beacon and a receiver, never who or where along it. */
+export interface HallLink {
+  id: string
+  tx: string
+  rx: string
+  /** The far beacon's position (the tx end) in the layout frame, or null when nodes.json has none. */
+  xy_m: [number, number] | null
+  activity: number
+  moving: boolean
+  rate_hz: number | null
+  stale: boolean
+}
+
 export interface StateMsg extends Envelope {
   type: 'state'
   cam: 'on' | 'off' | 'stalled'
@@ -118,6 +131,12 @@ export interface StateMsg extends Envelope {
   teacher: Teacher | null
   model: Model | null
   board: Board | null
+  /** Optional: a missing hall reads as []. */
+  hall?: HallLink[]
+  /** Optional: true after arm {on: true}; missing means false. */
+  armed?: boolean
+  /** Optional (contract #533): node ids silent while armed; absent or [] when none. */
+  tamper?: string[]
 }
 
 export interface EventMsg extends Envelope {

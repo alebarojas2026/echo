@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+from pathlib import Path
 from urllib.request import urlopen
 
 
@@ -22,6 +23,14 @@ def fields(*keys):
         if not isinstance(value, dict) or not all(key in value for key in keys):
             raise ValueError("required fields missing")
     return validate
+
+
+def layout_counts(body):
+    value = json.loads(body)
+    expected = json.loads((Path(__file__).resolve().parents[1] / "radio" / "nodes.json").read_text(encoding="utf-8-sig"))
+    for key in ("nodes", "links"):
+        if not isinstance(value.get(key), list) or len(value[key]) != len(expected[key]):
+            raise ValueError(f"{key} count differs from the configured layout")
 
 
 async def websocket_check(url):
@@ -44,7 +53,7 @@ def main():
     base = args.http.rstrip("/")
     checks = [
         ("web", lambda: http_check(base + "/", screen)),
-        ("nodes.json", lambda: http_check(base + "/nodes.json", fields("nodes", "links"))),
+        ("nodes.json", lambda: http_check(base + "/nodes.json", layout_counts)),
         ("proof.json", lambda: http_check(base + "/proof.json", fields("zone", "ms_per_decision", "watts"))),
         ("WebSocket", lambda: asyncio.run(websocket_check(args.ws))),
     ]

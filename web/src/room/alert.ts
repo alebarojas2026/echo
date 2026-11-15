@@ -3,7 +3,7 @@ import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import type { Alert, Checkin } from './contract'
-import { SQUARE_M, zoneCenter } from './frame'
+import { alertWordAt, zoneRect } from './frame'
 import { FAULT, PERSON } from './palette'
 import { v3 } from './stage'
 import type { RoomView } from './view'
@@ -49,7 +49,7 @@ export interface AlertLook {
 }
 
 export function alertLook(alert: Alert | null): AlertLook {
-  if (!alert || alert.state === 'none' || !alert.zone || !zoneCenter(alert.zone)) {
+  if (!alert || alert.state === 'none' || !alert.zone || !zoneRect(alert.zone)) {
     return { zone: null, color: PERSON, fill: 0, width: 0, breathe: false }
   }
   return alert.state === 'check_on'
@@ -57,13 +57,7 @@ export function alertLook(alert: Alert | null): AlertLook {
     : { zone: alert.zone, color: PERSON, fill: 0.15, width: 3, breathe: false }
 }
 
-/** Where the alert's word goes: on the floor just outside the square, level with the zone's name, on the
- *  zone's own side (east zones to the east, west zones to the west). Returns the point and whether it's west. */
-export function alertWordAt(zone: number): [[number, number, number], boolean] {
-  const east = zone === 2 || zone === 4
-  const north = zone === 1 || zone === 2
-  return [[east ? SQUARE_M + 0.08 : -0.08, north ? SQUARE_M - 0.2 : 0.2, 0], !east]
-}
+export { alertWordAt } from './frame'
 
 const INSET_M = 0.03 // the outline sits just inside the zone, clear of the square and zone lines
 
@@ -80,8 +74,8 @@ export class AlertMarks {
   private readonly word: HTMLElement
 
   constructor(private readonly view: RoomView) {
-    const side = SQUARE_M / 2 - 2 * INSET_M
-    this.fill = new Mesh(new PlaneGeometry(side, side), new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }))
+    // A unit plane, sized to the zone's rectangle when the alert moves there.
+    this.fill = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }))
     this.fill.rotation.x = -Math.PI / 2
     this.fill.renderOrder = -1
     this.fill.visible = false
@@ -114,10 +108,14 @@ export class AlertMarks {
   }
 
   private place(zone: number) {
-    const [cx, cy] = zoneCenter(zone)!
-    const h = SQUARE_M / 4 - INSET_M
+    const [x0, y0, x1, y1] = zoneRect(zone)!
+    const cx = (x0 + x1) / 2
+    const cy = (y0 + y1) / 2
+    const hx = (x1 - x0) / 2 - INSET_M
+    const hy = (y1 - y0) / 2 - INSET_M
     this.fill.position.copy(v3([cx, cy, 0.0015]))
-    const pts = [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h]].flatMap(([dx, dy]) => {
+    this.fill.scale.set(2 * hx - 2 * INSET_M, 2 * hy - 2 * INSET_M, 1)
+    const pts = [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy], [-hx, -hy]].flatMap(([dx, dy]) => {
       const p = v3([cx + dx, cy + dy, 0.005])
       return [p.x, p.y, p.z]
     })

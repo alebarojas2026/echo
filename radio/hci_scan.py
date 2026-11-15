@@ -21,7 +21,7 @@ import sys
 import time
 
 from . import hci
-from .nodes import BEACONS, LINKS
+from .nodes import BEACONS, LINKS, RECEIVERS
 
 MARK = b"\xff\xff\x52\x53"  # company id FFFF + "RS": a cheap test before parsing a packet
 
@@ -122,13 +122,18 @@ def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, se
     So when none of our beacons has been heard for quiet_s, the scan is started again (and again
     every quiet_s while it stays quiet). It's said once per quiet stretch, and again when adverts
     come back.
+
+    In a crowded hall the radio is busy: a restart can time out or be refused for a moment, and the
+    bus socket can fail a send. Neither ends the scan. A failed restart is said once per quiet
+    stretch and tried again after quiet_s; a failed send drops that reading and is said once until
+    a send works again. Only the controller itself going away (OSError from the HCI socket) ends it.
     """
     say = say or (lambda text: print(text, file=sys.stderr, flush=True))
     seen = ({} if seen is None else seen) if keep else None
     end = clock() + seconds if seconds else None
     start_either(scanner, say)
     last = quiet_since = clock()
-    restarted = False
+    restarted = restart_failed = send_failed = False
     try:
         while not stop() and (end is None or clock() < end):
             kept_now = scanner.poll()
@@ -139,14 +144,27 @@ def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, se
                     restarted = False
                 last = now
             for link, dbm in kept_now:
-                emit(link, dbm)
+                try:
+                    emit(link, dbm)
+                    if send_failed:
+                        say("sending to the bus again")
+                        send_failed = False
+                except OSError as e:
+                    if not send_failed:
+                        say(f"can't send to the bus ({e}); dropping readings until it works")
+                        send_failed = True
                 if seen is not None:
                     seen.setdefault(link, []).append(dbm)
             if quiet_s and now - last >= quiet_s:
                 if not restarted:
                     say(f"no beacon adverts for {quiet_s:g} s, restarting the scan")
-                    restarted, quiet_since = True, last
-                scanner.start()
+                    restarted, quiet_since, restart_failed = True, last, False
+                try:
+                    scanner.start()
+                except hci.HciError as e:
+                    if not restart_failed:
+                        say(f"restarting the scan failed ({e}); trying again every {quiet_s:g} s")
+                        restart_failed = True
                 last = now
     finally:
         scanner.stop()
@@ -174,7 +192,7 @@ def open_controller(dev: int) -> hci.Hci:
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--node", required=True, choices=["unoq", "pi5"], help="the receiver this runs on")
+    ap.add_argument("--node", required=True, choices=RECEIVERS, help="the receiver this runs on")
     ap.add_argument("--dev", type=int, default=0, help="HCI device number (0 = hci0)")
     ap.add_argument("--seconds", type=float, default=0, help="stop after this long (0 = until Ctrl-C)")
     args = ap.parse_args(argv)

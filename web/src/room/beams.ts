@@ -3,7 +3,7 @@ import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import type { LinkState, StateMsg } from './contract'
-import { LINK_IDS, SQUARE_M, nodePosition, parseLinkId, type NodeId, type Vec3 } from './frame'
+import { HOME_SPOT, LINK_IDS, floorSize, nodePosition, parseLinkId, routerId, type NodeId, type Vec3 } from './frame'
 import type { Mirror } from './mirror'
 import { follow, Glide3, Held, TAU } from './motion'
 import { ACTION, FAULT, LINK, PERSON } from './palette'
@@ -61,6 +61,27 @@ export function nodePair(id: string): string {
   return p ? [p.tx, p.rx].sort().join('-') : id
 }
 
+/**
+ * How far each link sits from the straight line between its two nodes, so links between the same two nodes
+ * (Wi-Fi and Bluetooth, or both directions) lie side by side 7 cm apart instead of on top of each other.
+ * The shift is to the left of the link's own direction, so it holds whichever way the link runs.
+ */
+export function laneShifts(ids: readonly string[]): Map<string, number> {
+  const groups = new Map<string, string[]>()
+  for (const id of ids) groups.set(nodePair(id), [...(groups.get(nodePair(id)) ?? []), id])
+  const out = new Map<string, number>()
+  for (const group of groups.values()) {
+    group.forEach((id, i) => {
+      const lane = ((group.length - 1) / 2 - i) * 0.07
+      const p = parseLinkId(id)
+      // Lanes are counted along the pair's sorted direction; a link running the other way flips its side.
+      const forward = !p || [p.tx, p.rx].sort()[0] === p.tx
+      out.set(id, forward ? lane : -lane)
+    })
+  }
+  return out
+}
+
 export class Beams {
   private readonly beams: Beam[] = []
   /** One "no signal" label per node pair, however many links run between the two nodes. */
@@ -69,7 +90,7 @@ export class Beams {
   private readonly waiting: HTMLElement
   private router: string | null = null
   /** The router's head glides to a new spot (600 ms); the links that end on it follow. */
-  private readonly pi5 = new Glide3(nodePosition('pi5', 'S-home'))
+  private readonly pi5 = new Glide3(nodePosition(routerId(), HOME_SPOT))
   /** The link that just carried a wave check-in, drawn green and wide while the wave shows. */
   private waveLink: string | null = null
 
@@ -87,14 +108,15 @@ export class Beams {
       this.beams.push({ id, pair, line, mat, look: beamLook(undefined, false, new Set()), amber: 0, green: 0,
         why: new Held<boolean>(false, (on) => (on ? 300 : 800)) })
     }
-    this.waiting = view.addLabel('Waiting for radio readings', v3([SQUARE_M / 2, SQUARE_M / 2, 0]), 'room-label--caption')
+    const [fw, fh] = floorSize()
+    this.waiting = view.addLabel('Waiting for radio readings', v3([fw / 2, fh / 2, 0]), 'room-label--caption')
     this.waiting.hidden = true
     view.onResize((w, h) => {
       for (const b of this.beams) b.mat.resolution.set(w, h)
     })
     view.addAnimator((dt) => this.ease(dt))
-    this.router = 'S-home'
-    this.placeAt(nodePosition('pi5', 'S-home'))
+    this.router = HOME_SPOT
+    this.placeAt(nodePosition(routerId(), HOME_SPOT))
   }
 
   setWave(link: string | null) {
@@ -106,7 +128,7 @@ export class Beams {
   update(state: StateMsg, nowMs = performance.now()) {
     if (state.router !== this.router) {
       this.router = state.router
-      this.pi5.set(nodePosition('pi5', state.router))
+      this.pi5.set(nodePosition(routerId(), state.router))
       this.view.requestRender()
     }
     const blind = new Set(state.health?.blind ?? [])
@@ -130,24 +152,29 @@ export class Beams {
     this.view.requestRender()
   }
 
-  /** Puts every line between its nodes, with the router's head at `pi5`. Two links between the same nodes
+  /** Puts every line between its nodes, with the router's head at `pi5`. Links between the same two nodes
    *  sit side by side. */
   private placeAt(pi5: Vec3) {
-    const at = (id: NodeId) => (id === 'pi5' ? pi5 : nodePosition(id, this.router))
+    const router = routerId()
+    const at = (id: NodeId) => (id === router ? pi5 : nodePosition(id, this.router))
+    const shifts = laneShifts(this.beams.map((b) => b.id))
+    const labelled = new Set<string>()
     for (const b of this.beams) {
       const parts = parseLinkId(b.id)!
       const a = at(parts.tx)
       const z = at(parts.rx)
-      const twin = LINK_IDS.filter((id) => id !== b.id && id.startsWith(`${parts.tx}>${parts.rx}:`)).length > 0
-      const shift = twin ? (parts.kind === 'wifi' ? 0.035 : -0.035) : 0
+      const shift = shifts.get(b.id) ?? 0
       const [ax, ay, az] = offset(a, z, shift)
       const [zx, zy, zz] = offset(z, a, -shift)
       const p = v3([ax, ay, az])
       const q = v3([zx, zy, zz])
       ;(b.line.geometry as LineGeometry).setPositions([p.x, p.y, p.z, q.x, q.y, q.z])
       b.line.computeLineDistances()
-      // A pair's label sits on the middle of its unshifted link, so twins share one spot.
-      if (!twin || parts.kind === 'wifi') this.view.moveLabel(this.pairLabels.get(b.pair)!, v3(a).lerp(v3(z), 0.5))
+      // A pair's label sits on the middle of the unshifted line between its nodes, one spot for all its links.
+      if (!labelled.has(b.pair)) {
+        labelled.add(b.pair)
+        this.view.moveLabel(this.pairLabels.get(b.pair)!, v3(a).lerp(v3(z), 0.5))
+      }
     }
     this.view.requestRender()
   }

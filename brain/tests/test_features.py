@@ -71,10 +71,17 @@ def test_missing_link_is_none_but_vector_stays_full():
     w = next(F.windows(msgs, base))
     assert w["links"]["east>pi5:ble"]["n"] == 0
     v = F.vector(w)
-    assert len(v) == len(F.feature_names()) == len(F.LINKS) * 5
-    assert v[:5] == pytest.approx([-62, 0, -62, -62, 2])
-    i = F.LINKS.index("east>pi5:ble") * 5
-    assert v[i:i + 5] == [-55, 0.0, -55, -55, 0.0]
+    assert len(v) == len(F.feature_names()) == len(F.LINKS) * len(F.STATS)
+    assert v[:4] == pytest.approx([2, 0, 2, 2])           # drop, spread, smallest and largest drop: no dBm
+    i = F.LINKS.index("east>pi5:ble") * len(F.STATS)
+    assert v[i:i + 4] == [0.0, 0.0, 0.0, 0.0]             # a silent link counts as sitting on its baseline
+
+
+def test_features_do_not_change_when_every_level_and_its_baseline_shift_together():
+    msgs = [rssi(t, "pi5>unoq:wifi", -62 - (t // 100) % 3) for t in range(0, 2000, 100)]
+    here = next(F.windows(msgs, {"pi5>unoq:wifi": -60}))
+    there = next(F.windows([dict(m, dbm=m["dbm"] - 11) for m in msgs], {"pi5>unoq:wifi": -71}))
+    assert F.vector(here) == pytest.approx(F.vector(there))
 
 
 def test_window_label_majority_and_drops():

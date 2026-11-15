@@ -17,8 +17,7 @@ from collections import deque
 
 import numpy as np
 
-LINKS = ("pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble",
-         "east>pi5:ble", "west>pi5:ble")
+from brain.layout import LINKS   # radio/nodes.json's links, in file order
 
 RATE_WINDOW_S = 2.0
 STALE_FRAC = 0.4
@@ -169,13 +168,17 @@ class Health:
         judge_jump = kind == "none" and router_home and not baseline_running
         rows = [lk.judge(now, judge_rate, judge_jump) for lk in self.links.values()]
 
-        blind = [r["id"] for r in rows if r["status"] == "blind"]
-        bad_cls = [k for k in self.classifier_links if k in blind]
+        all_blind = [r["id"] for r in rows if r["status"] == "blind"]
+        bad_cls = [k for k in self.classifier_links if k in all_blind]
+        # health.blind names only links that can blind the sensor. A link outside
+        # classifier_links (heard over the hotspot) shows blind in its own row and makes
+        # health degraded, nothing more.
+        blind = bad_cls
         if bad_cls:
             status, reason = "blind", self.links[bad_cls[0]].reason
         elif any(r["status"] != "ok" for r in rows):
             status = "degraded"
-            reason = "rate" if any(r["_stale"] for r in rows) else self.links[blind[0]].reason
+            reason = "rate" if any(r["_stale"] for r in rows) else self.links[all_blind[0]].reason
         else:
             status, reason = "ok", None
         for r in rows:

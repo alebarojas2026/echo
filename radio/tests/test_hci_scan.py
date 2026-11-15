@@ -335,3 +335,20 @@ def test_main_ends_with_one_line_when_hci0_goes_away(monkeypatch, capsys):
     with pytest.raises(SystemExit, match=r"hci0: .*No such device.*Is Bluetooth on\?"):
         run_main(monkeypatch, capsys, ["--node", "unoq"], [fixture("legacy_report_east")],
                  at_end=OSError(19, "No such device"))
+
+
+def test_a_new_receiver_needs_only_nodes_json(monkeypatch):
+    # Pi B (#415) as a third receiver: once nodes.json lists its links, kept() forwards them.
+    from radio import hci_scan
+    monkeypatch.setitem(hci_scan.LINKS, "east>pi5b:ble", {"id": "east>pi5b:ble", "tx": "east", "rx": "pi5b",
+                                                          "kind": "ble"})
+    assert kept(fixture("legacy_report_east"), "pi5b") == [("east>pi5b:ble", -61)]
+    assert kept(fixture("legacy_report_east"), "nobody") == []
+
+
+def test_node_choices_are_the_receivers_in_nodes_json():
+    from radio import hci_scan
+    from radio.nodes import RECEIVERS
+    assert set(RECEIVERS) >= {"unoq", "pi5"}
+    with pytest.raises(SystemExit):
+        hci_scan.main(["--node", "not-a-receiver"])

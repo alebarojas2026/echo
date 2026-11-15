@@ -26,9 +26,21 @@ export function scanUrl(source: NonNullable<ScanSource>, quality: Quality): stri
   return quality === 'hi' ? (source.hi ?? source.lo) : (source.lo ?? source.hi)
 }
 
-/** Where the scan and its alignment are: the dev server's current answer, or what the build found. */
+/** Where the scan and its alignment are: the dev server's current answer, or what the build found with the
+ *  alignment saved on the board (GET /layout, #532) taking over from the build's room.json once there is one. */
 async function scanSource(): Promise<ScanSource> {
-  if (!import.meta.env.DEV) return __ROOM_SCAN__
+  if (!import.meta.env.DEV) {
+    const built = __ROOM_SCAN__
+    if (!built) return null
+    try {
+      const res = await fetch('/layout', { cache: 'no-store', signal: AbortSignal.timeout(2000) })
+      const room = res.ok ? ((await res.json()) as { room?: ScanFit | null }).room : null
+      if (room) return { ...built, fit: room }
+    } catch {
+      // not served by the board, or it has nothing saved: the build's alignment
+    }
+    return built
+  }
   try {
     const res = await fetch('/__room-scan', { cache: 'no-store' })
     if (res.ok) return (await res.json()) as ScanSource
@@ -46,6 +58,8 @@ export interface ScanFit {
   scale?: number
   /** Anything higher than this (metres) is cut away so the camera sees into the room. */
   cut_m?: number
+  /** How far the model's floor sits below ours, in metres: a tier's height when the square stands on that tier. */
+  floor_m?: number
 }
 
 /** Anything above 1.4 m is cut away unless room.json says otherwise. */
@@ -66,7 +80,8 @@ export function placeScan(min: [number, number, number], max: [number, number, n
   const scale = fit.scale && fit.scale > 0 ? fit.scale : 1
   return {
     inner: [-(min[0] + max[0]) / 2, -min[1], -(min[2] + max[2]) / 2],
-    outer: [dx, -0.03, -dy], // 3 cm under our floor marks, so a bumpy scanned floor never pokes through them
+    // 3 cm under our floor marks, so a bumpy scanned floor never pokes through them; floor_m lower on a tier.
+    outer: [dx, -0.03 - (fit.floor_m ?? 0), -dy],
     yaw: ((fit.yaw_deg ?? 0) * Math.PI) / 180,
     scale,
     cut: fit.cut_m ?? DEFAULT_CUT_M,
@@ -77,7 +92,7 @@ export function placeScan(min: [number, number, number], max: [number, number, n
  * With `colored`, the model's own vertex colours (shading baked in). Without, floors take the floor colour and
  * walls a shade lighter, darkened a little by which way they face. Both cut away everything above `cut`.
  */
-function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial {
+function scanMaterial(cut: { value: number }, colored: boolean, lift = 1): ShaderMaterial {
   return new ShaderMaterial({
     vertexColors: colored, // three defines USE_COLOR (and USE_COLOR_ALPHA for RGBA) and declares `color`
     uniforms: {
@@ -85,6 +100,7 @@ function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial 
       uWall: { value: new Color(0x23272d) },
       uShade: { value: new Color(WALL_SHADE) },
       uCut: cut,
+      uLift: { value: lift },
     },
     vertexShader: /* glsl */ `
       #include <color_pars_vertex>
@@ -103,12 +119,13 @@ function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial 
       uniform vec3 uWall;
       uniform vec3 uShade;
       uniform float uCut;
+      uniform float uLift;
       varying vec3 vNormal;
       varying float vHeight;
       void main() {
         if (vHeight > uCut) discard;
         #ifdef USE_COLOR
-          vec3 base = vColor.rgb; // glTF vertex colours are linear, like the rest of the scene
+          vec3 base = vColor.rgb * uLift; // glTF vertex colours are linear, like the rest of the scene
         #else
           vec3 n = normalize(vNormal);
           float up = abs(n.y);
@@ -128,9 +145,9 @@ function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial 
 const TRIANGLE_BUDGET: Record<Quality, number> = { pi: 150_000, hi: 400_000 }
 
 /** Puts our material on every mesh (coloured where it has vertex colours) and drops textures. Returns the triangle count. */
-function flatten(root: Object3D, cut: { value: number }): number {
+function flatten(root: Object3D, cut: { value: number }, lift = 1): number {
   const flat = scanMaterial(cut, false)
-  const colored = scanMaterial(cut, true)
+  const colored = scanMaterial(cut, true, lift)
   let triangles = 0
   root.traverse((obj) => {
     if (!(obj instanceof Mesh)) return
@@ -145,6 +162,13 @@ function flatten(root: Object3D, cut: { value: number }): number {
     triangles += (index ? index.count : obj.geometry.getAttribute('position').count) / 3
   })
   return triangles
+}
+
+/** ?lift=1.2 brightens the hall model's own colours (a projector washes dark tones out); 1 when not set. Only
+ *  the model's baked colours change, never the room's palette, and it is kept between 0.5 and 2. */
+export function hallLift(params: URLSearchParams): number {
+  const v = Number(params.get('lift'))
+  return Number.isFinite(v) && v >= 0.5 && v <= 2 ? v : 1
 }
 
 /** Loads the scan if there is one. Resolves to it once it stands in for the drawn room, else to null. */
@@ -163,7 +187,7 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
     const gltf = await loader.loadAsync(url)
     const box = new Box3().setFromObject(gltf.scene)
     const cut = { value: DEFAULT_CUT_M }
-    const triangles = flatten(gltf.scene, cut)
+    const triangles = flatten(gltf.scene, cut, hallLift(params))
     if (triangles > TRIANGLE_BUDGET[quality]) {
       console.warn(
         `room scan: ${Math.round(triangles)} triangles, over the ${quality} budget of ${TRIANGLE_BUDGET[quality]}. ` +

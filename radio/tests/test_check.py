@@ -103,8 +103,18 @@ def test_silent_links_are_named(tmp_path):
     ok, text = check.check_links(5.0, capture=fake_capture(tmp_path, ["pi5>unoq:wifi", "east>unoq:ble"]),
                                  sessions=tmp_path)
     assert not ok
-    assert text == ("links: nothing from pi5>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble "
+    silent = [link for link in link_stats.LINKS if link not in ("pi5>unoq:wifi", "east>unoq:ble")]
+    assert text == (f"links: nothing from {', '.join(silent)} "
                     "(flowing: pi5>unoq:wifi 2.0/s, east>unoq:ble 2.0/s)")
+
+
+def test_gate_rates_come_from_the_layout():
+    # Wi-Fi and a Pi's beacon at 20/s, the other beacons at 7/s; whatever links nodes.json holds.
+    for link_id, link in link_stats.LINKS.items():
+        expected = 20.0 if link["kind"] == "wifi" or link["tx"] in check.PIS else 7.0
+        assert check.gate_hz(link_id) == expected
+    assert check.gate_hz("pi5>unoq:wifi") == 20.0 and check.gate_hz("pi5>unoq:ble") == 20.0
+    assert check.gate_hz("east>unoq:ble") == 7.0
 
 
 def test_no_bus_no_file(tmp_path):
@@ -171,3 +181,57 @@ def test_wifi_joined_to_another_access_point_fails():
     assert made_up_ap(1) not in text and made_up_ap(2) not in text
     ok, _ = check.check_wifi("wlan0", run, iw="iw", bssid=made_up_ap(1).upper())   # case doesn't matter
     assert ok
+
+
+def baseline(sessions, hz):
+    (sessions / "baseline.json").write_text(json.dumps(
+        {"t": 1, "session": None, "links": {link: {"base_dbm": -60, "expected_hz": rate} for link, rate in hz.items()}}))
+
+
+def test_after_a_baseline_each_link_is_judged_by_what_the_baseline_saw(tmp_path):
+    # A crowded hall: the beacons come in slower than the gates' 7/s. What the baseline counted is
+    # what the brain expects, so 2/s against a baseline of 4/s is healthy (the stale line is 1.6/s).
+    baseline(tmp_path, {link: 4.0 for link in link_stats.LINKS})
+    ok, text = check.check_links(5.0, capture=fake_capture(tmp_path, list(link_stats.LINKS)), sessions=tmp_path)
+    assert ok, text
+    assert text.endswith("(judged against the baseline's rates)")
+    assert [p.name for p in tmp_path.iterdir()] == ["baseline.json"]
+
+
+def test_a_link_under_0_4_of_its_baseline_rate_is_stale(tmp_path):
+    first = next(iter(link_stats.LINKS))
+    baseline(tmp_path, {link: (25.0 if link == first else 4.0) for link in link_stats.LINKS})
+    ok, text = check.check_links(5.0, capture=fake_capture(tmp_path, list(link_stats.LINKS)), sessions=tmp_path)
+    assert not ok
+    assert text.startswith(f"links: {first} under 10.0/s, stale (0.4 x the baseline's rate)")
+
+
+def test_a_link_the_baseline_did_not_count_keeps_its_gate_rate(tmp_path):
+    first = next(iter(link_stats.LINKS))
+    baseline(tmp_path, {link: 4.0 for link in link_stats.LINKS if link != first})
+    ok, text = check.check_links(5.0, capture=fake_capture(tmp_path, list(link_stats.LINKS)), sessions=tmp_path)
+    assert not ok and f"{first} under {check.gate_hz(first):g}/s, the gates' rates" in text
+
+
+@pytest.mark.parametrize("text", ["", "{", '{"links": []}', '{"links": {"x": {"expected_hz": null}}}'])
+def test_an_unreadable_baseline_is_no_baseline(tmp_path, text):
+    (tmp_path / "baseline.json").write_text(text)
+    assert check.baseline_rates(tmp_path / "baseline.json") == {}
+
+
+@pytest.mark.parametrize("links_ok, last", [(True, "all ok"), (False, "1 failed")])
+def test_main_ends_with_one_line_for_the_whole_board(monkeypatch, capsys, links_ok, last):
+    monkeypatch.setattr(check, "load_env_file", lambda path: None)
+    monkeypatch.setattr(check, "check_wifi", lambda iface, **kw: (True, "wifi"))
+    for name in ("check_tools", "check_radios", "check_ethernet", "check_services"):
+        monkeypatch.setattr(check, name, lambda: (True, name))
+    monkeypatch.setattr(check, "check_links", lambda seconds: (links_ok, "links"))
+    if links_ok:
+        check.main([])
+    else:
+        with pytest.raises(SystemExit):
+            check.main([])
+    out = capsys.readouterr().out.splitlines()
+    assert out[-1].startswith(last)
+    if links_ok:
+        assert out[-1] == f"all ok ({len(check.LINKS)} links)"

@@ -21,8 +21,9 @@
 # installed as radio-sight-llm.service. The Pi hotspot (pi/ap.sh) and the kiosk
 # (board/kiosk-notes.md) are not systemd services.
 #
-# Settings, all optional: PYTHON (/opt/rs/venv/bin/python), ROLE=board|pi
-# (found from the device tree otherwise), UNIT_DIR (/etc/systemd/system),
+# Settings, all optional: PYTHON (/opt/rs/venv/bin/python), ROLE=board|pi|pib
+# (board or pi is found from the device tree otherwise; pib, the second Pi of
+# the desk layout, has to be given: ROLE=pib, as pi/install.sh does), UNIT_DIR (/etc/systemd/system),
 # SYSTEMCTL (systemctl), SUDO (sudo, or empty). Under sudo, pass them as
 # `sudo PYTHON=... board/deploy.sh --install`.
 
@@ -32,7 +33,9 @@ USAGE="usage: board/deploy.sh <tag|sha> [--no-pi]  or  sudo board/deploy.sh --in
 
 # The units to install and run. needs: - = nothing else, pi = the Pi's hotspot
 # or beacons, link = the Ethernet link to the board. The Pi's radio node is -:
-# it advertises and scans without the cable and forwards once it's in.
+# it advertises and scans without the cable and forwards once it's in. Pi B
+# (pib) has no cable: its node and its Wi-Fi reader send through Pi A's hotspot,
+# and its .env names its node and link (RADIO_NODE, WIFI_LINK, BUS_HOST).
 # unit                    role   needs  unit file                                   runs from (folders end in /)
 UNITS='
 radio-sight-bus           board  -      board/units/radio-sight-bus.service         bus/ radio/nodes.json contracts/
@@ -40,10 +43,12 @@ radio-sight-wifi-rssi     board  pi     board/units/radio-sight-wifi-rssi.servic
 radio-sight-hci-scan      board  pi     board/units/radio-sight-hci-scan.service    radio/ contracts/
 radio-sight-camwatch      board  -      board/units/radio-sight-camwatch.service    teacher/ contracts/
 radio-sight-brain         board  -      board/units/radio-sight-brain.service       brain/ advisor/ radio/nodes.json contracts/
-radio-sight-serve         board  -      board/units/radio-sight-serve.service       board/serve.py
+radio-sight-serve         board  -      board/units/radio-sight-serve.service       board/serve.py board/layout.py
 radio-sight-llm           board  -      narrator/llm.service                        narrator/llm.service
 radio-sight-narrate       board  -      board/units/radio-sight-narrate.service     narrator/ contracts/
 radio-sight-radio-node    pi     -      board/units/radio-sight-radio-node.service  pi/ radio/ contracts/
+radio-sight-radio-node    pib    -      board/units/radio-sight-radio-node.service  pi/ radio/ contracts/
+radio-sight-wifi-rssi     pib    -      board/units/radio-sight-wifi-rssi.service   radio/ contracts/
 '
 
 die() { echo "deploy: $*" >&2; exit 1; }

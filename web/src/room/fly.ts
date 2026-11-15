@@ -2,7 +2,7 @@ import { Box3, BoxGeometry, Mesh, MeshBasicMaterial, Vector3 } from 'three'
 import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
-import { SQUARE_M } from './frame'
+import { SIZE_M } from './frame'
 import { easeInOut } from './motion'
 import { PERSON, SQUARE } from './palette'
 import { roomShot, type RoomView, type Shot } from './view'
@@ -178,9 +178,10 @@ export class HallMarks {
     private readonly fly: Fly,
     private readonly standing: () => { at: Vector3; alpha: number },
   ) {
-    const h = SQUARE_M / 2
+    const hx = SIZE_M[0] / 2
+    const hz = SIZE_M[1] / 2
     const geometry = new LineGeometry()
-    geometry.setPositions([-h, 0.01, -h, h, 0.01, -h, h, 0.01, h, -h, 0.01, h, -h, 0.01, -h])
+    geometry.setPositions([-hx, 0.01, -hz, hx, 0.01, -hz, hx, 0.01, hz, -hx, 0.01, hz, -hx, 0.01, -hz])
     const lineMat = new LineMaterial({ color: SQUARE, linewidth: 3, transparent: true, opacity: 0, depthTest: false })
     this.outline = new Line2(geometry, lineMat)
     this.outline.renderOrder = 20

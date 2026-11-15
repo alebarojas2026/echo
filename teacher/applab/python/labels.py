@@ -58,6 +58,54 @@ class Projection:
         return zone_in(self.area, *point)
 
 
+def _number(value, name, low, high):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)             or not low <= value <= high:
+        raise ValueError(f"desk view {name} must be a number from {low} to {high}")
+    return float(value)
+
+
+class DeskView:
+    """Left, right or nobody from the person box alone, for a webcam on the desk facing the strip.
+
+    From that close the camera sees a torso, never feet, so there is no floor point: only where the
+    box's centre sits across the frame. The config (written by `python -m teacher.calibrate --desk`
+    from radio/nodes.json) holds numbers only:
+      split      where the zone split line is across the frame, 0 (left edge) to 1 (right edge)
+      dead_band  half the width of the band around it where a label can't be trusted, same unit
+      mirror     true when the camera faces the person, so the strip's low-x zone is on the right
+      zones      [the zone below the split in x, the zone from the split up], from the zone rule
+      view_m     how much of the strip the frame spans at the standing line, for the moving rule
+      side_edge  "clipped" (a box cut by the left or right frame edge is dropped) or "keep"
+    A box cut by the top or bottom edge is normal here and is kept.
+    """
+    def __init__(self, config, image_size):
+        self.width, self.height = image_size
+        if self.width <= 0 or self.height <= 0:
+            raise ValueError("invalid detector dimensions")
+        self.split = _number(config.get("split"), "split", 0.05, 0.95)
+        self.dead_band = _number(config.get("dead_band"), "dead_band", 0.0, 0.4)
+        self.view_m = _number(config.get("view_m"), "view_m", 0.1, 100.0)
+        self.mirror, self.side_edge = config.get("mirror"), config.get("side_edge", "clipped")
+        zones = config.get("zones")
+        if not isinstance(self.mirror, bool) or self.side_edge not in ("clipped", "keep"):
+            raise ValueError("desk view needs mirror true or false and side_edge clipped or keep")
+        if not isinstance(zones, list) or len(zones) != 2 or zones[0] == zones[1]                 or not all(isinstance(z, int) and not isinstance(z, bool) and z > 0 for z in zones):
+            raise ValueError("desk view zones must be the two zone ids either side of the split")
+        self.zones = tuple(zones)
+
+    def side(self, x, width):
+        """(zone, metres along the strip from the split line) for a box's left edge and width in
+        pixels. zone is None when the label can't be trusted: the centre is inside the dead band,
+        or the box is cut by a side edge of the frame (unless side_edge is keep)."""
+        offset = (x + width / 2) / self.width - self.split
+        cut = x <= 0 or x + width >= self.width
+        if abs(offset) < self.dead_band or (cut and self.side_edge == "clipped"):
+            zone = None
+        else:
+            zone = self.zones[int((offset > 0) != self.mirror)]
+        return zone, (-offset if self.mirror else offset) * self.view_m
+
+
 class Motion:
     """Trailing 0.5 s coordinate median, then displacement over a full second."""
     def __init__(self):
@@ -96,31 +144,48 @@ class Teacher:
         """Called once for an explicit bounding_boxes list, including []."""
         t = self.clock()
         people = [b for b in boxes if b.get("label") == "person" and b.get("value", 0) >= self.confidence]
-        candidates, clipped = [], False
+        sized = []
         for b in people:
             x, y, w, h = (float(b[k]) for k in ("x", "y", "width", "height"))
             if not all(math.isfinite(v) for v in (x, y, w, h)) or w <= 0 or h <= 0:
                 raise ValueError("invalid person box")
-            edge = x <= 0 or y <= 0 or x + w >= self.projection.width or y + h >= self.projection.height
-            clipped |= edge
-            foot = self.projection.point(x + w / 2, y + h)
-            if self.projection.zone(foot):
-                candidates.append((foot, float(b["value"])))
-        # Multiple people cannot be represented by the single-person label contract.
-        clipped |= len(candidates) > 1
-        point, conf = candidates[0] if len(candidates) == 1 else (None, 0.0)
-        zone = self.projection.zone(point) if point else 0
-        moving = self.motion.update(t, None if clipped else point)
+            sized.append((x, y, w, h, float(b["value"])))
+        view = self._desk if isinstance(self.projection, DeskView) else self._floor
+        present, zone, point, track, conf, clipped = view(sized)
+        moving = self.motion.update(t, None if clipped else track)
         mode = self.mode()
         if mode not in {"person", "object", "off"}:
             raise ValueError("invalid label mode")
         self.frame += 1
         label = dict(v=2, type="label", t=t, seq=self.frame, src="live", frame=self.frame,
-                     mode=mode, persons_in_frame=len(people), present=bool(candidates),
+                     mode=mode, persons_in_frame=len(people), present=present,
                      zone=None if clipped else zone, foot_m=None if clipped else point,
-                     motion=moving if point is not None and not clipped else None, conf=conf, clipped=clipped)
+                     motion=moving if track is not None and not clipped else None, conf=conf, clipped=clipped)
         self.send(label)
         return label
+
+    def _floor(self, people):
+        """(present, zone, foot point, point to track for motion, conf, clipped) from foot points."""
+        candidates, clipped = [], False
+        for x, y, w, h, value in people:
+            edge = x <= 0 or y <= 0 or x + w >= self.projection.width or y + h >= self.projection.height
+            clipped |= edge
+            foot = self.projection.point(x + w / 2, y + h)
+            if self.projection.zone(foot):
+                candidates.append((foot, value))
+        # Multiple people cannot be represented by the single-person label contract.
+        clipped |= len(candidates) > 1
+        point, conf = candidates[0] if len(candidates) == 1 else (None, 0.0)
+        return bool(candidates), self.projection.zone(point) if point else 0, point, point, conf, clipped
+
+    def _desk(self, people):
+        """The same from the box's place across the frame. There is no foot point, so foot_m is null;
+        motion follows the box centre along the strip. Anyone in view counts as present."""
+        if len(people) != 1:
+            return bool(people), 0, None, None, 0.0, len(people) > 1
+        x, _, w, _, value = people[0]
+        zone, along_m = self.projection.side(x, w)
+        return True, zone, None, [along_m, 0.0], value, zone is None
 
 
 def attach_processed_results(detector, teacher):

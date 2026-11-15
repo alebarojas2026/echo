@@ -1,7 +1,7 @@
 type CommandName = 'train' | 'baseline' | 'record_start' | 'record_stop' | 'label_mode'
   | 'router_moved' | 'router_home' | 'reset_alert' | 'reset'
 
-export type HudCommand = { v: 2; type: 'cmd'; cmd: CommandName; args: Record<string, string> }
+export type HudCommand = { v: 2; type: 'cmd'; cmd: CommandName; args: Record<string, string | boolean> }
 
 export function mountHudControls(root: HTMLElement, send: (command: HudCommand) => void) {
   root.innerHTML = `
@@ -21,7 +21,8 @@ export function mountHudControls(root: HTMLElement, send: (command: HudCommand) 
       <fieldset>
         <legend>Setup</legend>
         <button type="button" data-testid="train-button" data-command="train">Train</button>
-        <button type="button" data-command="baseline">Baseline</button>
+        <button type="button" data-command="baseline" data-keep-model="true">New baseline, keep the model</button>
+        <button type="button" data-command="baseline">New place: baseline and forget the model</button>
         <label for="hud-label-mode">Label mode</label><select id="hud-label-mode" name="mode"><option>off</option><option>person</option><option>object</option></select>
         <button type="button" data-command="label_mode">Set label mode</button>
       </fieldset>
@@ -35,7 +36,7 @@ export function mountHudControls(root: HTMLElement, send: (command: HudCommand) 
       </fieldset>
     </section>
   `
-  const emit = (cmd: CommandName, args: Record<string, string> = {}) => send({ v: 2, type: 'cmd', cmd, args })
+  const emit = (cmd: CommandName, args: Record<string, string | boolean> = {}) => send({ v: 2, type: 'cmd', cmd, args })
   const form = root.querySelector('form')!
   form.addEventListener('submit', event => {
     event.preventDefault()
@@ -47,7 +48,11 @@ export function mountHudControls(root: HTMLElement, send: (command: HudCommand) 
   root.querySelectorAll<HTMLButtonElement>('button[data-command]').forEach(button => {
     button.addEventListener('click', () => {
       const cmd = button.dataset.command as CommandName
-      if (cmd === 'label_mode') emit(cmd, { mode: root.querySelector<HTMLSelectElement>('[name="mode"]')!.value })
+      if (cmd === 'baseline') {
+        if (button.dataset.keepModel === 'true') emit(cmd, { keep_model: true })
+        else if (window.confirm('Start a baseline for a new place? This forgets the current model and stops using the older recordings for training. This cannot be undone.')) emit(cmd)
+      }
+      else if (cmd === 'label_mode') emit(cmd, { mode: root.querySelector<HTMLSelectElement>('[name="mode"]')!.value })
       else if (cmd === 'router_moved') emit(cmd, { spot: root.querySelector<HTMLSelectElement>('[name="spot"]')!.value })
       else emit(cmd)
     })

@@ -15,14 +15,27 @@ function zoneName(z) {
 }
 
 // card(state, age of that state in ms) -> { mode, label, title, detail, zone, checkinT }
-// mode: 'alert' | 'calm' | 'waiting' | 'blind' | 'nodata'. label is the word that goes with the colour.
-export function card(state, ageMs) {
+// mode: 'intrusion' | 'alert' | 'armed' | 'calm' | 'waiting' | 'blind' | 'nodata'. label is the word that goes with the colour.
+// held: whether a person has held the majority of the last 10 states (personHeld below). The intrusion
+// card waits for it, like the brain's intrusion event (section 6), so one flickering decision in an
+// armed, empty space never chimes.
+export function card(state, ageMs, held = true) {
   const checkinT = state?.checkin?.t ?? null
   if (!isState(state) || ageMs > STALE_MS) {
     return { mode: 'nodata', label: 'NO DATA', title: 'No data from the board.', detail: 'Waiting for the radio feed.', zone: null, checkinT: null }
   }
   if (state.health?.status === 'blind') {
     return { mode: 'blind', label: 'SENSOR BLIND', title: 'The radio cannot read the room right now.', detail: 'This does not mean the room is empty.', zone: null, checkinT }
+  }
+  // Armed (section 6): this space should be empty. A person in it is an intrusion; with no prediction
+  // the card never says "all clear".
+  if (state.armed === true) {
+    const pred = state.pred
+    if (!pred) return { mode: 'waiting', label: 'ARMED', title: 'The radio is not ready yet.', detail: 'It cannot say the space is empty.', zone: null, checkinT }
+    if (pred.present && pred.kind === 'person' && held) {
+      return { mode: 'intrusion', label: 'INTRUSION', title: `Someone is in ${zoneName(pred.zone)}.`, detail: 'This space should be empty.', zone: ZONES[pred.zone] ?? null, checkinT }
+    }
+    return { mode: 'armed', label: 'ARMED', title: 'Nobody is here.', detail: 'This space should be empty.', zone: null, checkinT }
   }
   const alert = state.alert ?? {}
   if (alert.state === 'check_on') {
@@ -48,9 +61,16 @@ export function card(state, ageMs) {
   }
 }
 
-// The chime plays once, when the card turns into the alert. Staying in the alert does not repeat it.
+// Section 6: a person counts once they hold the majority of the last 10 decisions.
+export const HOLD_OF = 10
+export function personHeld(history) {
+  const recent = history.slice(-HOLD_OF)
+  return recent.filter(Boolean).length > recent.length / 2
+}
+
+// The chime plays once, when the card turns into the alert or an intrusion. Staying there does not repeat it.
 export function shouldChime(previousMode, mode) {
-  return mode === 'alert' && previousMode !== 'alert'
+  return (mode === 'alert' || mode === 'intrusion') && previousMode !== mode
 }
 
 export function checkinText(checkinT, format = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) {
@@ -74,4 +94,6 @@ export const MOCKS = {
   checkin: { ...base, pred: inZone(4, 'still'), alert: { state: 'counting', zone: 4, still_s: 0.6, limit_s: 10 }, checkin: { t: 1763149511000, link: 'pi5>unoq:wifi' } },
   empty: { ...base, pred: { present: false, kind: 'none', zone: 0, zone_set: [], motion: null }, alert: idle },
   blind: { ...base, health: { status: 'blind', blind: ['east>unoq:ble'], reason: 'rate' }, pred: null, alert: idle },
+  armed: { ...base, armed: true, pred: { present: false, kind: 'none', zone: 0, zone_set: [], motion: null }, alert: idle },
+  intrusion: { ...base, armed: true, pred: inZone(4, 'moving'), alert: idle },
 }

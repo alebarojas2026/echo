@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeFit, nudge, tidyFit } from './align'
+import { describeFit, layoutBody, nudge, tidyFit } from './align'
 
 describe('align mode keys', () => {
   it('moves 2 cm a press, 10 cm with Shift, east and north', () => {
@@ -24,6 +24,13 @@ describe('align mode keys', () => {
     expect(nudge({ cut_m: 0.22 }, '[', false)!.cut_m).toBe(0.2)
   })
 
+  it('lowers the model 2 cm on PageDown, a whole riser with Shift, and raises it on PageUp', () => {
+    expect(nudge({}, 'PageDown', false)!.floor_m).toBe(0.02)
+    expect(nudge({}, 'PageDown', true)!.floor_m).toBe(0.156)
+    expect(nudge({ floor_m: 0.156 }, 'PageUp', false)!.floor_m).toBe(0.136)
+    expect(describeFit({ floor_m: 0.312 })).toContain('Floor −0.31 m')
+  })
+
   it('leaves other keys alone', () => {
     for (const key of ['a', 'o', 'Escape', ' ', 'Enter', 'v', 's']) expect(nudge({}, key, false)).toBeNull()
   })
@@ -37,13 +44,27 @@ describe('align mode keys', () => {
 
 describe('the saved file', () => {
   it('always has all four fields, filled from the defaults', () => {
-    expect(tidyFit({})).toEqual({ offset_m: [0, 0], yaw_deg: 0, scale: 1, cut_m: 1.4 })
+    expect(tidyFit({})).toEqual({ offset_m: [0, 0], yaw_deg: 0, scale: 1, cut_m: 1.4, floor_m: 0 })
     expect(tidyFit({ scale: -1, yaw_deg: 540 })).toMatchObject({ scale: 1, yaw_deg: 180 })
   })
 
   it('reads as words on screen', () => {
     expect(describeFit({ offset_m: [0.12, -0.04], yaw_deg: 3 })).toBe(
-      'East +0.12 m · North −0.04 m\nTurn +3.0° · Scale 1.000 · Cut 1.40 m',
+      'East +0.12 m · North −0.04 m\nTurn +3.0° · Scale 1.000 · Cut 1.40 m · Floor +0.00 m',
     )
+  })
+})
+
+describe('saving on the board (POST /layout)', () => {
+  it('sends exactly the shape the board takes: room, and hall_beacons only when there are any', () => {
+    expect(JSON.parse(layoutBody({ offset_m: [1.7411, -7.31] }, undefined))).toEqual({
+      room: { offset_m: [1.741, -7.31], yaw_deg: 0, scale: 1, cut_m: 1.4 },
+    })
+    expect(Object.keys(JSON.parse(layoutBody({}, [])))).toEqual(['room'])
+    // floor_m only when the square is on a tier
+    expect(JSON.parse(layoutBody({ floor_m: 0 }, undefined)).room).not.toHaveProperty('floor_m')
+    expect(JSON.parse(layoutBody({ floor_m: 0.312 }, undefined)).room.floor_m).toBe(0.312)
+    const both = JSON.parse(layoutBody({}, [{ node: 'h', xyz_m: [3, 19, 1] }, { node: 'j', xyz_m: null }]))
+    expect(both.hall_beacons).toEqual([{ node: 'h', xyz_m: [3, 19, 1] }, { node: 'j', xyz_m: null }])
   })
 })

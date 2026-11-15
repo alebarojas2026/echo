@@ -5,10 +5,9 @@ Reads the Gate 2 table in ``radio/GATE.md`` and prints a pass/fail summary.
 Usage (on the board, after a live run):
     python -m radio.report_hci
 
-Pass criteria (the lowest rate written for each link):
-    pi5>unoq:ble:                  >= 20 adverts/s
-    east>unoq:ble, west>unoq:ble:  >= 7 adverts/s
-    east>pi5:ble, west>pi5:ble:    >= 7 adverts/s
+Pass criteria (the lowest rate written for each link), for every ble link in radio/nodes.json:
+    a Pi's beacon (its transmitter is also a receiver), e.g. pi5>unoq:ble:  >= 20 adverts/s
+    the other beacons, e.g. east>unoq:ble, west>pi5:ble:                 >= 7 adverts/s
 
 The verdict comes from the rates alone. One row per run is fine: the lowest one counts.
 The Result column is only cross-checked, so it can stay `__`.
@@ -20,16 +19,16 @@ import re
 import sys
 from pathlib import Path
 
+from .nodes import DOC, LINKS
+
 GATE_PATH = Path(__file__).resolve().parent / "GATE.md"
 
-MIN_RATES: dict[str, float] = {
-    "pi5>unoq:ble": 20.0,
-    "east>unoq:ble": 7.0,
-    "west>unoq:ble": 7.0,
-    "east>pi5:ble": 7.0,
-    "west>pi5:ble": 7.0,
-}
-BEACON_OF = {link: {"pi5": "S", "east": "E", "west": "W"}[link.split(">")[0]] for link in MIN_RATES}
+# Built from radio/nodes.json, so a new layout (a second Pi, #459) needs no edit here.
+_PIS = {n["id"] for n in DOC["nodes"] if "receiver" in n["roles"] and "beacon" in n["roles"]}
+_LETTER = {p["node"]: p["id"] for p in DOC["beacons"]["payloads"]}
+MIN_RATES: dict[str, float] = {link_id: 20.0 if link["tx"] in _PIS else 7.0
+                               for link_id, link in LINKS.items() if link["kind"] == "ble"}
+BEACON_OF = {link_id: _LETTER[LINKS[link_id]["tx"]] for link_id in MIN_RATES}
 UNMEASURED = "__"
 
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")

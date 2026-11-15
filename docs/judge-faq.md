@@ -2,56 +2,64 @@
 
 ## How does Radio Sight work?
 
-Radio Sight reads changes in Wi-Fi and Bluetooth signal strength across links around the room. A model on the Arduino UNO Q's Dragonwing CPU turns those patterns into presence, movement, zone, and person-versus-object predictions, while link health prevents a broken sensor from being mistaken for an empty room.
+Radio Sight reads changes across Wi-Fi and Bluetooth links around a room. A model on the Arduino UNO Q's Dragonwing CPU turns those patterns into presence, movement, zone, and person-versus-object predictions while link health prevents a broken sensor from looking like an empty room.
 
-## What does it show during the demo?
+## Why are there so many boards?
 
-The screen shows a radio X-ray, the strongest changed links, the predicted zone and motion, and whether a change looks like a person or an object. It also recognizes a practiced wave as a check-in and can recommend a tested router position when an object creates a dead zone.
+The boards create several radio paths so the prototype can learn where and how the room changed. They stand in for compatible radios and access points already distributed through a building, not a requirement to install this exact hardware set in every room.
 
 ## Why not just use a camera?
 
-A camera needs a clear view and collects much richer information than this task requires. Radio Sight uses a camera only as a temporary teacher during setup, then unplugs it and continues live sensing from radio changes without saving images.
+A camera captures identifying visual detail and needs a useful view of the space. Radio Sight uses one only as a temporary setup teacher, saves no image, unplugs it after the lesson, and continues from radio changes.
+
+## Why not use a motion sensor or radar?
+
+A basic motion sensor can stop reporting when a person stands still, while Radio Sight is designed to retain a learned presence state and distinguish it from movement. Radar can be effective, but it adds dedicated sensing hardware; our product direction is to reuse compatible building radios.
+
+## Can it identify people or count a crowd?
+
+No: it classifies a radio pattern as person or object and reports presence, zone, and movement, not identity. It does not claim crowd counting, and a multi-person scene remains outside the measured scope.
+
+## Does it work in any building?
+
+With compatible radios and adequate link coverage, presence is the portable capability, but this prototype has been measured only in its current setup. Detailed zone and motion behavior needs a local lesson whose measured duration is still `__` seconds, plus validation in that room.
+
+## What happens in a Wi-Fi dead spot?
+
+Radio Sight can report the measured link that something starts blocking and show the change behind a weak area. A complete building coverage map is future work, so we do not turn one blocked-link result into a whole-floor claim.
+
+## Why run it on-device?
+
+Local training and inference keep the room's sensing loop available without a cloud service or venue internet. They also keep radio windows and event decisions on the UNO Q and private network; measured outbound bytes remain `__` until proof is complete.
 
 ## What runs on the Arduino UNO Q?
 
-All model training and inference, signal health checks, the radio X-ray, check-in logic, no-movement alert logic, advisor, and narration run locally on the UNO Q. The learned work runs on the Dragonwing CPU, and the system does not depend on a cloud service.
+Model training and inference, signal-health checks, the radio X-ray, alert logic, advisor, narration, and local event decisions run on the UNO Q. Learned work runs on its Dragonwing CPU, and the Raspberry Pi runs no model.
 
 ## Why is there a Raspberry Pi too?
 
-The Pi provides the private sensing hotspot, receives radio samples, and routes the laptop browser to the board. It runs no model; the UNO Q remains the computing hub for every learned decision.
+The Pi provides the private sensing hotspot, receives radio samples, and routes the laptop browser to the board. It is a network and radio participant while the UNO Q remains the computing hub for learned decisions.
 
 ## How do you protect privacy?
 
-The system stays on its own local network and does not need venue Wi-Fi or a cloud account. It stores no camera images, does not identify anyone, and reports measured outbound bytes as `__` until the proof run supplies a value.
-
-## How does it tell a person from an object?
-
-During training, temporary camera labels pair radio patterns with a person or a known object while clipped and unlabeled windows are rejected. During live use, the model combines those learned patterns with motion and stability rules, but it does not identify the person or name an unknown object.
-
-## What happens if furniture moves?
-
-A new obstruction appears as change since the baseline, and a stable change near the router can trigger placement advice. A major room-layout change can invalidate the learned reference, so we clear the room and run a new baseline or retrain instead of pretending the old calibration still applies.
+The system does not identify anyone, stores no camera images, and needs no cloud account for the live loop. The laptop and phone page are local displays, and images stored and bytes sent outside the local network remain `__` until the proof record supplies measured values.
 
 ## How accurate is it?
 
-We report held-out results from separate recorded sessions, including zone accuracy, confidence, and person-versus-object accuracy. Those results remain `__` until the matching proof data is measured; we do not turn a live demo success into an accuracy claim.
+We will report held-out zone, presence, and person-versus-object results from sessions that were not used for training. Every result remains `__` until `PROOF.md` contains its method, sample size, date, and commit; a successful stage moment is not an accuracy study.
 
 ## What is the no-movement alert?
 
-In a configured zone, the timer counts only while the radio model says a person is present, still, and in the same zone. A check-in or reset clears the alert, and a blind radio link pauses it; it is a prompt to check on someone, not a medical or emergency claim.
+The timer runs only while the radio model reports a person present, still, and in the same enabled zone. It is a prompt to check on someone, not a diagnosis, and a blind required link pauses the timer rather than declaring the room empty.
 
-## Does the system need the camera after setup?
+## What can Radio Sight not do yet?
 
-No: the camera supplies zone and motion labels for baseline and training, then it can be unplugged for the radio-only demo. A new room or a deliberate retraining session needs the setup teacher again so the model has honest ground truth.
-
-## What can Radio Sight not do?
-
-It cannot identify people, reconstruct camera-like detail, or make a prediction when required radio links are blind. It is calibrated to one room and layout, so it does not claim that a model trained here will work unchanged somewhere else.
+It cannot identify a person, count a crowd, reconstruct camera-like detail, or make a prediction while required links are blind. Armed-mode event logic is in `main`, but the live phone display and room-question integrations are not yet complete, and transfer to other rooms and full coverage mapping still need measured tests.
 
 ## Honest limits
 
-- Radio patterns change with room layout, interference, node placement, and people, so calibration belongs to the room where the system runs.
-- The person-versus-object result is limited to the patterns represented in training; an unfamiliar scene can be uncertain.
-- A blind classifier link produces no prediction, not an "empty" result, and no-movement alert timers pause until health recovers.
-- Predictions pause while the router is away from its home position and while recalibration is running.
-- Every public performance, timing, power, and network result stays `__` until its proof record is complete.
+- Radio patterns change with layout, interference, node placement, materials, and people, so calibration belongs to the deployment room.
+- Person-versus-object behavior is limited to represented training patterns; an unfamiliar scene can be uncertain.
+- Armed mode raises one intrusion event for a new sustained person appearance, but it does not identify who entered.
+- Blind or stale input produces no prediction, not an “all clear.”
+- Every public performance, timing, power, storage, and network result stays `__` until its proof record is complete.

@@ -1,7 +1,7 @@
 // Run with: node --test web/src/game/phone/card.test.mjs
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { card, checkinText, isState, MOCKS, shouldChime, wsUrl } from './card.js'
+import { card, checkinText, isState, MOCKS, personHeld, shouldChime, wsUrl } from './card.js'
 
 const show = (name, age = 100) => card(MOCKS[name], age)
 
@@ -73,4 +73,26 @@ test('message check and socket address follow the contract', () => {
 
 test('right after a check-in the card does not say 0 s', () => {
   assert.equal(show('checkin').detail, 'Standing still.')
+})
+
+test('armed: nobody is calm, a person is an intrusion with a chime, no prediction is never all clear', () => {
+  const armed = card(MOCKS.armed, 0)
+  assert.deepEqual([armed.mode, armed.label, armed.title], ['armed', 'ARMED', 'Nobody is here.'])
+  const intrusion = card(MOCKS.intrusion, 0)
+  assert.deepEqual([intrusion.mode, intrusion.label, intrusion.title], ['intrusion', 'INTRUSION', 'Someone is in the Bathroom zone.'])
+  assert.equal(shouldChime('armed', 'intrusion'), true)
+  assert.equal(shouldChime('intrusion', 'intrusion'), false)
+  const notReady = card({ ...MOCKS.armed, pred: null }, 0)
+  assert.equal(notReady.label, 'ARMED')
+  assert.match(notReady.detail, /cannot say the space is empty/)
+  assert.equal(card({ ...MOCKS.intrusion, armed: false }, 0).mode, 'calm')      // disarmed: a person is just calm
+  assert.equal(card({ ...MOCKS.intrusion, health: { status: 'blind' } }, 0).mode, 'blind')
+})
+
+test('an intrusion waits for a person to hold the majority of the last 10 states', () => {
+  assert.equal(personHeld([false, false, false, false, false, false, false, false, false, true]), false)   // one flicker
+  assert.equal(personHeld([false, false, false, false, true, true, true, true, true, true]), true)
+  assert.equal(card(MOCKS.intrusion, 0, false).mode, 'armed')
+  assert.equal(card(MOCKS.intrusion, 0, true).mode, 'intrusion')
+  assert.equal(card(MOCKS.calm, 0, false).mode, 'calm')   // not armed: a person shows at once, as before
 })

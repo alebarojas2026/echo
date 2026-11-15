@@ -36,9 +36,9 @@ MAX_WORDS = 16
 EVENT_KINDS = ("enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice",
                "advice_result", "router_moved", "router_home", "recalibrating", "cam_off", "cam_on",
                "cam_stalled", "alert_on", "alert_off", "blind_on", "blind_off", "trained",
-               "baseline_done", "drift")
+               "baseline_done", "drift", "armed", "disarmed", "intrusion")
 # Which waiting event to keep, most important first. Kinds not listed rank below all of these.
-PRIORITY = ("alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
+PRIORITY = ("intrusion", "alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
             "recalibrating", "trained", "zone_change", "exit")
 NEVER = ("router_moved", "advice")   # the screen already says these itself
 # Zone id -> (name, still_alert_s), from radio/nodes.json (CONTRACTS.md section 3) when it can be read,
@@ -46,7 +46,7 @@ NEVER = ("router_moved", "advice")   # the screen already says these itself
 CONTRACT_ZONES = {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}
 ZONES = dict(CONTRACT_ZONES)
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
-NODES = {"unoq": "receiver", "pi5": "router", "east": "east beacon", "west": "west beacon"}
+NODES = {"unoq": "receiver", "pi5": "router", "pi5b": "second Pi", "east": "east beacon", "west": "west beacon"}
 
 # Things the screen must never say. The camera is added once it is off.
 BANNED = re.compile(
@@ -82,8 +82,16 @@ def rank(kind: str) -> int:
 
 # ---------------------------------------------------------------- templates
 
+def desk() -> bool:
+    """The desk layout: its zones are the strip's left and right ends, so sentences say "on the left"
+    and a person steps up to the desk instead of walking into a room."""
+    return bool(ZONES) and all(name.lower() in ("left", "right") for name, _ in ZONES.values())
+
+
 def _zone(z) -> str | None:
-    return f"zone {z} ({ZONES[z][0]})" if z in ZONES else None
+    if z not in ZONES:
+        return None
+    return f"on the {ZONES[z][0].lower()}" if desk() else f"zone {z} ({ZONES[z][0]})"
 
 
 def _link(link) -> str | None:
@@ -102,12 +110,31 @@ def template(kind: str, info: dict) -> str | None:
     link = _link(info.get("link"))
     before, after = _dbm(info.get("before_dbm")), _dbm(info.get("after_dbm"))
     limit = info.get("limit_s") or ZONES.get(info.get("zone"), (None, None))[1]
+    if desk():   # the strip in front of the desk: "on the left", "stepped up", no rooms
+        sentences = {
+            "enter": f"Someone just stepped up {zone}." if zone else "Someone just stepped up to the desk.",
+            "exit": "Someone just stepped away from the desk.",
+            "zone_change": f"Someone moved over, now {zone}." if zone else "Someone moved over.",
+            "checkin": f"Check-in received {zone}." if zone else "Check-in received on the router link.",
+            "recalibrating": "Recalibrating: please keep the space in front of the desk clear for 20 seconds.",
+            "baseline_done": "Baseline captured; the empty space is now the radio reference.",
+            "alert_on": (f"No movement {zone or 'here'} for {f'{limit} seconds' if limit else 'a while'}; "
+                         "time to check in."),
+            "alert_off": f"The alert {zone} is cleared." if zone else "The alert is cleared.",
+            "intrusion": f"Someone is here while armed, {zone}." if zone else "Someone is here while armed.",
+            "router_moved": "The router left its home spot, so tracking pauses.",
+        }
+        if kind in sentences:
+            return sentences[kind]
     sentences = {
         "enter": f"Someone just walked into {zone or 'the room'}.",
         "exit": f"Someone just left the room from {zone}." if zone else "Someone just left the room.",
         "zone_change": f"Someone moved to {zone or 'another zone'}.",
         "checkin": f"Check-in received from {zone}." if zone else "Check-in received on the router link.",
-        "object_on": f"A new object{near or ' in the room'} is weakening the signal.",
+        "armed": "Armed: this space should be empty now.",
+        "disarmed": "Disarmed: people are expected here again.",
+        "intrusion": f"Someone is here while armed, in {zone}." if zone else "Someone is here while armed.",
+        "object_on": f"A new object{near or (' on the desk' if desk() else ' in the room')} is weakening the signal.",
         "object_off": f"The object{near} is gone.",
         "advice": "There is a new tip for placing the router.",
         "advice_result": (f"After the move, the router's Wi-Fi went from {before} to {after} dBm."
@@ -157,8 +184,11 @@ def _join(words: list) -> str:
 
 def system() -> str:
     count = {1: "one zone", 2: "two zones", 3: "three zones", 4: "four zones"}.get(len(ZONES), f"{len(ZONES)} zones")
-    return ("You write captions for the screen of a Wi-Fi sensing demo. "
-            f"The room has {count}: {_join([f'zone {z} ({name})' for z, (name, _) in sorted(ZONES.items())])}. "
+    where = (f"People stand in front of a desk, {_join([f'on the {n.lower()}' for _, (n, _) in sorted(ZONES.items())])}. "
+             "Say on the left or on the right, never zone numbers. "
+             if desk() else
+             f"The room has {count}: {_join([f'zone {z} ({name})' for z, (name, _) in sorted(ZONES.items())])}. ")
+    return ("You write captions for the screen of a Wi-Fi sensing demo. " + where +
             "Rewrite the facts as one short, friendly sentence of at most 12 words. "
             "Use only the facts given. Call a person someone. Say no movement when nobody moves. "
             "Reply with the sentence only.")
@@ -171,8 +201,10 @@ def example_zone() -> int:
 def examples() -> tuple:
     z = example_zone()
     name = ZONES[z][0]
-    return (("enter", f"Someone just walked into zone {z} ({name}).",
-             f"Someone just stepped into zone {z}, by the {name.lower()}."),
+    first = (("enter", f"Someone just stepped up on the {name.lower()}.", f"Someone stepped up, on the {name.lower()} side.")
+             if desk() else
+             ("enter", f"Someone just walked into zone {z} ({name}).", f"Someone just stepped into zone {z}, by the {name.lower()}."))
+    return (first,
             ("advice_result", "After the move, the router's Wi-Fi went from -71 to -63 dBm.",
              "Moving the router lifted its Wi-Fi from -71 to -63 dBm."))
 

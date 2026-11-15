@@ -1,9 +1,11 @@
 """Checks the Pi's side of the radio path, one line per check, before a gate, a baseline or the demo.
 
-    python3 -m pi.check          # no sudo; exit 1 if anything failed
+    python3 -m pi.check                 # no sudo; exit 1 if anything failed
+    python3 -m pi.check --node pi5b     # on Pi B (default: RADIO_NODE from .env, else pi5)
 
 Bluetooth powered, the radio node running and hearing the E and W beacons and sending to the
-board, the Ethernet link to the board, and the sensing hotspot. Each FAIL line says what to run.
+board, the Ethernet link to the board, and the sensing hotspot. Pi B has no cable and no hotspot of its
+own: it checks its two services and that it's joined to Pi A's hotspot. Each FAIL line says what to run.
 It prints no device address: only the contract's addresses (CONTRACTS.md section 2).
 """
 import os
@@ -15,8 +17,9 @@ ETH = os.environ.get("ETH_IFACE", "eth0")
 WIFI = os.environ.get("SENSING_IFACE", "wlan0")
 UNIT = "radio-sight-radio-node"
 
-STATUS = re.compile(r"\[pi\.radio_node\] east>pi5:ble (?P<east>[\d.]+)/s, west>pi5:ble (?P<west>[\d.]+)/s; "
-                    r"sent (?P<sent>\d+), not sent (?P<failed>\d+)(?: \((?P<why>[^)]*)\))?")
+# Pi A's line lists east and west first; more links (Pi B's beacon, #460) may follow before the ";".
+STATUS = re.compile(r"\[pi\.radio_node\] east>pi5:ble (?P<east>[\d.]+)/s, west>pi5:ble (?P<west>[\d.]+)/s"
+                    r"(?:, [^;]*)?; sent (?P<sent>\d+), not sent (?P<failed>\d+)(?: \((?P<why>[^)]*)\))?")
 
 
 def run(*cmd: str) -> tuple[int, str]:
@@ -56,7 +59,11 @@ def radio_status(run=run):
             f"sudo journalctl -u {UNIT} -n 20 --no-pager (no lines at all: run this check with sudo)"
     m = lines[-1]
     east, west, failed = float(m["east"]), float(m["west"]), int(m["failed"])
-    rates = f"east>pi5:ble {east:.1f}/s, west>pi5:ble {west:.1f}/s, not sent {failed}"
+    # Links after west on the line: Pi B's beacon (pi5b>pi5:ble) in the desk layout.
+    others = [(link, float(rate)) for link, rate in LINK_RATE.findall(m.group(0))
+              if link not in ("east>pi5:ble", "west>pi5:ble")]
+    rates = ", ".join([f"east>pi5:ble {east:.1f}/s", f"west>pi5:ble {west:.1f}/s"]
+                      + [f"{link} {rate:.1f}/s" for link, rate in others]) + f", not sent {failed}"
     if failed:
         return False, f"radio node: {rates} ({m['why'] or 'send failed'})", \
             "the Ethernet link is down: see the Ethernet line below"
@@ -65,6 +72,10 @@ def radio_status(run=run):
         return False, f"radio node: {rates}", \
             f"nothing heard from beacon {' and '.join(silent)}: check it's powered and advertising " \
             "(a phone scanner must show company 0xFFFF, data 525345 for E, 525357 for W)"
+    quiet = [link for link, rate in others if rate <= 0]
+    if quiet:
+        return False, f"radio node: {rates}", \
+            f"nothing heard on {', '.join(quiet)}: is Pi B's node running? On Pi B: python3 -m pi.check --node pi5b"
     return True, f"radio node: {rates}", None
 
 
@@ -91,20 +102,70 @@ def hotspot(run=run):
 
 
 def forwarding(run=run):
-    """The demo laptop on the hotspot reaches the board through the Pi (the hotspot's shared mode forwards)."""
+    """The demo laptop and Pi B, both on the hotspot, reach the board through Pi A (the hotspot's shared mode forwards)."""
     code, out = run("cat", "/proc/sys/net/ipv4/ip_forward")
     if out.strip() != "1":
-        return False, "forwarding: off, so a laptop on the hotspot can't reach the board", \
+        return False, "forwarding: off, so the laptop and Pi B's readings can't reach the board", \
             "sudo nmcli connection up deadzone-ap (its shared mode turns forwarding on)"
-    return True, "forwarding: on (a laptop on the hotspot reaches 192.168.77.2)", None
+    return True, "forwarding: on (the laptop and Pi B on the hotspot reach 192.168.77.2)", None
+
+
+LINK_RATE = re.compile(r"(\S+>\S+:ble) ([\d.]+)/s")
+SENT = re.compile(r"; sent (\d+), not sent (\d+)(?: \(([^)]*)\))?")
+
+
+def radio_status_b(run=run):
+    """Pi B: every link on its last status line above 0/s, and its readings reach the board through Pi A."""
+    code, out = run("journalctl", "-u", UNIT, "--since", "-30s", "-o", "cat", "--no-pager")
+    lines = [line for line in out.splitlines() if line.startswith("[pi.radio_node] ") and SENT.search(line)]
+    if not lines:
+        return False, "radio node: no status line in the last 30 s", \
+            f"sudo journalctl -u {UNIT} -n 20 --no-pager (no lines at all: run this check with sudo)"
+    rates = [(link, float(rate)) for link, rate in LINK_RATE.findall(lines[-1])]
+    sent = SENT.search(lines[-1])
+    text = ", ".join(f"{link} {rate:.1f}/s" for link, rate in rates) + f", not sent {sent[2]}"
+    if int(sent[2]):
+        return False, f"radio node: {text} ({sent[3] or 'send failed'})", \
+            "readings go to the board through Pi A's hotspot: see the hotspot line below"
+    silent = [link for link, rate in rates if rate <= 0]
+    if silent:
+        return False, f"radio node: {text}", f"nothing heard on {', '.join(silent)}: check that beacon is powered"
+    return True, f"radio node: {text}", None
+
+
+def wifi_reader(run=run):
+    code, out = run("systemctl", "is-active", "radio-sight-wifi-rssi")
+    if out.strip() != "active":
+        return False, f"Wi-Fi reader: radio-sight-wifi-rssi is {out.strip() or 'not active'}", \
+            "journalctl -u radio-sight-wifi-rssi -n 20 --no-pager"
+    return True, "Wi-Fi reader: running", None
+
+
+def joined(run=run):
+    """Pi B: on Pi A's hotspot (a 10.42.0.x address, not .1), and the board answers through Pi A."""
+    code, out = run("ip", "-4", "-o", "addr", "show", "dev", WIFI)
+    if "inet 10.42.0." not in out or "inet 10.42.0.1/" in out:
+        return False, f"hotspot: {WIFI} isn't joined to Pi A's hotspot", \
+            "sudo bash radio/wifi_join.sh (SSID, passphrase and BSSID in .env)"
+    code, route = run("ip", "-4", "route", "get", "192.168.77.2")
+    if code != 0 or "via 10.42.0.1" not in route:
+        return False, "hotspot: joined, but there's no route to the board (192.168.77.2) through Pi A", \
+            "sudo bash radio/wifi_join.sh with RADIO_NODE=pi5b in .env (it adds 192.168.77.0/24 via 10.42.0.1)"
+    code, _ = run("ping", "-c", "1", "-W", "1", "192.168.77.2")
+    if code != 0:
+        return False, "hotspot: joined, but the board (192.168.77.2) doesn't answer through Pi A", \
+            "on Pi A: python3 -m pi.check (Ethernet and forwarding lines)"
+    return True, "hotspot: joined to Pi A's, the board answers", None
 
 
 CHECKS = (bluetooth, radio_node, radio_status, ethernet, hotspot, forwarding)
+CHECKS_B = (bluetooth, radio_node, radio_status_b, wifi_reader, joined)
 
 
-def main(run=run) -> int:
+def main(run=run, node=None) -> int:
+    node = node or os.environ.get("RADIO_NODE", "pi5")
     failed = 0
-    for check in CHECKS:
+    for check in (CHECKS_B if node == "pi5b" else CHECKS):
         ok, line, fix = check(run)
         print(f"{'ok  ' if ok else 'FAIL'}  {line}")
         if not ok:
@@ -115,4 +176,5 @@ def main(run=run) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    args = sys.argv[1:]
+    sys.exit(main(node=args[args.index("--node") + 1] if "--node" in args else None))

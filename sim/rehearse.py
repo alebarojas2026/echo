@@ -2,6 +2,7 @@
 
     python -m sim.rehearse          # PASS/FAIL per beat, exit 1 if any beat fails
     python -m sim.rehearse --desk   # the same for the 3-minute desk visit
+    python -m sim.rehearse --lesson # the live lesson: teach left and right, then unplug the camera
 
 The fake feed goes into the real bus code (bus.core.Bus), which stamps recv_t and forwards to
 the real brain (brain.core.Brain); the brain's state and events are what the screen would get.
@@ -20,6 +21,7 @@ from narrator import recap as recaps
 
 from . import fake
 from .layout import LAYOUT
+from . import lesson as live
 from .wire import encoder
 
 START_MS = 1_763_149_500_000
@@ -117,15 +119,19 @@ def wander(zone: int, start: float, end: float, step_s: float = 1.5) -> list:
 
 def desk_script():
     """The 3-minute desk visit in docs/desk-demo.md, at its times: the judge walks in at 0:20 and
-    around, goes to the bathroom (the zone with the shortest still limit) at 0:45 and stands still until
+    around, goes to the alert zone (the one with the shortest still limit) at 0:45 and stands still until
     the alert, waves at 1:10, moves to a zone with no alert while the camera cable is pulled, and walks
-    out at 2:10."""
-    wave, cam_off, leave, finish = 70.0, 95.0, 130.0, 155.0
+    out at 2:10. Then armed mode: armed at 2:15 with nobody there, the judge steps back in at 2:20 (an
+    intrusion), and it's disarmed at the end."""
+    wave, cam_off, leave, arm, back, finish = 70.0, 95.0, 130.0, 135.0, 140.0, 160.0
     at = lambda zone, t: {"t": t, "x": Z[zone][0], "y": Z[zone][1]}   # noqa: E731
     around = [at(z, 22.0 + 3 * i) for i, z in enumerate(TOUR)]   # walk through every zone, then keep moving
     person = ([{"t": 0, "x": None}, {"t": 20.0, **WEST_EDGE(TOUR[0])}] + around
               + wander(CALM, 23.0 + 3 * len(TOUR), 43.0) + [at(STILL, 47.0), at(STILL, wave + 4), at(CALM, wave + 6)]
-              + wander(CALM, wave + 7, leave - 2) + [{"t": leave, **EAST_EDGE(CALM)}, {"t": leave + 0.1, "x": None}])
+              + wander(CALM, wave + 7, leave - 2) + [{"t": leave, **EAST_EDGE(CALM)}, {"t": leave + 0.1, "x": None}]
+              # armed at 2:15 with nobody there; the judge steps back in at 2:20: an intrusion
+              + [{"t": back, **WEST_EDGE(TOUR[0])}, at(STILL, back + 2)] + wander(STILL, back + 3, finish - 6)
+              + [{"t": finish - 4, **EAST_EDGE(STILL)}, {"t": finish - 3.9, "x": None}])
     path = {"name": "desk", "duration_s": finish, "person": person,
             "waves": [{"t_on": wave + 1, "t_off": wave + 3.5}],
             "camera": [{"t": 0, "state": "on"}, {"t": cam_off, "state": "off"}],
@@ -137,14 +143,76 @@ def desk_script():
     beats = [
         ("nobody before the judge", 0, 20, "state", lambda s: pred(s, present=False)),
         ("judge walks in", 20, 45, "state", lambda s: pred(s, present=True, kind="person")),
-        ("still in the bathroom", 45, wave, "state", lambda s: pred(s, present=True, zone=STILL, motion="still")),
+        ("still in the alert zone", 45, wave, "state", lambda s: pred(s, present=True, zone=STILL, motion="still")),
         ("no-movement alert", 45, wave, "event", lambda e: e["kind"] == "alert_on"),
         ("wave check-in", wave, 90, "event", lambda e: e["kind"] == "checkin"),
         ("camera pulled, radio only", cam_off, leave, "state",
          lambda s: s["cam"] == "off" and s["teacher"] is None and pred(s, present=True, zone=CALM)),
-        ("walks out: nobody is here", leave, finish, "state", lambda s: pred(s, present=False)),
+        ("walks out: nobody is here", leave, arm, "state", lambda s: pred(s, present=False)),
+        ("armed, nobody here", arm, back, "state", lambda s: s.get("armed") is True and pred(s, present=False)),
+        ("intrusion while armed", back, back + 10, "event", lambda e: e["kind"] == "intrusion"),
+        ("disarmed", finish - 4, finish, "event", lambda e: e["kind"] == "disarmed"),
     ]
-    return path, [], beats
+    commands = [(arm, "arm", {"on": True}), (finish - 3, "arm", {"on": False})]
+    return path, commands, beats
+
+
+def lesson_script():
+    """The live lesson (sim/lesson.py): the commands the screen sends and the beats to look for.
+    The model starts from nothing: only a baseline and an empty recording exist before it."""
+    path = live.path()
+    record, train, cam_off, stop, end = live.RECORD_S, live.TRAIN_S, live.CAM_OFF_S, live.STOP_S, live.END_S
+    commands = [(record, "label_mode", {"mode": "person"}),
+                (record, "record_start", {"session": live.SESSION, "purpose": "train", "walker": "sim"}),
+                (train, "train", {}), (stop, "record_stop", {}), (stop, "label_mode", {"mode": "off"})]
+
+    def learning(s):
+        return (s["model"]["training"] or {}).get("lesson") or {}
+
+    def radio_only(s):
+        return s["cam"] == "off" and s["teacher"] is None and s["model"]["training"] is None and s["pred"] is not None
+
+    beats = [
+        ("lesson: no model while the first 20 s are recorded", record, train, "state",
+         lambda s: s["model"]["trained"] is False and s["teacher"] is not None and s["teacher"]["present"]),
+        ("lesson: a model within 5 s of train", train - 0.2, train + 5, "event", lambda e: e["kind"] == "trained"),
+        ("lesson: the learning signal counts 10 decisions", train, cam_off, "state", lambda s: learning(s).get("of") == 10),
+        ("lesson: the radio agrees with the camera 8 of 10", train, cam_off, "state", lambda s: learning(s).get("agree", 0) >= 8),
+        ("lesson: fits again while the camera is on", train + live.REFIT_S, cam_off, "state",
+         lambda s: learning(s).get("fits", 0) >= 2),
+        ("teach, then unplug: one last fit", cam_off, cam_off + 5, "event", lambda e: e["kind"] == "trained"),
+        ("teach, then unplug: radio only", cam_off + 3, end, "state", radio_only),
+        ("recording stopped, the radio carries on", stop + 1, end, "state", radio_only),
+    ]
+    return path, commands, beats
+
+
+def lesson_setup(stack) -> list:
+    """Before a lesson: a baseline and a short recording of the empty space, and no model."""
+    stack.cmd("baseline")
+    stack.play({"name": "lesson-baseline", "duration_s": 24, "person": None})
+    stack.cmd("record_start", session="lesson-empty", purpose="train", walker="sim")
+    stack.play({"name": "lesson-empty", "duration_s": 12, "person": None})
+    stack.cmd("record_stop")
+    stack.states.append(stack.brain.state())
+    stack._events()
+    kinds = [e["kind"] for e in stack.events]
+    return [("setup: baseline", "baseline_done" in kinds, None), ("setup: no model yet", "trained" not in kinds, None)]
+
+
+def follows_unplugged(stack, t0, settle_s: float = 1.5, share: float = 0.8) -> tuple:
+    """The "teach, then unplug" beat: with the camera off, the radio's zone is the side the person
+    is standing on, in at least `share` of the decisions (the first settle_s of each stand left out)."""
+    right = total = 0
+    for start, end, zone in live.stands():
+        if start < live.CAM_OFF_S + 3:
+            continue
+        for s in stack.states:
+            if start + settle_s <= (s["t"] - t0) / 1000 < end and s["cam"] == "off":
+                total += 1
+                right += bool(s["pred"] and s["pred"]["present"] and s["pred"]["zone"] == zone)
+    return (f"teach, then unplug: the radio follows left and right ({right} of {total} decisions)",
+            total > 0 and right >= share * total, None)
 
 
 class Stack:
@@ -159,6 +227,7 @@ class Stack:
         self.outbox = []   # commands the brain passes to the bus
         self.brain = Brain(sessions_dir=folder, to_bus=self.outbox.append)
         # The narrator's recap, as on the board: brain events in, a narration to the bus on reset.
+        narrate.set_zones(narrate.load_zones())   # the narrator's zone words come from nodes.json, as on the board
         self.narrator = narrate.Narrator(no_model, self._narration, clock=lambda: self.now, sleep=lambda s: None)
         self.recap = recaps.Recap(self.narrator, no_model)
 
@@ -216,19 +285,25 @@ class Stack:
         return [e["kind"] for e in self.events]
 
 
-def rehearse(script=None, seed: int = 0) -> list:
-    """Run the rehearsal. Returns [(beat name, passed, seconds until it showed or None)]."""
-    path, commands, beats = script or demo_script()
+def rehearse(script=None, seed: int = 0, lesson: bool = False) -> list:
+    """Run the rehearsal. Returns [(beat name, passed, seconds until it showed or None)].
+    lesson: the live lesson instead (lesson_script), starting with no model."""
+    path, commands, beats = script or (lesson_script() if lesson else demo_script())
     with tempfile.TemporaryDirectory() as folder:
         stack = Stack(folder, seed)
-        setup = stack.calibrate()
-        results = [("setup: baseline", "baseline_done" in setup, None), ("setup: training", "trained" in setup, None)]
+        if lesson:
+            results = lesson_setup(stack)
+        else:
+            setup = stack.calibrate()
+            results = [("setup: baseline", "baseline_done" in setup, None), ("setup: training", "trained" in setup, None)]
         t0 = stack.play(path, commands)
         for name, start, end, where, shows in beats:
             items = stack.states if where == "state" else stack.events
             hits = [(m["t"] - t0) / 1000 - start for m in items
                     if start <= (m["t"] - t0) / 1000 < end and shows(m)]
             results.append((name, bool(hits), round(hits[0], 1) if hits else None))
+        if lesson:
+            results.append(follows_unplugged(stack, t0))
     return results
 
 
@@ -237,8 +312,9 @@ def main(argv=None) -> int:
 
     ap = argparse.ArgumentParser(description="Play the demo through the real bus and brain, beat by beat.")
     ap.add_argument("--desk", action="store_true", help="the 3-minute desk visit (docs/desk-demo.md) instead")
+    ap.add_argument("--lesson", action="store_true", help="the live lesson: teach left and right, then unplug")
     args = ap.parse_args(argv)
-    results = rehearse(desk_script()) if args.desk else rehearse()
+    results = rehearse(lesson=True) if args.lesson else rehearse(desk_script()) if args.desk else rehearse()
     for name, passed, shown in results:
         took = "" if shown is None else f"  shown after {shown:.1f} s"
         print(f"{'PASS' if passed else 'FAIL'}  {name}{took}")

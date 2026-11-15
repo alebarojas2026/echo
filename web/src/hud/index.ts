@@ -1,3 +1,6 @@
+import { zoneName, zonePlace, linkName } from './layout'
+import { updateProofVisibility } from './proof-visibility'
+import { routerWords } from './router-words'
 import './hud.css'
 import type { HudState } from './state'
 
@@ -40,7 +43,7 @@ export function renderHud(root: HTMLElement, state: HudState) {
         <section class="hud-card hud-advice" aria-labelledby="hud-advice">
           <h2 id="hud-advice">Router placement</h2>
           <p data-testid="advice-text"></p>
-          <small>Router spot <span data-testid="router-spot"></span></small>
+          <small><span data-testid="router-spot"></span></small>
           <dl>
             <div><dt>Before (dBm)</dt><dd data-testid="before-dbm"></dd></div>
             <div><dt>After (dBm)</dt><dd data-testid="after-dbm"></dd></div>
@@ -73,16 +76,16 @@ export function renderHud(root: HTMLElement, state: HudState) {
     'cam-status': state.camera,
     'narrator-text': state.narration?.text ?? '__',
     'narrator-source': state.narration?.source ?? '',
-    'alert-banner': blind || stale ? '' : state.alert,
-    'alert-zone': blind || stale || state.alertZone == null ? '' : `Zone ${state.alertZone}`,
+    'alert-banner': blind || stale ? '' : state.movement === 'check_on' && state.alertZone != null ? `No movement ${zonePlace(state.alertZone)} for ${state.alertLimit ?? '__'} s` : state.alert,
+    'alert-zone': blind || stale || state.alertZone == null ? '' : zoneName(state.alertZone),
     'checkin-toast': !blind && !stale && state.checkin ? 'Check-in received' : '',
     'pred-kind': pred?.kind ?? '__',
     'pred-motion': pred?.motion ?? '__',
     'pred-zone': measurement(pred?.zone),
     'pred-zone-set': pred?.zone_set.join(', ') || '__',
-    'why-links': pred?.why.join(', ') || '__',
+    'why-links': pred?.why.map(id => linkName(id)).join('; ') || '__',
     'advice-text': state.advice?.text ?? '__',
-    'router-spot': state.router,
+    'router-spot': routerWords(state.router),
     'before-dbm': measurement(state.advice?.before_dbm, ' dBm'),
     'after-dbm': measurement(state.advice?.after_dbm, ' dBm'),
     'zone-score': measurement(state.proof.agreement, '%'),
@@ -98,6 +101,9 @@ export function renderHud(root: HTMLElement, state: HudState) {
     const field = root.querySelector(`[data-testid="${id}"]`)
     if (field && field.textContent !== value) field.textContent = value
   }
+  const why = root.querySelector<HTMLElement>('[data-testid="why-links"]')
+  if (why) why.dataset.links = pred?.why.join(',') ?? ''
+  updateProofVisibility(root)
   root.dataset.movement = state.checkin ? 'check-in' : state.movement
 }
 export { mountHud } from './judge'
