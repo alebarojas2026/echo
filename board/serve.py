@@ -15,6 +15,11 @@ are for drawing only and live in data/layout.local.json; /nodes.json carries the
 positions, and nothing else in it changes. POST is taken only from the board itself, the
 Ethernet link and the sensing hotspot (where the laptop is), and only as JSON.
 
+POST /ask with {"question": "..."} asks the room: agent/ask.py picks a tool with the on-board
+model and answers from the store (store/). The reply is {answer, rows, tool, args, picked_by,
+src, ms}. One question at a time, because llama-server has one slot. Taken from the same
+networks as a layout save.
+
 Standard library only.
 """
 import argparse
@@ -23,6 +28,7 @@ import functools
 import ipaddress
 import json
 import sys
+import threading
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -39,6 +45,7 @@ PROOF = REPO / "proof" / "proof.json"
 LAYOUT = REPO / "data" / "layout.local.json"
 # Who may save a layout: the board itself, the Ethernet link to the Pi (the laptop on the hotspot
 # arrives from 192.168.77.1, Pi A forwards it) and the sensing hotspot (CONTRACTS.md section 2).
+MAX_ASK_BYTES = 2048
 SAVE_FROM = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "192.168.77.0/24", "10.42.0.0/24")]
 
 # CONTRACTS.md section 7 with nothing measured yet.
@@ -86,15 +93,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?", 1)[0].split("#", 1)[0]
-        if path != "/layout":
+        if path not in ("/layout", "/ask"):
             return self._json({"error": "not found"}, False, HTTPStatus.NOT_FOUND)
-        try:
-            client = ipaddress.ip_address(self.client_address[0])
-        except ValueError:
-            client = None
-        if client is None or not any(client in net for net in SAVE_FROM):
-            return self._json({"error": "layout is saved only from the board's own networks"}, False,
+        if not self._ours():
+            return self._json({"error": "taken only from the board's own networks"}, False,
                               HTTPStatus.FORBIDDEN)
+        if path == "/ask":
+            return self._ask()
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
             return self._json({"error": "send JSON (Content-Type: application/json)"}, False,
                               HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
@@ -121,6 +126,36 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"error": "can't save the layout on the board"}, False,
                               HTTPStatus.INTERNAL_SERVER_ERROR)
         return self._json(self.server.layout.view(nodes_doc), False)
+
+    def _ours(self) -> bool:
+        """The request comes from the board itself, the Ethernet link or the sensing hotspot."""
+        try:
+            client = ipaddress.ip_address(self.client_address[0])
+        except ValueError:
+            return False
+        return any(client in net for net in SAVE_FROM)
+
+    def _ask(self):
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+            if not 0 < size <= MAX_ASK_BYTES:
+                raise ValueError("body size")
+            question = json.loads(self.rfile.read(size))["question"]
+            if not isinstance(question, str) or not question.strip():
+                raise ValueError("question")
+        except (ValueError, KeyError, TypeError):
+            return self._json({"error": 'send {"question": "..."}'}, False, HTTPStatus.BAD_REQUEST)
+        if self.server.ask is None:
+            return self._json({"error": "ask is not set up on this server"}, False,
+                              HTTPStatus.SERVICE_UNAVAILABLE)
+        try:
+            with self.server.ask_lock:
+                reply = self.server.ask(question)
+        except Exception as e:
+            self.log_error("ask failed: %s", e)
+            return self._json({"error": "the room could not answer"}, False,
+                              HTTPStatus.INTERNAL_SERVER_ERROR)
+        self._json(reply, False)
 
     def _nodes_doc(self):
         return json.loads(self.server.nodes_path.read_bytes())
@@ -196,13 +231,27 @@ class Handler(SimpleHTTPRequestHandler):
             super().log_request(code, size)
 
 
-def make_server(host="0.0.0.0", port=8080, dist=DIST, nodes=NODES, proof=PROOF, layout_path=LAYOUT):
+def make_server(host="0.0.0.0", port=8080, dist=DIST, nodes=NODES, proof=PROOF, layout_path=LAYOUT, ask=None):
+    """ask: a function question -> reply dict for POST /ask, or None to answer 503."""
     handler = functools.partial(Handler, directory=str(dist))
     server = ThreadingHTTPServer((host, port), handler)
     server.nodes_path = Path(nodes)
     server.proof_path = Path(proof)
     server.layout = layout.Store(layout_path)
+    server.ask, server.ask_lock = ask, threading.Lock()
     return server
+
+
+def room_ask(db=None, llm=None):
+    """question -> reply, from the store and the on-board model. None if agent/ or store/ is missing."""
+    try:
+        from agent.ask import LLM_URL, Picker, ask
+        from store import DB, Store
+    except ImportError as e:
+        print(f"serve: /ask is off ({e})", file=sys.stderr, flush=True)
+        return None
+    store, picker = Store(db or DB), Picker(llm or LLM_URL)
+    return lambda question: ask(question, store, picker)
 
 
 def main(argv=None) -> None:
@@ -213,9 +262,12 @@ def main(argv=None) -> None:
     ap.add_argument("--nodes", default=str(NODES))
     ap.add_argument("--proof", default=str(PROOF))
     ap.add_argument("--layout", default=str(LAYOUT), help="where align mode's saves are kept")
+    ap.add_argument("--store", default=None, help="the store's SQLite file, for /ask")
+    ap.add_argument("--llm", default=None, help="llama-server base URL, for /ask")
     args = ap.parse_args(argv)
 
-    server = make_server(args.host, args.port, args.dist, args.nodes, args.proof, args.layout)
+    server = make_server(args.host, args.port, args.dist, args.nodes, args.proof, args.layout,
+                         ask=room_ask(args.store, args.llm))
     host, port = server.server_address[:2]
     print(f"serve: http://{host}:{port} from {args.dist}", file=sys.stderr, flush=True)
     try:
