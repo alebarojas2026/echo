@@ -135,8 +135,30 @@ def test_only_the_last_armed_stretch_counts_and_events_outside_it_do_not():
     s = armed_store(intrusions=[(5, {"zone": 1}), (20, {"zone": 2}), (65, {"zone": 1})])
     assert [h["t"] for h in run(s)[0]["intrusions"]] == [T0 + 20_000]
     event(s, 66, "armed")
+    second(s, 70, armed=True)
     assert run(s)[0]["armed_from_t"] == T0 + 66_000 and run(s)[0]["armed_to_t"] is None
     assert run(s, from_t=T0, to_t=T0 + 30_000)[0]["present_s"] == 11          # an asked-for stretch: 20..30 s
+
+
+@pytest.mark.parametrize("disarmed_row", [False, True])
+def test_report_stops_when_records_stop_or_restart_disarmed(disarmed_row):
+    s = Store(":memory:")
+    event(s, 10, "armed")
+    second(s, 11, armed=True)
+    second(s, 12, armed=True)
+    if disarmed_row:
+        second(s, 69, armed=False)
+    out, why = run(s, lambda messages: "The space is still armed.")
+    assert out["armed_to_t"] == T0 + 12_000
+    assert "when the record of it stops" in out["text"]
+    assert "still armed" not in out["text"]
+    assert why == "template"
+
+
+def test_no_saved_seconds_never_claims_still_armed():
+    s = Store(":memory:")
+    event(s, 10, "armed")
+    assert "still armed" not in run(s)[0]["text"]
 
 
 def test_never_armed_gives_no_report():
@@ -191,7 +213,7 @@ def test_the_command_prints_the_last_report(tmp_path, capsys):
     s.add({"type": "event", "t": last - 15_000, "kind": "intrusion", "id": "i", "src": "sim", "info": {"zone": 1}})
     assert R.main(["--db", str(db), "--no-llm"]) == 0
     out = capsys.readouterr().out
-    assert "and still armed. Intrusion alerts: 1" in out and '"present_s": ' in out and "text from: template" in out
+    assert "when the record of it stops" in out and '"present_s": ' in out and "text from: template" in out
     assert R.main(["--db", str(tmp_path / "empty.db"), "--no-llm"]) == 1
 
 
