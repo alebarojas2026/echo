@@ -91,27 +91,29 @@ def test_fake_brain_hall_rows_quiet_then_movement_then_stale():
     for r in early["hall"]:
         assert set(r) == ROW_KEYS and (r["activity"], r["moving"], r["stale"]) == (0.0, False, False)
         assert r["xy_m"] == path["hall"]["beacons"][r["tx"]] and r["rate_hz"] > 0
-    walk = at(all_states, 37)                                    # somebody on h's path, both receivers
-    assert [(r["tx"], r["moving"]) for r in walk["hall"]] == [("h", True), ("j", False)] * 2
+    n = len(fake.receivers())                                    # every receiver in nodes.json hears both beacons
+    walk = at(all_states, 37)                                    # somebody on h's path, at every receiver
+    assert [(r["tx"], r["moving"]) for r in walk["hall"]] == [("h", True), ("j", False)] * n
     assert row(walk, "h>unoq:ble")["activity"] == 1.0
     assert 0.0 < row(at(all_states, 40), "h>unoq:ble")["activity"] < 1.0       # fading out after the walk
     assert row(at(all_states, 42), "h>unoq:ble")["moving"] is False
-    assert [(r["tx"], r["moving"]) for r in at(all_states, 49)["hall"]] == [("h", False), ("j", True)] * 2
+    assert [(r["tx"], r["moving"]) for r in at(all_states, 49)["hall"]] == [("h", False), ("j", True)] * n
     gone = at(all_states, 65)                                    # j is silent: stale, and nothing claimed
-    for link in ("j>unoq:ble", "j>pi5:ble"):
+    for link in (i for i in hall_ids(path) if i.startswith("j>")):
         assert row(gone, link) == {**row(gone, link), "stale": True, "activity": 0.0, "moving": False, "rate_hz": 0.0}
     assert row(gone, "h>unoq:ble")["stale"] is False
     assert row(at(all_states, 73), "j>unoq:ble")["stale"] is False
     last = at(all_states, 79)                                    # a walk only the board's link sees
-    assert row(last, "h>unoq:ble")["moving"] is True and row(last, "h>pi5:ble")["moving"] is False
+    assert row(last, "h>unoq:ble")["moving"] is True
+    assert not any(row(last, i)["moving"] for i in hall_ids(path) if i.startswith("h>") and i != "h>unoq:ble")
 
 
 def test_the_rest_of_the_state_still_passes_the_contract_checker():
     encode = encoder(1763149500000)
     for m in state.run(fake.load_path(PATH)):
         msg = json.loads(encode(m))
-        hall = msg.pop("hall", None)
-        assert set(errors(msg)) <= UNMEASURED, m["t"]
+        hall = msg.get("hall")
+        assert set(errors(msg)) <= UNMEASURED, m["t"]   # the whole state, hall rows and all (state.json has them)
         if m["type"] == "state":
             assert isinstance(hall, list)
             for r in hall:
