@@ -139,23 +139,26 @@ export function zoneSide(zone: number): { east: boolean; north: boolean } {
   return { east: x > SIZE_M[0] / 2, north: y > SIZE_M[1] / 2 }
 }
 
-export type LabelSide = 'above' | 'above-left' | 'above-right' | 'right' | 'left' | 'below-right' | 'below-left'
+export type LabelSide = 'above' | 'above-left' | 'above-right' | 'right' | 'left' | 'below' | 'below-right' | 'below-left'
 
 /** Which side of its head a node's name goes. On the square: outward at the east and west edges, above at the
- *  north edge (the UNO Q), else to the right. On the desk the names take no room beside the strip: a device on the
- *  desk has its name above it, and a beacon out over the aisle has it just below, reading inward from its stand
- *  (every link from it runs up toward the desk, and its stand runs down). */
+ *  north edge (the UNO Q), else to the right. On the desk the names take no room beside the strip and stay on the
+ *  side away from the standing spot (see below). */
 /** Devices nearer than this share the room above them: their names would overlap. */
 const CLOSE_M = 0.25
 
 export function nodeLabelSide(id: NodeId): LabelSide {
   const [x, y] = NODES[id]?.xyz ?? [0, 0, 0]
   if (STRIP_M) {
-    if (y < STRIP_M[1] - 0.01) return x < SIZE_M[0] / 2 ? 'below-right' : 'below-left'
-    // Two devices side by side on the desk (the board and the router on one hub): their names read outward from
-    // each other instead of landing on one another.
+    // Names go on the side away from the standing spot, never between a device and the person: above a device on
+    // our desk, below one across the gap. Two devices side by side (the board and the router on one hub) read
+    // outward from each other instead of landing on one another.
     const beside = Object.values(NODES).find((n) => n.id !== id && Math.abs(n.xyz[1] - y) < CLOSE_M && Math.abs(n.xyz[0] - x) < CLOSE_M)
-    return !beside ? 'above' : x < beside.xyz[0] || (x === beside.xyz[0] && id < beside.id) ? 'above-left' : 'above-right'
+    const west = !!beside && (x < beside.xyz[0] || (x === beside.xyz[0] && id < beside.id))
+    if (y >= STRIP_M[1] - 0.01) return !beside ? 'above' : west ? 'above-left' : 'above-right'
+    if (y < 0) return !beside ? 'below' : west ? 'below-left' : 'below-right'
+    // A beacon at the strip's end, level with the person: just below it, reading inward from its stand.
+    return x < SIZE_M[0] / 2 ? 'below-right' : 'below-left'
   }
   if (x <= 0.05) return 'left'
   if (x >= SIZE_M[0] - 0.05) return 'right'
@@ -177,6 +180,21 @@ export function alertWordAt(zone: number): [Vec3, 'west' | 'east' | 'south'] {
 export function nodePosition(id: NodeId, router: string | null | undefined): Vec3 {
   if (id === routerId() && router && ROUTER_SPOTS[router]) return ROUTER_SPOTS[router]
   return NODES[id]?.xyz ?? [0, 0, 0]
+}
+
+/** How far from the router the tray goes, toward the receiver. */
+const TRAY_FROM_ROUTER_M = 0.12
+
+/**
+ * The tray's place for a router and the receiver its Wi-Fi link runs to: on the line between them (the link it
+ * blocks), 12 cm from the router, or halfway when they are closer than 24 cm. At the router's height, like the
+ * file's own tray spot. Always between two devices, so always on the desk they stand on.
+ */
+export function trayBeside(router: Vec3, receiver: Vec3): Vec3 {
+  const d = Math.hypot(receiver[0] - router[0], receiver[1] - router[1])
+  const u = d > 0 ? Math.min(TRAY_FROM_ROUTER_M, d / 2) / d : 0
+  const r = (v: number) => Math.round(v * 1000) / 1000
+  return [r(router[0] + (receiver[0] - router[0]) * u), r(router[1] + (receiver[1] - router[1]) * u), router[2]]
 }
 
 type Json = Record<string, unknown>
@@ -268,7 +286,10 @@ export function applyLayout(json: unknown): boolean {
     if (d.some((v) => Math.abs(v) > 1e-6)) {
       const moved = (p: Vec3): Vec3 => [p[0] + d[0], p[1] + d[1], p[2] + d[2]]
       for (const k of Object.keys(ROUTER_SPOTS)) ROUTER_SPOTS[k] = moved(ROUTER_SPOTS[k])
-      replace(TRAY_SPOTS, TRAY_SPOTS.map(moved))
+      // The tray has its own place, on the line it is there to block: carried along it could hang off the desk.
+      const rx = links.map((id) => /^([a-z0-9]+)>([a-z0-9]+):wifi$/.exec(id)).find((m) => m?.[1] === router.id)?.[2]
+      const receiver = nodes.find((n) => n.id === rx)
+      replace(TRAY_SPOTS, receiver ? [trayBeside(router.xyz, receiver.xyz)] : TRAY_SPOTS.map(moved))
     }
   }
   replace(HALL_BEACONS, hall)

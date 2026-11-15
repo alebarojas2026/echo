@@ -118,6 +118,18 @@ describe('the room drawn on the desk layout', () => {
     expect(nodeLabelSide('east')).toBe('below-left')
   })
 
+  it('names a device across the gap below it, away from the standing spot, and a pair there outward', () => {
+    const fan = structuredClone(DESK_LAYOUT)
+    fan.nodes[2].xyz_m = [0.8, -0.41, 0.8] // Pi B, alone in the middle of the facing desk
+    fan.nodes[3].xyz_m = [1.5, -0.41, 0.8] // East beacon
+    fan.nodes[4].xyz_m = [1.42, -0.41, 0.8] // West beacon, moved next to it
+    expect(applyLayout(fan)).toBe(true)
+    expect(nodeLabelSide('pi5b')).toBe('below')
+    expect(nodeLabelSide('west')).toBe('below-left')
+    expect(nodeLabelSide('east')).toBe('below-right')
+    expect(applyLayout(DESK_LAYOUT)).toBe(true)
+  })
+
   it('reads the names of two devices side by side outward from each other', () => {
     const fan = structuredClone(DESK_LAYOUT)
     fan.nodes[0].xyz_m = [0.84, 0.68, 0.8] // the board

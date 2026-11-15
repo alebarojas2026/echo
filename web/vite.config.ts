@@ -32,7 +32,7 @@ async function boardJson(req: IncomingMessage, res: ServerResponse, next: () => 
   if (path !== '/nodes.json' && path !== '/proof.json') return next()
   let body: string | Buffer
   try {
-    body = await readFile(path === '/nodes.json' ? NODES : PROOF)
+    body = path === '/nodes.json' ? nodesText() : await readFile(PROOF)
   } catch {
     if (path === '/nodes.json') {
       res.statusCode = 404
@@ -47,6 +47,23 @@ async function boardJson(req: IncomingMessage, res: ServerResponse, next: () => 
 }
 
 const ROOM_JSON = new URL('./public/models/room.json', import.meta.url)
+// What align mode saves under the dev server, on this machine only (git-ignored): room.json and radio/nodes.json are
+// tracked files, and a save must never leave them changed for someone to commit by accident. Each wins over its
+// tracked file here and in a build made here.
+const ROOM_LOCAL = new URL('./public/models/room.local.json', import.meta.url)
+const NODES_LOCAL = new URL('./public/models/nodes.local.json', import.meta.url)
+
+/** radio/nodes.json as text, with the device places saved on this machine applied. */
+function nodesText(): string {
+  const text = readFileSync(NODES, 'utf8')
+  if (!existsSync(NODES_LOCAL)) return text
+  try {
+    const places = cleanNodePositions(JSON.parse(readFileSync(NODES_LOCAL, 'utf8')))
+    return places ? setNodePositions(text, places) : text
+  } catch {
+    return text
+  }
+}
 
 /** models/<name> when web/public/models/<name> exists. */
 const model = (name: string) => (existsSync(new URL(`./public/models/${name}`, import.meta.url)) ? `models/${name}` : undefined)
@@ -74,7 +91,7 @@ function hallFamilies(): Record<string, { hi?: string; lo?: string }> {
 /** radio/nodes.json as it is when the page is built: what the room falls back to if /nodes.json can't be read. */
 function buildLayout(): string {
   try {
-    return JSON.stringify(JSON.parse(readFileSync(NODES, 'utf8')))
+    return JSON.stringify(JSON.parse(nodesText()))
   } catch {
     return 'null'
   }
@@ -88,7 +105,7 @@ function roomScan() {
   if (!hi && !lo && !Object.keys(families).length) return null
   let fit = {}
   try {
-    fit = JSON.parse(readFileSync(ROOM_JSON, 'utf8'))
+    fit = JSON.parse(readFileSync(existsSync(ROOM_LOCAL) ? ROOM_LOCAL : ROOM_JSON, 'utf8'))
   } catch {
     // no alignment file: the scan is centred on the square
   }
@@ -134,8 +151,9 @@ function hallBeaconsApi(req: IncomingMessage, res: ServerResponse, next: () => v
   })
 }
 
-// Under `vite` only: align mode's S saves where the devices were placed into radio/nodes.json (POST), changing only
-// their xyz_m (and the router's spots with it). On the board the same goes through POST /layout.
+// Under `vite` only: align mode's S saves where the devices were placed (POST) into nodes.local.json; /nodes.json
+// is then served with those places applied (and the router's spots with it). On the board the same goes through
+// POST /layout.
 function nodesApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
   if (req.url?.split('?')[0] !== '/__nodes' || req.method !== 'POST') return next()
   let body = ''
@@ -155,8 +173,8 @@ function nodesApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
       res.statusCode = 400
       return void res.end(JSON.stringify({ error: 'expected [{id, xyz_m}]' }))
     }
-    writeFileSync(NODES, setNodePositions(readFileSync(NODES, 'utf8'), positions))
-    res.end(JSON.stringify({ saved: 'radio/nodes.json' }))
+    writeFileSync(NODES_LOCAL, `${JSON.stringify(positions)}\n`)
+    res.end(JSON.stringify({ saved: 'web/public/models/nodes.local.json' }))
   })
 }
 
@@ -181,8 +199,8 @@ function roomScanApi(req: IncomingMessage, res: ServerResponse, next: () => void
       res.statusCode = 400
       return void res.end(JSON.stringify({ error: 'expected offset_m, yaw_deg, scale and cut_m' }))
     }
-    writeFileSync(ROOM_JSON, `${JSON.stringify(fit, null, 2)}\n`)
-    res.end(JSON.stringify({ saved: 'web/public/models/room.json' }))
+    writeFileSync(ROOM_LOCAL, `${JSON.stringify(fit, null, 2)}\n`)
+    res.end(JSON.stringify({ saved: 'web/public/models/room.local.json' }))
   })
 }
 

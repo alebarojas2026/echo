@@ -78,6 +78,9 @@ describe('saving where the devices were placed', () => {
     {"id": "pi5", "name": "Pi A", "xyz_m": [0.8, 1.1, 1.0], "roles": ["router", "beacon", "receiver"]},
     {"id": "pi5b", "name": "Pi B", "xyz_m": [0.5, 0.6, 1.0], "roles": ["beacon", "receiver"]}
   ],
+  "links": [
+    {"id": "pi5>unoq:wifi", "tx": "pi5", "rx": "unoq", "kind": "wifi", "expected_hz": null}
+  ],
   "router_spots": [
     {"id": "S-home", "xyz_m": [0.8, 1.1, 1.0]},
     {"id": "S-W30", "xyz_m": [0.5, 1.1, 1.0]}
@@ -102,9 +105,15 @@ describe('saving where the devices were placed', () => {
     const saved = JSON.parse(setNodePositions(NODES_FILE, [{ id: 'pi5', xyz_m: [0.76, 0.68, 0.8] }]))
     expect(saved.nodes[1].xyz_m).toEqual([0.76, 0.68, 0.8])
     expect(saved.router_spots).toEqual([{ id: 'S-home', xyz_m: [0.76, 0.68, 0.8] }, { id: 'S-W30', xyz_m: [0.46, 0.68, 0.8] }])
-    expect(saved.tray_spots[0].xyz_m).toEqual([0.82, 0.58, 0.8])
+    // the tray takes its own place, 12 cm from the router toward the board, never carried off the desk's edge
+    expect(saved.tray_spots[0].xyz_m).toEqual([0.877, 0.653, 0.8])
     expect(saved.hall.beacons[0].xyz_m).toBeNull() // nothing else is touched
     expect(saved.beacons.payloads[0]).toEqual({ node: 'pi5', id: 'S', data_hex: 'FFFF525353' })
+  })
+
+  it('places the tray from where both ended up when the router and the board are saved together', () => {
+    const saved = JSON.parse(setNodePositions(NODES_FILE, [{ id: 'unoq', xyz_m: [0.84, 0.68, 0.8] }, { id: 'pi5', xyz_m: [0.76, 0.68, 0.8] }]))
+    expect(saved.tray_spots[0].xyz_m).toEqual([0.8, 0.68, 0.8]) // halfway between them, 8 cm apart
   })
 
   it('leaves out a device the file does not have', () => {

@@ -240,6 +240,11 @@
   translate: -8px calc(-100% - 12px);
 }
 
+/* On the desk, a device across the gap: its name below it, on the side away from the standing spot. */
+.room-label--below {
+  translate: -50% 12px;
+}
+
 /* On the desk, a beacon over the aisle: just below it, reading inward from its stand. */
 .room-label--below-right {
   translate: 10px 12px;

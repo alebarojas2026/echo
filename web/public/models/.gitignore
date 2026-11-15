@@ -4,3 +4,5 @@
 *.glb
 !hall-hi.glb
 !hall-lo.glb
+# Saved by align mode under the dev server, for this machine only.
+*.local.json

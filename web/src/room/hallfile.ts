@@ -2,6 +2,8 @@
 // value changes, in place, so the file's diff is one line per beacon moved. Used by the dev server (vite.config.ts)
 // for align mode's S.
 
+import { trayBeside } from './frame'
+
 export type Vec3 = [number, number, number]
 
 /** The file's text with each listed hall beacon's xyz_m replaced; beacons not in the file are left out. */
@@ -48,17 +50,26 @@ function setXyz(text: string, id: string, xyz: Vec3): string {
  */
 export function setNodePositions(text: string, positions: { id: string; xyz_m: Vec3 }[]): string {
   type Entry = { id?: string; xyz_m?: Vec3; roles?: string[] }
-  const file = JSON.parse(text) as { nodes?: Entry[]; router_spots?: Entry[]; tray_spots?: Entry[] }
+  const file = JSON.parse(text) as { nodes?: Entry[]; links?: { tx?: string; rx?: string; kind?: string }[]; router_spots?: Entry[]; tray_spots?: Entry[] }
   let out = text
+  const now = new Map<string, Vec3>((file.nodes ?? []).filter((n) => n.id && n.xyz_m).map((n) => [n.id!, n.xyz_m!]))
   for (const { id, xyz_m } of positions) {
-    const node = file.nodes?.find((n) => n.id === id)
-    if (!node?.xyz_m) continue
+    if (!now.has(id)) continue
     out = setXyz(out, id, xyz_m)
-    if (!node.roles?.includes('router')) continue
-    const d = xyz_m.map((v, i) => v - node.xyz_m![i])
-    for (const spot of [...(file.router_spots ?? []), ...(file.tray_spots ?? [])]) {
-      if (spot.id && spot.xyz_m) out = setXyz(out, spot.id, spot.xyz_m.map((v, i) => v + d[i]) as Vec3)
-    }
+    now.set(id, xyz_m)
+  }
+  const router = file.nodes?.find((n) => n.roles?.includes('router'))
+  const moved = router?.id && router.xyz_m ? now.get(router.id)! : null
+  if (!router?.xyz_m || !moved || moved.every((v, i) => v === router.xyz_m![i])) return out
+  const d = moved.map((v, i) => v - router.xyz_m![i])
+  for (const spot of file.router_spots ?? []) {
+    if (spot.id && spot.xyz_m) out = setXyz(out, spot.id, spot.xyz_m.map((v, i) => v + d[i]) as Vec3)
+  }
+  // The tray has its own place, between the router and the receiver its Wi-Fi link runs to (frame.ts).
+  const rx = file.links?.find((l) => l.tx === router.id && l.kind === 'wifi')?.rx
+  const receiver = rx ? now.get(rx) : undefined
+  for (const tray of file.tray_spots ?? []) {
+    if (tray.id && tray.xyz_m) out = setXyz(out, tray.id, receiver ? trayBeside(moved, receiver) : (tray.xyz_m.map((v, i) => v + d[i]) as Vec3))
   }
   return out
 }
