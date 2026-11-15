@@ -1,6 +1,6 @@
 const {test,expect}=require('@playwright/test')
 const fs=require('node:fs'),path=require('node:path')
-const gate=require('./fixtures/gate-layout.json')
+const gate=require('../../radio/layouts/gate-3.json')
 for(const [width,height] of [[1920,1080],[1440,900]])test(`lean check-in instructions and board acknowledgement at ${width}`,async({page})=>{
  await page.route('**/nodes.json',r=>r.fulfill({json:gate}));await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'})
  await page.goto('/tests/arrival-harness.html?op=1');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000});await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
@@ -8,7 +8,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`lean check-in instruc
  await page.evaluate(()=>window.arrival.update('still'))
  await expect(page.getByTestId('checkin-instruction')).toBeHidden();await shot('counting')
  await page.evaluate(()=>{const s=window.arrival.peek('still');window.arrival.update('still',{alert:{...s.alert,state:'check_on',still_s:12}})})
- await expect(page.getByTestId('checkin-instruction')).toHaveText('Lean aside to say you’re okay.')
+ await expect(page.getByTestId('checkin-instruction')).toHaveText("Lean aside to say you're okay.")
  await expect(page.getByTestId('checkin-instruction')).toBeVisible();await expect(page.getByTestId('checkin-instruction')).toHaveCSS('font-size','28px');await shot('alert')
  await page.evaluate(()=>window.arrival.update('checkin'))
  await expect(page.getByTestId('checkin-toast')).toHaveText('Check-in received');await expect(page.getByTestId('checkin-instruction')).toBeHidden();await shot('checkin')
