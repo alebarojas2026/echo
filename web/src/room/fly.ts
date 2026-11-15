@@ -221,12 +221,27 @@ const COLUMN_PX = 8
 /** "Our desk" stands this far above the floor, clear of the column's top. */
 const DESK_WORD_M = 3.9
 
+/**
+ * What the hall view says about the hall itself, one sentence a line. The hall is a detailed model next to
+ * "everything runs on the board": a judge can fairly ask who made it. It was built from a scan of the room, on
+ * another machine; the board draws only the live marks on it.
+ */
+export const HALL_CAPTION = ['Hall model built from a scan, not by the board.', 'The board draws the live marks.'] as const
+
+/** How strongly the hall view's own words show for how wide the camera is: only in the wide half of the fly, and
+ *  gone by the time the desk is what is on screen. */
+export function hallWordsAlpha(wide: number): number {
+  return Math.min(1, Math.max(0, (wide - 0.5) / 0.5))
+}
+
 /** The marks that keep the square and the person readable from the hall framing. */
 export class HallMarks {
   private readonly outline: Line2
   private readonly column: Mesh<BoxGeometry, MeshBasicMaterial>
   /** Says where we are in the whole hall, where the layout is a few pixels across. */
   private readonly word: HTMLElement
+  /** HALL_CAPTION, in the room's bottom-left corner while the hall is on screen. */
+  private readonly caption: HTMLElement
   private readonly scratch = new Vector3()
 
   constructor(
@@ -250,6 +265,11 @@ export class HallMarks {
     view.scene.add(this.outline, this.column)
     this.word = view.addLabel('Our desk', new Vector3(0, DESK_WORD_M, 0), 'room-label--ourdesk', true)
     this.word.hidden = true
+    this.caption = document.createElement('p')
+    this.caption.className = 'room-hall-caption'
+    for (const line of HALL_CAPTION) this.caption.append(Object.assign(document.createElement('span'), { textContent: line }))
+    this.caption.hidden = true
+    view.host.append(this.caption)
     // Runs every frame something else moves (the figure, the fly); never asks for frames itself.
     view.addAnimator(() => {
       this.place()
@@ -264,9 +284,9 @@ export class HallMarks {
     const { at, alpha } = this.standing()
     const cam = this.view.camera
     // Only in the wide half of the fly: closer in, the figure itself reads, and a pole through it would not.
-    const far = Math.min(1, Math.max(0, (wide - 0.5) / 0.5))
-    this.word.hidden = far === 0
-    this.word.style.opacity = String(far)
+    const far = hallWordsAlpha(wide)
+    this.word.hidden = this.caption.hidden = far === 0
+    this.word.style.opacity = this.caption.style.opacity = String(far)
     this.column.material.opacity = 0.9 * alpha * far
     this.column.visible = this.column.material.opacity > 0
     if (!this.column.visible) return

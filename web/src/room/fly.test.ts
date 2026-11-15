@@ -1,6 +1,6 @@
 import { Box3, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
-import { FIRST_LOOK_MS, FLY_MS, Fly, cutaway, hallShot, mixShot, pinnedFraming, wideness } from './fly'
+import { FIRST_LOOK_MS, FLY_MS, Fly, HALL_CAPTION, cutaway, hallShot, hallWordsAlpha, mixShot, pinnedFraming, wideness } from './fly'
 import { roomShot, type RoomView, type Shot } from './view'
 
 /** Just enough of RoomView for the fly: it records the shots and lets the test run frames. */
@@ -63,6 +63,21 @@ describe('flying between shots', () => {
     expect(pinnedFraming(new URLSearchParams('view=hall'))).toBe('hall')
     expect(pinnedFraming(new URLSearchParams('view=square'))).toBe('square')
     expect(pinnedFraming(new URLSearchParams('view=top'))).toBeNull()
+  })
+})
+
+describe('the hall view\u2019s caption', () => {
+  it('says the hall is a model built from a scan and that the board draws only the live marks', () => {
+    expect([...HALL_CAPTION]).toEqual(['Hall model built from a scan, not by the board.', 'The board draws the live marks.'])
+    // Nothing about when it was made: it was built during the event, so "before the event" would not be true.
+    expect(HALL_CAPTION.join(' ')).not.toMatch(/before/i)
+  })
+
+  it('shows in the hall view, fades with the fly, and is gone in the desk view', () => {
+    expect(hallWordsAlpha(1)).toBe(1)
+    expect(hallWordsAlpha(0.75)).toBeCloseTo(0.5)
+    expect(hallWordsAlpha(0.5)).toBe(0)
+    expect(hallWordsAlpha(0)).toBe(0)
   })
 })
 
