@@ -61,7 +61,9 @@ EXPECT = {"presence": "Yes. Someone was here for", "still_spans": "The longest t
 @pytest.mark.parametrize("tool", list(TOOLS))
 def test_each_tool_answers_from_its_rows(store, tool):
     reply = run(store, tool)
-    assert alerts_in(store) >= 1                      # the demo path has an alert on every layout
+    # The demo path stands still once, so it raises one alert on every layout (sim/tests/test_state.py
+    # checks the path itself). The count is still read from the store, not written here.
+    assert alerts_in(store) == 1
     assert EXPECT[tool].format(alerts=alerts_in(store)) in reply["answer"], reply["answer"]
     assert reply["tool"] == tool and reply["picked_by"] == "llm" and reply["src"] == "sim" and reply["rows"]
     # no number that isn't in a row (or the minutes that were asked for)

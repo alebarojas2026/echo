@@ -46,10 +46,10 @@ def room(tmp_path, store):
 
 
 def test_ask_answers_with_the_rows_and_the_time(room, store):
-    alerts = len(store.events(kinds=("alert_on",)))   # what the demo path gives on this layout
+    alerts = len(store.events(kinds=("alert_on",)))   # the demo path stands still once, on every layout
     status, reply = post(room + "/ask", json.dumps({"question": "any alerts?"}).encode())
     assert status == 200 and reply["tool"] == "alerts" and reply["picked_by"] == "llm" and reply["src"] == "sim"
-    assert alerts >= 1 and reply["answer"].startswith(f"No-movement alerts in the last 10 minutes: {alerts}.")
+    assert alerts == 1 and reply["answer"].startswith(f"No-movement alerts in the last 10 minutes: {alerts}.")
     assert reply["rows"] and isinstance(reply["ms"], int)
 
 

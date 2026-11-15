@@ -48,7 +48,9 @@ def test_numeric_heartbeat_atomic_and_missing(tmp_path):
     path = tmp_path / "heartbeat.json"
     assert read_heartbeat(path) is None
     write_heartbeat(path, {"t": 1000, "frame": 4, "unrelated": "not persisted"})
-    assert json.loads(path.read_text()) == {"t": 1000, "frame": 4}
+    assert json.loads(path.read_text()) == {"t": 1000, "frame": 4, "box_w": None}
+    write_heartbeat(path, {"t": 1100, "frame": 5}, 0.3125)       # desk view: the box width, a number only
+    assert json.loads(path.read_text()) == {"t": 1100, "frame": 5, "box_w": 0.3125}
     assert len(list(tmp_path.iterdir())) == 1
     path.write_text("broken")
     assert read_heartbeat(path) is None
