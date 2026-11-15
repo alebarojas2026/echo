@@ -1,0 +1,15 @@
+const {test,expect}=require('@playwright/test')
+const fs=require('node:fs'),path=require('node:path')
+require('./layout-fixture.cjs')
+for(const [width,height] of [[1920,1080],[1440,900]])test(`tamper releases the hall hold at ${width}`,async({page})=>{
+ await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'})
+ await page.goto('/tests/arrival-harness.html');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000})
+ await page.evaluate(()=>window.arrival.update('empty',{armed:true}))
+ await expect(page.locator('#room')).toHaveAttribute('data-view','hall')
+ const tamper=()=>page.evaluate(()=>window.arrival.update('blind',{armed:true,tamper:['pi5b']}))
+ await tamper();await expect(page.locator('.hud-arrival')).toBeHidden();await expect(page.locator('html')).toHaveAttribute('data-hud-arrival-cut','1');await expect(page.locator('#room')).toHaveAttribute('data-view','square')
+ await expect(page.getByTestId('tamper-text')).toContainText('Pi B')
+ if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-tamper-desk.png`)})}
+ await page.reload();await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded');await tamper();await expect(page.locator('#room')).toHaveAttribute('data-view','square')
+ await page.evaluate(()=>window.arrival.update('empty',{armed:true,tamper:[]}));await expect(page.locator('#room')).toHaveAttribute('data-view','hall')
+})
