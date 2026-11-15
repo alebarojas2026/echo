@@ -121,6 +121,8 @@ Use the short name: `python -m sim.fake zone_tour`.
 | `demo` | The whole demo in order, for the fake brain (see below) | 64 s |
 | `still_flicker` | Stand still in zone 4 with one 0.3 s moving flicker; the alert must still fire at 10 s | 18 s |
 | `tamper` | Nobody there. Armed at 3 s (the path sends the cmd itself); the east beacon is unplugged from 10 s to 20 s: `tamper` at 13 s, `tamper_cleared` at 22 s; disarmed at 36 s | 40 s |
+| `passed_by` | Nobody there. Armed at 3 s; at 10 s someone crosses the area in 1.5 s without stopping: `passed_by` once they are gone, no `intrusion`; disarmed at 21 s | 24 s |
+| `step_in` | Nobody there. Armed at 3 s; at 10 s someone steps in and stands for 6 s: one `intrusion` about 3.5 s after stepping in; disarmed at 21 s | 24 s |
 | `tray_removed` | Person in zone 2 throughout; tray at T1 from 5 s to 14 s, gone from the picture about 1 s later | 20 s |
 | `lesson` | The live lesson (built from the layout in `sim/lesson.py`, no file): someone steps left and right, desk-view labels with no foot point, the camera unplugged at 45 s. The fake brain shows `model.training.lesson` ("learning: 6 of 10", then 8) from 25 s until the camera goes | 66 s |
 
@@ -195,8 +197,8 @@ Every connected screen gets the same messages at real speed. `cmd` messages from
 read: `reset_alert` clears the alert, `reset` also clears the still timer, check-in and advice,
 sends the `reset` event and shows the narrator's template recap of the demo since the last reset,
 `arm {on: true|false}` arms or disarms (section 6, Armed: `state.armed`, the `armed`,
-`disarmed` and `intrusion` events, one intrusion each time a person appears while armed; reset
-disarms), and the rest are accepted and ignored. The `arrival` path is the hero arrival: nobody,
+`disarmed`, `intrusion` and `passed_by` events: an appearance still there `armed.hold_s` later
+(nodes.json, 3 s) is one intrusion, one that is gone first is a `passed_by`; reset disarms), and the rest are accepted and ignored. The `arrival` path is the hero arrival: nobody,
 then someone steps in on the left, crosses right and stands still. The `tamper` path is tamper while armed
 (section 6, Tamper; wording in issue #533): `python -m sim.ws tamper --loop` arms by itself (a path's
 `"commands": [{"t", "cmd", "args"}]` are run by the fake brain at their times), then east goes silent: the event
