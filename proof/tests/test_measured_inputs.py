@@ -62,7 +62,7 @@ def test_5_egress_is_read_from_board_command(monkeypatch):
         return "12\n"
     monkeypatch.setattr("proof.manual.subprocess.check_output", execute)
     assert capture_egress() == "12\n"
-    assert calls[0][-1] == "count" and calls[0][-2].endswith("board/egress.sh")
+    assert calls[0][-1] == "count" and Path(calls[0][-2]).parts[-2:] == ("board", "egress.sh")
 
 
 def test_6_zero_watts_is_not_a_board_measurement():
