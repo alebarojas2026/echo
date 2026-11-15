@@ -9,11 +9,18 @@ files are read on every request, so new measurements show up without a restart.
 Until proof/proof.json exists, /proof.json is the section 7 shape with every
 value null, which the screen shows as "__".
 
+/layout is for the operator's align mode (#510): GET gives the saved room alignment and
+the hall beacons' positions, POST saves them (board/layout.py says what may be sent). They
+are for drawing only and live in data/layout.local.json; /nodes.json carries the saved hall
+positions, and nothing else in it changes. POST is taken only from the board itself, the
+Ethernet link and the sensing hotspot (where the laptop is), and only as JSON.
+
 Standard library only.
 """
 import argparse
 import copy
 import functools
+import ipaddress
 import json
 import sys
 from http import HTTPStatus
@@ -21,9 +28,18 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:  # the unit runs this file as a script: board.layout must still import
+    sys.path.insert(0, str(REPO))
+
+from board import layout  # noqa: E402
+
 DIST = REPO / "web" / "dist"
 NODES = REPO / "radio" / "nodes.json"
 PROOF = REPO / "proof" / "proof.json"
+LAYOUT = REPO / "data" / "layout.local.json"
+# Who may save a layout: the board itself, the Ethernet link to the Pi (the laptop on the hotspot
+# arrives from 192.168.77.1, Pi A forwards it) and the sensing hotspot (CONTRACTS.md section 2).
+SAVE_FROM = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "192.168.77.0/24", "10.42.0.0/24")]
 
 # CONTRACTS.md section 7 with nothing measured yet.
 EMPTY_PROOF = {
@@ -68,12 +84,59 @@ class Handler(SimpleHTTPRequestHandler):
     def do_HEAD(self):
         self._route(head=True)
 
+    def do_POST(self):
+        path = self.path.split("?", 1)[0].split("#", 1)[0]
+        if path != "/layout":
+            return self._json({"error": "not found"}, False, HTTPStatus.NOT_FOUND)
+        try:
+            client = ipaddress.ip_address(self.client_address[0])
+        except ValueError:
+            client = None
+        if client is None or not any(client in net for net in SAVE_FROM):
+            return self._json({"error": "layout is saved only from the board's own networks"}, False,
+                              HTTPStatus.FORBIDDEN)
+        if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
+            return self._json({"error": "send JSON (Content-Type: application/json)"}, False,
+                              HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            return self._json({"error": "Content-Length needed"}, False, HTTPStatus.LENGTH_REQUIRED)
+        if length > layout.MAX_BODY:
+            return self._json({"error": "too big"}, False, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+        try:
+            nodes_doc = self._nodes_doc()
+        except (OSError, ValueError):
+            return self._json({"error": "radio/nodes.json can't be read"}, False, HTTPStatus.SERVICE_UNAVAILABLE)
+        try:
+            change = layout.clean(json.loads(self.rfile.read(length)), nodes_doc)
+        except layout.Invalid as e:
+            return self._json({"error": str(e)}, False, HTTPStatus.BAD_REQUEST)
+        except ValueError:
+            return self._json({"error": "not JSON"}, False, HTTPStatus.BAD_REQUEST)
+        try:
+            self.server.layout.save(change)
+        except OSError as e:
+            self.log_error("can't save the layout: %s", e)
+            return self._json({"error": "can't save the layout on the board"}, False,
+                              HTTPStatus.INTERNAL_SERVER_ERROR)
+        return self._json(self.server.layout.view(nodes_doc), False)
+
+    def _nodes_doc(self):
+        return json.loads(self.server.nodes_path.read_bytes())
+
     def _route(self, head: bool):
         path = self.path.split("?", 1)[0].split("#", 1)[0]
         if path == "/nodes.json":
             return self._nodes(head)
         if path == "/proof.json":
             return self._proof(head)
+        if path == "/layout":
+            try:
+                return self._json(self.server.layout.view(self._nodes_doc()), head)
+            except (OSError, ValueError):
+                return self._json({"error": "radio/nodes.json can't be read"}, head,
+                                  HTTPStatus.SERVICE_UNAVAILABLE)
         if not Path(self.directory).is_dir():
             return self._json({"error": "web/dist is not built yet"}, head,
                               HTTPStatus.SERVICE_UNAVAILABLE)
@@ -82,7 +145,10 @@ class Handler(SimpleHTTPRequestHandler):
     def _nodes(self, head: bool):
         try:
             body = self.server.nodes_path.read_bytes()
-            json.loads(body)
+            doc = json.loads(body)
+            stored = self.server.layout.load()
+            if stored["hall"]:  # the saved hall positions; with none, the file's own bytes
+                body = json.dumps(layout.overlay(doc, stored), indent=2).encode()
         except FileNotFoundError:
             return self._json({"error": "radio/nodes.json not found"}, head, HTTPStatus.NOT_FOUND)
         except (OSError, ValueError) as e:
@@ -130,11 +196,12 @@ class Handler(SimpleHTTPRequestHandler):
             super().log_request(code, size)
 
 
-def make_server(host="0.0.0.0", port=8080, dist=DIST, nodes=NODES, proof=PROOF):
+def make_server(host="0.0.0.0", port=8080, dist=DIST, nodes=NODES, proof=PROOF, layout_path=LAYOUT):
     handler = functools.partial(Handler, directory=str(dist))
     server = ThreadingHTTPServer((host, port), handler)
     server.nodes_path = Path(nodes)
     server.proof_path = Path(proof)
+    server.layout = layout.Store(layout_path)
     return server
 
 
@@ -145,9 +212,10 @@ def main(argv=None) -> None:
     ap.add_argument("--dist", default=str(DIST), help="built screen folder")
     ap.add_argument("--nodes", default=str(NODES))
     ap.add_argument("--proof", default=str(PROOF))
+    ap.add_argument("--layout", default=str(LAYOUT), help="where align mode's saves are kept")
     args = ap.parse_args(argv)
 
-    server = make_server(args.host, args.port, args.dist, args.nodes, args.proof)
+    server = make_server(args.host, args.port, args.dist, args.nodes, args.proof, args.layout)
     host, port = server.server_address[:2]
     print(f"serve: http://{host}:{port} from {args.dist}", file=sys.stderr, flush=True)
     try:

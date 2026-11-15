@@ -43,7 +43,7 @@ radio-sight-wifi-rssi     board  pi     board/units/radio-sight-wifi-rssi.servic
 radio-sight-hci-scan      board  pi     board/units/radio-sight-hci-scan.service    radio/ contracts/
 radio-sight-camwatch      board  -      board/units/radio-sight-camwatch.service    teacher/ contracts/
 radio-sight-brain         board  -      board/units/radio-sight-brain.service       brain/ advisor/ radio/nodes.json contracts/
-radio-sight-serve         board  -      board/units/radio-sight-serve.service       board/serve.py
+radio-sight-serve         board  -      board/units/radio-sight-serve.service       board/serve.py board/layout.py
 radio-sight-llm           board  -      narrator/llm.service                        narrator/llm.service
 radio-sight-narrate       board  -      board/units/radio-sight-narrate.service     narrator/ contracts/
 radio-sight-radio-node    pi     -      board/units/radio-sight-radio-node.service  pi/ radio/ contracts/
