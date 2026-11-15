@@ -163,6 +163,8 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
       fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M, s.fit.yaw_deg ?? 0))
     })
     feed.onEvent((event) => event.kind === 'reset' && fly.reset())
+    // A walk straight through the one spot (the board's passed_by event): the figure crosses it and is gone.
+    feed.onEvent((event) => event.kind === 'passed_by' && presence.passThrough())
     // The arrival screen (#552): while the HUD says "Nobody is here." the live hall shows under its words, dimmed
     // and drifting; "found" (or "closed") lifts the dim and flies down to the floor. The HUD sends window event
     // 'hud:arrival' {state: 'waiting' | 'found' | 'closed'} and keeps the latest on <html data-hud-arrival>, so a

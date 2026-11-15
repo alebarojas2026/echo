@@ -8,6 +8,7 @@ import { judgeMoment } from './judge-moment'
 import { blindSentence } from './health-words'
 import { hudLayout, loadHudLayout, zonePlace } from './layout'
 import { boardNow } from './board-time'
+import { WALKED, walkedThrough } from './judge-hall'
 
 type ArrivalState = StateMsg & { armed?: boolean }
 
@@ -103,6 +104,8 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   let passedBy = ''
   let passedTimer: ReturnType<typeof setTimeout> | undefined
   const seen = new Set<string>()
+  // A walk straight through the one spot (judge-hall.ts): said in place of "Nobody is here." for a few seconds.
+  const walked = walkedThrough(feed, () => render())
   const cancelHold = () => { clearTimeout(wake); wake = undefined; fade?.forEach(animation => animation.cancel()); fade = undefined }
   // cut: an intrusion goes straight to the floor, so the room should jump there instead of flying (#552).
   const announce = (next: ArrivalPhase, cut = false) => {
@@ -137,6 +140,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   }
   const render = () => {
     here = !stale && !!state?.pred?.present && state.pred.kind === 'person'
+    walked.seen(!state || stale || state.armed || state.health.status === 'blind' || !state.pred ? null : here)
     // The board's clock: the last state's t, carried forward by this page's clock until the next one.
     const presentMs = present.update(here, stale ? null : boardNow(feed?.current() ?? null))
     clearTimeout(wake)
@@ -184,7 +188,8 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     }
     fade?.forEach(animation => animation.cancel())
     fade = undefined
-    show(state.pred.kind === 'object' ? 'An object, not a person.' : 'Nobody is here.', 'Step up to the desk.')
+    const through = walked.active() && !here && state.pred.kind !== 'object'
+    show(state.pred.kind === 'object' ? 'An object, not a person.' : through ? WALKED.headline : 'Nobody is here.', through ? WALKED.detail : 'Step up to the desk.')
   }
   skip.onclick = () => { complete = true; cancelHold(); render() }
   arm.onclick = () => {
@@ -227,5 +232,5 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   document.addEventListener('visibilitychange', render)
   render()
   void loadHudLayout().then(() => { if (view.isConnected) render() })
-  return () => { document.removeEventListener('visibilitychange', render); disposePrivacy(); cancelHold(); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
+  return () => { document.removeEventListener('visibilitychange', render); disposePrivacy(); cancelHold(); clearTimeout(passedTimer); walked.dispose(); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
 }
