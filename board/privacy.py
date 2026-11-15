@@ -393,7 +393,8 @@ def _span(ms: int) -> str:
 def line(doc: dict) -> str:
     """One line a person can read."""
     if not doc.get("ok"):
-        return f"privacy meter not running: {doc.get('why')}"
+        why = doc.get("why")
+        return "privacy meter not running" if why == NOT_RUNNING else f"privacy meter can't count: {why}"
     images = doc["images"]
     text = (f"{images} image{'s' if images != 1 else ''} stored, {doc['bytes_out']} bytes sent out, "
             f"counting for {_span(doc['t'] - doc['since_t'])} (since "

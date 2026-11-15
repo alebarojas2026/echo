@@ -317,13 +317,13 @@ def test_one_line_a_person_can_read():
     assert text.startswith("0 images stored, 0 bytes sent out, counting for 12 min (since ")
     assert "checked 2 folders and 1 containers; not there: /home/x/ArduinoApps" in text
     assert "\n" not in text
-    assert privacy.line({"ok": False, "why": "privacy meter is not running"}) == \
-        "privacy meter not running: privacy meter is not running"
+    assert privacy.line({"ok": False, "why": "privacy meter is not running"}) == "privacy meter not running"
+    assert privacy.line({"ok": False, "why": "nft is not installed"}) == "privacy meter can't count: nft is not installed"
 
 
 def test_the_command_prints_one_line_and_fails_when_not_running(tmp_path, capsys):
     assert privacy.main(["--status", str(tmp_path / "none.json")]) == 1
-    assert capsys.readouterr().out.strip() == "privacy meter not running: privacy meter is not running"
+    assert capsys.readouterr().out.strip() == "privacy meter not running"
 
 
 def test_reset_command_waits_for_the_meter_to_take_it(meter, monkeypatch):
