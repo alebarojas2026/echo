@@ -102,10 +102,18 @@ def run(store, llm=None, **kw):
     return out, said[0] if said else None
 
 
+def test_report_counts_the_passed_by_events_of_the_stretch():
+    store = armed_store()
+    for i, t in enumerate((T0 + 5_000, T0 + 20_000, T0 + 30_000, T0 + 65_000)):   # one before arming, one after disarming
+        store.add({"type": "event", "t": t, "kind": "passed_by", "id": f"p{i}", "src": "sim", "info": {"zone": 1}})
+    out, _ = run(store)
+    assert out["passed_by"] == 2 and out["intrusions"] == []
+
+
 def test_report_with_no_intrusion():
     out, why = run(armed_store())
     assert (out["armed_from_t"], out["armed_to_t"]) == (T0 + 10_000, T0 + 60_000)
-    assert (out["intrusions"], out["tamper"], out["present_s"], out["blind_s"], out["passed_by"]) == ([], [], 20, 6, None)
+    assert (out["intrusions"], out["tamper"], out["present_s"], out["blind_s"], out["passed_by"]) == ([], [], 20, 6, 0)
     assert out["rows"] == 48 and why == "template" and isinstance(out["ms"], int)   # 10..60 s, less the 3 never saved
     assert "No intrusion alert." in out["text"] and "Someone was here for 20 s." in out["text"]
     assert "The sensor was blind for 6 s." in out["text"] and R.problem(out["text"], out) is None

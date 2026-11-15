@@ -227,11 +227,13 @@ function boardFiles(): Plugin {
   }
 }
 
-// Pages the board serves besides the screen, each at its own path: http://<board>:8080/game/ and /phone/.
+// Pages the board serves besides the screen, each at its own path: http://<board>:8080/game/, /phone/ and
+// /engine/ (the engine room, a second screen).
 // A page is built only once its file exists, so the phone page joins the build when it lands.
 const PAGES: Record<string, string> = {
   game: 'src/game/index.html',
   phone: 'src/game/phone/index.html',
+  engine: 'src/engine/index.html',
 }
 const pages = Object.entries(PAGES).filter(([, file]) => existsSync(new URL(file, import.meta.url)))
 
@@ -259,5 +261,5 @@ export default defineConfig({
     rolldownOptions: { input: { main: 'index.html', ...Object.fromEntries(pages) } },
   },
   // web/tests (Playwright) and web/src/game (node:test) have their own runners.
-  test: { include: ['src/room/**/*.test.ts'] },
+  test: { include: ['src/room/**/*.test.ts', 'src/engine/**/*.test.ts'] },
 })

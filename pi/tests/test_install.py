@@ -54,6 +54,7 @@ def pi(tmp_path):
     shutil.copy(REPO / "pi" / "install.sh", repo / "pi" / "install.sh")
     shutil.copy(REPO / "board" / "deploy.sh", repo / "board" / "deploy.sh")
     shutil.copytree(REPO / "board" / "units", repo / "board" / "units")
+    shutil.copytree(REPO / "pi" / "units", repo / "pi" / "units")
     (repo / "pi" / "radio_node.py").write_text("# stub\n", newline="\n")
     (repo / "narrator").mkdir()
     (repo / "narrator" / "llm.service").write_text("[Service]\n", newline="\n")
@@ -88,7 +89,7 @@ def test_clean_checkout_one_command_installs_and_starts_the_node(pi):
     out, calls = install(pi)
     _, tmp = pi
     assert calls == [f"python3 -m venv {(tmp / 'venv').as_posix()}"]
-    assert {p.stem for p in (tmp / "units").glob("*.service")} == {"radio-sight-radio-node"}
+    assert {p.stem for p in (tmp / "units").glob("*.service")} == {"radio-sight-radio-node", "radio-sight-witness"}
     unit = (tmp / "units" / "radio-sight-radio-node.service").read_text()
     assert f"ExecStart={(tmp / 'venv').as_posix()}/bin/python -m pi.radio_node" in unit
     assert "User=root" in unit and "Restart=always" in unit
@@ -118,8 +119,8 @@ def test_pi_b_is_one_command_ending_in_its_check(pi):
     assert env.splitlines() == ["RADIO_NODE='pi5b'", "WIFI_LINK='pi5>pi5b:wifi'", "BUS_HOST='192.168.77.2'"]
     assert "nmcli connection modify deadzone-ap connection.autoconnect no" in calls
     assert "nmcli connection down deadzone-ap" in calls
-    assert {p.stem for p in (tmp / "units").glob("*.service")} == {"radio-sight-radio-node",
-                                                                   "radio-sight-wifi-rssi"}
+    assert {p.stem for p in (tmp / "units").glob("*.service")} == {"radio-sight-radio-node", "radio-sight-wifi-rssi",
+                                                                   "radio-sight-witness"}
     assert calls[-2:] == ["wifi_join", "python3 -m pi.check --node pi5b"]
     assert out.rstrip().endswith("all ok")
 
@@ -224,3 +225,25 @@ def test_failed_service_stops_install_before_joining(pi,monkeypatch):
     out,calls = install(pi,'--node','pi5b',code=1)
     assert 'radio-sight-radio-node.service loaded failed failed' in out
     assert 'wifi_join' not in calls and not any('pi.check' in line for line in calls)
+
+
+def test_the_witness_is_installed_beside_the_node_as_its_own_optional_unit(pi):
+    # #866: its own process, the checkout owner's and not root's, not restarted after a clean exit
+    # (no key: "not enrolled"), and installed after everything the readers need.
+    repo, tmp = pi
+    out, _ = install(pi)
+    unit = (tmp / "units" / "radio-sight-witness.service").read_text()
+    assert f"ExecStart={(tmp / 'venv').as_posix()}/bin/python -m pi.witness" in unit
+    assert "Restart=on-failure" in unit and "User=root" not in unit and "@" not in unit
+    assert "Nice=10" in unit and "CPUQuota=" in unit
+    assert "systemctl restart radio-sight-witness.service" in out
+    assert out.index("radio-sight-radio-node.service") < out.index("radio-sight-witness.service")
+    assert "radio-sight-witness" not in (tmp / "units" / "radio-sight-radio-node.service").read_text()
+
+
+def test_a_checkout_without_the_witness_unit_installs_the_node_as_before(pi):
+    repo, tmp = pi
+    shutil.rmtree(repo / "pi" / "units")
+    out, _ = install(pi)
+    assert {p.stem for p in (tmp / "units").glob("*.service")} == {"radio-sight-radio-node"}
+    assert "witness" not in out
