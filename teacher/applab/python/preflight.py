@@ -81,10 +81,31 @@ def validate(config, detector_size):
     return projection
 
 
-def check_files(calibration, mode_file, heartbeat, detector_size):
+def area_size(text):
+    """TEACHER_AREA, the layout's area as WIDTHxHEIGHT in metres (calibrate prints it from nodes.json)."""
+    try:
+        width, height = [float(v) for v in text.lower().split("x")]
+    except (ValueError, AttributeError):
+        raise ValueError("layout area must be WIDTHxHEIGHT in metres, e.g. the value calibrate prints") from None
+    if not all(math.isfinite(v) and v > 0 for v in (width, height)):
+        raise ValueError("layout area must be positive and finite")
+    return [width, height]
+
+
+def check_area(projection, expected):
+    """Refuse a calibration made for another area, e.g. the old square once the layout is the strip."""
+    w, h = projection.area[:2]
+    if expected and not all(abs(a - b) <= 1e-6 for a, b in zip((w, h), expected)):
+        raise ValueError(f"calibration is for a {w:g} x {h:g} m area but the layout's is "
+                         f"{expected[0]:g} x {expected[1]:g} m; recalibrate with python -m teacher.calibrate")
+
+
+def check_files(calibration, mode_file, heartbeat, detector_size, area=None):
+    """area: the layout's [width, height] in metres; None skips the area check."""
     try:
         config = json.loads(Path(calibration).read_text(encoding="utf-8"))
         projection = validate(config, detector_size)
+        check_area(projection, area)
         mode = Path(mode_file).read_text(encoding="utf-8").strip()
         if mode not in {"off", "person", "object"}:
             raise ValueError("label_mode must contain off, person or object")
@@ -106,9 +127,11 @@ def main():
     parser.add_argument("--mode-file", required=True, type=Path)
     parser.add_argument("--heartbeat", required=True, type=Path)
     parser.add_argument("--box-size", required=True, type=box_size)
+    parser.add_argument("--area", type=area_size, default=os.environ.get("TEACHER_AREA"),
+                        help="the layout's area, WIDTHxHEIGHT metres (default TEACHER_AREA)")
     args = parser.parse_args()
     try:
-        check_files(args.calibration, args.mode_file, args.heartbeat, args.box_size)
+        check_files(args.calibration, args.mode_file, args.heartbeat, args.box_size, args.area)
     except ValueError as error:
         parser.exit(1, str(error) + "\n")
     print("Teacher numeric configuration and shared directory are ready; camera and bus remain untested.")
