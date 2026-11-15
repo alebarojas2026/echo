@@ -126,6 +126,8 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
         // probs = [empty, z1, z2]: one entry for empty, then one per zone in nodes.json. kind = person | object | none.
         // pred is null before training, while health is blind, while recalibrating, and while the router is off S-home.
         // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
+        // Not sure where: when somebody is there but the links read unlike anything in training (a feature more than
+        // 6 dB outside what the model saw), zone_set lists every zone the model knows. zone is still its best guess.
  "objects":[{"xy_m":[0.86,1.0],"near":"pi5","since_s":14.0,"drop_db":9.8}],
         // near (here and in advice) = the closest node within 0.5 m of xy_m, or null when no node is that close.
         // Node positions are where the nodes are now: the router at its current spot after router_moved.
@@ -210,6 +212,9 @@ Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, 
   relative to the baseline for this reason.
   On baseline_done the brain writes data/sessions/baseline.json: {"t": epoch ms, "session": id or null,
   "links": {link id: {"base_dbm": n, "expected_hz": n}}}. proof/ and a brain restart read it from there.
+  Every baseline, by hand or automatic, is also appended to data/sessions/baselines.jsonl: one line
+  {"t": epoch ms, "base": {link id: base_dbm}}. train reads each recording against the baseline that was in force
+  when it was recorded, so recordings from before a keep_model baseline still fit.
 Link health:
 - A link is stale when its rate over the last 2 s is < 0.4 x expected_hz.
 - It is blind when stale for >= 3 s, or when pred.kind == none and |median - base| > 6 dB for >= 3 s.
