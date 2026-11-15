@@ -19,8 +19,11 @@ curl -sf "$LLM/health" >/dev/null || fail "llama-server does not answer on $LLM/
 # Warm-up without the 8 s cap, so the timed sentence never queues behind it.
 "$PY" -c 'import sys; from narrator import narrate as n; n.warm_up(n.LlamaServer(sys.argv[1], 120))' "$LLM"
 
+# The alert in the zone with the shortest still limit in radio/nodes.json (the bathroom).
+zone=$("$PY" -c 'from narrator import narrate as n; z = n.load_zones(); print(min((z[k][1], k) for k in z if z[k][1])[1])')
+
 t0=$(date +%s%3N)
-msg=$("$PY" -m narrator.narrate --llm "$LLM" --once alert_on --info '{"zone": 4}' 2>"$LOG") \
+msg=$("$PY" -m narrator.narrate --llm "$LLM" --once alert_on --info "{\"zone\": $zone}" 2>"$LOG") \
     || fail "narrate.py crashed: $(tail -3 "$LOG")"
 wall_ms=$(( $(date +%s%3N) - t0 ))
 read -r source gen_ms text < <(printf '%s' "$msg" | "$PY" -c \

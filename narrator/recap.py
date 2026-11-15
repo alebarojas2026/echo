@@ -188,16 +188,24 @@ class Recap:
 
 
 # A demo as the brain reports it (no signal levels, so nothing here can turn into a made-up number).
-SAMPLE = [("enter", {"zone": 3}), ("zone_change", {"zone": 4}), ("zone_change", {"zone": 2}),
-          ("zone_change", {"zone": 1}), ("zone_change", {"zone": 4}), ("alert_on", {"zone": 4}),
-          ("checkin", {"zone": 4}), ("alert_off", {"zone": 4}), ("cam_off", {}), ("exit", {"zone": 4})]
+def sample_demo() -> list:
+    """A demo in the current zones (n.ZONES, from nodes.json): a tour of every zone, then the alert
+    and a wave in the zone with the shortest still limit, the camera unplugged, and walking out."""
+    zones = sorted(n.ZONES)
+    limited = [z for z in zones if n.ZONES[z][1]]
+    still = min(limited, key=lambda z: n.ZONES[z][1]) if limited else zones[-1]
+    tour = [z for z in zones if z != still] + [still]
+    return ([("enter", {"zone": tour[0]})] + [("zone_change", {"zone": z}) for z in tour[1:]]
+            + [("alert_on", {"zone": still}), ("checkin", {"zone": still}), ("alert_off", {"zone": still}),
+               ("cam_off", {}), ("exit", {"zone": still})])
 
 
 def sample(now_ms: int) -> list:
-    """SAMPLE as brain events, 6 s apart, ending now."""
-    start = now_ms - 6000 * len(SAMPLE)
+    """The sample demo as brain events, 6 s apart, ending now."""
+    demo = sample_demo()
+    start = now_ms - 6000 * len(demo)
     return [{"v": 2, "type": "event", "t": start + 6000 * i, "seq": i + 1, "src": "sim", "id": f"s{i + 1}",
-             "kind": kind, "info": info} for i, (kind, info) in enumerate(SAMPLE)]
+             "kind": kind, "info": info} for i, (kind, info) in enumerate(demo)]
 
 
 def main(argv=None) -> int:
@@ -206,7 +214,9 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="One recap of a sample demo from the on-board model, timed.")
     p.add_argument("--llm", default=n.LLM_URL, help="llama-server base URL")
     p.add_argument("--timeout", type=float, default=TIMEOUT_S, help="seconds before the template is used")
+    p.add_argument("--nodes", default=str(n.NODES_JSON), help="radio/nodes.json, for the zones")
     args = p.parse_args(argv)
+    n.set_zones(n.load_zones(args.nodes))
     nar = n.Narrator(lambda m: ("", None), send=lambda msg: None)
     rc = Recap(nar, n.LlamaServer(args.llm, timeout_s=args.timeout, max_tokens=MAX_TOKENS), timeout_s=args.timeout)
     events = sample(nar.clock())
