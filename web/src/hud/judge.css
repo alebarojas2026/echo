@@ -13,6 +13,10 @@
 .judge footer dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 24px; }
 .judge footer dd { font-size:32px; font-weight:600; }
 .judge footer dt { font-size:28px; }
+/* Presence leads the block on one line (the name, then the count), with its comparison under it. */
+.judge footer .proof-wide { grid-column:1 / -1; display:grid; grid-template-columns:auto 1fr; column-gap:16px; align-items:baseline; }
+.judge footer .proof-wide .proof-note { grid-column:1 / -1; }
+.judge footer .proof-note { font-size:28px; font-weight:500; color:var(--text-2); }
 .judge .hud-operator { position:fixed; inset:32px; overflow:auto; background:var(--floor); border:1px solid var(--edge); padding:32px; z-index:30; }
 .judge .hud-operator[hidden] { display:none; }
 .judge :is(button,input,select) { font:inherit; min-height:44px; padding:8px; background:var(--floor); color:var(--text); border:1px solid var(--square); }

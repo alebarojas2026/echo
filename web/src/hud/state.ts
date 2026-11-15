@@ -28,6 +28,8 @@ type Score = { correct: number | null; total: number | null }
 export type Proof = {
   zone: Score | null
   person_vs_object: Score | null
+  /** Somebody there or nobody, per second on held-out cycles; always_empty_correct is the always-"nobody" score on the same seconds (#656). */
+  presence?: { correct: number | null; total: number | null; always_empty_correct: number | null; cycles: number | null; method: string | null } | null
   train_s: number | null
   ms_per_decision: { p50: number | null; p95: number | null } | null
   watts: { radio_only: number | null } | null
