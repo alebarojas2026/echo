@@ -1,8 +1,8 @@
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import desk from '../../tests/fixtures/desk-layout.json'
 import gate from '../../tests/fixtures/gate-layout.json'
 import type { StateMsg } from '../room/contract'
-import { CHECKIN_WORDS, hallFirst, hallMoment } from './judge-hall'
+import { CHECKIN_WORDS, WALKED, WALKED_MS, hallFirst, hallMoment, walkedThrough } from './judge-hall'
 import type { HudLayout } from './layout'
 import { alignMockState, mockState } from './mock-layout'
 
@@ -52,4 +52,58 @@ test('armed, blind, no data, getting ready and a replayed second keep the words 
   expect(hallMoment(base('empty', { pred: null, links: [], model: { trained: false } as StateMsg['model'] }), false, layout).headline).toBe('Getting ready')
   expect(hallMoment({ ...here('still'), replay: { kind: 'none' } } as StateMsg, false, layout).tone).toBe('')
   expect(hallMoment({ ...here('moving', { alert: quiet }), replay: { kind: 'record' } } as StateMsg, false, layout)).toEqual({ headline: 'Someone is here.', detail: 'Moving', tone: '' })
+})
+
+test('a walk through is said only while nobody is here and the space is not armed', () => {
+  expect(WALKED).toEqual({ headline: 'Someone walked through.', detail: 'Nobody stopped.', tone: '' })
+  expect(`${WALKED.headline} ${WALKED.detail}`).not.toMatch(/left|right|side|\d/i)
+  expect(hallMoment(base('empty'), false, layout, true)).toEqual(WALKED)
+  // Not asked for: exactly what the page said before.
+  expect(hallMoment(base('empty'), false, layout, false)).toEqual(hallMoment(base('empty'), false, layout))
+  // A person, an alert, an armed space, a blind sensor and no data all come first.
+  const still = here('still', { alert: quiet })
+  expect(hallMoment(still, false, layout, true)).toEqual(hallMoment(still, false, layout))
+  const alert = here('still', { alert: { state: 'check_on', zone: 1, still_s: 13.4, limit_s: 10 } })
+  expect(hallMoment(alert, false, layout, true).tone).toBe('fault')
+  for (const state of [base('empty', { armed: true }), base('blind'), base('empty', { armed: true, tamper: ['pi5b'] })]) {
+    expect(hallMoment(state, false, layout, true)).toEqual(hallMoment(state, false, layout))
+    expect(hallMoment(state, false, layout, true).headline).not.toBe(WALKED.headline)
+  }
+  expect(hallMoment(base('empty'), true, layout, true).headline).toBe('No data')
+  expect(hallMoment(null, false, layout, true).headline).toBe('No data')
+})
+
+test('the walk-through lasts about 3 s from the passed_by event, on the one spot only, and a reset ends it', () => {
+  vi.useFakeTimers()
+  try {
+    let fire: (event: { kind: string }) => void = () => {}
+    let off = 0
+    const feed = { onEvent(fn: (event: { kind: string }) => void) { fire = fn; return () => { off++ } } }
+    let clock = 1000
+    let changes = 0
+    const walked = walkedThrough(feed, () => { changes++ }, () => clock, () => true)
+    expect(walked.active()).toBe(false)
+    for (const kind of ['enter', 'intrusion', 'disarmed', 'reset']) fire({ kind })
+    expect([walked.active(), changes]).toEqual([false, 0]) // a board that never sends it changes nothing
+    fire({ kind: 'passed_by' })
+    expect([walked.active(), changes]).toEqual([true, 1])
+    clock += WALKED_MS - 1
+    expect(walked.active()).toBe(true)
+    clock += 2
+    expect(walked.active()).toBe(false)
+    vi.advanceTimersByTime(WALKED_MS + 50)
+    expect(changes).toBe(2) // the page is told when it ends, so the words go without waiting for a state
+    fire({ kind: 'passed_by' })
+    fire({ kind: 'reset' })
+    expect([walked.active(), changes]).toEqual([false, 4])
+    walked.dispose()
+    expect(off).toBe(1)
+    // Any other layout: the event is not a walk through the one spot.
+    const other = walkedThrough(feed, () => { changes++ }, () => clock, () => false)
+    fire({ kind: 'passed_by' })
+    expect([other.active(), changes]).toEqual([false, 4])
+    expect(WALKED_MS).toBe(3000)
+  } finally {
+    vi.useRealTimers()
+  }
 })

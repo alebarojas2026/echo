@@ -96,6 +96,42 @@ const MOTION_HOLD_MS = 400
 /** The figure turns to face its glide only above this speed, so drifting in place can't spin it. */
 const TURN_SPEED_MPS = 0.12
 
+// On the one spot the figure walks on and off instead of appearing and vanishing in place (nothing teleports):
+// it comes on from WALK_ON_M to one side along the row, on a critically damped spring, fading in as it comes, and
+// leaves the same way. A walk straight through (the board's passed_by event) crosses the spot from that side to
+// the other in CROSS_MS and is gone.
+// Echo does not know which way a person came from or went: the side is a drawing choice, not a measurement, and it
+// is always the same one.
+const WALK_ON_SIDE = -1
+/** How far to the side the walk on starts and the walk off ends, in metres. */
+export const WALK_ON_M = 0.7
+/** The walk on and off: within 2% in about 680 ms (5.8 / omega), never overshoots. */
+const WALK_ON_OMEGA = 8.5
+/** A walk straight through takes this long from one side to the other. */
+export const CROSS_MS = 900
+/** Above this speed a figure on its way on, off or through takes steps. */
+const STEP_SPEED_MPS = 0.25
+/** The way the figure faces once it has stopped on the spot (what it faced when it appeared in place). */
+const REST_HEADING = 0
+
+const smooth = (lo: number, hi: number, v: number) => {
+  const u = Math.min(1, Math.max(0, (v - lo) / (hi - lo)))
+  return u * u * (3 - 2 * u)
+}
+
+/** How visible the figure is on its way on or off: `p` is how far it has come from the side (0) to the spot (1).
+ *  Fully there a little before it stops, and gone a little before the far end, so it never pops. */
+export function walkOnAlpha(p: number): number {
+  return smooth(0.03, 0.6, p)
+}
+
+/** A walk straight through at `t` (0 to 1): how far across (even pace) and how visible (in over the first fifth,
+ *  out over the last quarter). */
+export function crossing(t: number): { along: number; alpha: number } {
+  const u = Math.min(1, Math.max(0, t))
+  return { along: u, alpha: Math.min(smooth(0, 0.2, u), smooth(0, 0.25, 1 - u)) }
+}
+
 const zonesKey = (spots: GhostSpot[]) => spots.map((s) => s.zone).sort().join(',')
 
 /**
@@ -123,6 +159,15 @@ export class Presence {
   private alpha = 0
   private alphaTo = 0
   private placed = false
+  /** Where the figure stands (scene point and floor point): the walk on and off are measured from here. */
+  private readonly spot = new Vector3()
+  private spotXy: [number, number] | null = null
+  /** On its way on or off the spot: how visible it is follows how far it has come. */
+  private walkOn = false
+  /** A walk straight through, while it is drawn. */
+  private cross: { from: Vector3; to: Vector3; t: number } | null = null
+  private inPlace = false
+  private readonly reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
   private readonly zones = new Held<string>('', ZONE_HOLD_MS)
   private readonly motion = new Held<string>('', MOTION_HOLD_MS)
   private probs: number[] | undefined
@@ -153,6 +198,52 @@ export class Presence {
     this.label.append(this.labelWords)
     // No lights: the figure's material carries its own (a matcap, figure.ts) and everything else is unlit.
     view.addAnimator((dt) => this.ease(dt))
+    // A tab that was hidden drew no frames: when it is looked at again the figure is where the latest word puts
+    // it, at once, with no walk on or off left over to watch.
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && this.settle())
+  }
+
+  /** Whether the figure walks on and off: the one spot, a page that is being looked at, no replay, and motion
+   *  not turned down. Otherwise it fades in place, as on every other layout. */
+  private glides(): boolean {
+    if (this.reduced || this.inPlace || ZONES.length !== 1) return false
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return false
+    return this.view.host.dataset.replay !== 'on'
+  }
+
+  /** The point to the side of a floor point where a walk on starts (`side` 1) or a walk through ends (-1). */
+  private aside([x, y]: [number, number], side = 1): Vector3 {
+    return v3([x + side * WALK_ON_SIDE * WALK_ON_M, y, 0])
+  }
+
+  /** Ends any walk on, off or through where the latest word puts the figure. */
+  private settle() {
+    if (!this.walkOn && !this.cross) return
+    this.cross = null
+    this.walkOn = false
+    if (this.placed) {
+      this.at.copy(this.spot)
+      this.figure.setHeading(REST_HEADING, true)
+    }
+    this.to.copy(this.at)
+    this.vel.set(0, 0, 0)
+    this.alpha = this.alphaTo
+    this.view.requestRender()
+  }
+
+  /**
+   * Somebody walked straight through the spot without stopping (the board's passed_by event): the figure crosses
+   * it from one side to the other and is gone. Drawn only on the one spot, and only when no figure is there.
+   */
+  passThrough() {
+    const xy = ZONES.length === 1 ? zoneCenter(ZONES[0].id) : null
+    if (!xy || this.placed || this.cross || this.alpha > 0 || !this.glides()) return
+    this.cross = { from: this.aside(xy), to: this.aside(xy, -1), t: 0 }
+    this.walkOn = false
+    this.at.copy(this.cross.from)
+    this.vel.subVectors(this.cross.to, this.cross.from).multiplyScalar(1000 / CROSS_MS)
+    this.figure.setHeading(Math.atan2(this.vel.x, this.vel.z), true)
+    this.view.requestRender()
   }
 
   /** Where the figure stands now (scene floor point) and how visible it is (0..1), for the hall view's column. */
@@ -171,7 +262,10 @@ export class Presence {
   /** Nobody, at once and with no hold: the next sighting starts fresh, in place (a replay starting or ending). */
   clear(nowMs = performance.now()) {
     this.seenAt = null
+    this.inPlace = true
+    this.cross = null
     this.update(null, [], null, nowMs)
+    this.inPlace = false
   }
 
   update(pred: Pred | null, objects: ObjectMark[], xray: Xray | null = null, nowMs = performance.now()) {
@@ -180,7 +274,11 @@ export class Presence {
     if (!spots.length && this.placed && holdsPose(this.seenAt, nowMs)) {
       // A dropped reading: the figure holds where and how it stands until the next one, or until the hold runs out.
     } else if (!spots.length) {
-      // Gone: fade out where it stands. The next sighting starts fresh, in place.
+      // Gone. On the one spot it walks off to the side and fades as it goes; elsewhere it fades where it stands.
+      if (this.placed) {
+        this.walkOn = this.glides() && !!this.spotXy && this.alpha > 0
+        if (this.walkOn) this.to.copy(this.aside(this.spotXy!))
+      }
       this.alphaTo = 0
       this.placed = false
       this.zones.set('')
@@ -198,9 +296,25 @@ export class Presence {
       const target = ghostTarget(zones, this.probs, shadowCentre(xray))!
       if (zones.length === 1) lone = target
       this.to.copy(v3([target[0], target[1], 0]))
+      this.spot.copy(this.to)
+      this.spotXy = target
       if (!this.placed) {
-        this.at.copy(this.to) // the first sighting appears in place; later ones glide
-        this.vel.set(0, 0, 0)
+        if (this.alpha > 0 && (this.walkOn || this.cross)) {
+          // Still on its way off (a step aside and back) or through: it turns back from where it is. The spring
+          // keeps its speed, so the two walks join without a jump.
+          this.walkOn = true
+        } else if (this.glides()) {
+          // On the one spot the first sighting walks on from the side.
+          this.at.copy(this.aside(target))
+          this.vel.set(0, 0, 0)
+          this.walkOn = true
+          this.figure.setHeading(Math.atan2(this.to.x - this.at.x, this.to.z - this.at.z), true)
+        } else {
+          this.at.copy(this.to) // the first sighting appears in place; later ones glide
+          this.vel.set(0, 0, 0)
+          this.walkOn = false
+        }
+        this.cross = null
         this.placed = true
       }
       this.alphaTo = 1
@@ -275,17 +389,51 @@ export class Presence {
 
     // Position: a critically damped spring per floor axis (about 650 ms, no overshoot), so 10 Hz steps and a
     // noisy shadow centre become one smooth walk.
-    ;[this.at.x, this.vel.x] = springStep(this.at.x, this.vel.x, this.to.x, GHOST_OMEGA, dt)
-    ;[this.at.z, this.vel.z] = springStep(this.at.z, this.vel.z, this.to.z, GHOST_OMEGA, dt)
-    busy ||= this.at.distanceTo(this.to) > 0.002 || this.vel.length() > 0.002
+    if (this.cross) {
+      // A walk straight through: an even pace from one side to the other, then gone.
+      const c = this.cross
+      c.t = Math.min(1, c.t + dt / CROSS_MS)
+      this.at.lerpVectors(c.from, c.to, crossing(c.t).along)
+      this.alpha = crossing(c.t).alpha
+      if (c.t >= 1) {
+        this.cross = null
+        this.to.copy(this.at)
+        this.vel.set(0, 0, 0)
+      }
+      busy = true
+    } else {
+      const omega = this.walkOn ? WALK_ON_OMEGA : GHOST_OMEGA
+      ;[this.at.x, this.vel.x] = springStep(this.at.x, this.vel.x, this.to.x, omega, dt)
+      ;[this.at.z, this.vel.z] = springStep(this.at.z, this.vel.z, this.to.z, omega, dt)
+      busy ||= this.at.distanceTo(this.to) > 0.002 || this.vel.length() > 0.002
+    }
     // Face the way the figure is gliding; hold the heading while it stands. The walk takes the glide's speed, so
     // its stride and cadence match how fast the floor point travels and the planted foot doesn't slide.
     const speed = Math.hypot(this.vel.x, this.vel.z)
     if (speed > TURN_SPEED_MPS) this.figure.setHeading(Math.atan2(this.vel.x, this.vel.z))
-    this.figure.setMoving(this.walking, speed / this.size) // the stride is in the figure's own scale
+    // On its way on, off or through it takes steps at the pace it travels.
+    const stepping = (this.walkOn || !!this.cross) && speed > STEP_SPEED_MPS
+    this.figure.setMoving(this.walking || stepping, speed / this.size) // the stride is in the figure's own scale
 
-    this.alpha = fade(this.alpha, this.alphaTo, dt)
-    busy ||= this.alpha !== this.alphaTo
+    if (this.walkOn) {
+      // How visible follows how far it has come, so a walk off that turns back fades back in with no jump.
+      this.alpha = walkOnAlpha(1 - this.at.distanceTo(this.spot) / WALK_ON_M)
+      const arrived = this.placed && this.at.distanceTo(this.spot) < 0.01 && speed < 0.02
+      if (arrived) this.figure.setHeading(REST_HEADING) // it stops and turns to face the way it always stood
+      if (arrived || (!this.placed && this.alpha === 0)) {
+        this.walkOn = false
+        this.alpha = this.alphaTo
+        if (!this.placed) {
+          this.at.copy(this.to)
+          this.vel.set(0, 0, 0)
+        }
+      }
+      busy = true
+    } else if (!this.cross) {
+      this.alpha = fade(this.alpha, this.alphaTo, dt)
+      busy ||= this.alpha !== this.alphaTo
+    }
+    this.view.host.dataset.ghostMove = this.cross ? 'through' : this.walkOn ? (this.placed ? 'on' : 'off') : ''
     this.figure.object.position.copy(this.at)
     this.figure.object.scale.setScalar(this.size * (0.94 + 0.06 * this.alpha)) // arrives with a small settle, leaves the same way
     this.figure.object.visible = this.alpha > 0

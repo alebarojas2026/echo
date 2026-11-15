@@ -38,7 +38,7 @@ export interface Figure {
    */
   setMoving(moving: boolean, speedMps?: number): void
   /** Which way to face, in radians about the vertical: 0 faces the camera (+z). The figure turns smoothly. */
-  setHeading(rad: number): void
+  setHeading(rad: number, atOnce?: boolean): void
   /** 0..1. Below 1 the figure draws see-through, nearest surface only. */
   setOpacity(alpha: number): void
   /** Advance the pose by dtMs milliseconds. Returns true while it still needs frames. */
@@ -303,8 +303,9 @@ export function createFigure(onReady?: (loaded: boolean) => void): Figure {
       motion.moving = moving
       motion.speed = speedMps
     },
-    setHeading(rad) {
+    setHeading(rad, atOnce = false) {
       motion.headingTo = rad
+      if (atOnce) motion.heading = rad // a figure not yet seen faces its way from its first frame
     },
     setOpacity(a) {
       alpha = clamp(a, 0, 1)

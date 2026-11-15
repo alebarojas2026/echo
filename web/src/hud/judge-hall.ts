@@ -15,6 +15,35 @@ export const CHECKIN_WORDS = "Step aside and back to say you're okay."
 /** A check-in is shown this long, as the stillness card showed it. */
 const CHECKIN_SHOWN_MS = 6000
 
+/** A walk straight through the one spot (the board's passed_by event) is said this long; then the page is back
+ *  to "Nobody is here." */
+export const WALKED_MS = 3000
+/** What is said for it: calm, no fault colour. It is not an alert. Never a side, never a count. */
+export const WALKED: Moment = { headline: 'Someone walked through.', detail: 'Nobody stopped.', tone: '' }
+
+/**
+ * Keeps whether a walk-through is being said. `active()` is true for WALKED_MS after a passed_by event on the
+ * one-spot layout; a reset ends it. `changed` is called when it starts and when it ends. A board that never
+ * sends the event never makes it true.
+ */
+export function walkedThrough(feed: { onEvent(fn: (event: { kind: string }) => void): () => void } | null | undefined, changed: () => void, now: () => number = () => performance.now(), oneSpot: () => boolean = hallFirst) {
+  let until = -Infinity
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const off = feed?.onEvent((event) => {
+    if (event.kind === 'passed_by' && oneSpot()) {
+      until = now() + WALKED_MS
+      clearTimeout(timer)
+      timer = setTimeout(changed, WALKED_MS + 20)
+      changed()
+    } else if (event.kind === 'reset' && until > -Infinity) {
+      until = -Infinity
+      clearTimeout(timer)
+      changed()
+    }
+  })
+  return { active: () => now() < until, dispose: () => { clearTimeout(timer); off?.() } }
+}
+
 /** The layout the hall-first page is for: one spot (the same test the spot's own headline uses). */
 export function hallFirst(layout: HudLayout = hudLayout): boolean {
   return layout.zones.length === 1
@@ -22,7 +51,7 @@ export function hallFirst(layout: HudLayout = hudLayout): boolean {
 
 const seconds = (value: number | null | undefined) => value == null ? '__' : String(Math.floor(value))
 
-export function hallMoment(state: StateMsg | null, stale: boolean, layout: HudLayout = hudLayout): Moment {
+export function hallMoment(state: StateMsg | null, stale: boolean, layout: HudLayout = hudLayout, walked = false): Moment {
   const [headline, detail] = judgeMoment(state, stale, layout)
   const said = (tone: Tone = ''): Moment => ({ headline, detail, tone })
   // A replayed second with nothing to show keeps its own words; one with a record reads as it did live.
@@ -42,6 +71,8 @@ export function hallMoment(state: StateMsg | null, stale: boolean, layout: HudLa
     const counted = alert?.state === 'counting' && motion !== 'moving' ? ` for ${seconds(alert.still_s)} s` : ''
     return { headline: 'Someone is here.', detail: motion === 'moving' ? 'Moving' : motion === 'still' ? `Standing still${counted}` : '', tone: state.armed ? 'fault' : '' }
   }
-  if (headline === 'Nobody is here') return { headline: 'Nobody is here.', detail: 'Step up to the desk.', tone: '' }
+  // Somebody walked straight through a moment ago (walkedThrough): said only while nobody is here and the space
+  // is not armed. Armed, the walk-up card says it its own way.
+  if (headline === 'Nobody is here') return walked && !state.armed ? WALKED : { headline: 'Nobody is here.', detail: 'Step up to the desk.', tone: '' }
   return said()
 }
