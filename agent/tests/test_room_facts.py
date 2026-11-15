@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -27,7 +28,8 @@ def query(store, question, **kw):
 
 def test_weakest_uses_latest_wifi_drop_and_configured_names(recorded, tmp_path):
     layout = tmp_path / "nodes.json"
-    layout.write_text(json.dumps({"nodes": [{"id": "pi5", "name": "Desk radio"}, {"id": "unoq", "name": "Board"}],
+    layout.write_text(json.dumps({"zones": [{"id": 1, "name": "At the desk"}],
+                                  "nodes": [{"id": "pi5", "name": "Desk radio"}, {"id": "unoq", "name": "Board"}],
                                   "links": [{"id": "pi5>unoq:wifi", "tx": "pi5", "rx": "unoq"}]}))
     # Compare actual simulated saved drops, rather than inventing a baseline.
     latest = recorded.latest()
@@ -106,3 +108,18 @@ def test_move_without_measurement_says_result_is_pending():
     store = Store(":memory:")
     store.add({"type": "event", "t": NOW, "id": "move", "kind": "router_moved", "src": "sim", "info": {}})
     assert "no measured before-and-after" in query(store, "What did moving the router do?")["answer"]
+
+
+@pytest.mark.parametrize("kind, link, expected", [
+    ("person", "pi5>pi5b:wifi", False), ("object", "pi5>unoq:wifi", False), ("object", "pi5>pi5b:wifi", True)])
+def test_gate_advice_needs_an_object_and_the_crossing_wifi(kind, link, expected):
+    gate = Path(__file__).resolve().parents[2] / "narrator/tests/gate_nodes.json"
+    s = Store(":memory:")
+    s.add({"type": "state", "t": NOW, "src": "sim", "pred": {"kind": kind, "present": kind == "person"},
+           "links": [{"id": link, "status": "ok", "drop_db": 12}],
+           "advice": {"id": "a1", "link": link, "text": "Move the router 30 cm.", "before_dbm": -60, "after_dbm": None}})
+    out = query(s, "Did anything block the Wi-Fi?", nodes_path=gate)
+    assert ("Something was left in the Wi-Fi line" in out["answer"]) is expected
+    assert "30 cm" not in out["answer"]
+    if expected:
+        assert "Clear the obstruction or move Pi B" in out["answer"]

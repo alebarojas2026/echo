@@ -271,7 +271,7 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
     src is the newest record's src ("live", "sim" or "replay"; None when the store is empty)."""
     start = timer()
     if zones is None or links is None:
-        zones, links = layout()
+        zones, links = layout(nodes_path)
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
     question = " ".join(str(question).split())[:MAX_QUESTION]
     read = fix_typos(question)   # the keywords and the time read this; the model gets the question as typed
@@ -295,7 +295,7 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
         out = {"answer": can_answer() + (" " + CANT_ANSWER if refused else ""), "rows": []}
     else:
         specific = room_facts.intent(read)
-        out = (room_facts.answer(specific[0], store, now_ms, args["minutes"], nodes_path, privacy_reader)
+        out = (room_facts.answer(specific[0], store, now_ms, args["minutes"], nodes_path, privacy_reader, one_spot=len(zones) == 1)
                if specific else TOOLS[tool](store, now_ms, zones, **args))
         if tool in USES_MINUTES or specific:   # the minutes in the answer are in a row too
             out = {**out, "rows": out["rows"] + [{"row": "asked", "minutes": args["minutes"]}]}

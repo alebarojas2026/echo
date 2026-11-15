@@ -9,7 +9,7 @@ INTENTS = [
     ("privacy", "model_card", r"recording me|record (me|us)|anything leaving|data.*(leav|sent|upload)|privacy|private|images? stored|cloud|internet"),
     ("weakest", "link_history", r"weakest|worst.*(?:wi.?fi|signal)|(?:wi.?fi|signal).*worst"),
     ("blocked", "explain_advice", r"(?:block|dead zone|dead spot|obstruct)"),
-    ("moved", "explain_advice", r"(?=.*\b(?:router|the move)\b)(?=.*\b(?:did|what|how|gain|result|better|improved|moving|moved)\b)"),
+    ("moved", "explain_advice", r"(?=.*\b(?:router|the move|Pi B|clearing|clearance)\b)(?=.*\b(?:did|what|how|gain|result|better|improved|moving|moved)\b)"),
 ]
 
 
@@ -31,7 +31,7 @@ def _names(path):
             for link in layout["links"]}
 
 
-def answer(kind, store, now_ms, minutes, nodes_path=NODES, privacy_reader=None):
+def answer(kind, store, now_ms, minutes, nodes_path=NODES, privacy_reader=None, one_spot=False):
     if kind == "privacy":
         return privacy(store, now_ms, privacy_reader)
     names = _names(nodes_path)
@@ -49,6 +49,8 @@ def answer(kind, store, now_ms, minutes, nodes_path=NODES, privacy_reader=None):
                 if row["drop_db"] > 0 else "No Wi-Fi link is below its baseline in the latest saved reading.")
         return {"answer": text, "rows": [row]}
     seconds = [r for r in store.seconds(now_ms - minutes * 60_000) if r["t"] <= now_ms]
+    if one_spot:
+        return spot_recovery(seconds, nodes_path)
     events = [e for e in store.events(now_ms - minutes * 60_000, ("advice", "advice_result", "router_moved"))
               if e["t"] <= now_ms]
     if kind == "blocked":
@@ -77,6 +79,42 @@ def answer(kind, store, now_ms, minutes, nodes_path=NODES, privacy_reader=None):
     row.update(name=names.get(row["link"], row["link"]), gain_db=round(row["after_dbm"] - row["before_dbm"], 2))
     return {"answer": f"The last measured move on {row['name']} changed the signal from {row['before_dbm']} dBm "
                       f"to {row['after_dbm']} dBm, a gain of {row['gain_db']} dB.", "rows": [row]}
+
+
+def spot_recovery(seconds, nodes_path):
+    """One-spot advice needs an object decision and the configured cross-gap Wi-Fi drop."""
+    try:
+        layout = json.loads(Path(nodes_path).read_text())
+    except (OSError, ValueError):
+        layout = {}
+    links = {link["id"]: link for link in layout.get("links", [])
+             if link.get("kind") == "wifi" and link.get("crosses_spot") is True}
+    names = {node["id"]: node["name"] for node in layout.get("nodes", [])}
+    told = []
+    for second in seconds:
+        advice = second["advice"] or {}
+        reading = second["links"].get(advice.get("link"), {})
+        if (second["kind"] == "object" and second["present"] == 0 and advice.get("link") in links
+                and reading.get("status") == "ok" and _number(reading.get("drop_db")) and reading["drop_db"] >= 3):
+            told.append(second)
+    if not told:
+        return {"answer": "No object blocking the Wi-Fi line was recorded in that time.", "rows": []}
+    last, advice = told[-1], told[-1]["advice"]
+    receiver = names.get(links[advice["link"]]["rx"], "the receiving device")
+    results = [second["advice"] for second in seconds if second["t"] >= last["t"] and second["advice"]
+               and second["advice"].get("id") == advice.get("id") and second["advice"].get("link") == advice["link"]
+               and _number(second["advice"].get("after_dbm"))]
+    measured = results[-1] if results else advice
+    row = {"t": last["t"], "link": advice["link"], "receiver": receiver,
+           "drop_db": last["links"][advice["link"]]["drop_db"],
+           "before_dbm": measured.get("before_dbm"), "after_dbm": measured.get("after_dbm")}
+    text = "Something was left in the Wi-Fi line."
+    if all(_number(row[k]) for k in ("before_dbm", "after_dbm")):
+        row["gain_db"] = round(row["after_dbm"] - row["before_dbm"], 2)
+        text += f" The signal changed from {row['before_dbm']} to {row['after_dbm']} dBm, a gain of {row['gain_db']} dB."
+    else:
+        text += f" Clear the obstruction or move {receiver}; the gain has not been measured yet."
+    return {"answer": text, "rows": [row]}
 
 
 def privacy(store, now_ms, reader=None):
