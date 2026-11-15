@@ -12,6 +12,6 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`one-spot judge words 
  }
  await page.evaluate(()=>{const s=window.arrival.peek('still');window.arrival.update('still',{alert:{...s.alert,state:'none'},advice:{id:'move',link:'pi5>pi5b:wifi',move_m:[-0.3,0],to_spot:'S-W30',before_dbm:-65,after_dbm:null,text:'Move the router',cause:'blocked',near:'pi5b',xy_m:[0,0],why:[]}})})
  await expect(page.getByTestId('advice-text')).toContainText('30 cm west')
- expect(await page.locator('body').innerText()).not.toMatch(/\b(on the left|on the right|beacons?|five devices|zone [12])\b/i)
+ expect(await page.locator('body').innerText()).not.toMatch(/\b(left|right|beacons?|five devices|zone [12])\b/i)
  if(process.env.HUD_SCREENSHOTS)await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-advice.png`)})
 })
