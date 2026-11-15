@@ -1,105 +1,108 @@
-# Radio Sight: Safety and After-Hours Security with Wi-Fi
+# Radio Sight: Wi-Fi that understands the room
 
-**Wi-Fi that understands the room.**
+**Taught by a camera. Runs without one.**
 
 ## Inspiration
 
-Radio Sight brings safety and after-hours security to buildings using the Wi-Fi already there, with no permanent camera and no cloud dependency.
+Some places need to know someone is present without keeping a camera on them: patient rooms, bathrooms, study rooms and offices after hours. We wanted safety and after-hours security using the Wi-Fi already there, with a clear privacy boundary and a useful answer when the connection itself is blocked.
 
-Patient rooms, bathrooms, study rooms, and offices after hours all need a simple answer to the same question: is someone present, and are they moving? A camera often captures far more than that question requires. We wanted the radio links already crossing a room to provide a smaller, private signal that can be understood locally.
-
-We built Radio Sight at MadHacks 2026 for the Qualcomm / N+1 track and the theme “Let’s Dig In.” We dug into the way people and objects reshape radio paths and turned those changes into a room-aware local system.
+We built Radio Sight at MadHacks 2026 for the Qualcomm / N+1 track and the theme “Let's Dig In.” We dug into the signal changes that an ordinary connection indicator hides.
 
 ## What it does
 
-Radio Sight reads changes across Wi-Fi and Bluetooth links around a sensing area. A model on the Arduino UNO Q reports presence, movement, zone, and whether a learned pattern looks like a person or object. It does not identify anyone or count a crowd.
+Walk between two devices and the Wi-Fi signal gives you away. Radio Sight reports presence and movement in one spot from the Wi-Fi path between Pi A and Pi B; Bluetooth to the Arduino UNO Q gives a second opinion.
 
-### Who it is for
+Most Wi-Fi sensing only sees movement. Ours sees you standing still. A temporary camera teaches the local model, then is unplugged; the radio keeps supplying the presence evidence. The prototype aims to distinguish person-vs-object patterns and movement from stillness, without identifying anyone or counting a crowd.
 
-- patient rooms where staff need a private presence or no-movement prompt;
-- bathrooms where a permanent camera does not belong;
-- study rooms that should show occupancy without tracking a visitor's phone; and
-- offices after hours where a new person pattern should create a local intrusion alert.
+The six-beat demonstration is:
 
-### What's new
+- **Found you:** the live signal changes as the judge enters the spot.
+- **Teach the room:** a temporary camera provides labels and the UNO Q learns locally.
+- **Camera unplug:** the cable comes out, the teacher goes off, and radio sensing continues while the person moves and stands still.
+- **Intrusion alert:** the judge returns to an armed spot and stays until a local event appears on the phone.
+- **Dead zone:** with nobody present, an object blocks the cross-gap Wi-Fi path; clearing it or moving Pi B provides a before-and-after test.
+- **Ask the room and Proof:** the board answers from its saved records, and every published result has a proof method.
 
-A temporary camera teaches the radio model on the board. It supplies zone and motion labels for a short room lesson, saves no image, and is then unplugged. Training and live inference run on the UNO Q's Dragonwing CPU, while the Raspberry Pi provides network and radio and runs no model.
+The radio X-ray visualizes measured link changes. A no-movement alert prompts a check, and the “I'm okay” check-in is to lean aside and wait for confirmation. A tamper alert names a device that goes silent while armed; Replay shows recorded summaries, and Incident report summarizes an armed stretch from those same records. Missing history remains unknown.
 
-The primary story uses the same eight beats as our runbook:
+### Privacy by design
 
-- **Found you:** the changed radio links report that a person entered.
-- **Teach the room:** the temporary camera labels a fresh local lesson.
-- **Camera unplug:** the teacher goes off and stays off.
-- **Still follows:** radio continues reporting presence when the person moves or stands still.
-- **Arm the space:** armed mode says the room should be empty.
-- **Intrusion alert:** a new sustained person appearance creates one local event and phone-page alert.
-- **Ask the room:** a question is answered from timestamped local records.
-- **Proof:** every public measurement comes from the proof record; missing results stay unpublished.
+The camera is a temporary teacher, not the continuing sensor. No camera image is saved, the system does not identify anyone, and the laptop and phone use our private network. The sensing loop, records, on-board narrator and room questions need no cloud service; nothing is sent to the internet during the local demo. Live privacy counts are published only after verification.
 
 ### Proof
 
-Every value below comes from the repository's [measured proof record](https://github.com/alebarojas2026/echo/blob/main/PROOF.md). A blank stays blank until that record contains the result.
+Every measured result stays blank until the [proof record](https://github.com/alebarojas2026/echo/blob/main/PROOF.md) supplies its method, sample size, date and commit. A live demonstration does not substitute for held-out validation.
 
 | Result | Measured value |
 |---|---:|
-| Zone accuracy | __ |
 | Presence accuracy | __ |
 | Person versus object | __ |
+| Still versus moving | __ |
+| Time to train | __ |
+| Decision latency | __ |
 | Update latency | __ |
 | No-movement alert latency | __ |
 | Dead-zone improvement | __ |
 | Images stored | __ |
 | Bytes sent outside the local network | __ |
 
-### How it is different
+### Current boundary
 
-Commercial Wi-Fi products make different architecture choices, so we do not claim they all work the same way. [Aerial documents hybrid cloud and edge deployment](https://aerial.ai/motion-intelligence), while [Origin documents edge sensing that can communicate activity events to cloud services](https://www.originwirelessai.com/trupresence-2/). Radio Sight's training, inference, event decisions, and demo display stay on the UNO Q and its private local network; it requires no vendor cloud for the live loop.
-
-Building location analytics can also answer a different question. [Cisco Meraki describes detecting Wi-Fi and Bluetooth client devices and aggregating their location data in the Meraki cloud](https://documentation.meraki.com/Wireless/Operate_and_Maintain/User_Guides/Monitoring_and_Reporting/Location_Analytics). Radio Sight instead measures how a person changes the room's radio links, so the person does not need to carry the device being located.
-
-The radio X-ray, person-vs-object result, no-movement alert, check-in, dead-zone advisor, and on-board narrator remain available for the finalist round and judge questions rather than crowding the primary desk story.
+This is one spot with three devices, not a measured building deployment. No unfinished beat will be staged as live: each must pass preflight on the deployed kit. We do not claim validated operation with multiple people, unfamiliar objects, radios hidden in bags or panels, or different room layouts.
 
 ## How we built it
 
-The Arduino UNO Q is the computing hub. Versioned local messages bring in radio signal measurements, temporary teacher labels, link health, commands, and events. The board forms time windows, rejects unusable inputs, trains a compact model, and makes learned decisions on the Dragonwing CPU.
+The Arduino UNO Q, powered by Qualcomm Dragonwing, is the computing hub. The board forms windows of radio readings, checks link health, trains compact models and makes learned decisions entirely on device on its Dragonwing CPU. Local contract-v2 messages connect readers, camera labels, decisions, controls and events.
 
-The setup camera sends labels, not saved images. After a successful lesson, the camera is then unplugged. A blind required link produces no prediction rather than an empty-room claim, and unmeasured proof values stay unpublished.
+The Arduino UNO Q and Pi A sit together on the desk, with Pi B about a metre away at desk height on a chair. Our development boards stand in for access points and radios in a building: Pi A provides the hotspot and wired route to the board, and Pi B supplies the far endpoint across the gap. Neither Pi runs a model.
 
-Our development boards stand in for access points and radios that are already distributed through a building. The Pi supplies the private hotspot and one radio path; the UNO Q and beacon nodes supply the other measured paths. A production deployment would integrate with compatible building radios instead of placing this exact set of boards in every room.
+A laptop browser shows the local interface; Pi A routes it to the UNO Q over direct Ethernet. A small local database stores summaries and events for Ask the room, replay and reports, without images or identity. The language model can select relevant records or phrase their facts; it is not the source of those facts.
 
-A laptop browser shows the local interface over the Pi's private hotspot. The Pi routes it to the UNO Q over direct Ethernet. The web interface presents the live room, changed links, predictions, armed state, alerts, event records, narration, and proof without sending the sensing loop to a cloud service.
+The dead-zone advisor uses the same cross-gap Wi-Fi path, only for an object decision with nobody there. Pi A stays beside the cabled hub: the gain in this kit comes from clearing the object or moving Pi B, not a large router move.
 
 ## Challenges
 
-Radio data is noisy. Doors, furniture, interference, transmission bursts, and small body turns can all change a link. We had to distinguish a person from an object, keep stillness from looking like absence, and keep a failed radio link from becoming a false all-clear.
+Radio readings change with people, furniture, interference and device placement. We had to keep still presence separate from movement, distinguish learned person and object patterns, and prevent missing data from becoming an empty-room claim.
 
-The model also belongs to its room. Node placement, layout, and materials change the paths, so setup needs a clean baseline and a short labeled lesson. Presence may transfer as a product capability, but detailed zone and motion behavior must be taught and tested in each deployment.
+The physical kit changed the design. The Wi-Fi path across the gap became the primary sensor, Bluetooth became supporting evidence, and the short path between the desk devices stopped being a useful sensing line. A layout file now defines which links cross the spot.
 
-The complete hero path crosses radio collection, teaching, training, live inference, armed mode, the phone page, event storage, room questions, and proof. Keeping one frozen contract across those pieces was as important as any individual model.
+Coordinating learning, alerts, records and a local interface required one frozen message contract. Clock changes, dropped links and interrupted recordings also had to leave clear evidence instead of confident but unsupported answers.
 
 ## Accomplishments
 
-We built a private local loop that learns radio patterns, keeps sensing after the camera is disconnected, reports presence and movement, separates learned person and object patterns, and refuses to guess when required links are blind. The radio X-ray connects each decision to changed links rather than presenting a label with no explanation.
+We built the local pipeline from radio readings and temporary labels to presence, movement, alerts and recorded explanations on an Arduino UNO Q. The unplugged camera makes the teaching boundary visible, and the live trace lets a judge change the input.
 
-We also built the no-movement alert, deliberate check-in, caregiver phone page, dead-zone advisor, on-board narrator, and a fact-based end-of-demo recap. The primary story now gives each feature a clear place instead of trying to show everything at once.
-
-Privacy and proof are part of the architecture. The camera is temporary, images are not saved, learned work runs on the UNO Q, and every incomplete measurement stays unpublished rather than becoming a demo estimate.
-
-One honest line about what does not work yet: armed-mode event logic is in `main`, while the live phone display and room-question path are still being integrated, and no unfinished beat will be staged as live.
+We also built local replay, incident reports, a no-movement alert with lean-aside check-in, and an object-blockage demonstration on the same Wi-Fi path. We keep the distinction between implemented features, the deployed preflight and measured accuracy explicit.
 
 ## What we learned
 
-A camera can be useful as a temporary teacher without becoming the deployed sensor. The important boundary is visible: teach, verify the model, unplug, and continue from radio alone.
+A temporary camera can teach a radio model without becoming the deployed sensor. Keeping a person present while still requires a presence decision separate from movement, and a blocked path is not automatically a person or a dead zone.
 
-Building radio analytics and device location are not the same thing. Measuring the room's links can report a person's effect without asking that person to install an app or carry a tracked device.
-
-We also learned that missing-data behavior is part of the product. “Sensor blind” is safer and more honest than “empty,” and a blank proof value is better than an impressive number with no method.
+We also learned that failure behavior is part of the product. Sensor blind, No data and unknown history are useful answers when the evidence is missing.
 
 ## What's next
 
-First, we will finish and test the live phone display and local room-question integrations, then run the complete hero path without fallbacks. We will also test the caregiver page on a real phone and record every proof result with its method, sample size, date, and commit.
+We will record repeatable held-out trials with people absent from training, varied objects, passers-by and interference. Every result will carry its method and limits in the proof record.
 
-After the hackathon, we want to test more building layouts, materials, access-point arrangements, and groups of people. We will measure how much of the local model can transfer between rooms, expand held-out proof, and develop the current blocked-link view into a full coverage map.
+After that, we want to test more room layouts and compatible building radios, including hidden placements and additional sensing paths. The desk line is one strand of that direction; broader coverage and reuse of existing infrastructure require evidence.
+
+## Images
+
+This is the capture and caption plan for the submission lead. Take every demo view from the live desk, never the simulated demo. Include no recognisable face and no camera frame, ever. Keep photos, clips, and the exported diagram outside the repository; commit only this plan and the Mermaid source. Hide proof tiles until real results are available.
+
+| Demo order | Image to capture | Caption |
+|---|---|---|
+| 1. Cover | A hand holding the unplugged USB plug in front of the screen with its found figure; optionally use a short continuous unplug clip if Devpost accepts it | The Arduino UNO Q keeps sensing the spot after the teaching camera is unplugged. |
+| 2. Found you | Arrival words over the live room view, with the source visible | The Arduino UNO Q detects someone entering the spot from the Wi-Fi path between Pi A and Pi B. |
+| 3. The lesson | Camera teaching status and progress, never the camera's image | The Arduino UNO Q learns locally from temporary camera labels. |
+| 4. After the unplug | Radio only status, disconnected cable, and the figure remaining present when the person stops | The Arduino UNO Q continues presence and movement sensing from radio alone. |
+| 5. Armed | The live phone intrusion card beside the screen | The Arduino UNO Q raises a local intrusion event when someone stays in the armed spot. |
+| 6. The dead zone | Blocked-link advice and the verified before-and-after gain, only after the object is cleared or Pi B is moved | The Arduino UNO Q measures the blocked Wi-Fi path and the result of clearing the object or moving Pi B. |
+| 7. The hardware | Label the Arduino UNO Q and Pi A together on the desk; label Pi B across the gap at desk height | The Arduino UNO Q runs the models; Pi A provides the hotspot and cable route, and Pi B supplies the far radio endpoint. |
+| 8. Architecture | Export the current Mermaid diagram once for Devpost, outside the repository | The Arduino UNO Q runs sensing, local records, Ask the room, replay, reports, and alerts without a cloud service. |
+
+Use the [current architecture source](https://github.com/alebarojas2026/echo/blob/main/docs/architecture.md). The layout has one spot and three devices. Wi-Fi across the gap is the primary sensor and dead-zone link; Bluetooth to the board is a second opinion. The capture lead must verify that each caption matches the deployed build before uploading.
+
 
 ## Built with
 
