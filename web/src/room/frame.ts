@@ -139,15 +139,24 @@ export function zoneSide(zone: number): { east: boolean; north: boolean } {
   return { east: x > SIZE_M[0] / 2, north: y > SIZE_M[1] / 2 }
 }
 
-export type LabelSide = 'above' | 'right' | 'left' | 'below-right' | 'below-left'
+export type LabelSide = 'above' | 'above-left' | 'above-right' | 'right' | 'left' | 'below-right' | 'below-left'
 
 /** Which side of its head a node's name goes. On the square: outward at the east and west edges, above at the
  *  north edge (the UNO Q), else to the right. On the desk the names take no room beside the strip: a device on the
  *  desk has its name above it, and a beacon out over the aisle has it just below, reading inward from its stand
  *  (every link from it runs up toward the desk, and its stand runs down). */
+/** Devices nearer than this share the room above them: their names would overlap. */
+const CLOSE_M = 0.25
+
 export function nodeLabelSide(id: NodeId): LabelSide {
   const [x, y] = NODES[id]?.xyz ?? [0, 0, 0]
-  if (STRIP_M) return y >= STRIP_M[1] - 0.01 ? 'above' : x < SIZE_M[0] / 2 ? 'below-right' : 'below-left'
+  if (STRIP_M) {
+    if (y < STRIP_M[1] - 0.01) return x < SIZE_M[0] / 2 ? 'below-right' : 'below-left'
+    // Two devices side by side on the desk (the board and the router on one hub): their names read outward from
+    // each other instead of landing on one another.
+    const beside = Object.values(NODES).find((n) => n.id !== id && Math.abs(n.xyz[1] - y) < CLOSE_M && Math.abs(n.xyz[0] - x) < CLOSE_M)
+    return !beside ? 'above' : x < beside.xyz[0] || (x === beside.xyz[0] && id < beside.id) ? 'above-left' : 'above-right'
+  }
   if (x <= 0.05) return 'left'
   if (x >= SIZE_M[0] - 0.05) return 'right'
   return y >= SIZE_M[1] - 0.05 ? 'above' : 'right'
@@ -249,6 +258,19 @@ export function applyLayout(json: unknown): boolean {
     for (const r of spots) ROUTER_SPOTS[r.id] = r.xyz_m
   }
   if (trays.length) replace(TRAY_SPOTS, trays)
+  // The router's spots and the tray's are places around the router. When the file puts the router somewhere
+  // else than S-home (a placement saved in align mode moves the devices, not the spots), they travel with it, so
+  // S-home is always where the router is.
+  const router = nodes.find((n) => n.roles.includes('router'))
+  const home = ROUTER_SPOTS[HOME_SPOT]
+  if (router && home) {
+    const d = router.xyz.map((v, i) => v - home[i])
+    if (d.some((v) => Math.abs(v) > 1e-6)) {
+      const moved = (p: Vec3): Vec3 => [p[0] + d[0], p[1] + d[1], p[2] + d[2]]
+      for (const k of Object.keys(ROUTER_SPOTS)) ROUTER_SPOTS[k] = moved(ROUTER_SPOTS[k])
+      replace(TRAY_SPOTS, TRAY_SPOTS.map(moved))
+    }
+  }
   replace(HALL_BEACONS, hall)
   return true
 }

@@ -167,6 +167,8 @@ export function deskAnchors(personM = FIGURE_HEIGHT_M, width = 1280): Anchor[] {
     const side = nodeLabelSide(n.id)
     if (side === 'below-right') add(n.xyz, 8, w + 10, 8, tall)
     else if (side === 'below-left') add(n.xyz, w + 10, 8, 8, tall)
+    else if (side === 'above-left') add(n.xyz, w, 8, tall, 8)
+    else if (side === 'above-right') add(n.xyz, 8, w, tall, 8)
     else add(n.xyz, w / 2, w / 2, tall, 8)
   }
   // Under each zone, in the aisle: its name (room-label--zone's size on this canvas), then the no-movement word.
