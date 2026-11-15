@@ -37,6 +37,9 @@ five seconds, including explicit blind states; gaps are unknown, never zero.
 False tamper exposure excludes entire unplug/recovery intervals. Event IDs are
 deduplicated. Repeated passes are trials, not independent people or identities.
 
+On a layout with a presence line there is no model and no lesson: confirmed positions are scored
+from the brain's own decisions with no trained model (no camera running), and no lesson is timed.
+
 Lesson time begins at bus session start; this lesson must have fitted a model
 and report 8/10 on its rolling telemetry, with continuous capture from the start
 (first state within one second). Unreached convergence stays null per

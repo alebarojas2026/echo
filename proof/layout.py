@@ -30,6 +30,12 @@ def is_spot(doc):
     return is_strip(doc) and len(doc["zones"]) == 1 and doc["frame"].get("zone_split_x_m") is None
 
 
+def presence_line(doc):
+    """The line that decides by itself on this layout (CONTRACTS.md section 6), or None. Where there is
+    one, the brain decides with no model and no lesson, so proof asks for neither."""
+    return (doc.get("presence") or {}).get("line") or None
+
+
 def zones(doc):
     """{zone id: (x, y, name)}: each zone's centre and name."""
     out = {}

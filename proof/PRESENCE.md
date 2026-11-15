@@ -1,5 +1,11 @@
 # Held-out presence measurement
 
+**On a layout with a presence line** (the one-spot gate) the line decides with no model, no lesson
+and no camera, so none is asked for: `proof.presence_walk` waits only for a fresh state from the
+brain, `proof.presence` needs no `--train`, and the brain's own decisions are scored against the
+written log. A camera that is on, or a model that appears part-way, is refused. Everything below
+about training walkers and a trained model applies to the layouts without such a line.
+
 Use a different real person from every training/lesson participant. Keep their
 pseudonym stable; renaming a training walker is not a heldout experiment.
 Keep the trained model and layout fixed, and physically unplug the camera.
