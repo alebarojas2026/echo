@@ -299,7 +299,7 @@ def test_the_core_links_state_is_the_same_with_and_without_hall_beacons(monkeypa
 def busy_hall(empty=None):
     doc = nodes_doc()
     if empty is not None:
-        doc["hall"]["empty_quiet_db"] = empty
+        doc["hall"]["links"] = [{"id": link, "empty_quiet_db": db} for link, db in empty.items()]
     return H.Hall.from_nodes(doc)
 
 
@@ -328,7 +328,8 @@ def test_the_same_path_when_quiet_is_not_busy_and_still_sees_one_crossing():
 
 def test_a_link_with_no_empty_hall_level_has_no_busy_in_its_row():
     link = "h>unoq:ble"
-    for hall in (busy_hall(), busy_hall({"j>pi5:ble": 0.5}), busy_hall({link: "quiet"}), busy_hall({link: 0})):
+    for hall in (busy_hall(), busy_hall({"j>pi5:ble": 0.5}), busy_hall({link: "quiet"}), busy_hall({link: 0}),
+                 busy_hall({link: None})):
         rows = play(hall, link, far_link(40, seed=5), 40)
         assert set(rows[-1][1]) == ROW_KEYS                    # not calibrated: the row is what it was
     stale = play(busy_hall({link: 0.5}), link, far_link(5, seed=6), 20)

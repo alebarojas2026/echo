@@ -22,7 +22,7 @@ next, while an empty or still path gives a steady level. So per link:
   < 0.25 (three times) for 1 s.
 - busy (wording in issue #584): the quiet level is the link's own, so in a hall that is full all
   the time it climbs, and "four times quiet" then means nothing. empty_quiet_db is the link's
-  quiet level measured once with the hall empty (nodes.json, hall.empty_quiet_db: {link id: dB}).
+  quiet level measured once with the hall empty (nodes.json, hall.links: [{id, empty_quiet_db}]).
   While the current quiet level is above twice that, the path is busy: moving is false and busy
   is true. A link with no empty_quiet_db has no busy in its row: it is not calibrated, and the
   screen says so.
@@ -184,11 +184,14 @@ class Hall:
                 raise ValueError(f"hall beacons {sorted(core & set(beacons))} are also nodes of the square")
             receivers = [str(n["id"]) for n in doc["nodes"] if "receiver" in n.get("roles", [])]
             empty = {}
-            for link, db in (hall.get("empty_quiet_db") or {}).items():
+            for entry in hall.get("links") or []:   # [{"id": "h>unoq:ble", "empty_quiet_db": n}], section 3
+                link, db = entry.get("id"), entry.get("empty_quiet_db")
+                if db is None:
+                    continue
                 if isinstance(db, (int, float)) and not isinstance(db, bool) and db > 0:
                     empty[str(link)] = max(QUIET_FLOOR_DB, float(db))   # the same floor as the live quiet level
                 else:
-                    log.warning("hall.empty_quiet_db for %s is not a level in dB (%r): that link stays not calibrated", link, db)
+                    log.warning("hall.links: empty_quiet_db for %s is not a level in dB (%r): that link stays not calibrated", link, db)
             return cls(beacons, receivers, empty)
         except Exception as e:
             log.warning("the hall section of nodes.json can't be read (%r): no hall links", e)

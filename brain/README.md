@@ -186,7 +186,7 @@ has been heard, and is otherwise exactly what it was.
   few to judge); it clears after 3 s. A stale link has activity 0 and moving false. On a link near
   the receiver's limit a body in the path can stop the readings altogether: that shows as stale,
   never as "no movement".
-- `busy` (wording in issue #584): a row has it only when radio/nodes.json gives that link an empty-hall quiet level, `"hall": {"empty_quiet_db": {"h>unoq:ble": 0.6}}`. While the link's current quiet level is above twice that, the path is busy: `busy` is true and `moving` is false, because in a hall that is full all the time "four times quiet" means nothing. No `busy` in a row = that link is not calibrated.
+- `busy` (wording in issue #584): a row has it only when radio/nodes.json gives that link an empty-hall quiet level, `"hall": {"links": [{"id": "h>unoq:ble", "empty_quiet_db": 0.6}]}`. While the link's current quiet level is above twice that, the path is busy: `busy` is true and `moving` is false, because in a hall that is full all the time "four times quiet" means nothing. No `busy` in a row = that link is not calibrated.
 - `xy_m` is the far beacon's spot from the `hall` section of radio/nodes.json, or null until it is
   measured.
 
