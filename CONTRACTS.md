@@ -141,12 +141,20 @@ The positions above are the last ones measured and written into nodes.json, and 
 {"v":2,"type":"label","t":1763149512150,"seq":412,"src":"live","frame":18231,"mode":"person","persons_in_frame":1,
  "present":true,"zone":2,"foot_m":[1.22,0.31],"motion":"moving","conf":0.81,"clipped":false}
    // One label per processed camera frame (5-10/s), including frames with nobody in them.
-   // present:false only on a processed frame with nobody in the sensing area (floor view: no foot point inside the
-   // strip; desk view: nobody in view); then zone 0, foot_m null, motion null.
-   // Desk view (the webcam on the desk, facing the person): there is no foot point. foot_m is null on every label;
-   // present is true when anyone is in view, and zone is the side of the split line the person's box centre is on.
-   // clipped is true when the centre is within the dead band around the line, the box is cut by a side edge of the
-   // frame, or more than one person is in view.
+   // present:false and not clipped only on a processed frame with nobody in the sensing area (floor view: no foot
+   // point inside the strip; desk view: nobody in view); then zone 0, foot_m null, motion null.
+   // Desk view (the webcam on the desk, facing the strip): there is no foot point. foot_m is null on every label.
+   // present is true only for one person standing IN the strip: their box is at least calib.json's near_width wide
+   // (a share of the frame width, measured at calibration: at the desk edge, then one step back). zone is the side
+   // of the split line the box centre is on.
+   // A person in view but standing back (a narrower box) is NOT present: present false, clipped true,
+   // persons_in_frame 1, zone and motion null, and the window is dropped. They are behind the line of the beacons,
+   // where no link sees them; calling them present would teach the radio a ghost.
+   // Until near_width has been measured, the desk view labels nobody as present: every one-person frame is clipped.
+   // clipped is also true when the centre is within the dead band around the line, the box is cut by a side edge
+   // of the frame, or more than one person is in view (then present is true).
+   // So with cam on, state.teacher null means somebody is in view but not usable, and the screen may say
+   // "Step up to the desk". teacher {"present": false} means the camera sees nobody.
    // seq: one counter per sending socket (a producer), shared across all message types it sends.
    // clipped:true -> zone, foot_m and motion are null, whatever present is, and the window is dropped. mode = the current label_mode.
 {"v":2,"type":"cam","t":1763149512200,"seq":77,"src":"live","state":"on","fps":9.6}
