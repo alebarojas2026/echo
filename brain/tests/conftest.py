@@ -10,16 +10,35 @@ Two things are pinned for as long as this folder's tests run, and put back after
   It is set here, before any test module imports the brain.
 - the sim's fake feed (sim.fake), which otherwise follows radio/nodes.json, and its paths,
   which are read from brain/tests/paths.
-Run this folder as its own pytest run (as CI and the merge gate do), or first in one.
+Run this folder as its own pytest run (as CI and the merge gate do), or first in one: when
+its tests are done the brain's modules are loaded again from radio/nodes.json, so whatever runs
+after them in the same run (sim, proof) gets the real layout. The other way round can't work:
+if something has already imported the brain on another layout, this stops with a message.
 """
+import importlib
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
 
 HERE = Path(__file__).resolve().parent
 SQUARE = HERE / "square_nodes.json"
+BRAIN_MODULES = ("brain.layout", "brain.features", "brain.health", "brain.xray", "brain.train", "brain.alert",
+                 "brain.lesson", "brain.core", "brain.main", "brain.tune_checkin")   # in import order
+
+
+def _links(path):
+    return [link["id"] for link in json.loads(Path(path).read_text(encoding="utf-8"))["links"]]
+
+
+_loaded = sys.modules.get("brain.layout")
+if _loaded is not None and Path(_loaded.NODES_JSON) != SQUARE and _links(_loaded.NODES_JSON) != _links(SQUARE):
+    raise pytest.UsageError(
+        "brain/tests pin their own layout (brain/tests/square_nodes.json), but the brain was already imported "
+        "on radio/nodes.json's by an earlier folder in this run. Run brain/ by itself or put it first: "
+        "python -m pytest brain")
 os.environ["RADIO_SIGHT_NODES"] = str(SQUARE)
 
 
@@ -45,3 +64,6 @@ def square_layout():
     yield
     put(*saved)
     os.environ.pop("RADIO_SIGHT_NODES", None)
+    for name in BRAIN_MODULES:               # back to radio/nodes.json for whatever runs next
+        if name in sys.modules:
+            importlib.reload(sys.modules[name])
