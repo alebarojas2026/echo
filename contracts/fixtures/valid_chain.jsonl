@@ -1,0 +1,5 @@
+{"v":2,"type":"chain_head","t":1763149510000,"seq":4120,"src":"live","hash":"9f2c4e0a7b1d3c5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6"}
+{"v":2,"type":"chain_witness","t":1763149510000,"seq":4120,"src":"live","node":"pi5","hash":"9f2c4e0a7b1d3c5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6","sig":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="}
+{"v":2,"type":"chain_witness","t":1763149510000,"seq":4120,"src":"live","node":"pi5b","hash":"9f2c4e0a7b1d3c5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6","sig":"0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"}
+{"v":2,"type":"chain_head","t":1763149515000,"seq":4127,"src":"live","hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809","verified":true,"witnesses_ok":2,"witnesses":2}
+{"v":2,"type":"chain_head","t":1763149500000,"seq":0,"src":"sim","hash":"0000000000000000000000000000000000000000000000000000000000000000"}

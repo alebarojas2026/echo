@@ -21,6 +21,11 @@ export function judgeMoment(state: StateMsg | null, stale: boolean, layout = hud
   if (zone) return [zone.headline, zone.detail]
   if (state.router !== 'S-home') return ['Paused', 'The router is off its home spot']
   const pred = state.pred
+  if (!pred && layout.zones.length === 1 && !state.model?.trained) {
+    // The one-spot layout needs no lesson: the Wi-Fi line decides once the empty space is measured. Never ask for training.
+    const measured = state.links.some(link => link.drop_db != null)
+    return measured ? ['One moment', 'Checking the radio line'] : ['Getting ready', 'Keep the spot clear while the empty space is measured']
+  }
   if (!pred) return [state.model?.trained ? 'Recalibrating' : 'Not trained yet', 'Waiting for a room prediction']
   if (pred.kind === 'object' || (pred.kind !== 'person' && state.objects.length)) return ['An object, not a person', '']
   if (pred.kind === 'none' || pred.zone === 0) return ['Nobody is here', '']
