@@ -61,12 +61,15 @@ def test_a_zone_name_is_said_as_a_place():
 
 @pytest.mark.parametrize("zone", [0, 1])
 def test_presence_reads_naturally_with_or_without_the_zone(store, zone):
-    out = A.ask("was anyone here?", store, model("presence", zone), now_ms=T0 + 60_000, zones=ZONES, links=LINKS)
+    # Python reads the zone from the question (keywords before the model), so the question names it.
+    question = "was anyone at the desk?" if zone else "was anyone here?"
+    out = A.ask(question, store, model("presence", zone), now_ms=T0 + 60_000, zones=ZONES, links=LINKS)
     here = "at the desk" if zone else "here"
+    span = out["rows"][-2]   # the last row says how many minutes were asked for
     assert out["answer"] == (f"Yes. Someone was {here} for 20 s of the last 10 minutes, "
-                             "most recently at the desk from " + out["rows"][-1]["from"] + " to " + out["rows"][-1]["to"] + ".")
+                             "most recently at the desk from " + span["from"] + " to " + span["to"] + ".")
     assert out["args"] == {"minutes": 10, "zone": zone or None, "link": None}
-    assert out["rows"][-1]["name"] == "At the desk" and not SIDES.search(out["answer"])
+    assert span["name"] == "At the desk" and not SIDES.search(out["answer"])
 
 
 @pytest.mark.parametrize("tool", ["presence", "still_spans", "alerts", "intrusions"])
