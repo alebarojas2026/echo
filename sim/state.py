@@ -19,6 +19,7 @@ from statistics import mean, median, pstdev
 
 from . import fake
 from .layout import LAYOUT
+from .lesson import fit_times as lesson_fit_times
 from .wire import encoder
 from narrator.recap import template as recap_template
 
@@ -91,6 +92,7 @@ class Brain:
                        "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
         self.armed, self.intruded = False, False   # section 6, Armed: the space should be empty
+        self.fits = 0    # fits of a scripted lesson so far (path["lesson"])
         self.demo = []   # every event since the last reset, for the recap
 
     def see(self, event: dict) -> None:
@@ -344,9 +346,31 @@ class Brain:
                 "teacher": {"present": bool(pos), "zone": zone,
                             "motion": ("moving" if moving else "still") if pos else None} if cam == "on" else None,
                 "model": {"trained": trained, "ver": "sim" if trained else None, "train_s": None,
-                          "ms_per_decision": None, "windows": 0, "train_sessions": [], "training": None},
+                          "ms_per_decision": None, "windows": 0, "train_sessions": [],
+                          "training": self._lesson(t, cam)},
                 "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None},
                 **({"armed": True} if self.armed else {})}   # section 5: missing means false
+
+    def _lesson(self, t: float, cam: str):
+        """model.training for a path with a scripted lesson (sim/lesson.py): null outside the lesson;
+        inside it, the learning signal the real brain sends (brain/lesson.py). The agreement is
+        scripted, not worked out: path["lesson"]["agree"] gives it after each fit."""
+        lesson = self.path.get("lesson")
+        if not lesson:
+            return None
+        cam_off = min([c["t"] for c in self.path.get("camera") or [] if c["state"] == "off"] or [math.inf])
+        fits = sum(1 for at in lesson_fit_times(lesson, cam_off) if at <= t)
+        for _ in range(fits - self.fits):
+            self._event(t, "trained")
+        self.fits = fits
+        start = lesson["train_at"]
+        if not (start <= t < lesson.get("stop_at", math.inf) and cam == "on"):
+            return None
+        of = min(RECENT, int((t - start) * 10))
+        agree = min(of, lesson["agree"][min(fits, len(lesson["agree"])) - 1])
+        session = (self.path.get("meta") or {}).get("session", "sim-" + self.path.get("name", "path"))
+        return {"started_t": self._ms(start), "progress": None, "sessions": [session],
+                "lesson": {"started_t": self._ms(start), "agree": agree, "of": of, "fits": fits, "fitting": False}}
 
     def _event(self, t: float, kind: str, **info) -> None:
         info = {k: v for k, v in info.items() if v is not None}   # an unknown node is left out, not sent as null

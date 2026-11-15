@@ -121,6 +121,7 @@ Use the short name: `python -m sim.fake zone_tour`.
 | `demo` | The whole demo in order, for the fake brain (see below) | 64 s |
 | `still_flicker` | Stand still in zone 4 with one 0.3 s moving flicker; the alert must still fire at 10 s | 18 s |
 | `tray_removed` | Person in zone 2 throughout; tray at T1 from 5 s to 14 s, gone from the picture about 1 s later | 20 s |
+| `lesson` | The live lesson (built from the layout in `sim/lesson.py`, no file): someone steps left and right, desk-view labels with no foot point, the camera unplugged at 45 s. The fake brain shows `model.training.lesson` ("learning: 6 of 10", then 8) from 25 s until the camera goes | 66 s |
 
 ## Replay a recording
 
@@ -204,7 +205,13 @@ rounds count as practice because the source is `sim`.
 ```
 python -m sim.rehearse          # PASS/FAIL per beat, exit 1 if any beat fails
 python -m sim.rehearse --desk   # the 3-minute desk visit in docs/desk-demo.md
+python -m sim.rehearse --lesson # the live lesson: teach left and right for 20 s, then unplug the camera
 ```
+
+`--lesson` starts with a baseline, an empty recording and no model, sends the screen's commands
+(`label_mode`, `record_start`, `train` with the recording still open, `record_stop`) and checks: a
+model within 5 s of `train`, the learning signal, a second fit while the camera is on, one last fit
+when it is unplugged, and then that the radio alone says left and right as the person keeps stepping.
 
 Plays the whole demo, in runbook order, through the real bus and brain code and checks that each
 beat reaches the screen's state or events: baseline, training, empty room, walk in, the four zones,
