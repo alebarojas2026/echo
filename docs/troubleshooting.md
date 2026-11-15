@@ -48,9 +48,10 @@ Do not call this state empty. The screen needs a current state message before it
 The Wi-Fi line from Pi A to Pi B is stale. Decisions stay null and alert timers pause until it recovers. This is the expected state while Pi B is unplugged on purpose.
 
 1. Ask Alexander to confirm Pi B is powered and its power cable is secure.
-2. On Pi B, run `python3 -m pi.check --node pi5b` and confirm the board bus at `192.168.77.2:5600` is reachable and the line reports 20 readings a second or more.
+2. On Pi B, run `python3 -m pi.check --node pi5b` and confirm the board bus at `192.168.77.2:5600` is reachable and `pi5>pi5b:wifi` is listed and updating.
 3. Confirm Pi A's hotspot is running and its hotspot-to-Ethernet forwarding is active.
-4. Wait for health to return to `ok`, then take the baseline with the spot empty. Do not replace a null decision with a guess.
+4. If Pi B lost power, its clock has reset: set Pi B's clock before anything else.
+5. Wait for health to return to `ok`, then take the baseline with the spot empty. Do not replace a null decision with a guess.
 
 Pi B has no cable and its address comes from DHCP: do not record it. Any device, cable or placement change needs Alexander. State what the screen says in the `needs Alexander:` note.
 
@@ -97,7 +98,7 @@ The Pis run no model. The decision, the alerts, the record and the answers run l
 
 Before the next judge:
 
-- plug Pi B back in if it was unplugged, and wait for it to rejoin;
+- plug Pi B back in if it was unplugged, wait for it to rejoin, and set Pi B's clock, which resets whenever it loses power;
 - disarm and send `reset`;
 - take the baseline with the spot empty;
 - confirm health is `ok` and the headline says "Nobody is here";

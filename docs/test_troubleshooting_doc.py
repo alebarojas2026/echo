@@ -55,7 +55,8 @@ class TroubleshootingDocTest(unittest.TestCase):
     def test_check_in_and_proof_blanks(self):
         for phrase in ("step fully out of the line and back", "a lean does not count",
                        "keep the value as `__`", "numbers-to-say.md",
-                       "take the baseline with the spot empty"):
+                       "take the baseline with the spot empty",
+                       "set pi b's clock before anything else", "`pi5>pi5b:wifi` is listed and updating"):
             self.assertIn(phrase, self.lower)
 
     def test_cut_parts_are_absent(self):

@@ -19,7 +19,7 @@ There is no camera and no microphone on the kit. The demo uses its own equipment
 
 - **UNO Q:** receives the readings and runs the bus, the decision, the alerts, the sealed record, the signature checks, the answers, the narration and the web server.
 - **Pi A:** creates the private 5 GHz hotspot whose signal is the sensor, routes the screens and Pi B's readings to the board over the direct Ethernet cable, and signs the record. It runs no model.
-- **Pi B:** measures Pi A's signal across the gap 25 times a second and signs the record. It has no cable, joins Pi A's hotspot, and sends its readings to the board through Pi A. It runs no model.
+- **Pi B:** measures Pi A's signal across the gap continuously and signs the record. It has no cable, joins Pi A's hotspot, and sends its readings to the board through Pi A. It runs no model.
 - **Laptops and phone:** join the Pi hotspot and display the board's pages. Keep hotspot traffic to the live pages; do not copy files or bundles over the hotspot during a demo or recording.
 
 ## Connect the hardware
@@ -36,7 +36,11 @@ For the exact network roles and contract addresses, follow the [network guide](n
 
 ### Finish internet installs first
 
-Install system packages, Python dependencies and web dependencies while the board still has internet access. Build the web app and download the local model file before joining the isolated hotspot, because the board has no internet there.
+Install system packages, Python dependencies and web dependencies while the board still has internet access. Download the local model file before joining the isolated hotspot, because the board has no internet there. Do not build the web page yet: the layout is chosen first.
+
+### Choose the layout, then build the page
+
+First switch the layout: run `python3 -m radio.use_layout gate` on all three devices and in the laptop's copy of the repository. Only then build the web page; it goes onto the board with `board/push-web.sh` once the cable link is up, never while a demo or a recording is running. The order matters because the page carries the layout it was built with.
 
 ### Bring up the direct Ethernet link
 
@@ -45,10 +49,6 @@ With the one Ethernet cable connected, run `sudo bash pi/eth.sh` on Pi A and `su
 ### Start Pi A's private hotspot
 
 Run `sudo bash pi/ap.sh` on Pi A, then run `sudo bash radio/wifi_join.sh` on the UNO Q. Join Pi B to the same hotspot and start its readers with `BUS_HOST=192.168.77.2`; its address comes from DHCP and is never written into the repository. Never run `pi/install.sh --wifi-off` on Pi B: that takes the only sensor down.
-
-### Choose the layout before building the page
-
-On all three devices run `python3 -m radio.use_layout gate`. Do this before the web page is built, because the page carries the layout it was built with.
 
 ### Set up the signing on each Pi
 
@@ -60,7 +60,7 @@ Set the board's clock from the laptop after every power-up. Pi B's clock resets 
 
 ### Run the signal test
 
-On the board run `python3 -m radio.check`, on Pi A `python3 -m pi.check`, and on Pi B `python3 -m pi.check --node pi5b`. Every line is ok and `pi5>pi5b:wifi` reports 20 readings a second or more. Fix a missing line before the baseline.
+On the board run `python3 -m radio.check`, on Pi A `python3 -m pi.check`, and on Pi B `python3 -m pi.check --node pi5b`. Every line is ok, and `pi5>pi5b:wifi` is listed and updating. Fix a missing line before the baseline.
 
 ### Take the baseline
 
@@ -75,7 +75,7 @@ Join each screen to the hotspot and open its page: the judge's page `http://192.
 Do not assume the build-room setup survives a move. In the presentation room:
 
 1. Place the three devices again, measure the gap, and tape their places only now.
-2. Set the clocks and check the signal test.
+2. Set the board's clock, and set Pi B's clock: it resets whenever Pi B loses power. Then check the signal test.
 3. Place the screen: press `P` on the judge's page, click the desk the board is on, and press `Enter`.
 4. Redo the `20 s` baseline with the gap empty.
 5. Stand on the spot once and check the figure appears, then check both Pis are signing on the engine room.
