@@ -209,3 +209,14 @@ def test_on_the_repos_own_nodes_json_every_state_and_event_passes_the_contract()
     w, h = grid_shape(doc["frame"])
     assert (state["xray"]["w"], state["xray"]["h"]) == (w, h) and len(state["xray"]["static_db"]) == w * h
     assert not bad, bad[:5]
+
+
+def test_after_router_home_only_a_link_with_the_router_at_one_end_can_ask_for_a_recalibration():
+    brain, ids, play = taught_desk()
+    brain.pop_events()
+    brain.on_cmd(cmd("router_home"))
+    play([(6, 0)], 40, level={"east>pi5b:ble": -55})      # 5 dB off base, but pi5b is not the router
+    assert "recalibrating" not in [e["kind"] for e in brain.pop_events()] and brain.capture is None
+    brain.on_cmd(cmd("router_home"))
+    play([(6, 0)], 41, level={"pi5b>pi5:ble": -55})       # the router is its receiver: this one counts
+    assert "recalibrating" in [e["kind"] for e in brain.pop_events()]
