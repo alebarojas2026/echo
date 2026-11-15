@@ -905,7 +905,10 @@ class Brain:
         links = [self._link_row(row, weights) for row in health["links"]
                  if row["id"] in self._heard]   # a link is listed once it has a reading
         self._update_advice(now, xray, links)
-        cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
+        # "off" is the camera watcher's own reading that no camera is connected. With no cam message
+        # in the last 3 s (or none yet) the board can't say: "unknown", and no event. A crashed
+        # watcher must never read as "0 cameras" (#651).
+        cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "unknown"
         if cam != self._said_cam and cam in ("on", "off", "stalled"):
             self._said_cam = cam
             self.emit(f"cam_{cam}", {})

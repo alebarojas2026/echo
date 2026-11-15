@@ -62,7 +62,7 @@ def ready():
 def test_state_before_anything_has_the_contract_shape_and_no_pred():
     s = Brain().state()
     assert set(s) == STATE_KEYS and s["v"] == 2 and s["type"] == "state"
-    assert s["pred"] is None and s["model"]["trained"] is False and s["cam"] == "off"
+    assert s["pred"] is None and s["model"]["trained"] is False and s["cam"] == "unknown"
     # Section 5: what state looks like before readings, a baseline and training.
     assert s["links"] == [] and s["xray"] is None and s["objects"] == []
     assert s["health"] == {"status": "ok", "blind": [], "reason": None}
@@ -187,7 +187,7 @@ def test_links_go_stale_when_the_feed_stops():
     assert all(l["status"] == "ok" for l in brain.state()["links"])
     clock[0] += 5_000
     s = brain.state()
-    assert all(l["status"] == "stale" and l["rate_hz"] == 0 for l in s["links"]) and s["cam"] == "off"
+    assert all(l["status"] == "stale" and l["rate_hz"] == 0 for l in s["links"]) and s["cam"] == "unknown"
 
 
 def test_reset_clears_the_judge_state_and_recording_events_share_one_seq():
@@ -655,14 +655,22 @@ def test_camera_events_follow_the_camera_state():
         brain.on_message({"v": 2, "type": "rssi", "recv_t": t, "link": "pi5>unoq:wifi", "dbm": -50, "src": "sim"})
         brain.state()
 
-    brain.state()
-    assert brain.events == []                 # off at start is not news
+    assert brain.state()["cam"] == "unknown" and brain.events == []   # nothing heard yet: no claim, no event
     cam("on", 0), cam("on", 1000), cam("stalled", 1000), cam("on", 1000), cam("off", 1000)
     assert [e["kind"] for e in brain.pop_events()] == ["cam_on", "cam_stalled", "cam_on", "cam_off"]
     cam("on", 1000)
     brain.on_message({"v": 2, "type": "rssi", "recv_t": t + 4000, "link": "pi5>unoq:wifi", "dbm": -50, "src": "sim"})
-    brain.state()                             # no cam message for over 3 s: it's off
-    assert [e["kind"] for e in brain.pop_events()] == ["cam_on", "cam_off"]
+    quiet = brain.state()                     # no cam message for over 3 s: the watcher went quiet (#651)
+    assert quiet["cam"] == "unknown" and quiet["teacher"] is None
+    assert [e["kind"] for e in brain.pop_events()] == ["cam_on"]          # unknown is not "off": no cam_off
+    cam("off", 5000)                          # the watcher is back and reports no camera: a real reading
+    assert brain.state()["cam"] == "off" and [e["kind"] for e in brain.pop_events()] == ["cam_off"]
+    cam("on", 1000)
+    brain.on_message({"v": 2, "type": "rssi", "recv_t": t + 4000, "link": "pi5>unoq:wifi", "dbm": -50, "src": "sim"})
+    assert brain.state()["cam"] == "unknown"
+    t += 4000
+    cam("on", 1000)                           # quiet, then on again: it never stopped being on
+    assert [e["kind"] for e in brain.pop_events()] == ["cam_on"]          # only the one from before the gap
 
 
 # ---- a restart keeps the model (#270); recordings don't pile up in memory (#271) ----
