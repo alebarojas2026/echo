@@ -220,7 +220,12 @@ def test_recap_check_prints_a_model_recap_and_fails_on_the_template(capsys, monk
 
 
 def test_sample_demo_gives_facts_without_numbers_beyond_the_times():
-    lines = r.facts(r.sample(NOW))
+    saved = dict(n.ZONES)
+    n.set_zones(dict(n.CONTRACT_ZONES))   # the square's zones, whatever nodes.json says
+    try:
+        lines = r.facts(r.sample(NOW))
+    finally:
+        n.set_zones(saved)
     assert len(lines) == 8 and lines[0] == "0:00 someone walked into the Bed zone"
     assert "0:24 no-movement alert in the Bathroom zone" in lines   # the zone with the shortest limit
     assert "dBm" not in " ".join(lines)

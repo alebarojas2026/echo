@@ -20,7 +20,7 @@ from narrator import narrate as n
 MAX_WORDS, MAX_SENTENCES = 45, 3
 TIMEOUT_S = 25.0     # 45 words is about three ordinary sentences on the board's model
 MAX_TOKENS = 110
-KEPT = ("enter", "zone_change", "exit", "alert_on", "checkin", "object_on", "object_off", "advice",
+KEPT = ("enter", "zone_change", "exit", "alert_on", "intrusion", "armed", "checkin", "object_on", "object_off", "advice",
         "router_moved", "advice_result", "router_home", "cam_off", "blind_on", "blind_off")
 SYSTEM = (
     "You write the recap shown on the screen at the end of a Wi-Fi sensing demo. "
@@ -41,7 +41,20 @@ def _clock(ms: int) -> str:
 def _fact(kind: str, info: dict) -> str | None:
     zone, node = _zone(info.get("zone")), n.NODES.get(info.get("node"))
     before, after = n._dbm(info.get("before_dbm")), n._dbm(info.get("after_dbm"))
+    if n.desk():   # the strip in front of the desk: "on the left", "stepped up"
+        side = f"on the {zone.lower()}" if zone else None
+        desk_facts = {
+            "enter": f"someone stepped up {side}" if side else "someone stepped up to the desk",
+            "zone_change": f"someone moved over, now {side}" if side else None,
+            "exit": "someone stepped away from the desk",
+            "alert_on": f"no-movement alert {side}" if side else "no-movement alert",
+            "intrusion": f"someone came in while armed, {side}" if side else "someone came in while armed",
+        }
+        if kind in desk_facts:
+            return desk_facts[kind]
     return {
+        "armed": "the space was armed",
+        "intrusion": f"someone came in while armed, in the {zone} zone" if zone else "someone came in while armed",
         "enter": f"someone walked into the {zone} zone" if zone else "someone walked in",
         "zone_change": f"someone moved to the {zone} zone" if zone else None,
         "exit": "someone left the room",
@@ -86,16 +99,21 @@ def template(events: list) -> str | None:
         if e.get("kind") in ("enter", "zone_change") and z and z not in zones:
             zones.append(z)
     out = []
-    if zones:
+    if zones and n.desk():
+        out.append(f"Someone stood {_join([f'on the {z.lower()}' for z in zones])}.")
+    elif zones:
         out.append(f"Someone visited the {_join(zones)} zone{'s' if len(zones) > 1 else ''}.")
     elif "enter" in kinds:
         out.append("Someone came into the room.")
     if "alert_on" in kinds:
         where = _zone(info["alert_on"].get("zone"))
-        alert = f"A no-movement alert fired{f' in the {where} zone' if where else ''}"
+        place = (f" on the {where.lower()}" if n.desk() else f" in the {where} zone") if where else ""
+        alert = f"A no-movement alert fired{place}"
         out.append(alert + (" and a wave check-in answered it." if "checkin" in kinds else "."))
     elif "checkin" in kinds:
         out.append("A wave check-in was received.")
+    if "intrusion" in kinds:
+        out.append("While it was armed, someone came in.")
     before, after = n._dbm(info.get("advice_result", {}).get("before_dbm")), n._dbm(info.get("advice_result", {}).get("after_dbm"))
     if before is not None and after is not None:
         out.append(f"Moving the router took its Wi-Fi from {before} to {after} dBm.")
