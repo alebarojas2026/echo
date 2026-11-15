@@ -471,6 +471,8 @@ class Watch:
             self.led.alert(True)
 
     def on_rssi(self, msg: dict) -> None:
+        if self.line:
+            return   # one spot: the only check-in is stepping out of the presence line and back (_on_line); a wave on another link is not one
         t = msg["recv_t"]
         if self.checkin_rule.push(t, msg["link"], float(msg["dbm"])) and self._person:
             self.checkin = {"t": t, "link": CHECKIN_LINK}
