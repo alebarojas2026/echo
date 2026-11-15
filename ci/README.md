@@ -18,7 +18,7 @@ python ci/modal_ci.py --prs 476,478,485 [--each | --together] [--main]
 - `--main`: main alone. With `--each`, a PR failure that also fails on main is marked "same as main".
 - PRs that are no longer open (merged or closed) are skipped and named; it asks `gh` for the open list, read-only.
 - `--dry-run` builds the trees and prints the plan without starting anything.
-- `--lanes brain,web` runs only those lanes. `--max-dollars` (default 2) refuses a run whose estimate is higher.
+- `--lanes brain,web` runs only those lanes. `--repeat N` runs each lane N times in fresh containers, to tell a flaky test from a broken one. `--max-dollars` (default 2) refuses a run whose estimate is higher.
 
 Run it with a Python that has `modal` installed and a Modal login. Merges happen on this PC
 with git (`git merge-tree`, the same merge `git merge` does, nothing checked out). A merge

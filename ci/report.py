@@ -180,7 +180,7 @@ def render_summary(trees, results):
         if not t.runnable:
             lines.append(f"- {label}: **conflict** with main in {', '.join(f'`{f}`' for f in t.conflicts)}; not run")
             continue
-        rows = [r for r in results if r.tree == t.name]
+        rows = [r for r in results if r.tree == t.name or r.tree.startswith(t.name + " (run ")]
         bad = [r for r in rows if not r.ok]
         if not bad:
             lines.append(f"- {label}: all {len(rows)} lanes pass")

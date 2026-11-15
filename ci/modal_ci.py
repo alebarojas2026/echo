@@ -37,6 +37,7 @@ def parse_args(argv=None):
     mode.add_argument("--together", action="store_true", help="all PRs stacked on main in the given order")
     p.add_argument("--main", action="store_true", help="also test origin/main alone")
     p.add_argument("--lanes", default="", help="only these lanes, comma-separated")
+    p.add_argument("--repeat", type=int, default=1, help="run every lane N times (to check a flaky test)")
     p.add_argument("--max-dollars", type=float, default=2.0, help="refuse to start if the estimate is higher")
     p.add_argument("--dry-run", action="store_true", help="build the trees and print the plan; no Modal")
     p.add_argument("--no-fetch", action="store_true", help="use the refs already fetched")
@@ -118,7 +119,7 @@ def output_name(repo, tree_list, main, args):
 def write_logs(log_dir, raws):
     log_dir.mkdir(parents=True, exist_ok=True)
     for (tree, lane), raw in raws.items():
-        safe = tree.replace("#", "pr")
+        safe = "".join(c if c.isalnum() else "_" for c in tree.replace("#", "pr")).strip("_")
         if isinstance(raw, BaseException):
             body = f"{type(raw).__name__}: {raw}\n"
         else:
@@ -144,6 +145,10 @@ def main(argv=None):
     tree_list = plan_trees(repo, main_sha, args)
     only = {x for x in args.lanes.split(",") if x}
     jobs, blobs = plan_jobs(repo, tree_list, only)
+    labels = [name for name, _, _ in jobs]
+    if args.repeat > 1:  # the same lane in several fresh containers, to tell a flaky test from a broken one
+        jobs = [j for j in jobs for _ in range(args.repeat)]
+        labels = [f"{name} (run {i % args.repeat + 1})" for i, (name, _, _) in enumerate(jobs)]
     estimate = len(jobs) * EXPECTED_SECONDS_PER_LANE * DOLLARS_PER_CONTAINER_SECOND
     print(f"main {main_sha[:7]}; {len([t for t in tree_list if t.runnable])} trees, {len(jobs)} containers, about ${estimate:.2f}", file=sys.stderr)
     for t in tree_list:
@@ -171,14 +176,14 @@ def main(argv=None):
                 print(f"  done {res['key']} {res['lane']} in {res['seconds']:.0f} s", file=sys.stderr)
 
         results = remote.run_all(jobs, blobs, progress)
-        for (name, lane, _), res in zip(jobs, results):
-            raws[(name, lane)] = res
+        for label, (_, lane, _), res in zip(labels, jobs, results):
+            raws[(label, lane)] = res
         wall = time.monotonic() - started
     else:
         wall = 0.0
 
     rows = report.conflict_rows(tree_list)
-    rows += [report.lane_result(name, lane, raws[(name, lane)]) for name, lane, _ in jobs]
+    rows += [report.lane_result(label, lane, raws[(label, lane)]) for label, (_, lane, _) in zip(labels, jobs)]
     report.mark_known(rows)
     spent = sum(r.seconds for r in rows) * DOLLARS_PER_CONTAINER_SECOND
 
