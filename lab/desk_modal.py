@@ -109,6 +109,12 @@ def jobs_for(stage: str, n: int = None) -> list:
                     for reach in (0.35, 0.45):
                         add(f"B visit {v} reach {reach}", 3000 + s, r, scene=dict(BETTER, visit=v, reach_m=reach))
                     add(f"A visit {v} reach 0.35", 3000 + s, r, scene={"visit": v})
+    elif stage == "links":                     # strip-crossing links only, on the sweep's seeds
+        for s in range(n or 80):
+            for r in RATES:
+                for links in ("cross", "cross+ends"):
+                    add(f"A links {links}", 1000 + s, r, links=links)
+                    add(f"B links {links}", 1000 + s, r, scene=dict(BETTER), links=links)
     elif stage == "today":                     # the brain as it is on main: six links, tonight's place
         for s in range(n or 60):
             for r in RATES:

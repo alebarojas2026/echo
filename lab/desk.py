@@ -660,7 +660,11 @@ def drive(msgs, S: Scene, plan: dict, doc: dict, links, base_est="median"):
     use_links(links)
     keep_model = "keep_model" in inspect.getsource(core.Brain._cmd_baseline)
     saved = (F.baseline, core.BASELINE_MS)
-    brain = core.Brain(clock=None, nodes=doc, links=links)
+    # The brain keeps every link of the layout (rates, baseline, windows); `links` is what the
+    # model's feature vector is built from. Its "why" list assumes the two are the same, and
+    # nothing here reads it.
+    brain = core.Brain(clock=None, nodes=doc, links=[x["id"] for x in doc["links"]])
+    brain._why_weights = lambda: {}
     clk = [msgs[0]["recv_t"]]
     brain._clock = lambda: clk[0]
     T0 = rf.T0_MS
