@@ -38,6 +38,17 @@ class DevpostDraftTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.lower)
 
+    def test_opening_names_the_unplug_and_on_device_boundary(self):
+        opening = self.lower.split("## inspiration", 1)[1].split("## what it does", 1)[0]
+        for phrase in (
+            "taught by a camera. runs without one",
+            "temporary camera",
+            "unplugs it",
+            "entirely on device",
+            "nothing is sent to the internet",
+        ):
+            self.assertIn(phrase, self.lower if phrase.startswith("taught") else opening)
+
     def test_contract_v2_demo_features_are_named(self):
         for phrase in (
             "radio x-ray",

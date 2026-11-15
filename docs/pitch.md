@@ -8,7 +8,7 @@ Radio Sight brings safety and after-hours security to buildings using the Wi-Fi 
 
 _Start with the setup camera disconnected. Ask the judge to step into the sensing area._
 
-> This is Radio Sight: Wi-Fi that understands the room. The radio links changed when you stepped in, so it found a person without identifying you. The laptop shows the local interface. The Raspberry Pi supplies network and radio, but it runs no model.
+> Some places need to know someone is there, and cannot have a camera: a bathroom, a patient's room, an office after hours. Found you. That decision was made here, on this Arduino UNO Q, a Qualcomm Dragonwing board. It trained here and runs entirely on device. The board has no internet. This page comes from the board; the laptop is only a screen.
 
 ### Teach the room
 
@@ -50,7 +50,7 @@ _Use the prepared room question only when the local event-record feature gate pa
 
 _Finish on the proof strip._
 
-> The measured results are zone accuracy __, presence accuracy __, decision latency __, images stored __, and bytes sent outside our local network __. Blank means unmeasured, not estimated. Radio Sight is taught by a camera, then runs without one.
+> The measured results are zone accuracy __, presence accuracy __, decision latency __, images stored __, and bytes sent outside our local network __. Blank means unmeasured, not estimated. We dug into a signal every building already has, for rooms where cameras cannot go. Taught by a camera. Runs without one. Next is the same lesson on real access points. We would like to keep building it.
 
 ## Five-minute finalist extension
 

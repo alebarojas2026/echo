@@ -55,10 +55,21 @@ class PitchDocTest(unittest.TestCase):
         self.assertIn("images stored __", self.spoken.lower())
 
     def test_compute_and_screen_roles_are_clear(self):
-        self.assertIn("the laptop shows the local interface", self.spoken.lower())
-        self.assertIn("raspberry pi supplies network and radio", self.spoken.lower())
-        self.assertIn("it runs no model", self.spoken.lower())
         self.assertIn("dragonwing cpu", self.spoken.lower())
+
+    def test_qualcomm_and_on_device_land_immediately_after_found_you(self):
+        after_found = self.spoken.lower().split("found you", 1)[1]
+        first_sixty = " ".join(re.findall(r"\b[\w'-]+\b", after_found)[:60])
+        self.assertIn("qualcomm", first_sixty)
+        self.assertIn("on device", first_sixty)
+
+    def test_theme_and_ask_close_the_pitch(self):
+        for phrase in (
+            "we dug into a signal every building already has",
+            "taught by a camera. runs without one",
+            "we would like to keep building it",
+        ):
+            self.assertIn(phrase, self.spoken.lower())
 
     def test_feature_status_is_current(self):
         self.assertIn("armed-mode event logic is now in `main`", self.lower)

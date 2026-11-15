@@ -35,14 +35,14 @@ If a step fails, fix it and repeat the baseline or lesson. Do not carry failed c
 
 Use these exact beat names and keep them in this order.
 
-1. **Found you:** Start with the camera disconnected. Ask the judge to step into the sensing area. Show a fresh `person` prediction and say, “Found you. Camera disconnected.” Do not substitute a numeric camera claim while proof remains pending.
+1. **Found you:** Start with the camera disconnected. Ask the judge to step into the sensing area. Say, “Some places need to know someone is there, and cannot have a camera: a bathroom, a patient's room, an office after hours.” Show a fresh `person` prediction, then say, “Found you. That decision was made here, on this Arduino UNO Q, a Qualcomm Dragonwing board. It trained here and runs entirely on device. The board has no internet. This page comes from the board; the laptop is only a screen.”
 2. **Teach the room:** Connect the camera, start the fresh judge lesson, and display `Lesson time: __ s`. Show labels, not an image. Wait for successful training before continuing.
 3. **Camera unplug:** Unplug the camera in one continuous shot. Follow the camera-unplug proof below and leave the cable visible.
 4. **Still follows:** Ask the judge to move and then stand still. Show presence, zone, and motion state continuing from radio alone. If a required link goes blind, say so and stop; never call it empty.
 5. **Arm the space:** Ask the judge to step out. Use the arm control only if the current build exposes contract v2 `armed` state, emits `armed`, and the phone page is connected to the live feed.
 6. **Intrusion alert:** Ask the judge to re-enter. Continue only after one live `intrusion` event names the zone and the phone page shows it. Do not identify the judge or claim crowd counting.
 7. **Ask the room:** Ask the prepared question only if the current build can answer from its local timestamped event records. Read the returned facts; do not improvise an answer.
-8. **Proof:** Finish on `/proof.json`. Say only completed values. Close with `Images stored: __` and `Bytes sent outside local network: __` until proof records replace them.
+8. **Proof:** Finish on `/proof.json`. Show `Images stored: __` and `Bytes sent outside local network: __` until proof replaces them, but say only completed values. Close with “We dug into a signal every building already has, for rooms where cameras cannot go. Taught by a camera. Runs without one. Next is the same lesson on real access points. We would like to keep building it.”
 
 If the feature gate for **Arm the space**, **Intrusion alert**, or **Ask the room** fails, stop the live sequence after **Still follows**. State that the remaining integrations are not ready, then go directly to **Proof**.
 

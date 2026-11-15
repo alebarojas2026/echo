@@ -44,6 +44,17 @@ class DemoRunbookTest(unittest.TestCase):
         positions = [self.lower.index(beat) for beat in beats]
         self.assertEqual(positions, sorted(positions))
 
+    def test_found_you_names_qualcomm_and_on_device(self):
+        found = self.lower.split("**found you:**", 1)[1].split("**teach the room:**", 1)[0]
+        for phrase in (
+            "arduino uno q",
+            "qualcomm dragonwing",
+            "entirely on device",
+            "board has no internet",
+            "laptop is only a screen",
+        ):
+            self.assertIn(phrase, found)
+
     def test_demo_includes_privacy_and_proof_moments(self):
         for phrase in (
             "unplug the camera",
