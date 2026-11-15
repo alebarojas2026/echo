@@ -31,19 +31,25 @@ def post(url, body: bytes):
 
 
 @pytest.fixture
-def room(tmp_path):
+def store():
     store = Store(":memory:")
     fill_from_sim(store, "demo", end_ms=NOW)
+    return store
+
+
+@pytest.fixture
+def room(tmp_path, store):
     pick = lambda messages, schema: {"tool": "alerts", "minutes": 10, "zone": 0, "link": "any"}
     server, url = start(tmp_path, lambda q: ask(q, store, pick, now_ms=NOW))
     yield url
     server.shutdown()
 
 
-def test_ask_answers_with_the_rows_and_the_time(room):
+def test_ask_answers_with_the_rows_and_the_time(room, store):
+    alerts = len(store.events(kinds=("alert_on",)))   # the demo path stands still once, on every layout
     status, reply = post(room + "/ask", json.dumps({"question": "any alerts?"}).encode())
     assert status == 200 and reply["tool"] == "alerts" and reply["picked_by"] == "llm" and reply["src"] == "sim"
-    assert reply["answer"].startswith("No-movement alerts in the last 10 minutes: 1.")
+    assert alerts == 1 and reply["answer"].startswith(f"No-movement alerts in the last 10 minutes: {alerts}.")
     assert reply["rows"] and isinstance(reply["ms"], int)
 
 
