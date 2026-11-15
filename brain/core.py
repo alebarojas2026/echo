@@ -605,9 +605,14 @@ class Brain:
         if not self.sessions_dir:
             return
         session = self.open_session["meta"].get("session") if self.open_session else None
+        # quiet_db goes into the file only when a setting uses it: with the three factors at their
+        # default the file is the contract's, key for key (the key is proposed in a contract issue).
+        s = self.settings
+        keep_quiet = bool(s.steady_x_quiet or s.checkin_x_quiet or s.settle_x_quiet)
         doc = {"t": now, "session": session,
                "links": {link: {"base_dbm": self.base[link], "expected_hz": self.expected_hz[link],
-                                **({"quiet_db": round(self.quiet_db[link], 2)} if link in self.quiet_db else {})}
+                                **({"quiet_db": round(self.quiet_db[link], 2)}
+                                   if keep_quiet and link in self.quiet_db else {})}
                          for link in self.base}}
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         (self.sessions_dir / "baseline.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")

@@ -129,10 +129,12 @@ def test_a_baseline_measures_the_quiet_level_writes_it_and_reads_it_back(tmp_pat
     assert old.base == brain.base and old.quiet_db == {} and old._settle_db(link) == 1.0
 
 
-def test_by_default_every_rule_keeps_the_contract_number():
-    brain = Brain()
+def test_by_default_every_rule_keeps_the_contract_number_and_the_file_its_contract_keys(tmp_path):
+    brain = Brain(sessions_dir=tmp_path)
     brain.on_cmd(cmd("baseline"))
     Feed(brain).play("empty_room", seed=1)
+    doc = json.loads((tmp_path / "baseline.json").read_text())
+    assert all(set(v) == {"base_dbm", "expected_hz"} for v in doc["links"].values())
     brain.quiet_db = {k: 3.0 for k in brain.links}
     brain._set_baseline(brain.base, brain.expected_hz, brain.quiet_db)
     assert all(lk.steady_db == 0.8 for lk in brain.health.links.values())
