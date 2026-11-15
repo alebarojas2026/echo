@@ -27,8 +27,29 @@ export interface Room {
   stage: Stage
 }
 
-/** Builds the 3D room inside `host` and keeps it in step with the feed. */
-export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchParams(location.search)): Room {
+/** What the room says when the browser gives it no 3D context. The text column runs on the feed alone. */
+export const NO_3D_WORDS = ['3D view unavailable', 'The radio keeps working.'] as const
+
+/** The room's notice: a heading and one line over the room, hidden while the heading is empty. */
+function addNotice(host: HTMLElement): (title: string, line: string) => void {
+  const notice = document.createElement('div')
+  notice.className = 'room-notice'
+  notice.setAttribute('role', 'status')
+  const title = document.createElement('h2')
+  const line = document.createElement('p')
+  notice.append(title, line)
+  notice.hidden = true
+  host.append(notice)
+  return (t, l) => {
+    notice.hidden = !t
+    title.textContent = t
+    line.textContent = l
+  }
+}
+
+/** Builds the 3D room inside `host` and keeps it in step with the feed. Returns null when the 3D view can't start
+ *  (no WebGL context: battery saver, a driver hiccup, a remote display); the room then says so in words. */
+export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchParams(location.search)): Room | null {
   host.classList.add('room')
   // Mock data says so in plain words across the room, the whole time it plays (#642). The room starts below the
   // band, so nothing is ever drawn under it.
@@ -41,7 +62,16 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     document.body.append(band)
   }
   const options = viewOptions(params)
-  const view = new RoomView(host, options)
+  let view: RoomView
+  try {
+    view = new RoomView(host, options)
+  } catch (err) {
+    // Never an empty two thirds of the screen with no explanation next to a text column that carries on.
+    console.error(err)
+    host.dataset.room3d = 'unavailable'
+    addNotice(host)(...NO_3D_WORDS)
+    return null
+  }
   host.dataset.quality = options.quality
   if (params.get('fps') === '1') startFpsMeter(view)
   const stage = new Stage(view)
@@ -106,17 +136,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   const wave = new WaveClock()
 
   // NO DATA and SENSOR BLIND are different states (contract section 6), and each is said in words.
-  const notice = document.createElement('div')
-  notice.className = 'room-notice'
-  notice.setAttribute('role', 'status')
-  notice.innerHTML = '<h2></h2><p></p>'
-  notice.hidden = true
-  host.append(notice)
-  const say = (title: string, line: string) => {
-    notice.hidden = !title
-    notice.querySelector('h2')!.textContent = title
-    notice.querySelector('p')!.textContent = line
-  }
+  const say = addNotice(host)
 
   // Replay (replay.ts, #537): recorded seconds drive the figure, zone and alert tints; devices and links stay live.
   // The figure's holds run on the replay's own clock, kept ahead of real time so it only moves forward.
