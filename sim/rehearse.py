@@ -119,13 +119,17 @@ def desk_script():
     """The 3-minute desk visit in docs/desk-demo.md, at its times: the judge walks in at 0:20 and
     around, goes to the bathroom (the zone with the shortest still limit) at 0:45 and stands still until
     the alert, waves at 1:10, moves to a zone with no alert while the camera cable is pulled, and walks
-    out at 2:10."""
-    wave, cam_off, leave, finish = 70.0, 95.0, 130.0, 155.0
+    out at 2:10. Then armed mode: armed at 2:15 with nobody there, the judge steps back in at 2:20 (an
+    intrusion), and it's disarmed at the end."""
+    wave, cam_off, leave, arm, back, finish = 70.0, 95.0, 130.0, 135.0, 140.0, 160.0
     at = lambda zone, t: {"t": t, "x": Z[zone][0], "y": Z[zone][1]}   # noqa: E731
     around = [at(z, 22.0 + 3 * i) for i, z in enumerate(TOUR)]   # walk through every zone, then keep moving
     person = ([{"t": 0, "x": None}, {"t": 20.0, **WEST_EDGE(TOUR[0])}] + around
               + wander(CALM, 23.0 + 3 * len(TOUR), 43.0) + [at(STILL, 47.0), at(STILL, wave + 4), at(CALM, wave + 6)]
-              + wander(CALM, wave + 7, leave - 2) + [{"t": leave, **EAST_EDGE(CALM)}, {"t": leave + 0.1, "x": None}])
+              + wander(CALM, wave + 7, leave - 2) + [{"t": leave, **EAST_EDGE(CALM)}, {"t": leave + 0.1, "x": None}]
+              # armed at 2:15 with nobody there; the judge steps back in at 2:20: an intrusion
+              + [{"t": back, **WEST_EDGE(TOUR[0])}, at(STILL, back + 2)] + wander(STILL, back + 3, finish - 6)
+              + [{"t": finish - 4, **EAST_EDGE(STILL)}, {"t": finish - 3.9, "x": None}])
     path = {"name": "desk", "duration_s": finish, "person": person,
             "waves": [{"t_on": wave + 1, "t_off": wave + 3.5}],
             "camera": [{"t": 0, "state": "on"}, {"t": cam_off, "state": "off"}],
@@ -142,9 +146,13 @@ def desk_script():
         ("wave check-in", wave, 90, "event", lambda e: e["kind"] == "checkin"),
         ("camera pulled, radio only", cam_off, leave, "state",
          lambda s: s["cam"] == "off" and s["teacher"] is None and pred(s, present=True, zone=CALM)),
-        ("walks out: nobody is here", leave, finish, "state", lambda s: pred(s, present=False)),
+        ("walks out: nobody is here", leave, arm, "state", lambda s: pred(s, present=False)),
+        ("armed, nobody here", arm, back, "state", lambda s: s.get("armed") is True and pred(s, present=False)),
+        ("intrusion while armed", back, back + 10, "event", lambda e: e["kind"] == "intrusion"),
+        ("disarmed", finish - 4, finish, "event", lambda e: e["kind"] == "disarmed"),
     ]
-    return path, [], beats
+    commands = [(arm, "arm", {"on": True}), (finish - 3, "arm", {"on": False})]
+    return path, commands, beats
 
 
 class Stack:
