@@ -220,6 +220,10 @@ Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, 
   relative to the baseline for this reason.
   On baseline_done the brain writes data/sessions/baseline.json: {"t": epoch ms, "session": id or null,
   "links": {link id: {"base_dbm": n, "expected_hz": n}}}. proof/ and a brain restart read it from there.
+  On trained the brain writes data/sessions/model.pkl (a Python pickle: {"ver", "base": {link id: base_dbm},
+  "place_t", "model"}). At start the brain loads it only if its place_t equals place.json's t (a file without
+  place_t: only if its base equals baseline.json's) and it was fit on this layout's links and zones; otherwise it
+  starts untrained. Nothing else reads this file.
   Every baseline, by hand or automatic, is also appended to data/sessions/baselines.jsonl: one line
   {"t": epoch ms, "base": {link id: base_dbm}}. train reads each recording against the baseline that was in force
   when it was recorded, so recordings from before a keep_model baseline still fit.
