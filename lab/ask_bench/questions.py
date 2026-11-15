@@ -15,6 +15,7 @@ The bench clock is fixed at NOW_HM, so "since 2" has one right answer.
 import json
 import random
 import re
+import zlib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -53,7 +54,7 @@ TIMES = [  # (phrase, [lo, hi])
     ("in the last 24 hours", [1440, 1440]), ("in the last quarter of an hour", [15, 15]),
     ("during the last 10 min", [10, 10]), ("in the last 10 mins", [10, 10]), ("within the last 5 minutes", [5, 5]),
     ("in the last three minutes", [3, 3]), ("in the past twenty minutes", [20, 20]), ("over the past 40 min", [40, 40]),
-    ("since 2", since(2)), ("since 2pm", since(14)), ("since two o'clock", since(14)), ("since 2:30", since(14, 30)),
+    ("since 2", since(14)), ("since 2pm", since(14)), ("since two o'clock", since(14)), ("since 2:30", since(14, 30)),
     ("since 1", since(13)), ("since 1:30 pm", since(13, 30)), ("since noon", since(12)), ("since 14:00", since(14)),
     ("since 11", since(11)), ("since 2:15", since(14, 15)),
     ("today", [887, 1440]), ("so far today", [887, 1440]), ("this afternoon", [160, 300]),
@@ -238,7 +239,7 @@ def vary(text: str, rng: random.Random) -> tuple:
 
 def fill(base: str, t, z, s) -> str:
     text = base.replace("{T}", t[0]).replace("{Z}", z[0]).replace("{S}", s[0])
-    if t[0] and base.endswith("{T}?") and t[0].startswith("in the") and hash(base + t[0]) % 5 == 0:
+    if t[0] and base.endswith("{T}?") and t[0].startswith("in the") and zlib.crc32((base + t[0]).encode()) % 5 == 0:
         # sometimes the time goes first: "In the last hour, was anyone here?"
         body = base.replace(" {T}", "").replace("{Z}", z[0]).replace("{S}", s[0])
         text = t[0][0].upper() + t[0][1:] + ", " + body[0].lower() + body[1:]

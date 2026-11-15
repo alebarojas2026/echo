@@ -27,13 +27,16 @@ def parse(content):
 def decide(q: str, content, layers: set, zones: dict, links: list) -> tuple:
     """(pick dict, picked_by) the way ask() would end up, for one combination of layers."""
     from agent import ask as A
-    from .variants import by_new_rules, guard, parse_minutes, parse_zone
+    from .variants import by_new_rules, fix_typos, guard, parse_minutes, parse_zone
     if "rules474" in layers:
         return A.by_rules(q), "rules"
+    raw = q
+    if layers & {"rules_only", "guard", "rules", "args", "args10"}:
+        q = fix_typos(q)   # the Python layers read a typo-fixed copy; the model gets the question as typed
     if "rules_only" in layers:
-        t = "none" if guard(q) else (by_new_rules(q) or "none")
+        t = "none" if guard(q, zones) else (by_new_rules(q) or "none")
         pick, by = {"tool": t, "minutes": 10, "zone": 0, "link": "any"}, "rules"
-    elif "guard" in layers and guard(q):
+    elif "guard" in layers and guard(q, zones):
         pick, by = {"tool": "none", "minutes": 10, "zone": 0, "link": "any"}, "guard"
     elif "rules" in layers and by_new_rules(q):
         pick, by = {"tool": by_new_rules(q), "minutes": 10, "zone": 0, "link": "any"}, "rules"
@@ -41,10 +44,11 @@ def decide(q: str, content, layers: set, zones: dict, links: list) -> tuple:
         pick, by = parse(content), "llm"
         if pick is None:   # #474: a reply that is not JSON falls back to its keywords
             pick, by = A.by_rules(q), "fallback"
-    if "args" in layers or "rules_only" in layers:
+    if layers & {"args", "args10", "rules_only"}:
         pick = dict(pick)
         m = parse_minutes(q)
-        pick["minutes"] = m if m is not None else (pick.get("minutes") if by == "llm" else 10)
+        keep = by == "llm" and "args" in layers   # args: the model's minutes when none is said; args10: 10
+        pick["minutes"] = m if m is not None else (pick.get("minutes") if keep else 10)
         pick["zone"] = parse_zone(q, zones)
     return pick, by
 
@@ -69,7 +73,8 @@ def judge(gold: dict, pick: dict, zones: dict, links: list) -> dict:
 
 
 from .variants import VARIANTS as MODEL_VARIANTS
-LAYER_SETS = [(), ("args",), ("guard",), ("guard", "args"), ("guard", "rules"), ("guard", "rules", "args")]
+LAYER_SETS = [(), ("args",), ("args10",), ("guard",), ("guard", "args10"), ("guard", "rules"), ("guard", "rules", "args"),
+              ("guard", "rules", "args10")]
 
 
 def combos(variants):
@@ -80,11 +85,11 @@ def combos(variants):
     return out
 
 
-def evaluate(tag: str, splits=None, extra_tags=()):
+def evaluate(tag: str, splits=None, extra_tags=(), qfile=None):
     overlay.use()
     from agent import ask as A
     zones, links = A.layout()
-    qs = {q["id"]: q for q in load_questions()}
+    qs = {q["id"]: q for q in load_questions(qfile)}
     res = {}
     for t in (tag,) + tuple(extra_tags):
         for l in open(OUT / f"results-{t}.jsonl", encoding="utf-8"):
@@ -153,8 +158,10 @@ if __name__ == "__main__":
     ap.add_argument("--misses", default=None, help="combo name to list misses for")
     ap.add_argument("-k", type=int, default=20)
     ap.add_argument("--field", default="all_ok")
+    ap.add_argument("--questions", default=None, help="another question file (default out/questions.jsonl + paraphrases)")
     a = ap.parse_args()
-    table, rows, qs = evaluate(a.tag, a.split.split(",") if a.split else None, [t for t in a.extra.split(",") if t])
+    table, rows, qs = evaluate(a.tag, a.split.split(",") if a.split else None, [t for t in a.extra.split(",") if t],
+                               a.questions)
     print_table(table)
     if a.misses:
         for m in misses(rows, qs, a.misses, a.k, a.field):

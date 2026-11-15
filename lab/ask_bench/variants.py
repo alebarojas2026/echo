@@ -124,35 +124,71 @@ def body(variant: str, question: str, zones: dict, links: list) -> dict:
 
 CANT = re.compile(
     r"\bhow many (people|persons|visitors|judges|guys|ppl|of them|men|women)\b|\bcount (the |how many )?(people|visitors|ppl|persons)\b"
-    r"|\bwho(?!\s+trained)\b|\bwhos\b|\bwho's\b|\bwhose\b|\bidentif|\brecogni|\b(ivan|alejandro|izet|alexander)\b"
+    r"|\bwho(?!\s+trained)\b|\bwhos\b|\bwho's\b|\bwhose\b|\bidentif|\brecogni"
     r"|\bman or (a )?woman\b|\bwas it a (man|woman|guy|girl)\b|\bwearing\b|\bhow tall\b|\bhow old\b|\bhis name\b|\bher name\b"
     r"|\blook like\b|\bsame person\b|\bphoto\b|\bpicture\b|\bheart\b|\bbreathing\b|\bon (his|her|their) phone\b"
     r"|\bignore\b|\bpretend\b|\brepeat after\b|\bsystem prompt\b|\byou are now\b|\bjailbreak|\bforget (the|your|all)\b"
     r"|\bweather\b|\bjoke\b|\bpoem\b|\bhaiku\b|\bpassword\b|\bcapital of\b|\bstock\b|\bwhat time is it\b"
-    r"|^\W*(please )?(arm|disarm|turn (on|off)|reset|delete|send|call|open|play|set|translate|write)\b", re.I)
+    r"|^\W*(please )?(arm|disarm|turn (on|off)|reset|delete|send|call|open|play|set|translate|write|say|tell me a)\b", re.I)
 
 RULES = [  # (tool, pattern): first match wins
     ("intrusions", r"intru|\barmed\b|\barm(ed)? mode|break.?ins?\b|broke in|trespass|after.?hours|sneak|security (alarm|mode|system)"),
     ("alerts", r"no.?movement (alert|alarm|warning)|not.?moving (alert|alarm)|\balerts?\b|\balarms?\b|check.?ins?\b|\bcheck in\b|still (alert|alarm)|\bwarn"),
     ("explain_advice", r"router|advice|advis|suggest|dead (zone|spot)|blocking|obstruct|in the way|the move\b|move the pi\b|arrow"),
-    ("still_spans", r"\bstill\b(?! (here|there|on|working|blind))|not mov|without mov|motionless|stationary|stay(ed)? put"
+    ("still_spans", r"\b(stand|stood|standing|stay|stayed|staying|sit|sat|sitting|hold|held|keep|kept|been|be) still\b"
+                    r"|\bstill\b(?! (here|there|working|blind|on\b))|not mov|without mov|motionless|stationary|stay(ed)? put"
                     r"|freez|frozen|hold still|keep still|in one (spot|place)|didn.?t move|stop(ped)? moving"),
     ("link_history", r"wi.?fi|signal|\blinks?\b|bluetooth|\bble\b|dbm|rssi|blind|radio|interference|dropouts?|stale"),
     ("model_card", r"\bmodel\b|train|learn|camera|cloud|internet|online|private|privacy|data (leave|get|sent)|upload"
-                   r"|neural|\bai\b|decision|decide|accura"),
-    ("presence", r"\b(any|some|no|every)\s?(one|body)\b|\bppl\b|\bperson\b|\bpeople\b|visit|occupied|empty"
+                   r"|neural|\bai\b|decision|decide|accura|\brun(s|ning)? on\b"),
+    ("presence", r"\b(any|some|no|every)\s?(one|body)\b|\bppl\b|\bperson\b|\bpeople\b|visit|occupied|empty|presen"
                  r"|walk(ed)? (past|by|up|behind)|pass(ed)? (by|through)|c[oa]me by|stop(ped)? by|show(ed)? up|detected|activity|movement"),
 ]
 RULES = [(t, re.compile(p, re.I)) for t, p in RULES]
 
 
-def guard(question: str) -> bool:
-    return bool(CANT.search(question))
+# "Is that Ivan?", "Where is Ivan?": a capitalised name that isn't one of the zones.
+NAME = re.compile(r"\b(?:(?:[Ii]s|[Ww]as) (?:that|this|it)(?: guy| girl| person)?|[Ww]here is|[Ww]here's) ([A-Z][a-z]+)\b")
+
+
+def guard(question: str, zones=None) -> bool:
+    if CANT.search(question):
+        return True
+    names = {n.lower() for n in (zones or {1: "Left", 2: "Right"}).values()}
+    return any(m.group(1).lower() not in names for m in NAME.finditer(question))
 
 
 def by_new_rules(question: str):
     """The first tool whose keywords match, or None when nothing matches."""
     return next((t for t, p in RULES if p.search(question)), None)
+
+
+# Words the keywords and the time reader look for. A typo one letter away from one of them
+# ("sinec", "alamr", "anyoe") is read as that word before the keywords run.
+VOCAB = sorted(set("""
+since minutes minute hours hour today seconds right left side empty anyone anybody someone somebody person people
+visitors visited occupied presence detected movement still standing frozen motionless stationary moving without stay
+alert alerts alarm alarms warning check intrusion intrusions intruder intruders armed break trespassed security
+signal signals link links wifi bluetooth radio blind interference dropouts router advice advise suggest blocking
+obstruction camera model trained training learn cloud internet private privacy decision accurate many count
+""".split()))
+KEEP = set("""
+mode modes wearing hearing stand stands sits time times with were what when here there come came went move moved moves wave waved
+rain raining light lights sign signs like lift many arms army alter mail sale stall stalls rights sight sites
+""".split())
+
+
+def fix_typos(question: str) -> str:
+    import difflib
+    out = []
+    for w in re.findall(r"\w+|\W+", question):
+        lw = w.lower()
+        if len(lw) >= 4 and w.isalpha() and lw not in VOCAB and lw not in KEEP:
+            near = difflib.get_close_matches(lw, VOCAB, n=1, cutoff=0.8)
+            if near and abs(len(near[0]) - len(lw)) <= 1:
+                w = near[0]
+        out.append(w)
+    return "".join(out)
 
 
 WORDS = {w: i for i, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve".split())}
