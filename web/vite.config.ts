@@ -1,5 +1,5 @@
 /// <reference types="vitest/config" />
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineConfig, type Plugin } from 'vite'
@@ -55,18 +55,35 @@ const model = (name: string) => (existsSync(new URL(`./public/models/${name}`, i
 // never logs a 404 for a missing file. hall-hi.glb is the detailed model and hall-lo.glb the light one. Its
 // alignment, if any, is room.json. room.glb (npm run scan:prep of a raw scan) is used only when there is no
 // hall model: it has its own box and axes, so the hall's room.json would place it wrong.
+/** Other looks of the same hall to compare (hall-hi-A.glb / hall-lo-A.glb, ...), picked on screen with ?hall=A. */
+function hallFamilies(): Record<string, { hi?: string; lo?: string }> {
+  const out: Record<string, { hi?: string; lo?: string }> = {}
+  let names: string[] = []
+  try {
+    names = readdirSync(new URL('./public/models/', import.meta.url))
+  } catch {
+    return out
+  }
+  for (const name of names) {
+    const m = /^hall-(hi|lo)-([A-Za-z0-9]+)\.glb$/.exec(name)
+    if (m) out[m[2]] = { ...out[m[2]], [m[1]]: `models/${name}` }
+  }
+  return out
+}
+
 function roomScan() {
   const hi = model('hall-hi.glb')
   const hall = hi ?? model('hall-lo.glb')
   const lo = hall ? model('hall-lo.glb') : model('room.glb')
-  if (!hi && !lo) return null
+  const families = hallFamilies()
+  if (!hi && !lo && !Object.keys(families).length) return null
   let fit = {}
   try {
     fit = JSON.parse(readFileSync(ROOM_JSON, 'utf8'))
   } catch {
     // no alignment file: the scan is centred on the square
   }
-  return { hi, lo, fit }
+  return Object.keys(families).length ? { hi, lo, fit, families } : { hi, lo, fit }
 }
 
 /** Only the alignment numbers (floor_m optional), each finite and in a sane range, or null. */

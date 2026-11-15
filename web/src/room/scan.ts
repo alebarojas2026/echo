@@ -19,11 +19,19 @@ export interface Scan {
   bounds(): Box3
 }
 
-export type ScanSource = { hi?: string; lo?: string; fit: ScanFit } | null
+export type ScanSource = {
+  hi?: string
+  lo?: string
+  fit: ScanFit
+  /** Other looks of the same hall to compare (hall-hi-A.glb, ...), picked with ?hall=A. */
+  families?: Record<string, { hi?: string; lo?: string }>
+} | null
 
-/** The model for this quality: hi takes the detailed one when there is one, pi the light one. */
-export function scanUrl(source: NonNullable<ScanSource>, quality: Quality): string | undefined {
-  return quality === 'hi' ? (source.hi ?? source.lo) : (source.lo ?? source.hi)
+/** The model for this quality: hi takes the detailed one when there is one, pi the light one. With `family`
+ *  (?hall=A) that look's files, when it has them. */
+export function scanUrl(source: NonNullable<ScanSource>, quality: Quality, family?: string | null): string | undefined {
+  const files = (family && source.families?.[family]) || source
+  return quality === 'hi' ? (files.hi ?? files.lo) : (files.lo ?? files.hi)
 }
 
 /** Where the scan and its alignment are: the dev server's current answer, or what the build found with the
@@ -175,7 +183,7 @@ export function hallLift(params: URLSearchParams): number {
 export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLSearchParams, quality: Quality): Promise<Scan | null> {
   if (params.get('scan') === '0') return null
   const source = await scanSource()
-  const url = source && scanUrl(source, quality)
+  const url = source && scanUrl(source, quality, params.get('hall'))
   if (!source || !url) return null
   try {
     // Loaded only when there is a scan, so builds without one stay small.
