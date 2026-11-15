@@ -312,6 +312,19 @@ export function applyLayout(json: unknown): boolean {
     for (const r of spots) ROUTER_SPOTS[r.id] = r.xyz_m
   }
   if (trays.length) replace(TRAY_SPOTS, trays)
+  // The router's spots and the tray's are places around the router. When the file puts the router somewhere
+  // else than S-home (a placement saved in align mode moves the devices, not the spots), they travel with it, so
+  // S-home is always where the router is.
+  const router = nodes.find((n) => n.roles.includes('router'))
+  const home = ROUTER_SPOTS[HOME_SPOT]
+  if (router && home) {
+    const d = router.xyz.map((v, i) => v - home[i])
+    if (d.some((v) => Math.abs(v) > 1e-6)) {
+      const moved = (p: Vec3): Vec3 => [p[0] + d[0], p[1] + d[1], p[2] + d[2]]
+      for (const k of Object.keys(ROUTER_SPOTS)) ROUTER_SPOTS[k] = moved(ROUTER_SPOTS[k])
+      replace(TRAY_SPOTS, TRAY_SPOTS.map(moved))
+    }
+  }
   replace(HALL_BEACONS, hall)
   return true
 }

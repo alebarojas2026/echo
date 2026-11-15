@@ -119,6 +119,17 @@ describe('the room drawn on the desk layout', () => {
     expect(nodeLabelSide('east')).toBe('below-left')
   })
 
+  it('reads the names of two devices side by side outward from each other', () => {
+    const fan = structuredClone(DESK_LAYOUT)
+    fan.nodes[0].xyz_m = [0.84, 0.68, 0.8] // the board
+    fan.nodes[1].xyz_m = [0.76, 0.68, 0.8] // Pi A, 8 cm west of it on the same hub
+    expect(applyLayout(fan)).toBe(true)
+    expect(nodeLabelSide('pi5')).toBe('above-left')
+    expect(nodeLabelSide('unoq')).toBe('above-right')
+    expect(nodeLabelSide('pi5b')).toBe('above')
+    expect(applyLayout(DESK_LAYOUT)).toBe(true)
+  })
+
   it('puts each zone\'s no-movement word in the aisle, under the middle of its zone', () => {
     expect(alertWordAt(1)).toEqual([[0.4, -0.06, 0], 'south'])
     const [[x2, y2, z2], side2] = alertWordAt(2)
