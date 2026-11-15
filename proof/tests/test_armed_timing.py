@@ -94,3 +94,17 @@ def test_offline_contract_validation_retains_device_subset_evidence():
     assert out['security']['fewer_devices'] == proof['security']['fewer_devices']
     proof['security']['fewer_devices'][0]['links'] = ['not-a-layout-link']
     with pytest.raises(ValidationError): publish(proof,report,[],proof['commit'],schema)
+
+
+def test_three_device_subsets_use_only_active_classifier_links():
+    from proof.ablation import subsets
+    layout = {'nodes':[{'id':'board','roles':['receiver']},{'id':'router','roles':['router']},
+                       {'id':'listener','roles':['receiver']}],
+              'links':[{'id':'wifi','tx':'router','rx':'board','classifier':False},
+                       {'id':'radio-a','tx':'listener','rx':'board'},
+                       {'id':'radio-b','tx':'listener','rx':'router'}]}
+    groups = subsets(layout)
+    assert [len(ids) for _,ids,_ in groups] == [3,2]
+    assert groups[0][2] == ['radio-a','radio-b'] and groups[1][2] == []
+    layout['nodes'].pop()
+    assert len(subsets(layout)) == 1

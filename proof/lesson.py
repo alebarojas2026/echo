@@ -27,8 +27,8 @@ import time
 
 from teacher.lesson import NO_EMPTY, EmptyTime, script
 
-TEACH_S = 30      # empty, left and right, a step out, left and right again, before the first fit
-STEP_S = 4        # seconds on each side
+TEACH_S = 30      # empty time and occupied steps before the first fit
+STEP_S = 4        # seconds per occupied step
 REPORT_S = 40     # when the agreement is read off (10 s after train, as before)
 
 
@@ -93,7 +93,7 @@ class Coach:
             if self.empty.ok():
                 self.trained_sent = True
                 self.cmd("train")
-                self.say("\ntrain sent. Keep stepping left and right; unplug the camera when you like.")
+                self.say("\ntrain sent. Keep entering and leaving the sensing area; unplug the camera when you like.")
             elif not self.no_empty_said:
                 self.no_empty_said = True
                 self.say("\n" + NO_EMPTY)
