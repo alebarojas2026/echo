@@ -34,6 +34,7 @@ STEADY_DROP_DB = 3.0
 STEADY_STD_DB = 0.8
 STEADY_BIN_MS = 500    # the std is taken over 0.5 s means, the same way the x-ray does it
 STEADY_COVER = 0.9     # readings must span this much of the 2 s
+LONG_MIN = 8           # a link's 2 s median and spread need this many readings (a line at 4 a second or more)
 
 # Classifier links, in the fixed order used for feature vectors (section 3): radio/nodes.json's.
 from brain.layout import LINKS  # noqa: E402
@@ -119,6 +120,20 @@ def steady_drop(readings: List[tuple], base_dbm: Optional[float], end: int) -> b
     if len(means) < 2 or statistics.pstdev(means) >= STEADY_STD_DB:
         return False
     return base_dbm - statistics.median(d for _, d in pts) >= STEADY_DROP_DB
+
+
+def long_stats(readings: List[tuple]) -> dict:
+    """A link over the 2 s before a window's end: {"n", "median", "std"} of its readings (dBm).
+
+    std is the spread a presence line is judged on (CONTRACTS.md section 6): a line that arrives 25
+    times a second and sits within 1 dB when the spot is empty spreads when a body is in it and
+    does not when a thing is. median and std are None under LONG_MIN readings."""
+    dbms = [d for _, d in readings]
+    if len(dbms) < LONG_MIN:
+        return {"n": len(dbms), "median": None, "std": None}
+    mean = sum(dbms) / len(dbms)
+    return {"n": len(dbms), "median": statistics.median(dbms),
+            "std": math.sqrt(sum((d - mean) ** 2 for d in dbms) / len(dbms))}
 
 
 def _majority(counts: Counter):
@@ -237,6 +252,7 @@ class Windower:
             "base": self.base,
             "links": {link: link_stats(per_link.get(link, []), self.base.get(link))
                       for link in self.links},
+            "long": {link: long_stats(trail.get(link, [])) for link in self.links},   # the last 2 s
             "label": window_label(labels),
         }
 

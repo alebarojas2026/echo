@@ -30,6 +30,8 @@ ZONES = [0] + layout.zone_ids()   # empty, then one per zone in radio/nodes.json
 FOREST = dict(n_estimators=60, max_depth=12, min_samples_leaf=2, n_jobs=4, random_state=0)
 ZONE_SET_MIN_P = 0.25  # a zone joins zone_set when its probability is at least this
 UNSEEN_DB = 6.0        # a feature this far outside everything seen in training = "not sure"
+SPLIT_MIN_WINDOWS = 20 # the lesson sets where "moving" begins on the presence line with this many windows of each kind
+SPLIT_MIN_RIGHT = 0.8  # ... and only when its best boundary gets this share of each kind right
 
 
 def kind_of(window: dict) -> Optional[str]:
@@ -42,10 +44,30 @@ def kind_of(window: dict) -> Optional[str]:
     return "person" if label["present"] else "none"
 
 
-def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS, crossing=()) -> dict:
+def best_split(still: List[float], moving: List[float]) -> Optional[float]:
+    """The spread (dB) that best tells a lesson's still windows from its moving ones on the presence line:
+    the value with the largest share right, averaged over the two kinds. None when either kind has
+    under SPLIT_MIN_WINDOWS windows, or no value gets SPLIT_MIN_RIGHT of each kind right (then the
+    layout file's own boundary stands)."""
+    if min(len(still), len(moving)) < SPLIT_MIN_WINDOWS:
+        return None
+    low, high = np.sort(np.asarray(still, dtype=float)), np.sort(np.asarray(moving, dtype=float))
+    values = np.unique(np.concatenate([low, high]))
+    cuts = (values[:-1] + values[1:]) / 2
+    if cuts.size == 0:
+        return None
+    right_still = np.searchsorted(low, cuts, side="left") / low.size          # still windows under the cut
+    right_moving = 1.0 - np.searchsorted(high, cuts, side="left") / high.size   # moving windows at or over it
+    score = np.where(np.minimum(right_still, right_moving) >= SPLIT_MIN_RIGHT, (right_still + right_moving) / 2, -1.0)
+    i = int(np.argmax(score))
+    return None if score[i] < 0 else round(float(cuts[i]), 2)
+
+
+def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS, crossing=(), motion_line=None) -> dict:
     """Labeled windows from every session, as arrays. links = the layout's links, in order;
-    crossing = those the layout says cross the spot (features.vector)."""
-    X, zone, motion, kind, walker, session = [], [], [], [], [], []
+    crossing = those the layout says cross the spot (features.vector); motion_line = the layout's
+    presence line: "spread" then holds its 2 s spread in each window (NaN when it had too few readings)."""
+    X, zone, motion, kind, walker, session, spread = [], [], [], [], [], [], []
     for s in sessions:
         meta = s.get("meta") or {}
         # A session is windowed against the baseline it was recorded on, when that is known:
@@ -61,7 +83,10 @@ def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS, crossin
             kind.append(k)
             walker.append(meta.get("walker"))
             session.append(meta.get("session"))
+            std = ((w.get("long") or {}).get(motion_line) or {}).get("std")
+            spread.append(float("nan") if std is None else std)
     return {
+        "spread": np.asarray(spread, dtype=float),
         "X": np.asarray(X, dtype=float).reshape(-1, len(F.feature_names(links, crossing))),
         "zone": np.asarray(zone), "motion": np.asarray(motion), "kind": np.asarray(kind),
         "walker": np.asarray(walker, dtype=object), "session": np.asarray(session, dtype=object),
@@ -76,9 +101,11 @@ class Model:
     # A class default, so an older pickle without the attribute reads as unknown.
     train_walkers: Optional[List[str]] = None
     crossing: tuple = ()   # a class default, so a model file from before this reads as having none
+    motion_line: Optional[str] = None      # the layout's presence line, when it has one
+    spread_split: Optional[float] = None   # where "moving" begins on it, as the lesson's labels put it (dB); None = not learned
 
     def __init__(self, base: Dict[str, float], ver: str = "m1", links=F.LINKS, zones=ZONES[1:], motion_links=None,
-                 crossing=()):
+                 crossing=(), motion_line=None):
         """links and zones come from radio/nodes.json (the brain passes them); the defaults are
         the 2 x 2 m square's. probs has one entry for empty, then one per zone, in that order.
         motion_links: the links whose features decide moving / still (brain/settings.py);
@@ -86,7 +113,11 @@ class Model:
         crossing: the links the layout marks as crossing the spot ("crosses_spot" in nodes.json).
         Their median drops, and the average of them, are features too: presence is the drop
         under the empty baseline, and a median holds on a line with few, noisy readings.
-        A layout that marks none (the desk strip, the square) has the features it always had."""
+        A layout that marks none (the desk strip, the square) has the features it always had.
+        motion_line: the layout's presence line ("presence" in nodes.json). Moving and still are then told
+        apart by that line's 2 s spread (the brain does it), and a fit learns the boundary from the
+        lesson's labels: spread_split, None when the lesson can't say."""
+        self.motion_line = motion_line if motion_line in links else None
         unknown = [k for k in motion_links or () if k not in links]
         if unknown:
             raise ValueError(f"motion_links names links this layout doesn't have: {', '.join(unknown)}")
@@ -110,9 +141,13 @@ class Model:
 
     def fit(self, sessions: List[dict]) -> "Model":
         t0 = time.monotonic()
-        d = dataset(sessions, self.base, self.links, self.crossing)
+        d = dataset(sessions, self.base, self.links, self.crossing, self.motion_line)
         if len(d["X"]) == 0:
             raise ValueError("no labeled windows to train on")
+        if self.motion_line:
+            seen = (d["zone"] != 0) & ~np.isnan(d["spread"])
+            self.spread_split = best_split(d["spread"][seen & (d["motion"] == "still")].tolist(),
+                                           d["spread"][seen & (d["motion"] == "moving")].tolist())
         self.zone = _forest(d["X"], d["zone"])
         moving = d["zone"] != 0
         self.motion = _forest(d["X"][moving][:, self._motion_cols()], d["motion"][moving]) if moving.any() else None

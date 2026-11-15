@@ -24,13 +24,16 @@ LEVEL = {"pi5>unoq:wifi": -38, "pi5>unoq:ble": -42, "pi5b>unoq:ble": -58, "pi5>p
 # The Wi-Fi line from Pi A to Pi B is the one that decides: 15 to 21 dB with a person, 25 readings a second.
 DROP = {"pi5>pi5b:wifi": 18.0, "pi5b>unoq:ble": 8.0, "pi5>pi5b:ble": 8.0, "pi5b>pi5:ble": 5.0}
 RAMP_S = 0.3   # stepping in or out takes about this long
+THING_DB = 5.0   # what a thing left standing in the Wi-Fi line takes off it: steady, with no body in it
 
 
 class Feed:
     """Readings, camera labels and cam messages for a plan of (seconds, who) steps, one after another.
 
     who: "nobody", "still" (standing), "shift" (standing, shifting their weight), "moving"
-    (stepping about on the spot) or "lean" (leaning aside, nearly out of the lines). wobble_db is the spread (one standard deviation) of a Bluetooth
+    (stepping about on the spot), "lean" (leaning aside, nearly out of the lines) or "thing" (nobody there,
+    and something left standing in the Wi-Fi line from Pi A to Pi B: THING_DB off that line, as steady as the
+    empty line). wobble_db is the spread (one standard deviation) of a Bluetooth
     line with nobody there: 1.2 gives a 2 to 5 dB wobble peak to peak over a few seconds, half of
     it slow. camera=False sends no labels and cam off (the camera is unplugged).
     """
@@ -40,6 +43,7 @@ class Feed:
         self.slow = {link: 0.0 for link in LINKS}      # the slow half of each line's wobble
         self.drift, self.t0 = drift_db_per_min, float(t0)   # the empty level of the Bluetooth lines to Pi B sinks this fast
         self.depth = 0.0                               # 0 nobody .. 1 fully in the lines
+        self.thing, self.thing_db = 0.0, THING_DB      # 0 nothing .. 1 the thing stands in the Wi-Fi line
         self.sway = {link: 0.0 for link in [None] + LINKS}   # the body's own movement: one part shared, one per line
         self.next = {link: self.t + self.rng.random() / self.rate[link] for link in LINKS}
 
@@ -55,8 +59,9 @@ class Feed:
 
     def _step(self, who, camera, dt_ms=20):
         t, rng, out = self.t, self.rng, []
-        want = {"nobody": 0.0, "lean": 0.1}.get(who, 1.0)   # leaning aside: nearly out of the lines
+        want = {"nobody": 0.0, "lean": 0.1, "thing": 0.0}.get(who, 1.0)   # leaning aside: nearly out of the lines
         self.depth += max(-dt_ms / 1000 / RAMP_S, min(dt_ms / 1000 / RAMP_S, want - self.depth))
+        self.thing += max(-dt_ms / 1000 / RAMP_S, min(dt_ms / 1000 / RAMP_S, (who == "thing") - self.thing))
         # a body that shifts or steps changes how much of each line it covers, a couple of times a second
         size = {"shift": 1.5, "moving": 3.0}.get(who, 0.0)
         for key in self.sway:
@@ -71,6 +76,8 @@ class Feed:
                 drop = self.drop.get(link, 0.0) * self.depth
                 if drop:
                     drop += (self.sway[None] + self.sway[link]) * self.depth
+                if link == "pi5>pi5b:wifi":
+                    drop += self.thing_db * self.thing
                 if link in DROP and ble:
                     drop += self.drift * (t - self.t0) / 60000
                 dbm = LEVEL[link] - drop + self.slow[link] + rng.gauss(0, spread * 0.7)

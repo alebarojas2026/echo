@@ -6,6 +6,7 @@ about 8 dB with a person on the spot; and the Wi-Fi line from Pi A to Pi B, 25 r
 when empty and 18 dB down with a person: the line that decides (the layout's "presence"). It shows the rules hold at those numbers. It is not a
 measurement of the real desk.
 """
+import json
 import statistics
 
 import pytest
@@ -128,16 +129,40 @@ def test_ten_minutes_of_an_empty_spot_show_nobody(kit):
     assert sum(s["pred"]["present"] for _, s in rows) <= 2                        # not even a flicker held
 
 
-def test_standing_still_is_told_from_stepping_about_most_of_the_time(kit):
+def test_standing_still_is_told_from_stepping_about_nine_times_in_ten(kit):
+    """Moving and still come from the Wi-Fi line's spread over 2 s (25 readings a second, under 1 dB when
+    empty), not from the Bluetooth lines, which wobble 2 to 5 dB by themselves."""
     said = {}
-    for who in ("still", "shift", "moving") * 3:
-        start, rows, _ = kit.play([(8, who)])
+    for who in ("still", "shift", "moving") * 4:
+        start, rows, _ = kit.play([(10, who)])
         said.setdefault(who, []).extend(s["pred"]["motion"] for t, s in rows if t - start > 3000 and s["pred"]["present"])
         kit.play([(4, "nobody")])
     share = {who: sum(m == "still" for m in v) / len(v) for who, v in said.items()}
-    assert share["still"] >= 0.9               # a person standing still is said to be still
-    assert share["moving"] <= 0.6              # stepping about is told from it more often than not
-    assert share["shift"] >= 0.6               # shifting their weight still reads as standing there
+    assert share["still"] >= 0.9, share        # a person standing still is said to be still
+    assert share["moving"] <= 0.1, share       # stepping about is said to be moving
+    assert share["shift"] >= 0.6, share        # shifting their weight still reads as standing there
+
+
+def test_where_moving_begins_comes_from_the_file_and_then_from_the_lesson(kit):
+    from brain.train import best_split
+    assert Brain(nodes=GATE).moving_spread_db == 2.0 and Brain(nodes=GATE).object_spread_db == 1.0     # the defaults
+    tuned = Brain(nodes=dict(GATE, presence=dict(GATE["presence"], moving_spread_db=3.5, object_db=4, object_max_db=None,
+                                                 object_spread_db=0.6, object_hold_s=2)))
+    assert (tuned.moving_spread_db, tuned.object_db, tuned.object_max_db, tuned.object_spread_db, tuned.object_hold_ms) \
+        == (3.5, 4.0, float("inf"), 0.6, 2000)
+    # the lesson had moving and still windows on the line: its labels put the boundary between them
+    split = kit.brain.model.spread_split
+    assert kit.brain.model.motion_line == "pi5>pi5b:wifi" and split is not None and 0.8 < split < 3.5, split
+    # too few windows of a kind, or kinds that don't come apart: the file's value stands
+    assert best_split([0.4] * 30, [3.0] * 5) is None and best_split([1.0, 2.0] * 20, [1.0, 2.0] * 20) is None
+    assert best_split([0.4, 0.6] * 15, [2.5, 3.5] * 15) == 1.55
+    # a brain with no lesson boundary uses the file's: 2 dB, and still again under 80% of it
+    brain = Brain(nodes=GATE)
+    brain.window = {"long": {"pi5>pi5b:wifi": {"n": 50, "median": -65.0, "std": 1.9}}}
+    assert brain._motion_says() == "still"
+    for std, says in ((2.1, "moving"), (1.7, "moving"), (1.5, "still"), (1.9, "still"), (None, "still")):
+        brain.window["long"]["pi5>pi5b:wifi"]["std"] = std
+        assert brain._motion_says() == says, std
 
 
 def test_armed_a_person_who_stays_is_an_intrusion_and_one_who_leaves_passed_by(kit):
@@ -328,3 +353,135 @@ def test_leaning_aside_is_the_check_in_and_leaving_ends_the_alert_without_one():
     # and walking away ends the alert with no check-in said
     _, rows, events = kit.play([(8, "nobody")])
     assert alerts(events) == ["alert_off"] and rows[-1][1]["alert"]["state"] == "none"
+
+
+def things(events):
+    return [e["kind"] for _, e in events if e["kind"] in ("advice", "advice_result", "enter", "exit", "intrusion", "passed_by",
+                                                         "alert_on", "blind_on")]
+
+
+def test_a_thing_left_in_the_wifi_line_is_an_object_never_a_person_and_its_removal_shows_the_gain():
+    kit = Kit(seed=17).teach()
+    kit.brain.on_cmd(cmd("arm", on=True))                # armed all through: a thing is never an intrusion
+    kit.play([(6, "nobody")])
+    kit.brain.pop_events()
+    start, rows, events = kit.play([(30, "thing")])       # left for 30 s
+    assert things(events) == ["advice"], things(events)
+    assert (when(events, "advice") - start) / 1000 <= 8
+    assert not any(s["pred"] is None or s["pred"]["present"] for _, s in rows)       # never somebody, never unknown
+    late = [s for t, s in rows if t - start > 8000]
+    assert all(s["pred"]["kind"] == "object" and s["pred"]["zone"] == 0 and s["pred"]["motion"] is None for s in late)
+    assert all(s["alert"]["state"] == "none" and s["health"]["status"] != "blind" for s in late)
+    advice = late[-1]["advice"]
+    assert advice["link"] == "pi5>pi5b:wifi" and advice["cause"] == "obstruction" and advice["why"] == ["pi5>pi5b:wifi"]
+    assert (advice["to_spot"], advice["move_m"], advice["dist_change_m"], advice["after_dbm"]) == (None, [0, 0], 0, None)
+    assert "router" not in advice["text"].lower() and "Pi A to Pi B" in advice["text"]   # nobody is told to move the router
+    assert advice["xy_m"] == [0.38, 0.3] and len({s["advice"]["id"] for s in late}) == 1   # the middle of the line; one advice
+    assert -53.5 <= advice["before_dbm"] <= -50.5                                    # 5 dB under the empty level of -47
+    assert any(s["objects"] for s in late)                                           # and the x-ray lists it
+    # the state passes the schema, apart from what the contract change for one spot brings: the length of probs,
+    # a null to_spot, and near judged on this layout's own devices
+    assert [e for e in check.errors(late[-1]) if not any(k in e for k in ("probs", "to_spot", ".near"))] == []
+    held = kit.brain.base["pi5>pi5b:wifi"]
+    assert abs(held - -47) <= 1.0                         # the empty level did not follow the thing down
+
+    start, rows, events = kit.play([(20, "nobody")])      # taken away
+    assert things(events) == ["advice_result"], things(events)
+    result = next(e for _, e in events if e["kind"] == "advice_result")
+    assert 5 <= (when(events, "advice_result") - start) / 1000 <= 9      # 3 s of readings, starting 2 s after it went
+    assert result["info"]["link"] == "pi5>pi5b:wifi"
+    gain = result["info"]["after_dbm"] - result["info"]["before_dbm"]
+    assert 4.0 <= gain <= 6.0, gain                       # the 5 dB the thing took, through the fields that were there
+    shown = [s["advice"] for _, s in rows if s["advice"] and s["advice"]["after_dbm"] is not None]
+    assert shown and shown[0]["after_dbm"] == result["info"]["after_dbm"] and shown[0]["to_spot"] is None
+    assert rows[-1][1]["advice"] is None and rows[-1][1]["pred"]["kind"] == "none"   # shown 10 s, then gone
+    assert not any(s["pred"]["present"] for _, s in rows)
+    kit.brain.on_cmd(cmd("arm", on=False))
+
+
+def test_a_person_on_the_spot_is_never_a_thing_however_still_and_ends_one_that_was_there():
+    kit = Kit(seed=19).teach()
+    kit.play([(5, "nobody")])
+    _, rows, events = kit.play([(120, "still")])          # two minutes without moving: 18 dB down, as steady as a thing
+    assert all(s["pred"]["present"] and s["pred"]["kind"] == "person" for t, s in rows[20:])
+    assert not any(s["advice"] for _, s in rows) and "advice" not in things(events)
+    kit.brain.on_cmd(cmd("reset_alert"))
+    kit.play([(6, "nobody")])
+    kit.brain.pop_events()
+    # the weakest person seen (15 dB) is one too
+    weak = Kit(seed=23)
+    weak.feed = Feed(T0_MS, 23, 1.2, drop=WEAK)
+    weak.teach().play([(5, "nobody")])
+    _, rows, _ = weak.play([(40, "still")])
+    assert all(s["pred"]["kind"] == "person" for _, s in rows[20:]) and not any(s["advice"] for _, s in rows)
+    # somebody steps in front of a thing: they are found, and the advice goes at once
+    kit.play([(15, "thing")])
+    assert kit.brain.advice is not None and kit.brain.pred["kind"] == "object"
+    start, rows, events = kit.play([(8, "still")])
+    assert "enter" in things(events) and (when(events, "enter") - start) / 1000 <= 2.5
+    assert rows[-1][1]["pred"]["kind"] == "person" and rows[-1][1]["advice"] is None
+    assert "advice_result" not in things(events)          # nothing was taken away, so no gain is claimed
+
+
+def test_ten_minutes_empty_show_no_thing_and_a_reset_clears_the_advice_while_the_thing_stays(kit):
+    kit.play([(8, "nobody")])
+    kit.brain.pop_events()
+    _, rows, events = kit.play([(600, "nobody")])
+    assert not any(s["advice"] or s["objects"] or s["pred"]["kind"] != "none" for _, s in rows)
+    assert things(events) == []
+    kit.play([(15, "thing")])
+    assert kit.brain.advice is not None
+    kit.brain.on_cmd(cmd("reset"))
+    _, rows, events = kit.play([(10, "thing")])
+    assert not any(s["advice"] for _, s in rows) and "advice" not in things(events)   # dismissed while that thing stays
+    assert rows[-1][1]["pred"]["kind"] == "object"
+    kit.play([(12, "nobody")])
+    kit.brain.pop_events()
+
+
+def test_an_old_classifier_false_on_the_presence_line_does_not_switch_it_off():
+    links = [dict(link, classifier=False) if link["id"] == "pi5>pi5b:wifi" else link for link in GATE["links"]]
+    brain = Brain(nodes=dict(GATE, links=links))
+    assert brain.presence_line == "pi5>pi5b:wifi" and "pi5>pi5b:wifi" in brain.model_links
+    assert "pi5>pi5b:wifi" in brain.crossing and "pi5b>pi5:ble" not in brain.model_links   # the other flag still counts
+
+
+def test_the_wifi_line_reaches_the_brain_at_twenty_readings_a_second_or_more(tmp_path):
+    """Pi B's reader -> the bus -> the brain, with nothing in between thinning the presence line: the reader
+    polls 25 times a second and sends every fresh reading, the bus stamps and forwards every one, and the
+    brain keeps and counts every one."""
+    from bus.core import Bus
+    from radio import wifi_rssi
+
+    brain = Brain(nodes=GATE)
+    line, now = brain.presence_line, [T0_MS / 1000]
+    bus = Bus(tmp_path, send=lambda data: brain.on_message(json.loads(data)), clock=lambda: int(now[0] * 1000))
+    saved = (wifi_rssi.LINK_ID, wifi_rssi.TX, wifi_rssi.RX, wifi_rssi.KIND)
+    wifi_rssi.LINK_ID, wifi_rssi.TX, wifi_rssi.RX, wifi_rssi.KIND = line, "pi5", "pi5b", "wifi"
+    frames, seq, seen = [0], [0], []
+    try:
+        def read(iface, bssid):          # a frame from the hotspot since the last poll (the 50 a second ping)
+            frames[0] += 1
+            return -47 - frames[0] % 2, frames[0]
+
+        def send(dbm):
+            bus.handle(wifi_rssi._make_message(dbm, seq[0]), ("192.168.77.1", 40001))
+            seq[0] += 1
+
+        def tick():
+            if seq[0] % 25 == 0:
+                seen.append(next((row["rate_hz"] for row in brain.state()["links"] if row["id"] == line), 0.0))
+
+        reader = wifi_rssi.Reader("wlan0", "", read=read, say=lambda text: None, link=lambda iface: "")
+        spent = wifi_rssi.poll_loop(reader, send, 25.0, seconds=20, tick=tick, clock=lambda: now[0],
+                                    sleep=lambda s: now.__setitem__(0, now[0] + s))
+    finally:
+        wifi_rssi.LINK_ID, wifi_rssi.TX, wifi_rssi.RX, wifi_rssi.KIND = saved
+    assert 19.9 <= spent <= 20.1 and seq[0] >= 20 * 24                     # the reader sent 25 a second
+    last_10_s = [t for t, _ in brain._recent[line]]
+    assert len(last_10_s) >= 10 * 20, len(last_10_s)                      # ... and the brain has them: 20 a second or more
+    assert min(seen[3:]) >= 20.0, seen                                    # as the screen's own row for the line says
+    window = brain.windower.push({"type": "rssi", "recv_t": int(now[0] * 1000) + 5000, "link": line, "dbm": -47}) \
+        if brain.windower else None
+    assert window is None                                                 # no baseline yet: nothing was windowed
+    assert bus.link_counts[line] == seq[0] and bus.bad == 0               # the bus dropped none
