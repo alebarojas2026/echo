@@ -1,3 +1,4 @@
+import { sourceWords } from './source-words'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
 import { changingText } from './changing-text'
@@ -85,7 +86,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     else presentSince ??= performance.now()
     arm.textContent = state?.armed ? 'Disarm space' : 'Arm space'
     arm.disabled = !feed || stale
-    source.textContent = state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO'
+    source.textContent = sourceWords(state)
     if (!state || stale) { cancelHold(); show('No data', 'Waiting for the room signal.'); return }
     if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', 'A radio link stopped.'); return }
     if (!state.pred || state.router !== 'S-home') {
