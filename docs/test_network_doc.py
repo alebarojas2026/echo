@@ -55,8 +55,21 @@ class NetworkDocTest(unittest.TestCase):
         self.assertIsNone(
             re.search(r"\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b", self.text, re.I)
         )
-        for internal_name in ("unoq", "pi5", "east", "west"):
-            self.assertNotIn(internal_name, self.lower)
+        self.assertNotIn("mac address", self.lower)
+
+    def test_pi_b_path_and_desk_links_are_explicit(self):
+        for phrase in (
+            "pi b has no cable",
+            "receive sensing addresses by dhcp",
+            "no address is written into the repository",
+            "192.168.77.2:5600",
+            "pi a forwards that traffic",
+            "twelve core classifier links",
+            "two wi-fi and ten bluetooth",
+            "health `degraded`",
+            "python -m pi.radio_node --node pi5b",
+        ):
+            self.assertIn(phrase, self.lower)
 
 
 if __name__ == "__main__":
