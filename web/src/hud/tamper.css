@@ -5,3 +5,6 @@
 .tamper-alert p { margin:0 0 8px; }
 .tamper-alert h2 { margin:0; font-size:40px; line-height:1.1; font-weight:600; letter-spacing:-.02em; }
 @media(max-width:1100px) { .tamper-alert { width:100%; } }
+
+/* The named tamper alert owns this fault; keep the device itself unobstructed. */
+body:has(.tamper-alert:not([hidden])) .room[data-feed="live"]:not([data-room3d="unavailable"]) .room-notice { display:none; }
