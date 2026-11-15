@@ -1,0 +1,13 @@
+{
+  "name": "still_flicker",
+  "about": "Walk into zone 4 and stand still. At 7 s the decision flickers to moving for 0.3 s; the no-movement alert must still fire after 10 s of standing.",
+  "duration_s": 18,
+  "person": [
+    {"t": 0, "x": 2.0, "y": 0.5},
+    {"t": 1, "x": 1.5, "y": 0.5},
+    {"t": 16, "x": 1.5, "y": 0.5},
+    {"t": 17, "x": 2.0, "y": 0.5},
+    {"t": 17.1, "x": null}
+  ],
+  "flickers": [{"t_on": 7.0, "t_off": 7.3}]
+}

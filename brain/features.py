@@ -7,6 +7,12 @@ Per link, a window has: n (readings), mean, std, min, max (dBm) and drop_db,
 which is base_dbm - mean (positive = the signal fell below the baseline).
 The baseline is the per-link median over a 20 s capture.
 
+The model never sees a level in dBm. Its features (STATS) are all taken against
+the link's baseline: the mean drop, the spread, and the smallest and largest
+drop in the window. Set the same layout down somewhere else, take a new
+baseline, and the same person in the same spot gives the same features, so a
+trained model carries over.
+
 A window's label is the majority of the non-clipped camera labels in it.
 Windows with a clipped label or with no label get label None and are left
 out of training.
@@ -28,16 +34,9 @@ STEADY_STD_DB = 0.8
 STEADY_BIN_MS = 500    # the std is taken over 0.5 s means, the same way the x-ray does it
 STEADY_COVER = 0.9     # readings must span this much of the 2 s
 
-# Classifier links, in the fixed order used for feature vectors (section 3).
-LINKS = (
-    "pi5>unoq:wifi",
-    "pi5>unoq:ble",
-    "east>unoq:ble",
-    "west>unoq:ble",
-    "east>pi5:ble",
-    "west>pi5:ble",
-)
-STATS = ("mean", "std", "min", "max", "drop_db")
+# Classifier links, in the fixed order used for feature vectors (section 3): radio/nodes.json's.
+from brain.layout import LINKS  # noqa: E402
+STATS = ("drop_db", "std", "drop_min_db", "drop_max_db")   # all relative to the link's baseline, in dB
 
 
 def baseline(messages: Iterable[dict]) -> Dict[str, float]:
@@ -113,17 +112,18 @@ def _majority(counts: Counter):
 def vector(window: dict, links=LINKS) -> List[float]:
     """Flat feature list for a model: per link, STATS in order.
 
-    A link with no readings in the window counts as sitting on its baseline
-    (drop 0, std 0). Link health (section 6) is what reports a missing link.
+    A link with no readings in the window, or with no baseline, counts as sitting
+    on its baseline (every feature 0). Link health (section 6) is what reports a
+    missing link.
     """
     out: List[float] = []
     for link in links:
         s = window["links"].get(link) or {"n": 0}
-        if s["n"] == 0:
-            base = window["base"].get(link, 0.0)
-            out += [base, 0.0, base, base, 0.0]
+        base = window["base"].get(link)
+        if s["n"] == 0 or base is None:
+            out += [0.0, 0.0, 0.0, 0.0]
         else:
-            out += [s["mean"], s["std"], s["min"], s["max"], s["drop_db"] or 0.0]
+            out += [base - s["mean"], s["std"], base - s["max"], base - s["min"]]
     return out
 
 

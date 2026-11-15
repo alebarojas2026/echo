@@ -23,6 +23,7 @@ from typing import Callable, Dict, List, Optional
 
 from advisor.advise import advise
 from brain import features as F
+from brain import layout
 from brain.alert import Armed, Watch
 from brain.health import Health
 from brain.lesson import Lesson
@@ -32,7 +33,7 @@ from brain.xray import Xray
 BASELINE_MS = 20_000
 BASELINE_GIVE_UP_MS = 120_000   # a baseline asked for by hand that still can't start after this long is dropped
 HOME = "S-home"
-NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
+NODES_JSON = layout.NODES_JSON   # radio/nodes.json
 CAM_SILENT_MS = 3_000
 TEACHER_FRESH_MS = 1_000
 LINK_FRESH_MS = 1_000
@@ -41,6 +42,7 @@ SETTLE_MS = 3_000        # after router_home, pi5 links must sit near base this 
 SETTLE_DB = 1.0          # ... within this of base, else an automatic baseline runs
 ADVICE_MEDIAN_MS = 3_000 # before_dbm and after_dbm are medians over this long
 AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
+HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable (Pi B): their readings ride the sensing Wi-Fi
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
 ZONE_HOLD = 5            # decisions in a row (0.5 s) before enter, exit or zone_change is said
 TRAIN_PURPOSES = ("train", "object")
@@ -86,6 +88,22 @@ def last_meta(path) -> Optional[dict]:
     return found
 
 
+def base_at(history: List[dict], t) -> Optional[Dict[str, float]]:
+    """The baseline in force at time t: the last one taken at or before it. None when unknown
+    (the caller then uses the current baseline)."""
+    found = None
+    for entry in history:
+        if t is not None and entry["t"] <= t:
+            found = entry["base"]
+    return found
+
+
+def _ends(link: str):
+    """'pi5>unoq:wifi' -> ('pi5', 'unoq')."""
+    tx, _, rest = link.partition(">")
+    return tx, rest.partition(":")[0]
+
+
 def _same_object(a, b) -> bool:
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 <= SAME_OBJECT_M
 
@@ -100,7 +118,7 @@ def now_ms() -> int:
 
 class Brain:
     def __init__(self, clock: Optional[Callable[[], int]] = None, to_bus=None, mode_file=None,
-                 spawn=None, board_stats=None, links=F.LINKS, nodes=None, led=None, sessions_dir=None):
+                 spawn=None, board_stats=None, links=None, nodes=None, led=None, sessions_dir=None):
         """clock None = follow the feed (latest recv_t), for recorded files played fast.
         to_bus(msg) forwards a command to the bus.
         spawn(fit, done) runs fit() off the loop, then done(model) back on it.
@@ -108,7 +126,17 @@ class Brain:
         led is the LED grid (brain/alert.py); None = no lights.
         sessions_dir is data/sessions: baseline.json is written there and read back at start."""
         nodes = nodes or json.loads(NODES_JSON.read_text(encoding="utf-8"))
-        self.health = Health.from_nodes(nodes)
+        # The layout is whatever radio/nodes.json says: links (in its order), zones, the router.
+        links = tuple(links or [link["id"] for link in nodes["links"]])
+        self.zone_ids = [int(z["id"]) for z in nodes["zones"]]
+        self.router_node = next((n["id"] for n in nodes["nodes"] if "router" in n.get("roles", [])), "pi5")
+        ends = {link["id"]: (link.get("tx"), link.get("rx")) for link in nodes["links"]}
+        self.router_links = [k for k in links if self.router_node in ends.get(k, _ends(k))]
+        # Links heard by a receiver whose readings travel over the sensing hotspot itself can go
+        # quiet when that link is blocked on purpose: they show stale or blind in their own rows
+        # but never blind the sensor (desk layout, Pi B).
+        over_hotspot = [k for k in links if ends.get(k, _ends(k))[1] in HOTSPOT_RECEIVERS]
+        self.health = Health.from_nodes(nodes, classifier_links=[k for k in links if k not in over_hotspot])
         self.xray = Xray.from_nodes(nodes)
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
         self.armed = Armed()                  # after hours: a person appearing is an intrusion
@@ -141,6 +169,7 @@ class Brain:
         self.feed_t = 0
         self.src = "live"
         self.base: Dict[str, float] = {}
+        self._base_log: List[dict] = []       # every baseline of this run, when nothing is written to disk
         self.place_t: Optional[int] = None    # when the operator's last baseline finished: "this place"
         self.expected_hz: Dict[str, float] = {}
         self.windower: Optional[F.Windower] = None
@@ -238,9 +267,13 @@ class Brain:
 
     def _cmd_baseline(self, args):
         """A baseline asked for by hand means a new place (or a new layout): when it finishes, the
-        model and the recordings made before it are dropped from use. The files stay on disk."""
+        model and the recordings made before it are dropped from use. The files stay on disk.
+
+        baseline {keep_model: true} = the same layout set down again (another desk, a knocked
+        beacon): only the baseline is new. The model was taught on drops from a baseline, so
+        it carries over, and the recordings keep the baseline they were made on."""
         self._cmd_label_mode({"mode": "off"})
-        self._start_capture(new_place=True)
+        self._start_capture(new_place=args.get("keep_model") is not True, by_hand=True)
 
     def _cmd_train(self, args):
         if self.training or not self.base:
@@ -256,12 +289,15 @@ class Brain:
         self.training = {"started_t": self.now(), "progress": None,
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
+        history, links, zones = self._baselines(), self.links, self.zone_ids
 
         def fit():   # may run on another thread: touches nothing of ours
             for s in sessions:   # read back from the bus's files; nothing is kept after the fit
                 if s["messages"] is None:
                     s["messages"] = read_session(s["path"], s["meta"].get("recv_t"))
-            return Model(base, ver=ver).fit(sessions)
+                if not s.get("base"):
+                    s["base"] = base_at(history, s["meta"].get("recv_t"))
+            return Model(base, ver=ver, links=links, zones=zones).fit(sessions)
 
         def done(model):   # back on the loop; model None = the fit failed
             self.training = None
@@ -394,6 +430,13 @@ class Brain:
             with open(self.sessions_dir / "model.pkl", "rb") as f:
                 doc = pickle.load(f)
             model, ver = doc["model"], str(doc["ver"])
+            want = F.feature_names(self.links)
+            if getattr(model, "features", None) != want or getattr(model, "classes", None) != [0] + self.zone_ids:
+                logging.getLogger("brain").warning(
+                    "model.pkl was trained on other features or zones (%d features, first %s) than this layout "
+                    "has (%d, first %s): not loaded, train again", len(getattr(model, "features", None) or []),
+                    (getattr(model, "features", None) or ["?"])[0], len(want), want[0])
+                return
             if doc.get("place_t") is not None:
                 same_place = doc["place_t"] == self.place_t
             else:
@@ -446,7 +489,7 @@ class Brain:
 
     def _median(self, link: str, t0: int, t1: Optional[int] = None) -> Optional[float]:
         """Median dBm of a link's readings with t0 <= recv_t < t1 (t1 None = up to now)."""
-        vals = [d for t, d in self._recent[link] if t >= t0 and (t1 is None or t < t1)]
+        vals = [d for t, d in self._recent.get(link, ()) if t >= t0 and (t1 is None or t < t1)]
         return round(statistics.median(vals), 1) if vals else None
 
     def _check_settle(self, now) -> None:
@@ -455,12 +498,12 @@ class Brain:
             return
         start, self.settle = self.settle, None
         for link in self.links:
-            if "pi5" in link:
+            if link in self.router_links:   # the router as tx or rx; "pi5b" is another node
                 m = self._median(link, start)
                 if m is None or abs(m - self.base[link]) > SETTLE_DB:
                     self.recalibrating, self._old_base = True, dict(self.base)
                     self._cmd_label_mode({"mode": "off"})
-                    self._start_capture(new_place=False)
+                    self._start_capture(new_place=False, by_hand=False)
                     self.emit("recalibrating", {"link": link})
                     return
 
@@ -522,9 +565,31 @@ class Brain:
                          for link in self.base}}
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         (self.sessions_dir / "baseline.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+        # Every baseline is also kept in baselines.jsonl, so a recording can be read against
+        # the baseline it was made on, also after a restart.
+        with open(self.sessions_dir / "baselines.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"t": now, "base": self.base}) + "\n")
         # place.json: when this place began (the last baseline asked for by hand). proof/ and a
         # restart use recordings from then on only. An automatic baseline leaves it alone.
         (self.sessions_dir / "place.json").write_text(json.dumps({"t": self.place_t}) + "\n", encoding="utf-8")
+
+    def _baselines(self) -> List[dict]:
+        """Every baseline taken so far, oldest first: [{"t", "base"}] (baselines.jsonl, or just
+        the ones this run has seen when there is no sessions folder)."""
+        if not self.sessions_dir:
+            return list(self._base_log)
+        out = []
+        try:
+            with open(self.sessions_dir / "baselines.jsonl", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                        out.append({"t": entry["t"], "base": {k: float(v) for k, v in entry["base"].items()}})
+                    except (ValueError, KeyError, TypeError, AttributeError):
+                        continue
+        except OSError:
+            pass
+        return sorted(out, key=lambda e: e["t"])
 
     def _load_baseline(self) -> None:
         if not self.sessions_dir:
@@ -552,12 +617,16 @@ class Brain:
         for kind, info in self.watch.pop_events():
             self.emit(kind, info)
 
-    def _start_capture(self, new_place: Optional[bool] = None):
-        """new_place None = keep what the running capture was asked for (a restart of its 20 s)."""
+    def _start_capture(self, new_place: Optional[bool] = None, by_hand: Optional[bool] = None):
+        """new_place None = keep what the running capture was asked for (a restart of its 20 s).
+        by_hand = asked for with the baseline cmd (with or without keep_model), not the automatic one."""
+        if by_hand is None:
+            by_hand = bool(self.capture and self.capture.get("by_hand"))
         asked = self.capture["asked"] if self.capture else None   # set on the first tick: the clock may not have started
         if new_place is None:
             new_place = bool(self.capture and self.capture["new_place"])
-        self.capture = {"start": None, "messages": [], "new_place": new_place, "asked": asked}
+        self.capture = {"start": None, "messages": [], "new_place": new_place, "asked": asked,
+                        "by_hand": by_hand}
 
     def _new_place(self, now) -> None:
         """The operator's baseline finished: nothing learned before it is used from here on.
@@ -583,8 +652,7 @@ class Brain:
         lb = self.label
         cam_on = bool(self.cam and self.cam[1] == "on" and now - self.cam[0] <= CAM_SILENT_MS)
         if not cam_on:
-            if not self.recalibrating:
-                return "the camera is not on"
+            pass   # no camera to ask (unplugged at the judging desk): the operator keeps the area empty
         elif lb is None or now - lb["recv_t"] > TEACHER_FRESH_MS:
             return "no camera labels in the last second"
         elif (lb.get("persons_in_frame") or 0) != 0:
@@ -608,8 +676,7 @@ class Brain:
                 self._wait_said = wait
                 log = logging.getLogger("brain")
                 log.warning("baseline is waiting: %s", wait) if wait else log.info("baseline: capturing 20 s")
-            if wait and self.capture["new_place"] and not self.recalibrating \
-                    and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS:
+            if wait and self.capture["by_hand"] and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS:
                 # Pressed by mistake in front of an audience, or the room never cleared: without
                 # this pred stays hidden for ever. The old baseline and the model are untouched.
                 logging.getLogger("brain").warning(
@@ -626,6 +693,7 @@ class Brain:
                 expected = {link: round(sum(1 for m in msgs if m["link"] == link) / (BASELINE_MS / 1000), 1)
                             for link in self.links}
                 self._set_baseline(F.baseline(msgs), expected)
+                self._base_log.append({"t": now, "base": dict(self.base)})
                 if new_place or self.place_t is None:
                     self._new_place(now)
                 self._save_baseline(now)

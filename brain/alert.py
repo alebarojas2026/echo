@@ -29,6 +29,8 @@ from collections import deque
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from brain import layout
+
 CHECKIN_LINK = "pi5>unoq:wifi"
 CROSS_DB = 1.5          # a crossing is this far above or below the rolling median
 CROSSINGS = 4           # alternating crossings needed
@@ -42,7 +44,7 @@ SMOOTH_DECISIONS = 10   # zone and kind are the majority of this many decisions 
 SMOOTH_MAJORITY = 6     # ... and a value needs this many of them to take over
 MOVING_RUN = 5          # "moving" decisions in a row (0.5 s) before the still timer resets
 LED_RETRY_S = 30.0      # after a failed LED call, leave the grid alone this long
-NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
+NODES_JSON = layout.NODES_JSON   # radio/nodes.json
 
 
 def zone_limits(path=NODES_JSON) -> Dict[int, Optional[float]]:

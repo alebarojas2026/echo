@@ -1,0 +1,7 @@
+{
+  "name": "tray_removed",
+  "about": "Someone stands in zone 2 the whole time. The metal tray sits at T1 from 5 s to 14 s, then is taken away: the object must disappear within about 1 s even though a person is present.",
+  "duration_s": 20,
+  "person": [{"t": 0, "x": 1.5, "y": 1.5}],
+  "objects": [{"x": 1.0, "y": 0.2, "drop_db": 10, "t_on": 5, "t_off": 14}]
+}

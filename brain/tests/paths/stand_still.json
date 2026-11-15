@@ -1,0 +1,13 @@
+{
+  "name": "stand_still",
+  "about": "Walk into zone 4 (Bathroom, 10 s alert limit), stand still for 15 s, walk out. For the no-movement alert.",
+  "duration_s": 20,
+  "person": [
+    {"t": 0, "x": 2.0, "y": 0.5},
+    {"t": 1, "x": 1.5, "y": 0.5},
+    {"t": 16, "x": 1.5, "y": 0.5},
+    {"t": 17, "x": 2.0, "y": 0.5},
+    {"t": 17.1, "x": null}
+  ],
+  "objects": []
+}

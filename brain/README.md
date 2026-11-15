@@ -19,10 +19,21 @@ pip install -r brain/requirements.txt
 python -m pytest brain
 ```
 
+## The layout comes from radio/nodes.json (`brain/layout.py`)
+
+Nothing in the brain names a node, a link or a zone of its own, except the two links section 6 names (`pi5>unoq:wifi` for the check-in and the advice).
+- Links, in file order, are the feature vector's order, the rows of `state.links` and the x-ray's rows.
+- Zones give `probs` its length and the alert its limits.
+- The x-ray grid: with `frame.strip_m` (the desk layout) cells of 0.125 m over `frame.size_m` plus 0.2 m each side (16 x 12 for 1.6 x 1.1 m); without it the square's 10 x 10. The zone of a point follows the same switch (`1 + (x >= zone_split_x_m)` inside the strip and 0 off it, or the square's four). `sim/layout.py` does the same.
+- The router is the node with the `router` role. "A pi5 link" (the 3 s check after `router_home`) is a link with that node as tx or rx, by the parsed ends: `pi5b` is another node.
+- Links whose receiver has no cable (`pi5b`: its readings ride the sensing hotspot, which the demo blocks on purpose) are judged like any link and show stale or blind in their own rows, and health is then degraded; but they never make health blind, never appear in `health.blind`, never hide `pred` and never pause the alert.
+- A model file remembers its feature names and zones, so one from another layout is refused at start with a line in the log.
+- `RADIO_SIGHT_NODES=<file>` makes the brain read another layout file. The tests in brain/tests pin their own (the 2 x 2 m square, `brain/tests/square_nodes.json`, with their own copies of the sim paths), so they don't change when the room does; `brain/tests/test_layout.py` runs the loop on the desk layout and on whatever radio/nodes.json holds.
+
 ## Training (`brain/train.py`)
 
 Three random forests share one feature vector per window:
-- `zone`: classes 0-4 (0 = empty), so its probabilities are the contract's `probs`;
+- `zone`: class 0 (empty) and one class per zone in radio/nodes.json, so its probabilities are the contract's `probs` (`[empty, z1, ...]`: five entries on the square, three on the desk strip);
 - `motion`: moving or still, trained on windows with someone present;
 - `kind`: person, object or none.
 
@@ -49,7 +60,7 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 
 | cmd | What the brain does |
 |---|---|
-| `baseline` | Sets label mode off and captures 20 s. The 20 s start again whenever a section 6 condition breaks: the camera is off or its labels stop, it sees anybody, label mode is turned on, health is not ok, or a link goes quiet for 1 s. If it still can't start 120 s after the command, it is given up (logged; the old baseline and the model stay, `pred` comes back), so a Baseline pressed by mistake during a demo doesn't hide `pred` for good. Then it writes `data/sessions/baseline.json` and sends `baseline_done`. **A baseline asked for by hand means a new place**: when it finishes, the model is dropped (`pred` is null and `model.trained` false until the next `train`) and recordings made before it are never trained on again. Their files stay in `data/sessions`. The time is kept in `data/sessions/place.json`. |
+| `baseline` | Sets label mode off and captures 20 s. With the camera off there is nobody to ask and the operator keeps the area empty; with it on, it must see nobody. The 20 s start again whenever a section 6 condition breaks: the camera is on and its labels stop or it sees anybody, label mode is turned on, health is not ok, or a link goes quiet for 1 s. If it still can't start 120 s after the command (with or without `keep_model`), it is given up (logged; the old baseline and the model stay, `pred` comes back), so a Baseline pressed by mistake during a demo doesn't hide `pred` for good. Then it writes `data/sessions/baseline.json` and sends `baseline_done`. `baseline {keep_model: true}` is the same layout set down again (another desk, a knocked beacon): only the baseline is new, the model and the recordings stay, and each recording keeps the baseline it was made on (`data/sessions/baselines.jsonl`). The model's features are all drops and spreads against the baseline, never levels in dBm, which is why it carries over. Without `keep_model`: **A baseline asked for by hand means a new place**: when it finishes, the model is dropped (`pred` is null and `model.trained` false until the next `train`) and recordings made before it are never trained on again. Their files stay in `data/sessions`. The time is kept in `data/sessions/place.json`. |
 | `record_start`, `record_stop` | Sends a `recording` event. The bus records. The brain keeps its own copy of the session from the bus's `meta` message until `record_stop`. |
 | `train` | Trains on the kept sessions with purpose `train` or `object`, off the loop. Then `trained`. |
 | `relearn` | Drops the model and trains again, from this place's recordings only. |

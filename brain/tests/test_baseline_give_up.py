@@ -54,3 +54,21 @@ def test_a_baseline_that_is_capturing_when_the_time_runs_out_is_allowed_to_finis
     for seed in range(72, 78):                          # 180 s: the 20 s capture runs across the limit
         play(brain, feed, "empty_room", seed, edit=edit)
     assert brain.capture is None and "baseline_done" in [e["kind"] for e in brain.pop_events()]
+
+
+def test_a_keep_model_baseline_that_cannot_start_is_given_up_too(caplog):
+    caplog.set_level(logging.WARNING, logger="brain")
+    brain, feed = taught()
+    model, base = brain.model, dict(brain.base)
+    brain.pop_events()
+    brain.on_cmd(cmd("baseline", keep_model=True))      # the camera is on and sees the judges
+    t0, log = feed.t, []
+    for seed in range(80, 86):
+        play(brain, feed, "zone_tour", seed, edit=somebody_in_frame,
+             each=lambda m: log.append(((m["recv_t"] - t0) / 1000, brain.capture is not None, brain.pred is not None)))
+    give_up_s = BASELINE_GIVE_UP_MS / 1000
+    assert all(waiting for s, waiting, _ in log if 1 < s < give_up_s - 1)
+    after = [(waiting, shown) for s, waiting, shown in log if s > give_up_s + 3]
+    assert after and not any(waiting for waiting, _ in after) and any(shown for _, shown in after)
+    assert brain.model is model and brain.base == base
+    assert sum("given up" in r.getMessage() for r in caplog.records) == 1

@@ -102,7 +102,7 @@ def test_object_at_t1_lands_in_the_cell_the_contract_gives():
 
 
 def test_builds_from_radio_nodes_json():
-    doc = json.loads((Path(__file__).parents[2] / "radio" / "nodes.json").read_text())
+    doc = json.loads(Path(__file__).with_name("square_nodes.json").read_text())   # this folder's own layout
     xr = xray.Xray.from_nodes(doc)
     assert xr.links == list(xray.LINKS)
     assert np.allclose(xr.W, xray.Xray().W)
