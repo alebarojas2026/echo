@@ -731,11 +731,18 @@ class Brain:
         """Write a file of ours whole or not at all: a temporary file, flushed to the disk, then
         renamed over the old one (as model.pkl is). Power pulled mid-write leaves the old file."""
         tmp = self.sessions_dir / f"{name}.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, self.sessions_dir / name)
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(text)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self.sessions_dir / name)
+        except OSError:
+            try:
+                tmp.unlink()        # a failed write (a full disk) leaves no half file behind
+            except OSError:
+                pass
+            raise
 
     def _baselines(self) -> List[dict]:
         """Every baseline taken so far, oldest first: [{"t", "base"}] (baselines.jsonl, or just
