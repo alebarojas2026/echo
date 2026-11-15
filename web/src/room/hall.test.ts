@@ -14,7 +14,7 @@ describe('hall paths', () => {
     expect(pathLooks([])).toEqual([])
   })
 
-  it('draw one line per beacon, to the board when the board hears it, amber when any of its links is moving', () => {
+  it('draw one line per beacon, to the board when the board hears it, blue when any of its links is moving', () => {
     const [h] = pathLooks([row('h', 'pi5'), row('h', 'unoq', { moving: true })])
     expect(h).toEqual({ tx: 'h', show: true, moving: true, xy: [3, 19], rx: 'unoq' })
     expect(pathLooks([row('h', 'unoq'), row('h', 'pi5')])[0].moving).toBe(false)

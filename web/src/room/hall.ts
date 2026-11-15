@@ -12,10 +12,10 @@ import type { RoomView } from './view'
 
 // Hall links (state.hall): long paths from a far beacon to a receiver at the desk, drawn across the hall model.
 // They say one thing only: "movement on this path", never who, where along it, or how many. Quiet paths are
-// neutral and fainter than the square's links, so the square stays the hero; a moving path turns person amber with
+// neutral and fainter than the square's links, so the square stays the hero; a moving path turns person blue with
 // the words. A stale path, or one whose beacon has no spot yet, is not drawn: these links are optional, and a
 // missing one is not a fault. Two links from the same beacon nearly overlap at hall scale, so each beacon gets
-// one line, amber when any of its links is moving, and the words once.
+// one line, blue when any of its links is moving, and the words once.
 
 /** How each beacon's path looks this frame, from its rows. */
 export interface PathLook {
@@ -118,7 +118,7 @@ export class HallPaths {
       p.amber = fade(p.amber, p.amberTo, dt)
       p.wordsAlpha = fade(p.wordsAlpha, p.wordsTo, dt)
       busy ||= p.alpha !== p.alphaTo || p.amber !== p.amberTo || p.wordsAlpha !== p.wordsTo
-      // Quiet: neutral, 2 px, at half strength. Moving: person amber, 3 px, nearly full.
+      // Quiet: neutral, 2 px, at half strength. Moving: person blue, 3 px, nearly full.
       p.mat.color.copy(quiet).lerp(amber, p.amber)
       p.mat.linewidth = 2 + p.amber
       p.mat.opacity = p.alpha * (0.5 + 0.45 * p.amber)

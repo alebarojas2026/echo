@@ -401,7 +401,7 @@ export class Stage {
     return busy
   }
 
-  /** Amber zone names for the zones the radio is weighing (pred.zone_set); red for a fired alert's zone. */
+  /** Blue zone names for the zones the radio is weighing (pred.zone_set); red for a fired alert's zone. */
   markZones(zones: readonly number[], alertZone: number | null = null) {
     for (const [id, el] of this.zoneLabels) {
       el.classList.toggle('room-label--zone-set', zones.includes(id))

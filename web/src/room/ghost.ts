@@ -17,7 +17,7 @@ import { standBase, v3 } from './stage'
 import { shadowCentre } from './xray'
 import type { RoomView } from './view'
 
-// Where the radio thinks the person is: one amber figure, a faint amber tile under each zone in zone_set (the
+// Where the radio thinks the person is: one blue figure, a faint blue tile under each zone in zone_set (the
 // figure stands toward the line when the brain can't pick between two zones), and grey-blue box markers for
 // state.objects. Nothing is drawn while pred is null.
 //
