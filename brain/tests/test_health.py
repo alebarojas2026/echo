@@ -170,7 +170,10 @@ def test_blind_link_outside_the_classifier_only_degrades():
     lost = "west>pi5:ble"
     hm = make(classifier_links=[k for k in LINKS if k != lost])
     outs = run(hm, 0, 12, alive=lambda t, link: link != lost or t < 3.0)
-    assert outs[11.9]["health"] == {"status": "degraded", "blind": [lost], "reason": "rate"}
+    # Degraded, and blind in its own row, but never in health.blind: that list is the links
+    # that blind the sensor.
+    assert outs[11.9]["health"] == {"status": "degraded", "blind": [], "reason": "rate"}
+    assert {r["id"]: r["status"] for r in outs[11.9]["links"]}[lost] == "blind"
     assert hm.blind is False and kinds(outs) == []
 
 

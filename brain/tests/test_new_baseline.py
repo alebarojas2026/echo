@@ -119,7 +119,7 @@ def test_links_that_read_like_nothing_in_training_give_every_zone_not_one():
     assert unsure["zone"] in (0, 1, 2, 3, 4) and len(unsure["probs"]) == 5
 
 
-def test_keep_model_baseline_runs_with_the_camera_unplugged_but_a_new_place_still_needs_it():
+def test_keep_model_baseline_runs_with_the_camera_unplugged_and_keeps_the_model():
     brain, feed = taught()
     model = brain.model
 
@@ -137,6 +137,6 @@ def test_keep_model_baseline_runs_with_the_camera_unplugged_but_a_new_place_stil
     brain.on_cmd(cmd("baseline", keep_model=True))
     play(85)
     assert brain.capture is None and brain.model is model          # done, with nobody watching
-    brain.on_cmd(cmd("baseline"))                      # a new place: the camera has to see it empty
+    brain.on_cmd(cmd("baseline"))                      # a plain baseline also runs, and is a new place
     play(86)
-    assert brain.capture is not None and brain.model is model
+    assert brain.capture is None and brain.model is None

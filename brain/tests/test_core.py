@@ -356,13 +356,19 @@ def baseline_feed(brain, path="empty_room", edit=None, seed=1):
             brain.on_message(m)
 
 
-def test_baseline_needs_the_camera_on():
-    brain = Brain()
+def test_baseline_runs_with_the_camera_off_and_with_it_on_it_must_see_nobody():
+    brain = Brain()                                          # unplugged at the judging desk: nothing to ask
     baseline_feed(brain, edit=lambda m: None if m["type"] in ("cam", "label") else m)
-    assert not brain.base and brain.capture is not None      # still waiting, never done blind
+    assert brain.base and brain.capture is None
     brain2 = Brain()
     baseline_feed(brain2, edit=lambda m: dict(m, state="off") if m["type"] == "cam" else m)
-    assert not brain2.base
+    assert brain2.base
+    brain3 = Brain()                                         # on, and somebody is in view: it waits
+    baseline_feed(brain3, edit=lambda m: dict(m, persons_in_frame=1) if m["type"] == "label" else m)
+    assert not brain3.base and brain3.capture is not None
+    brain4 = Brain()                                         # on, but its labels have stopped: it waits
+    baseline_feed(brain4, edit=lambda m: None if m["type"] == "label" else m)
+    assert not brain4.base and brain4.capture is not None
 
 
 def test_baseline_needs_every_link_through_the_capture():
@@ -556,10 +562,6 @@ def test_recalibration_also_runs_with_the_camera_unplugged():
     brain, feed = taught()
     router_run(brain, feed, "router_move", moved_at=40, home_at=45, edit_path=tray_stays, drop_camera_after=30)
     assert "baseline_done" in [e["kind"] for e in brain.events[-6:]] and not brain.recalibrating
-    # ... but a baseline asked for by hand still waits for the camera.
-    brain.on_cmd(cmd("baseline"))
-    router_run(brain, feed, "empty_room", moved_at=999, home_at=999, drop_camera_after=0)
-    assert brain.capture is not None
 
 
 def test_reset_clears_the_advice_and_it_stays_away_while_the_tray_is_down():
