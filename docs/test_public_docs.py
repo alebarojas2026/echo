@@ -62,12 +62,12 @@ class PublicDocsTest(unittest.TestCase):
         self.assertIn("the laptop shows the local interface", text)
         self.assertNotIn("the pi is the router and screen", text)
 
-    def test_devpost_measured_results_use_placeholders(self):
+    def test_devpost_keeps_placeholders_in_its_proof_table(self):
         text = (DOCS / "devpost-draft.md").read_text(encoding="utf-8")
-        claims = re.findall(r"(?:Our|The) measured[^.]*\.", text)
-        self.assertGreater(len(claims), 0)
-        for claim in claims:
-            self.assertIn("__", claim)
+        proof = text.split("### Proof", 1)[1].split("### ", 1)[0]
+        outside = text.replace(proof, "")
+        self.assertNotIn("__", outside)
+        self.assertIn("| Zone accuracy | __ |", proof)
 
     def test_research_credit_is_present(self):
         text = (DOCS / "credits.md").read_text(encoding="utf-8")
