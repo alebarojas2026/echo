@@ -77,10 +77,18 @@ export function mockHistory({ from_t, to_t }: Span): History {
   return { from_t, to_t, step_s: 1, rows }
 }
 
+export function mockReport(count: 0 | 2, now = Date.now()): Report {
+  const from = now - 120000
+  const intrusions = count ? [{ t: from + 20000, zone: hudLayout.zones[0].id }, { t: from + 70000, zone: hudLayout.zones.at(-1)!.id }] : []
+  return { armed_from_t: from, armed_to_t: now, intrusions, present_s: count ? 30 : 0, passed_by: null,
+    tamper: [], blind_s: 0, rows: 120, ms: null,
+    text: count ? 'Two intrusion alerts were recorded. Someone was present for 30 seconds.' : 'No intrusion alerts were recorded during this armed stretch.' }
+}
+
 export const mockRecords: RecordsClient = {
   mode: 'mock',
   history: async (span) => mockHistory(span),
-  report: async () => { throw new Error('no mock report') },
+  report: async () => mockReport(new URLSearchParams(location.search).get('report') === 'quiet' ? 0 : 2),
 }
 
 /** ?records=board|mock picks one; otherwise the board's records go with the board's feed. */
