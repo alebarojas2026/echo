@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CmdMsg } from './contract'
-import { feedFrom, feedSource, servedByBoard, wsTransport, type Transport } from './feed'
+import { feedFrom, feedSource, servedByBoard, SILENT_MS, wsTransport, type Transport } from './feed'
 import { mockScenario, mockState } from './mock'
 
 function fakeTransport() {
@@ -86,6 +86,95 @@ describe('websocket transport', () => {
     expect(deliver).not.toHaveBeenCalled()
     expect(() => sock.onmessage!({ data: '{"boom":true}' })).toThrow('subscriber failed')
     vi.unstubAllGlobals()
+  })
+})
+
+describe('a connection that dies without closing', () => {
+  interface Sock {
+    onopen: (() => void) | null
+    onmessage: ((e: { data: string }) => void) | null
+    onclose: (() => void) | null
+    closed: boolean
+  }
+  let socks: Sock[] = []
+  beforeEach(() => {
+    vi.useFakeTimers()
+    socks = []
+    vi.stubGlobal(
+      'WebSocket',
+      class {
+        static OPEN = 1
+        onopen = null
+        onmessage = null
+        onclose = null
+        closed = false
+        constructor() {
+          socks.push(this as unknown as Sock)
+        }
+        close() {
+          this.closed = true // a dead connection: the close handshake never finishes, so onclose never comes
+        }
+      },
+    )
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+  const state = (seq: number) => ({ data: JSON.stringify(mockState('empty', seq, 0)) })
+
+  it('opens a new socket after 3 s of silence, and its states clear "No data"', () => {
+    let clock = 0
+    const feed = feedFrom('ws', wsTransport('ws://test/ws'), () => clock)
+    const tick = (ms: number) => {
+      clock += ms
+      vi.advanceTimersByTime(ms)
+    }
+    socks[0].onopen!()
+    for (let seq = 1; seq <= 5; seq++) {
+      socks[0].onmessage!(state(seq))
+      tick(100)
+    }
+    expect(feed.current()).toMatchObject({ stale: false, connected: true })
+    // The connection dies: nothing more arrives, and nothing says it closed.
+    tick(1500)
+    expect(feed.current()).toMatchObject({ stale: true, connected: true }) // "No data", on a socket that looks open
+    expect(socks).toHaveLength(1)
+    tick(SILENT_MS - 1500)
+    expect(socks[0].closed).toBe(true)
+    expect(feed.current().connected).toBe(false)
+    expect(socks).toHaveLength(1) // the usual pause first
+    tick(500)
+    expect(socks).toHaveLength(2)
+    socks[1].onopen!()
+    socks[1].onmessage!(state(6))
+    expect(feed.current()).toMatchObject({ stale: false, connected: true })
+    expect(feed.current().state!.seq).toBe(6)
+    // A late word from the dead socket changes nothing: it has no handlers left.
+    expect(socks[0].onmessage).toBeNull()
+    expect(socks[0].onclose).toBeNull()
+  })
+
+  it('leaves a talking socket alone, and does not hammer a board that stays silent', () => {
+    wsTransport('ws://test/ws').start(() => {}, () => {})
+    socks[0].onopen!()
+    for (let t = 0; t < 20_000; t += 500) {
+      socks[0].onmessage!(state(t))
+      vi.advanceTimersByTime(500) // two states a second, as slow as a real Bluetooth link's readings
+    }
+    expect(socks).toHaveLength(1)
+    // Now a board that accepts the connection and says nothing: one new socket per silence plus pause, no faster.
+    vi.advanceTimersByTime(SILENT_MS + 500)
+    expect(socks).toHaveLength(2)
+    for (let i = 0; i < 5; i++) {
+      socks.at(-1)!.onopen!()
+      vi.advanceTimersByTime(SILENT_MS + 500)
+    }
+    expect(socks).toHaveLength(7)
+    // And one that closes properly reconnects as before, once.
+    socks.at(-1)!.onclose!()
+    vi.advanceTimersByTime(10_000)
+    expect(socks).toHaveLength(8)
   })
 })
 
