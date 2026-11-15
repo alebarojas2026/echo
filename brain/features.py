@@ -48,6 +48,21 @@ def baseline(messages: Iterable[dict]) -> Dict[str, float]:
     return {link: statistics.median(v) for link, v in by_link.items()}
 
 
+def quiet(messages: Iterable[dict]) -> Dict[str, float]:
+    """Per-link quiet level over a baseline capture: the std of the link's 0.5 s means, in dB
+    ({link: quiet_db}). What "steady" and "moved" are measured against on a noisy link. A link
+    with fewer than two such means is left out."""
+    by_link: Dict[str, Dict[int, List[float]]] = {}
+    start = None
+    for m in messages:
+        if m.get("type") == "rssi":
+            start = m["recv_t"] if start is None else start
+            bins = by_link.setdefault(m["link"], {})
+            bins.setdefault((m["recv_t"] - start) // STEADY_BIN_MS, []).append(float(m["dbm"]))
+    return {link: statistics.pstdev(sum(v) / len(v) for v in bins.values())
+            for link, bins in by_link.items() if len(bins) >= 2}
+
+
 def link_stats(dbms: List[float], base_dbm: Optional[float]) -> dict:
     """Features of one link in one window. Empty input -> all None, n 0."""
     if not dbms:

@@ -112,6 +112,7 @@ class CheckIn:
         self.cross_db, self.n_crossings, self.window_ms, self.other_db = cross_db, crossings, window_ms, other_db
         self.wifi: deque = deque()                 # (t, dbm), last MEDIAN_MS
         self.others: Dict[str, deque] = {}         # link -> (t, dbm), last CROSS_WINDOW_MS
+        self.other_db_of: Dict[str, float] = {}    # link -> its own limit, where that is over other_db
         self.crossings: deque = deque()            # (t, +1 | -1), alternating
         self.zone_since = 0                        # when pred.zone last changed
         self.quiet_until = 0                       # one wave is one check-in
@@ -158,13 +159,13 @@ class CheckIn:
     def _others_quiet(self, t0: int, t1: int) -> bool:
         if self.other_db is None:
             return True
-        for q in self.others.values():
+        for link, q in self.others.items():
             bins: Dict[int, List[float]] = {}
             for t, d in q:
                 if t0 <= t <= t1:
                     bins.setdefault((t - t0) // OTHER_BIN_MS, []).append(d)
             means = [sum(v) / len(v) for v in bins.values() if len(v) >= 2]
-            if means and max(means) - min(means) > self.other_db:
+            if means and max(means) - min(means) > max(self.other_db, self.other_db_of.get(link, 0.0)):
                 return False
         return True
 
