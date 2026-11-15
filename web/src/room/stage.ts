@@ -12,7 +12,8 @@ import {
   Vector3,
 } from 'three'
 import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, type NodeId, type Vec3 } from './frame'
-import { Glide3 } from './motion'
+import type { Hearing } from './heard'
+import { fade, Glide3 } from './motion'
 import { EDGE, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
 import { at, mix, shadedGeometry, type Part } from './shade'
 import type { RoomView } from './view'
@@ -140,10 +141,16 @@ export function standBase([x, y, z]: Vec3): Vec3 {
 
 interface NodeMesh {
   id: NodeId
-  head: Mesh
-  post: LineSegments
+  head: Mesh<BoxGeometry, MeshBasicMaterial>
+  post: LineSegments<BufferGeometry, LineBasicMaterial>
   label: HTMLElement
+  /** 0..1 as drawn, and where it is heading: 1 heard, LOST_ALPHA heard before but quiet now, 0 never heard. */
+  alpha: number
+  alphaTo: number
 }
+
+/** How faint a device that has gone quiet is drawn, beside its name and "not heard". */
+const LOST_ALPHA = 0.25
 
 export class Stage {
   readonly group = new Group()
@@ -169,19 +176,21 @@ export class Stage {
       this.zoneLabels.set(z.id, view.addLabel(`${z.id} ${z.name}`, at, `room-label--zone${east ? ' room-label--zone-east' : ''}`))
     }
 
+    // Devices are live (heard.ts): each starts unseen and fades in once the board hears it.
     const headGeom = new BoxGeometry(HEAD_M, HEAD_M, HEAD_M)
-    const ink = new MeshBasicMaterial({ color: TEXT })
-    const postMat = new LineBasicMaterial({ color: EDGE })
     for (const info of Object.values(NODES)) {
-      const head = new Mesh(headGeom, ink)
+      const head = new Mesh(headGeom, new MeshBasicMaterial({ color: TEXT, transparent: true, opacity: 0 }))
       const postGeom = new BufferGeometry()
       postGeom.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3))
-      const post = new LineSegments(postGeom, postMat)
+      const post = new LineSegments(postGeom, new LineBasicMaterial({ color: EDGE, transparent: true, opacity: 0 }))
+      head.visible = post.visible = false
       this.group.add(head, post)
       const label = view.addLabel(info.name, new Vector3(), `room-label--node room-label--${nodeLabelSide(info.id)}`)
-      this.nodes.push({ id: info.id, head, post, label })
+      label.hidden = true
+      this.nodes.push({ id: info.id, head, post, label, alpha: 0, alphaTo: 0 })
     }
     this.putNodes()
+    view.addAnimator((dt) => this.fadeNodes(dt))
     view.addAnimator((dt) => {
       const moving = this.routerGlide.step(dt)
       if (moving) this.putNodes()
@@ -213,6 +222,37 @@ export class Stage {
       this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))
     }
     this.view.requestRender()
+  }
+
+  /** Shows each device as the board hears it: in full while heard, faint with "not heard" once it goes quiet,
+   *  and not at all before it has ever been heard. */
+  setHearing(hearing: ReadonlyMap<string, Hearing>) {
+    for (const n of this.nodes) {
+      const h = hearing.get(n.id) ?? 'never'
+      n.alphaTo = h === 'heard' ? 1 : h === 'lost' ? LOST_ALPHA : 0
+      const name = NODES[n.id]?.name ?? n.id
+      const text = h === 'lost' ? `${name} · not heard` : name
+      if (n.label.textContent !== text) n.label.textContent = text
+      n.label.classList.toggle('room-label--node-lost', h === 'lost')
+    }
+    this.view.host.dataset.devices = this.nodes.filter((n) => n.alphaTo === 1).map((n) => n.id).join(',')
+    this.view.host.dataset.devicesLost = this.nodes.filter((n) => n.alphaTo === LOST_ALPHA).map((n) => n.id).join(',')
+    this.view.requestRender()
+  }
+
+  /** Fades each device toward how it is heard (140 ms in, 100 ms out). Returns true while any is still fading. */
+  private fadeNodes(dt: number): boolean {
+    let busy = false
+    for (const n of this.nodes) {
+      n.alpha = fade(n.alpha, n.alphaTo, dt)
+      busy ||= n.alpha !== n.alphaTo
+      n.head.material.opacity = n.post.material.opacity = n.alpha
+      n.head.visible = n.post.visible = n.alpha > 0
+      // The name stays readable on a quiet device: "not heard" is the point of showing it at all.
+      n.label.style.opacity = String(n.alphaTo === LOST_ALPHA ? Math.min(1, n.alpha / LOST_ALPHA) : n.alpha)
+      n.label.hidden = n.alpha === 0 && n.alphaTo === 0
+    }
+    return busy
   }
 
   /** Amber zone names for the zones the radio is weighing (pred.zone_set); red for a fired alert's zone. */

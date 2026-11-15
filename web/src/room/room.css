@@ -122,6 +122,11 @@
   font-weight: 600;
 }
 
+/* A device that has gone quiet: its name in the secondary colour, with "not heard". */
+.room-label--node-lost {
+  color: var(--text-2);
+}
+
 .room-label--above {
   translate: -50% calc(-100% - 12px);
 }
