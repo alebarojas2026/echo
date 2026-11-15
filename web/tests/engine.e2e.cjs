@@ -49,10 +49,13 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     // The number is the newest block's own label: very large, figures of one width, its edge over the block's.
     const fit = await page.evaluate(() => {
       const n = document.querySelector('[data-testid="engine-head"]'), b = document.querySelector('.eng-block--head'), s = getComputedStyle(n)
-      return { size: parseFloat(s.fontSize), tabular: s.fontVariantNumeric, off: Math.abs(n.getBoundingClientRect().right - b.getBoundingClientRect().right), unit: innerWidth / 1920 }
+      return { size: parseFloat(s.fontSize), tabular: s.fontVariantNumeric, widths: [...new Set([...n.querySelectorAll('.eng-digit')].map(d => Math.round(d.getBoundingClientRect().width * 10)))].length, title: s.fontFamily, weight: s.fontWeight, synthesis: s.fontSynthesisWeight, off: Math.abs(n.getBoundingClientRect().right - b.getBoundingClientRect().right), unit: innerWidth / 1920 }
     })
     expect(fit.size).toBeGreaterThanOrEqual(200 * fit.unit)
     expect(fit.tabular).toContain('tabular-nums')
+    expect(fit.widths).toBe(1) // every figure in a box of one width: the title face has no tabular figures
+    expect(fit.title).toMatch(/^"?Tenor Sans/)
+    expect([fit.weight, fit.synthesis]).toEqual(['400', 'none']) // one weight, and never a faked bold
     expect(fit.off).toBeLessThanOrEqual(1)
     // The record grows while we watch, and the number changing moves nothing.
     const first = await head(), at = [await top(page, 'engine-title'), await top(page, 'engine-record'), await top(page, 'engine-prove')]

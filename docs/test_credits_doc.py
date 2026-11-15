@@ -122,6 +122,33 @@ class CreditsDocTest(unittest.TestCase):
         self.assertIn("`web/`", meshoptimizer[4])
         self.assertIn("https://github.com/zeux/meshoptimizer", meshoptimizer[5])
 
+    def test_typefaces_are_credited_with_their_licence_and_files(self):
+        rows = {
+            columns[0].strip(): columns
+            for line in self.text.splitlines()
+            if line.startswith("|")
+            for columns in ([column.strip() for column in line.split("|")[1:-1]],)
+            if columns
+        }
+        fonts = CREDITS.parent.parent / "web" / "src" / "hud" / "fonts"
+
+        for typeface, weights, role, files in (
+            ("Poppins", "400, 500, 600", "All text", ("poppins-400", "poppins-500", "poppins-600")),
+            ("Tenor Sans", "400", "Titles", ("tenor-sans-400",)),
+        ):
+            row = rows[typeface]
+            self.assertEqual(row[1], weights)
+            self.assertEqual(row[2], "SIL Open Font License 1.1")
+            self.assertEqual(row[3], role)
+            self.assertIn("`web/`", row[4])
+            for name in files:
+                self.assertEqual((fonts / f"{name}.woff2").read_bytes()[:4], b"wOF2")
+            licence = fonts / f"{files[0].rsplit('-', 1)[0]}-OFL.txt"
+            self.assertIn("SIL OPEN FONT LICENSE Version 1.1", licence.read_text(encoding="utf-8"))
+
+        self.assertNotIn("Hanken", self.text)
+        self.assertFalse((fonts / "hanken-grotesk.woff2").exists())
+
     def test_app_lab_bricks_are_credited(self):
         for phrase in (
             "Arduino App Bricks",

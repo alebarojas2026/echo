@@ -7,7 +7,7 @@
 }
 .radio-hud :is(h1,h2,p,dl,dd) { margin: 0; }
 .hud-header { display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-bottom:24px; }
-.hud-header h1 { font:600 32px/1 var(--sans); }
+.hud-header h1 { font:var(--title-weight) 32px/1 var(--font-title); font-synthesis:none; }
 .hud-indicators { display:flex; gap:8px; flex-wrap:wrap; }
 .hud-badge,.hud-camera { font-size:28px; }
 .hud-grid { display:grid; gap:24px; }
