@@ -149,8 +149,16 @@ class Brain:
         # quiet when that link is blocked on purpose: they show stale or blind in their own rows
         # but never blind the sensor (desk layout, Pi B).
         over_hotspot = [k for k in links if ends.get(k, _ends(k))[1] in HOTSPOT_RECEIVERS]
-        self.health = Health.from_nodes(nodes, classifier_links=[k for k in links if k not in over_hotspot])
-        self.xray = Xray.from_nodes(nodes)
+        # Section 3: a link with "classifier": false is too thin to classify on. It is read, listed in
+        # state.links, judged stale or blind in its own row and counted for tamper like any other,
+        # but it is no feature, never blinds the sensor, never holds up a baseline, and the x-ray,
+        # objects, the check-in and the advice don't look at it.
+        thin = {link["id"] for link in nodes["links"] if link.get("classifier") is False}
+        self.model_links = tuple(k for k in links if k not in thin)
+        self.health = Health.from_nodes(
+            nodes, classifier_links=[k for k in self.model_links if k not in over_hotspot])
+        self.xray = Xray.from_nodes(dict(nodes, links=[k for k in nodes["links"] if k["id"] not in thin]))
+        self.router_links = [k for k in self.router_links if k not in thin]   # the 3 s check after router_home
         self.hall = Hall.from_nodes(nodes)    # optional long links (brain/hall.py); none unless nodes.json lists them
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led, self.settings)
         # after hours: a person who appears and is still there armed.hold_s later is an intrusion
@@ -269,7 +277,8 @@ class Brain:
             elif msg.get("link") in self.links:
                 link, dbm = msg["link"], float(msg["dbm"])
                 self.health.add(link, t, dbm)
-                self.watch.on_rssi(msg)
+                if link in self.model_links:
+                    self.watch.on_rssi(msg)
                 self._heard.add(link)
                 self._last_seen[link] = t
                 self._last_dbm.setdefault(link, dbm)
@@ -334,7 +343,7 @@ class Brain:
         self.training = {"started_t": self.now(), "progress": None,
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
-        history, links, zones = self._baselines(), self.links, self.zone_ids
+        history, links, zones = self._baselines(), self.model_links, self.zone_ids
         motion_links = self.settings.motion_links
 
         def fit():   # may run on another thread: touches nothing of ours
@@ -507,7 +516,7 @@ class Brain:
             with open(self.sessions_dir / "model.pkl", "rb") as f:
                 doc = pickle.load(f)
             model, ver = doc["model"], str(doc["ver"])
-            want = F.feature_names(self.links)
+            want = F.feature_names(self.model_links)
             if getattr(model, "features", None) != want or getattr(model, "classes", None) != [0] + self.zone_ids:
                 logging.getLogger("brain").warning(
                     "model.pkl was trained on other features or zones (%d features, first %s) than this layout "
@@ -627,7 +636,7 @@ class Brain:
 
     def _set_baseline(self, base: Dict[str, float], expected_hz: Dict[str, float]) -> None:
         self.base, self.expected_hz = dict(base), dict(expected_hz)
-        self.windower, self.window = F.Windower(self.base, self.links), None
+        self.windower, self.window = F.Windower(self.base, self.model_links), None
         self.health.set_base(self.base)
         self.health.set_expected(self.expected_hz)
         self.xray.reset()
@@ -741,7 +750,7 @@ class Brain:
         # reads "stale" by chance, so 1 s of silence or any not-ok health restarted the 20 s for ever.
         # Every kind of baseline now waits only for a link silent for 3 s (the blind rule's and
         # tamper's silence) or for health blind.
-        quiet = [link for link in self.links if now - self._last_seen.get(link, -10**15) > SILENT_MS]
+        quiet = [link for link in self.model_links if now - self._last_seen.get(link, -10**15) > SILENT_MS]
         if quiet:
             return f"no readings in the last {SILENT_MS // 1000} s from " + ", ".join(quiet)
         if self.health.blind:
@@ -876,7 +885,7 @@ class Brain:
         if not (self.model and self.window and self.pred):
             return {}
         raw = {}
-        for i, link in enumerate(self.links):
+        for i, link in enumerate(self.model_links):
             drop = (self.window["links"].get(link) or {}).get("drop_db") or 0.0
             raw[link] = float(self.model._link_weight[i]) * abs(drop)
         top = max(raw.values()) or 1.0
@@ -904,7 +913,7 @@ class Brain:
         weights = self._why_weights()
         links = [self._link_row(row, weights) for row in health["links"]
                  if row["id"] in self._heard]   # a link is listed once it has a reading
-        self._update_advice(now, xray, links)
+        self._update_advice(now, xray, [row for row in links if row["id"] in self.model_links])
         cam = self.cam[1] if self.cam and now - self.cam[0] <= CAM_SILENT_MS else "off"
         if cam != self._said_cam and cam in ("on", "off", "stalled"):
             self._said_cam = cam

@@ -11,6 +11,9 @@ Rules (section 6):
   jump rule is off while the router is off S-home or a baseline is running.
 - health is blind when any classifier link is blind. A blind link clears
   after 3 s ok.
+- A link whose baseline counted under 4 readings a second is never blind by rate: it shows
+  stale while it reads under 0.4 x expected_hz, and that is all. (At 1.6 a second a link
+  has fewer than two readings in 2 s about one time in six with nothing wrong.)
 status is "degraded" when some link is stale or blind but health isn't blind.
 """
 from collections import deque
@@ -24,6 +27,7 @@ STALE_FRAC = 0.4
 MEDIAN_WINDOW_S = 1.0
 JUMP_DB = 6.0
 BLIND_AFTER_S = 3.0
+BLIND_RATE_MIN_HZ = 4.0   # a link slower than this at the baseline is never blind by rate
 CLEAR_AFTER_S = 3.0
 EPS_S = 1e-6           # float slack on the timers
 STEADY_S = 5.0         # a steady drop is judged over up to this long (the x-ray's static test)
@@ -66,7 +70,8 @@ class _Link:
         self.ok_since = (self.ok_since if self.ok_since is not None else now) if ok else None
 
         if not self.blind:
-            if self.stale_since is not None and now - self.stale_since >= BLIND_AFTER_S - EPS_S:
+            if (self.stale_since is not None and now - self.stale_since >= BLIND_AFTER_S - EPS_S
+                    and self.expected_hz >= BLIND_RATE_MIN_HZ):
                 self.blind, self.reason = True, "rate"
             elif jump and now - self.jump_since >= BLIND_AFTER_S - EPS_S:
                 self.blind, self.reason = True, "jump"
