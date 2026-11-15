@@ -1,0 +1,51 @@
+{
+  "v": 2,
+  "layout": "gate",
+  "frame": {
+    "units": "m",
+    "origin": "the spot's west corner on the side away from the desk",
+    "x": "east, along the desk",
+    "y": "north, towards the desk",
+    "z": "up",
+    "size_m": [0.85, 1.35],
+    "strip_m": [0.8, 0.6],
+    "note": "strip_m is the spot: the one place a person stands, 0 <= x <= 0.8 and 0 <= y <= 0.6. The desk's edge is y = 0.8 and Pi B is 1.0 m from it, at y = -0.2, so the spot sits in the middle of the gap. size_m is the box the screen and the x-ray grid are laid out on, from the origin to the back of the desk top; a device may sit outside it (Pi B does) and outside the spot. Positions are rough until they are measured at the desk."
+  },
+  "nodes": [
+    {"id": "unoq", "device": "unoq", "name": "Board", "xyz_m": [0.44, 0.8, 0.75], "roles": ["receiver"]},
+    {"id": "pi5", "device": "pi5", "name": "Pi A", "xyz_m": [0.36, 0.8, 0.75], "roles": ["router", "beacon", "receiver"]},
+    {"id": "pi5b", "device": "pi5", "name": "Pi B", "xyz_m": [0.4, -0.2, 0.75], "roles": ["beacon", "receiver"]}
+  ],
+  "links": [
+    {"id": "pi5>unoq:wifi", "tx": "pi5", "rx": "unoq", "kind": "wifi", "expected_hz": null, "crosses_spot": false},
+    {"id": "pi5>unoq:ble", "tx": "pi5", "rx": "unoq", "kind": "ble", "expected_hz": null, "crosses_spot": false},
+    {"id": "pi5b>unoq:ble", "tx": "pi5b", "rx": "unoq", "kind": "ble", "expected_hz": null, "crosses_spot": true},
+    {"id": "pi5>pi5b:wifi", "tx": "pi5", "rx": "pi5b", "kind": "wifi", "expected_hz": null, "crosses_spot": true},
+    {"id": "pi5>pi5b:ble", "tx": "pi5", "rx": "pi5b", "kind": "ble", "expected_hz": null, "crosses_spot": true},
+    {"id": "pi5b>pi5:ble", "tx": "pi5b", "rx": "pi5", "kind": "ble", "expected_hz": null, "crosses_spot": true}
+  ],
+  "links_note": "crosses_spot marks the four lines a person on the spot stands in: the ones to or from Pi B. The other two run 8 cm over the desk and are the dead-zone lines. pi5>pi5b:wifi did not react to a person on the kit: give it \"classifier\": false if it gets in the way, as for any Bluetooth link whose baseline counts under 4 readings a second.",
+  "zone_rule": "zone = 1 when 0 <= x <= 0.8 and 0 <= y <= 0.6; anywhere else 0 = empty",
+  "zones": [
+    {"id": 1, "name": "At the desk", "centre_m": [0.4, 0.3], "still_alert_s": 10}
+  ],
+  "router_spots": [
+    {"id": "S-home", "xyz_m": [0.36, 0.8, 0.75]},
+    {"id": "S-W30", "xyz_m": [0.06, 0.8, 0.75]},
+    {"id": "S-E30", "xyz_m": [0.66, 0.8, 0.75]}
+  ],
+  "router_spots_note": "Gate 7 sets the distance from S-home.",
+  "tray_spots": [
+    {"id": "T1", "xyz_m": [0.48, 0.8, 0.75]}
+  ],
+  "beacons": {
+    "match": "manufacturer data, never MAC",
+    "company_id": "FFFF",
+    "prefix_hex": "5253",
+    "payloads": [
+      {"node": "pi5", "id": "S", "data_hex": "FFFF525353"},
+      {"node": "pi5b", "id": "B", "data_hex": "FFFF525342"}
+    ]
+  },
+  "armed": {"hold_s": 3}
+}
