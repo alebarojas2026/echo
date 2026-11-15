@@ -1,5 +1,5 @@
 [Unit]
-Description=Radio Sight privacy meter (images stored, bytes sent out)
+Description=Echo privacy meter (images stored, bytes sent out)
 After=network-online.target
 StartLimitIntervalSec=0
 

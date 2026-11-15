@@ -69,7 +69,7 @@ PORT=$(ls /dev/cu.usbmodem* | head -n 1); echo "$PORT"
 With only the XIAO plugged in there is one `/dev/cu.usbmodem...` port. If there are more, unplug the XIAO, run `ls /dev/cu.usbmodem*` again, and the one that disappeared is the XIAO. Don't paste the port name anywhere.
 
 ### 4. Build and flash
-From the repo folder (`cd` into your deadzone clone first).
+From the repo folder (`cd` into your clone of this repo first).
 
 East:
 ```sh

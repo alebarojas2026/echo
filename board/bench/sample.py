@@ -3,7 +3,7 @@
     python board/bench/sample.py --seconds 300 --every 2 --csv /tmp/load.csv
 
 Linux only. Per sample: a "system" row (CPU % of all cores, MB in use, hottest thermal zone,
-slowest core clock, clock cap) and a row per Radio Sight process, or any other over 5% CPU
+slowest core clock, clock cap) and a row per Echo process, or any other over 5% CPU
 (CPU % of one core, RSS). Throttling: over 80 C, the clock capped, or slow while busy.
 """
 import argparse

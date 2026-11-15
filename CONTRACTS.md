@@ -1,6 +1,6 @@
 # Contracts (v2.1: the desk layout, frozen)
 
-The message formats every part of Radio Sight agrees on. Only Ivan changes this file. Need a change? Open an issue labeled `contract`, keep working with what's here, and switch when the change lands.
+The message formats every part of Echo agrees on. Only Ivan changes this file. Need a change? Open an issue labeled `contract`, keep working with what's here, and switch when the change lands.
 
 v2.1 changes the layout only: section 3, and the places that named the old 2 x 2 m square, its four nodes, six links and four zones. Every message still carries `"v": 2`. Recordings, baselines and models made on the old layout don't fit this one.
 

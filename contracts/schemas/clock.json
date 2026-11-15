@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/clock.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/clock.json",
   "$comment": "Section 12 (as proposed): the answer of GET /clock. Not a bus message: no envelope.",
   "type": "object",
   "properties": {

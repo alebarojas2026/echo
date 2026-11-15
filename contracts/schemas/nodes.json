@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/nodes.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/nodes.json",
   "$comment": "Section 3: the optional parts of radio/nodes.json that the rules in section 6 read. The layout itself (nodes, links, zones, spots) is checked in tests/test_layout.py, so every other key is left alone here.",
   "type": "object",
   "properties": {

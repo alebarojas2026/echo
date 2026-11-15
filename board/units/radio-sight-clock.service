@@ -1,5 +1,5 @@
 [Unit]
-Description=Radio Sight clock helper (sets the board's clock from the operator's laptop, then restarts the stack)
+Description=Echo clock helper (sets the board's clock from the operator's laptop, then restarts the stack)
 StartLimitIntervalSec=0
 
 [Service]

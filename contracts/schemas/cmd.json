@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/cmd.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/cmd.json",
   "$comment": "Section 5, screen -> brain. The doc's cmd example has no t, seq or src, so they are optional here.",
   "$ref": "common.json#/$defs/fields",
   "properties": {

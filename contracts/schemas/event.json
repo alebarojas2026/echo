@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/event.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/event.json",
   "$comment": "Section 5. info carries what the narrator needs: zone, link, node, before_dbm, after_dbm; recording has on, session; alert_off may say why. An intrusion names a zone, or the hall link it was seen on. tamper and tamper_cleared name the node (a hall beacon is h or j). passed_by names the zone, never 0.",
   "$ref": "common.json#/$defs/envelope",
   "properties": {

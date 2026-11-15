@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/layout.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/layout.json",
   "$comment": "Section 2: /layout on the board's web server, for drawing only. GET answers with both keys. POST takes either key or both, and its room is never null. Not a bus message: no envelope.",
   "type": "object",
   "properties": {

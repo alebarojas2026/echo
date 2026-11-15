@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/narration.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/narration.json",
   "$comment": "Section 4. model is null when source is template. event_kind is an event kind or recap; a recap allows 45 words, every other narration 16 (section 6).",
   "$ref": "common.json#/$defs/envelope",
   "properties": {

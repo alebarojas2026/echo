@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/ask_reply.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/ask_reply.json",
   "$comment": "Section 10: the 200 answer of POST /ask. Not a bus message: no envelope. With tool null the answer lists what can be asked, rows is [] and args is {}.",
   "type": "object",
   "properties": {

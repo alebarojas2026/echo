@@ -1,5 +1,5 @@
 [Unit]
-Description=Radio Sight Bluetooth raw scan (root for raw HCI)
+Description=Echo Bluetooth raw scan (root for raw HCI)
 After=bluetooth.service radio-sight-bus.service
 StartLimitIntervalSec=0
 

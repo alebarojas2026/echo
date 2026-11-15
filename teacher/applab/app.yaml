@@ -1,4 +1,4 @@
-name: Radio Sight Teacher
+name: Echo Teacher
 description: Temporary zone labels from the camera, for the strip in front of the desk (or the old square), held in memory only.
 bricks:
   - arduino:video_object_detection

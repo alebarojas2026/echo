@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain_verify.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/chain_verify.json",
   "$comment": "Section 13: the answer of GET /chain/verify. Not a bus message. ok false names the first bad record; ok true names none.",
   "type": "object",
   "properties": {

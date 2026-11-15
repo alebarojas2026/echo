@@ -11,7 +11,7 @@ Every number shown on screen or in the pitch has a row here: what was measured, 
 | Time per decision | __ | Time around the prediction step on the board. Report median and 95th percentile. | __ | __ | __ |
 | End-to-end update latency | pending | Slow-motion phone video with the person and the screen in one shot. Count frames from the step into the zone to the screen changing. | 10+ trials | | |
 | No-movement alert latency | pending | Same video method: time from the person freezing to the alert, minus the configured wait period. | 5+ trials | | |
-| Dead-zone improvement | pending | Measured with tools independent of Radio Sight (otherwise circular): `iperf3` throughput and ping packet loss from a laptop in the problem spot, before and after the placement change, same position. Report change in Mbps and loss. | 5+ runs before, 5+ after | | |
+| Dead-zone improvement | pending | Measured with tools independent of Echo (otherwise circular): `iperf3` throughput and ping packet loss from a laptop in the problem spot, before and after the placement change, same position. Report change in Mbps and loss. | 5+ runs before, 5+ after | | |
 | Board power draw | __ | USB power meter inline on the board's cable. Average over 5 min idle and 5 min fully running. | __ | __ | __ |
 | Images stored | __ | After a full lesson, audit project data, the App Lab app folder, teacher host mounts and its full filesystem using teacher/privacy.py suffixes. Missing scope fails the audit. See proof/MANUAL.md. | __ | __ | __ |
 | Bytes sent outside our network | __ | Board egress counter around a full rehearsal, with no IPv4 or IPv6 default route. Local laptop/phone traffic is allowed. See proof/MANUAL.md. | __ | __ | __ |

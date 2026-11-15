@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/label.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/label.json",
   "$comment": "Section 4. One per processed camera frame. present:false -> zone 0 and foot_m, motion null. clipped:true -> zone, foot_m and motion null, even when present is false.",
   "$ref": "common.json#/$defs/envelope",
   "properties": {

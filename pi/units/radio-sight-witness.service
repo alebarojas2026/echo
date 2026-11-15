@@ -1,5 +1,5 @@
 [Unit]
-Description=Radio Sight witness (signs the board's chain head with this Pi's own key; optional)
+Description=Echo witness (signs the board's chain head with this Pi's own key; optional)
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0

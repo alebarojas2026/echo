@@ -34,7 +34,7 @@ def get(url):
 def dist(tmp_path):
     d = tmp_path / "dist"
     d.mkdir()
-    (d / "index.html").write_text("<!doctype html><html><head><title>Radio Sight</title></head><body></body></html>")
+    (d / "index.html").write_text("<!doctype html><html><head><title>Echo</title></head><body></body></html>")
     return d
 
 

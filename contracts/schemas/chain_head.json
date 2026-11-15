@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain_head.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/chain_head.json",
   "$comment": "Section 13: the board's chain head, sent on the bus every 5 s. seq is the record number of the head, not a per-producer counter, and t is the board's clock when it was sent. The last three fields are optional: what the brain copies into state.chain.",
   "$ref": "common.json#/$defs/envelope",
   "properties": {
