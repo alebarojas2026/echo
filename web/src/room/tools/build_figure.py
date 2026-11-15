@@ -148,9 +148,9 @@ def leg_sdf(p):
     hip, knee, ankle = J['hip'], J['knee'], J['ankle']
     thigh = sd_round_cone(p, (hip[0], hip[1] + 0.004, hip[2] - 0.02), (knee[0], knee[1] + 0.002, knee[2] + 0.03), 0.073, 0.050)
     shin = sd_round_cone(p, (knee[0], knee[1] + 0.004, knee[2] - 0.01), (ankle[0], ankle[1] - 0.002, ankle[2] + 0.02), 0.047, 0.031)
-    calf = sd_ellipsoid(p, (knee[0] + 0.002, 0.020, 0.355), (0.043, 0.047, 0.125))
-    d = smin(thigh, shin, 0.05)
-    d = smin(d, calf, 0.08)
+    calf = sd_ellipsoid(p, (knee[0] + 0.002, 0.018, 0.360), (0.041, 0.045, 0.135))
+    d = smin(thigh, shin, 0.07)
+    d = smin(d, calf, 0.10)
     # The foot: a rounded wedge from heel to toe with a flat sole.
     foot = sd_round_cone(p, (ankle[0], ankle[1] + 0.030, 0.046), (J['toe'][0] - 0.004, J['toe'][1] + 0.022, 0.030), 0.046, 0.030)
     foot = smax(foot, -p[:, 2], 0.012)
@@ -186,8 +186,8 @@ def torso_sdf(p):
     for s in (1.0, -1.0):
         # Shoulders slope from the neck to the arm, with a soft deltoid where the arm hangs.
         trap = sd_round_cone(p, (0, 0.018, 1.430), (0.138 * s, 0.014, 1.370), 0.041, 0.040)
-        delt = sd_ellipsoid(p, (0.157 * s, 0.012, 1.350), (0.044, 0.046, 0.056))
-        d = smin(d, trap, 0.05)
+        delt = sd_ellipsoid(p, (0.157 * s, 0.012, 1.350), (0.046, 0.048, 0.058))
+        d = smin(d, trap, 0.055)
         d = smin(d, delt, 0.05)
     head = sd_ellipsoid(p, (0, -0.004, 1.600), (0.074, 0.089, 0.104))
     jaw = sd_ellipsoid(p, (0, -0.019, 1.552), (0.060, 0.066, 0.058))
@@ -532,7 +532,7 @@ def bind(obj, rig):
 
 
 # ------------------------------------------------------------------------------------------------- 4. occlusion
-def bake_ao(obj, rays=128, reach=0.32, strength=0.7):
+def bake_ao(obj, rays=128, reach=0.32, strength=0.55):
     me = obj.data
     p, e = mesh_arrays(me)
     n = unit_normals(p)
@@ -557,9 +557,9 @@ def bake_ao(obj, rays=128, reach=0.32, strength=0.7):
             if loc is not None:
                 hit += 1.0 - dist / reach  # near surfaces darken more: a soft falloff
         occ[i] = hit / rays
-    for _ in range(3):
+    for _ in range(5):
         occ = 0.5 * occ + 0.5 * neighbour_mean(occ, e, len(p))
-    shade = np.clip(1.0 - strength * np.clip(occ * 2.5, 0, 1) ** 0.9, 0.35, 1.0)
+    shade = np.clip(1.0 - strength * np.clip(occ * 2.0, 0, 1), 0.45, 1.0)
     attr = me.color_attributes.new('ao', 'FLOAT_COLOR', 'POINT')
     cols = np.stack([shade, shade, shade, np.ones_like(shade)], axis=1)
     attr.data.foreach_set('color', cols.astype(np.float32).ravel())
