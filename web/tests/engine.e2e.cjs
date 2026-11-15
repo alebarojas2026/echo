@@ -75,8 +75,18 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     expect(errors).toEqual([])
 
     errors = await open(page, 'answer', width, height)
-    await expect(page.getByTestId('engine-ask')).toContainText('Cites records', { timeout: 10000 })
+    await expect(page.getByTestId('engine-ask')).toContainText(/Cites \d+ records, #[\d,]+ to #[\d,]+/, { timeout: 10000 })
     await expect(page.getByTestId('engine-ask')).toContainText('the chain verified over them')
+    // A story of several sentences with the detective's five steps: the steps and the cited records are all on
+    // the page, inside the panel, and the page does not scroll.
+    await expect(page.locator('.eng-steps li')).toHaveCount(5)
+    const fit = await page.evaluate(() => {
+      const box = document.querySelector('[data-testid="engine-ask"]')
+      const inner = box.getBoundingClientRect().bottom - parseFloat(getComputedStyle(box).paddingBottom)
+      return { scrolls: document.documentElement.scrollHeight > window.innerHeight, lowest: Math.max(...[...box.children].map((e) => e.getBoundingClientRect().bottom)), inner }
+    })
+    expect(fit.scrolls).toBe(false)
+    expect(fit.lowest).toBeLessThanOrEqual(fit.inner + 1)
     await expect(page.locator('[data-testid="engine-strip"] .eng-block--cited')).not.toHaveCount(0)
     await shot(page, `engine-${width}-answer`)
     expect(errors).toEqual([])

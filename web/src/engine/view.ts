@@ -1,4 +1,4 @@
-import { blocks, count, deviceViews, headlines, hearsLines, proveAsk, proveWords, seenHeads, timings, toolWord, watchLine, type AskLast, type Block, type ChainInfo, type EngineState, type Layout, type Privacy, type ProveResult, type TailRecord } from './model'
+import { blocks, citesWords, count, deviceViews, headlines, hearsLines, proveAsk, proveWords, seenHeads, timings, toolWord, watchLine, type AskLast, type Block, type ChainInfo, type EngineState, type Layout, type Privacy, type ProveResult, type TailRecord } from './model'
 import { engineState, type Source } from './source'
 
 // The engine room: a second screen beside the judge's, showing the machinery as it runs. Three devices, the
@@ -80,7 +80,10 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
   const chainNote = el('p', 'eng-note')
   const strip = el('ol', 'eng-strip')
   strip.dataset.testid = 'engine-strip'
-  chainBox.append(chainTitle, chainNote, strip)
+  // The caption sits beside the title, not under it: the line it saves is what keeps the page from scrolling.
+  const chainTop = el('div', 'eng-titled')
+  chainTop.append(chainTitle, chainNote)
+  chainBox.append(chainTop, strip)
 
   // ---- prove it, and the last answer
   const bottom = el('section', 'eng-bottom')
@@ -106,7 +109,9 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
   const askSteps = el('ol', 'eng-steps')
   const askCites = el('p', 'eng-note')
   const timing = el('p', 'eng-note eng-timing')
-  askBox.append(askTitle, askAnswer, askSteps, askCites, timing)
+  const askTop = el('div', 'eng-titled eng-titled--ends')
+  askTop.append(askTitle, timing)
+  askBox.append(askTop, askAnswer, askSteps, askCites)
   bottom.append(proveBox, askBox)
 
   host.append(top, heads, devices, chainBox, bottom)
@@ -257,16 +262,18 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
     askBox.dataset.state = ask ? 'answer' : 'none'
     if (!ask) {
       say(askAnswer, 'No question has been answered yet.')
+      askAnswer.removeAttribute('title')
       askSteps.replaceChildren()
       say(askCites, '')
     } else {
       say(askAnswer, ask.answer)
+      askAnswer.title = ask.answer // the panel shows the first lines of a long story; the whole of it is here
       const steps = ask.steps.map((s, i) => `${i + 1}. ${toolWord(s.tool)}${s.rows === null ? '' : ` · ${count(s.rows)} records`}${s.ms === null ? '' : ` · ${s.ms} ms`}`)
       if (askSteps.dataset.key !== steps.join('|')) {
         askSteps.dataset.key = steps.join('|')
         askSteps.replaceChildren(...steps.map((s) => el('li', '', s)))
       }
-      const cited = ask.cites.length ? `Cites record${ask.cites.length > 1 ? 's' : ''} ${ask.cites.map((c) => `#${count(c)}`).join(', ')}` : 'Cites no record'
+      const cited = citesWords(ask.cites)
       const ok = ask.chain_ok === null ? '' : ask.chain_ok ? ' · the chain verified over them' : ' · the chain did NOT verify over them'
       askCites.classList.toggle('eng-fault', ask.chain_ok === false)
       say(askCites, cited + ok)

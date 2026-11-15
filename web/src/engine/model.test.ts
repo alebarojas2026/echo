@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ENGINE_SCENES, MOCK_LAYOUT, engineScene, fakeHash, records, sceneAt, witnessIds } from './mock'
 import { mockProve } from './source'
-import { ago, blocks, boardId, count, deviceViews, hash8, headlines, heardNow, hearsLines, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveAsk, proveWords, seenHeads, span, timings, watchLine, type ChainInfo } from './model'
+import { ago, blocks, boardId, citesWords, count, deviceViews, hash8, headlines, heardNow, hearsLines, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveAsk, proveWords, seenHeads, span, timings, watchLine, type ChainInfo } from './model'
 
 const HASH = 'a3f09c21'.repeat(8)
 const chain = (over: Partial<ChainInfo> = {}): ChainInfo => ({
@@ -105,6 +105,15 @@ describe('the devices', () => {
     expect(a).toMatchObject({ name: 'Pi A', does: 'The Wi-Fi of the room', hz: 6, heard: true })
     expect(a.witness).toEqual({ seq: 1185, ago: '2 s ago', ok: true, silent: false, quiet: null })
     expect(b).toMatchObject({ name: 'Pi B', does: 'Listens across the gap', hz: 31 })
+  })
+
+  it('names up to six cited records one by one, and gives the count and range beyond that', () => {
+    expect(citesWords([])).toBe('Cites no record')
+    expect(citesWords([1204])).toBe('Cites record #1,204')
+    expect(citesWords([10, 14, 15, 16, 18, 19])).toBe('Cites records #10, #14, #15, #16, #18, #19')
+    expect(citesWords([10, 14, 15, 16, 18, 19, 20])).toBe('Cites 7 records, #10 to #20')
+    // The board's order is not relied on for the range.
+    expect(citesWords([203, 10, 14, 15, 16, 18, 19, 1190])).toBe('Cites 8 records, #10 to #1,190')
   })
 
   it('lists at most three of the lines a device hears, and says what a beacon is', () => {

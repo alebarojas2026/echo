@@ -48,6 +48,19 @@ body {
   color: var(--text-2);
 }
 
+/* A title with its note on the same line (the note goes under it only when the line is too short for both). */
+.eng-titled {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--s4);
+  min-width: 0;
+}
+
+.eng-titled--ends {
+  justify-content: space-between;
+}
+
 .eng-fault,
 .eng-fault .eng-head-value,
 .eng-fault .eng-head-note {
@@ -374,9 +387,16 @@ body {
   color: var(--fault);
 }
 
+/* A story over a few minutes runs to many sentences. The panel shows its first lines and ends them with an
+   ellipsis, so the steps and the cited records under it are always on the page. */
 .eng-ask-answer {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--text);
   font: 600 24px/1.25 'Hanken Grotesk', system-ui, sans-serif;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 .eng-ask[data-state='none'] .eng-ask-answer {
@@ -384,10 +404,11 @@ body {
   font-weight: 500;
 }
 
+/* The detective reports five steps: one line each, close together, so they and the cited records stay on the page. */
 .eng-steps {
   display: grid;
-  gap: 2px;
   color: var(--text-2);
+  line-height: 1.25;
 }
 
 /* With no board behind the page nothing is live: the parts stay, dimmed, and the words say so. */
@@ -422,6 +443,11 @@ body {
 
   .eng-device {
     gap: var(--s1);
+  }
+
+  .eng-ask-answer {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 }
 
