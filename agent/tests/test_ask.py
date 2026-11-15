@@ -314,3 +314,36 @@ def test_the_pick_limit_can_be_set_on_the_board(monkeypatch):
         monkeypatch.delenv("ASK_PICK_S")
         importlib.reload(A)
     assert A.TIMEOUT_S == 3.0
+
+
+@pytest.mark.parametrize("question, tool", [("Was anyone here in the last five minutes?", "presence"),
+                                            ("any alerts in the last 10 minutes?", "alerts")])
+def test_an_answer_read_from_the_record_shows_its_steps_cites_and_chain_check(store, question, tool):
+    # On the kit "was anyone here in the last five minutes" came back with no steps, cites or chain_ok,
+    # where "what happened" had all three.
+    reply = A.ask(question, store, None, now_ms=NOW, zones=ZONES, links=LINKS)
+    assert reply["tool"] == tool and check.errors(reply, "ask_reply") == []
+    assert [s["tool"] for s in reply["steps"]] == ["fetch summaries", tool, "verify the chain"]
+    assert reply["chain_ok"] is True and 2 <= len(reply["cites"]) <= A.MAX_CITES and reply["cites"] == sorted(reply["cites"])
+    minutes = reply["args"]["minutes"]
+    sealed = [r["seq"] for r in store.seconds(NOW - minutes * 60_000, NOW)]
+    assert reply["cites"][0] == sealed[0] and set(reply["cites"]) <= set(range(sealed[0], store.head()["seq"] + 1))
+    assert reply["steps"][-1]["rows"] == reply["cites"][-1] - reply["cites"][0] + 1   # checked from the first to the last
+    assert not reply["answer"].startswith("Warning")
+
+
+def test_an_edited_record_is_said_first_and_named(tmp_path):
+    s = Store(tmp_path / "store.db")
+    fill_from_sim(s, "demo", end_ms=NOW)
+    middle = s.records(since_ms=NOW - 60_000, limit=5)[2]["seq"]
+    with s.db:
+        s.db.execute("update chain set body = replace(body, 'sim', 'SIM') where seq = ?", (middle,))
+    reply = A.ask("Was anyone here in the last five minutes?", s, None, now_ms=NOW, zones=ZONES, links=LINKS)
+    assert reply["chain_ok"] is False and reply["answer"].startswith(f"Warning: the sealed record does not check out at record {middle}")
+    assert check.errors(reply, "ask_reply") == []
+
+
+def test_with_nothing_sealed_in_the_stretch_there_are_steps_and_no_cites():
+    reply = A.ask("Was anyone here in the last five minutes?", Store(":memory:"), None, now_ms=NOW, zones=ZONES, links=LINKS)
+    assert [s["tool"] for s in reply["steps"]] == ["fetch summaries", "presence"]
+    assert "cites" not in reply and "chain_ok" not in reply and check.errors(reply, "ask_reply") == []

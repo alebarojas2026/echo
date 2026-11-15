@@ -16,7 +16,8 @@ for(const [width,height] of [[1920,1080],[1440,900]]) test(`readable panels at $
  await page.clock.runFor(3000);await expect(narrator).toHaveText(narration)
  if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-narration.png`)})}
  await page.clock.runFor(1300);await expect(narrator).toHaveText('The next sentence.')
- await page.getByRole('button',{name:'Ask the room',exact:true}).click()
+ await page.getByRole('button',{name:'What happened?',exact:true}).click()
+    await page.getByRole('button', {name:'Ask another question',exact:true}).click()
  await page.getByRole('button',{name:'Was anyone here in the last 10 minutes?',exact:true}).click();await page.clock.runFor(700)
  const replay=page.getByTestId('ask-replay');await expect(replay).toBeVisible()
  expect(await replay.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)')

@@ -5,7 +5,7 @@ import type { Feed } from './feed'
 import { startFpsMeter } from './fps'
 import { AlertMarks, WaveClock } from './alert'
 import { startAlign } from './align'
-import { standAtDefaultDesk } from './desks'
+import { loadDesks, standAtDefaultDesk } from './desks'
 import { HallBeacons } from './devices'
 import { HallPaths } from './hall'
 import { Fly, HallMarks, PresentRun, comesDownAlone, cutaway, hallShot, pinnedFraming } from './fly'
@@ -15,6 +15,7 @@ import { Replay, rowAlert, rowPred, secondKind, type HistoryRow, type ReplayFram
 import { NODES, SIZE_M, STRIP_M, deviceAcross, setSurface } from './frame'
 import { DEFAULT_CUT_M, loadScan, type Scan } from './scan'
 import { Mirror } from './mirror'
+import { offerPlacing } from './place'
 import { RouterSpots } from './spots'
 import { Stage } from './stage'
 import { RoomView, inSituShot, viewOptions, reserveBottom } from './view'
@@ -139,11 +140,17 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
         const [fw, fh] = SIZE_M
         const under = (x: number, y: number, z: number) => s.under(x - fw / 2, fh / 2 - y, z)
         // And never inside it: a device on the next row's desk sits on that desk's top, a tier above ours.
-        setSurface(under)
-        stage.setGround(under)
-        beams.refresh()
+        const reseat = () => {
+          setSurface(under)
+          stage.setGround(under)
+          beams.refresh()
+        }
+        reseat()
         presence.setTrueSize(true)
         fly.setClose(inSituShot)
+        // Placing the kit by clicking a desk (place.ts): offered once the hall's desks are known.
+        const hallShotNow = () => hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M, s.fit.yaw_deg ?? 0)
+        void loadDesks().then((hall) => hall && offerPlacing({ view, scan: s, fly, hall, reseat, hallShotNow }, params.get('place') === '1'))
       }
       fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M, s.fit.yaw_deg ?? 0))
     })

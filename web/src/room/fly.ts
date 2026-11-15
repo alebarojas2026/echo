@@ -104,6 +104,8 @@ export class Fly {
   /** Someone was found while the hall model was still loading: the camera is at the desk and stays there. */
   private foundEarly = false
   private driftMs = 0
+  /** Another mode has the camera (placing the kit, place.ts): the fly keeps its state and moves nothing. */
+  private taken = false
   private readonly reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
   constructor(
@@ -178,6 +180,47 @@ export class Fly {
     this.view.requestRender()
   }
 
+  /**
+   * Another mode takes the camera (placing the kit): `shot` is shown and stays, whatever the walk-up card or the
+   * board says meanwhile. The hall's marks show as they do on the whole hall. give() hands it back.
+   */
+  take(shot: Shot) {
+    this.taken = true
+    this.legs = []
+    this.view.setShot(shot)
+    this.wide = 1
+    this.view.host.dataset.view = 'hall'
+    this.onWide(1)
+    this.view.requestRender()
+  }
+
+  /** The camera is handed back, with the hall as it stands now: the whole hall, then down to the floor unless
+   *  the walk-up card is waiting or a framing is pinned. */
+  give(hall: Shot) {
+    this.taken = false
+    this.hall = hall
+    if (this.pinned) return this.cut(this.pinned)
+    this.cut('hall')
+    if (this.holding) return this.view.requestRender()
+    this.legs = [{ to: 'square', waitMs: 0 }]
+    this.begin()
+  }
+
+  /**
+   * After the kit was placed: down to the floor so the saved place is seen, whatever the walk-up card says, and
+   * back out to the hall after `backAfterMs` when the card is still waiting. Not when pinned.
+   */
+  showPlace(backAfterMs: number) {
+    if (!this.hall || this.pinned) return
+    this.legs = this.holding
+      ? [
+          { to: 'square', waitMs: FIRST_LOOK_MS },
+          { to: 'hall', waitMs: backAfterMs },
+        ]
+      : [{ to: 'square', waitMs: FIRST_LOOK_MS }]
+    this.begin()
+  }
+
   /** Between judges: out to the hall, a pause, and back. Not when pinned or under reduced motion. */
   reset() {
     if (!this.hall || this.pinned || this.reduced) return
@@ -244,6 +287,7 @@ export class Fly {
   /** Puts the camera on `shot`. Once it has arrived on the square, the view follows the canvas size from then on. */
   private show(shot: Shot, arrived?: Framing) {
     this.shot = shot
+    if (this.taken) return // the camera is another mode's: remember where the fly would be, move nothing
     this.view.setShot(arrived === 'square' ? this.close : shot)
     // Arrived is exact: the last step's shot can sit a rounding error off the square's, which would read as "flying".
     this.wide = !this.hall || arrived === 'square' ? 0 : arrived === 'hall' ? 1 : wideness(shot, this.square(), this.hall)
@@ -252,6 +296,7 @@ export class Fly {
   }
 
   private step(dt: number): boolean {
+    if (this.taken) return false
     const leg = this.legs[0]
     if (!leg) return this.drift(dt)
     this.elapsed += dt

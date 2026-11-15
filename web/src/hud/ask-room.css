@@ -22,3 +22,15 @@
 .ask-room [data-testid="ask-answer"] { font-size:40px; line-height:1.2; }
 .ask-room [role="alert"] { color:var(--fault); }
 @media(max-width:768px) { .ask-room { width:calc(100% - 24px); max-height:calc(100% - 24px); padding:24px; } .ask-room h2 { font-size:40px; } .ask-input { flex-direction:column; } }
+
+.ask-story { display:grid; gap:16px; }
+.ask-story ol { margin:0; padding:0; list-style:none; }
+.story-timeline { display:grid; gap:24px; }
+.story-timeline li { display:grid; grid-template-columns:132px 1fr; gap:8px 24px; }
+.story-timeline time,.story-row-cites,.story-steps,.story-cites { font-size:28px; color:var(--text-2); }
+.story-timeline li > p:not(.story-row-cites),.story-answer { font-size:36px; line-height:1.2; }
+
+.story-steps { display:grid; gap:8px; }
+.ask-story .story-warning { color:var(--fault); font-size:32px; }
+.ask-room .ask-other { align-self:flex-start; }
+@media(max-width:600px) { .story-timeline li { grid-template-columns:1fr; } }

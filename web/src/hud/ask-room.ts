@@ -1,4 +1,5 @@
-import { examples, mockAskClient, type AskClient } from './ask-client'
+import { renderStory } from './ask-story'
+import { recentQuestion, examples, mockAskClient, type AskClient } from './ask-client'
 import { changingText } from './changing-text'
 import type { Proof } from './state'
 import { fetchProof } from '../room/hud-host'
@@ -8,7 +9,8 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
   const trigger = document.createElement('button')
   trigger.type = 'button'
   trigger.className = 'ask-trigger'
-  trigger.textContent = 'Ask the room'
+  trigger.textContent = 'What happened?'
+  trigger.dataset.testid = 'what-happened'
   host.append(trigger)
   const dialog = document.createElement('dialog')
   dialog.className = 'ask-room'
@@ -18,8 +20,8 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
     <form><label for="room-question">Your question</label><div class="ask-input"><input id="room-question" name="question" required maxlength="500" autocomplete="off"><button class="ask-submit">Ask</button></div></form>
     <details class="ask-example-list" open><summary>Example questions</summary><div class="ask-examples" aria-label="Example questions"></div></details>
     <p role="status" data-testid="ask-progress" hidden>Reading the room records…</p>
-    <section class="ask-result" aria-live="polite" hidden><p data-testid="ask-answer"></p><button type="button" class="ask-replay" data-testid="ask-replay" hidden>Replay</button><div class="ask-evidence" hidden><h3>Records behind this answer</h3><ul data-testid="ask-rows"></ul></div><p data-testid="ask-time"></p><p data-testid="ask-privacy"></p></section>
-    <p role="alert" data-testid="ask-error" hidden></p>`
+    <section class="ask-result" aria-live="polite" hidden><p data-testid="ask-answer"></p><div class="ask-story" data-testid="ask-story" hidden></div><button type="button" class="ask-replay" data-testid="ask-replay" hidden>Replay</button><div class="ask-evidence" hidden><h3>Records behind this answer</h3><ul data-testid="ask-rows"></ul></div><p data-testid="ask-time"></p><p data-testid="ask-privacy"></p></section>
+    <p role="alert" data-testid="ask-error" hidden></p><button type="button" class="ask-other" hidden>Ask another question</button>`
   document.body.append(dialog)
   const input = dialog.querySelector<HTMLInputElement>('input')!
   const form = dialog.querySelector('form')!
@@ -30,8 +32,8 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
   const answerText = changingText(answer)
   const rows = dialog.querySelector('[data-testid="ask-rows"]')!
   const evidence = dialog.querySelector<HTMLElement>('.ask-evidence')!
-  const timing = dialog.querySelector('[data-testid="ask-time"]')!
-  const privacy = dialog.querySelector('[data-testid="ask-privacy"]')!
+  const timing = dialog.querySelector<HTMLElement>('[data-testid="ask-time"]')!
+  const privacy = dialog.querySelector<HTMLElement>('[data-testid="ask-privacy"]')!
   const error = dialog.querySelector<HTMLElement>('[data-testid="ask-error"]')!
   const replay = dialog.querySelector<HTMLButtonElement>('[data-testid="ask-replay"]')!
   dialog.querySelector('.ask-mode')!.textContent = client.mode === 'mock' ? 'Mock response · board connection pending' : 'Answers from records on the board'
@@ -52,12 +54,20 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
     if (!dialog.open) { previousFocus = document.activeElement as HTMLElement; dialog.showModal() }
     input.focus()
   }
-  trigger.onclick = open
+  const other = dialog.querySelector<HTMLButtonElement>('.ask-other')!
+  const mode = (quick: boolean) => {
+    dialog.dataset.quick = String(quick)
+    dialog.querySelector('h2')!.textContent = quick ? 'What happened?' : 'Ask the room'
+    form.hidden = quick; dialog.querySelector<HTMLDetailsElement>('details')!.hidden = quick; dialog.querySelector<HTMLDetailsElement>('details')!.open = !quick; other.hidden = !quick
+  }
+  other.onclick = () => { generation++; controller?.abort(); idle(); result.hidden = true; mode(false); input.value = ''; input.focus() }
+  trigger.onclick = () => { mode(true); open(); other.focus(); input.value = recentQuestion; form.requestSubmit() }
   dialog.querySelector<HTMLButtonElement>('.ask-close')!.onclick = close
   dialog.addEventListener('cancel', event => { event.preventDefault(); close() })
   const key = (event: KeyboardEvent) => {
     if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey || (event.target as HTMLElement)?.closest('input, textarea, select, [contenteditable]')) return
     event.preventDefault()
+    mode(false)
     open()
   }
   document.addEventListener('keydown', key)
@@ -85,6 +95,10 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
       const response = await client.ask(question, controller.signal)
       if (current !== generation) return
       answerText.set(response.answer)
+      const hasStory = renderStory(dialog.querySelector<HTMLElement>('.ask-story')!, response)
+      answer.hidden = hasStory
+      answer.style.color = response.chain_ok === false ? 'var(--fault)' : ''
+      const quick = dialog.dataset.quick === 'true'
       // An answer about a stretch of time can be replayed from the same records.
       const span = response.span
       replay.hidden = !span || !onReplay
@@ -95,7 +109,9 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
         item.textContent = Object.entries(row).map(([key, value]) => `${key.replaceAll('_', ' ')}: ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`).join(' · ')
         rows.append(item)
       }
-      evidence.hidden = response.rows.length === 0
+      evidence.hidden = hasStory || quick || response.rows.length === 0
+      timing.hidden = quick
+      privacy.hidden = quick
       timing.textContent = `${client.mode === 'mock' ? 'Mock response time' : 'Answer time'}: ${response.ms != null && Number.isFinite(response.ms) && response.ms >= 0 ? response.ms : '__'} ms`
       privacy.textContent = client.mode === 'mock' ? 'Mock response · __ bytes out' : 'Answered on the board · __ bytes out'
       result.hidden = false

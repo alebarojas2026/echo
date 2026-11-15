@@ -115,7 +115,7 @@ export function layoutBody(fit: ScanFit, beacons: { node: string; xyz_m: unknown
 /** Saves the alignment and the hall beacons' spots where the page is served from: under `vite` into the repo's
  *  room.json and radio/nodes.json; on the board through its POST /layout, kept on the board; anywhere else, or if
  *  that fails, room.json downloads. */
-async function saveAll(fit: ScanFit, beacons: HallBeacons | undefined, places?: { id: string; xyz_m: Vec3 }[]): Promise<string> {
+export async function saveAll(fit: ScanFit, beacons: HallBeacons | undefined, places?: { id: string; xyz_m: Vec3 }[]): Promise<string> {
   const json = `${JSON.stringify(tidyFit(fit), null, 2)}\n`
   const post = (url: string, body: string) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body })
   try {

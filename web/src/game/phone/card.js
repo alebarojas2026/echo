@@ -1,7 +1,7 @@
 // What the caregiver's phone shows for a brain state. No DOM in here, so it can be tested with node.
 // Message shapes come from CONTRACTS.md v2, section 5. Every number shown comes from the state.
 
-import { deviceName, placeName, ZONES } from '../zones.js'
+import { CHECKIN, deviceName, placeName, ZONES } from '../zones.js'
 
 export { ZONES }
 export const STALE_MS = 1000 // section 6: NO DATA when the last state is older than 1 s
@@ -105,7 +105,7 @@ export function card(state, ageMs, events = noEvents(), now = 0) {
   if (alert.state === 'check_on') {
     const where = placeName(alert.zone) ?? (ZONES[alert.zone] ? `in the ${ZONES[alert.zone]}` : 'in the room')
     const howLong = typeof alert.limit_s === 'number' ? ` for ${alert.limit_s} s` : ''
-    return { mode: 'alert', label: 'NO-MOVEMENT ALERT', title: `No movement ${where}${howLong}.`, detail: 'A wave or a tap on reset clears it.', zone: zoneWord(alert.zone), checkinT, ...lines }
+    return { mode: 'alert', label: 'NO-MOVEMENT ALERT', title: `No movement ${where}${howLong}.`, detail: CHECKIN.stepAside ? 'Stepping aside and back, or a tap on reset, clears it.' : 'A wave or a tap on reset clears it.', zone: zoneWord(alert.zone), checkinT, ...lines }
   }
   const pred = state.pred
   if (!pred) {

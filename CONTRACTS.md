@@ -756,6 +756,9 @@ POST http://192.168.77.2:8080/chain/prove        // operator only; JSON; the bod
    // chain_ok: the chain was verified over the cited range before answering. If it does not verify, the answer
    //   says so first and names the record. chain_ok is left out (never false) when the store holds no sealed
    //   record to check.
+   // The answers read from a stretch of the record (presence, still_spans, alerts, intrusions, link_history) carry
+   //   the same three: cites are the records where what was asked about changed, with the first and the last
+   //   record of the stretch (60 at most), and the chain is checked from the first to the last.
    // rows: one row for each sentence of the story, each with its own cites; span (section 10) covers the whole
    //   stretch, so the screen can offer a replay of it.
 

@@ -120,6 +120,74 @@ describe('room kept free at the bottom of the close view', () => {
   })
 })
 
+describe('handing the camera to the placing view', () => {
+  const PICK = { elevDeg: 58, azimDeg: 20, target: new Vector3(1, 0, 2), radiusM: 14 }
+
+  it('stands still on the shot it was given, whatever the walk-up card says meanwhile, and takes the camera back', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    const hall = hallShot(HALL, 12)
+    fly.setHall(hall)
+    view.run(FIRST_LOOK_MS + FLY_MS + 100)
+    fly.take(PICK)
+    expect(view.shot).toBe(PICK)
+    expect(fly.wide).toBe(1) // the hall's marks show, as on the whole hall
+    expect(view.host.dataset.view).toBe('hall')
+    const shots = view.shots.length
+    fly.hold() // the card starts waiting
+    fly.arrive() // and finds someone
+    fly.reset()
+    fly.cutToFloor()
+    view.run(FLY_MS * 3)
+    expect(view.shots.length).toBe(shots) // nothing moved the camera
+    // Handed back with the hall where it stands now: the whole hall, then down to the floor.
+    const moved = hallShot(new Box3(new Vector3(-30, -0.03, -8), new Vector3(4, 6, 22)), 12)
+    fly.give(moved)
+    expect(view.shot.target.distanceTo(moved.target)).toBeLessThan(1e-6)
+    view.run(FLY_MS + 100)
+    expect(fly.wide).toBe(0)
+    expect(view.host.dataset.view).toBe('square')
+  })
+
+  it('stays on the hall when handed back while the card is waiting', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    const hall = hallShot(HALL, 12)
+    fly.hold()
+    fly.setHall(hall)
+    fly.take(PICK)
+    fly.give(hall)
+    view.run(FLY_MS + 100)
+    expect(fly.wide).toBe(1)
+  })
+
+  it('after a save comes down to the place, and goes back to the hall when the card is still waiting', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.hold()
+    fly.setHall(hallShot(HALL, 12))
+    fly.showPlace(6000)
+    view.run(FIRST_LOOK_MS + FLY_MS + 100)
+    expect(fly.wide).toBe(0) // down at the saved place, though the card says nobody is here
+    view.run(6000 + FLY_MS + 100)
+    expect(fly.wide).toBe(1) // and back out to the hall
+    // With no card waiting it comes down and stays.
+    const free = fakeView()
+    const fly2 = new Fly(free as unknown as RoomView, null, () => {})
+    fly2.setHall(hallShot(HALL, 12))
+    fly2.showPlace(6000)
+    free.run(FIRST_LOOK_MS + FLY_MS + 6000 + FLY_MS + 500)
+    expect(fly2.wide).toBe(0)
+    // A pinned framing stays pinned.
+    const pinned = fakeView()
+    const fly3 = new Fly(pinned as unknown as RoomView, 'hall', () => {})
+    fly3.setHall(hallShot(HALL, 12))
+    fly3.showPlace(6000)
+    pinned.run(FIRST_LOOK_MS + FLY_MS + 100)
+    expect(fly3.wide).toBe(1)
+  })
+})
+
 describe('the room coming down by itself', () => {
   it('counts how long a person has been present on the board\u2019s clock, and starts again when a state says nobody', () => {
     const run = new PresentRun()

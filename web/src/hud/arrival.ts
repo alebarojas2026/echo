@@ -6,7 +6,7 @@ import { changingText, framesDrawn } from './changing-text'
 import './arrival.css'
 import { judgeMoment } from './judge-moment'
 import { blindSentence } from './health-words'
-import { hudLayout, zonePlace } from './layout'
+import { hudLayout, loadHudLayout, zonePlace } from './layout'
 import { boardNow } from './board-time'
 
 type ArrivalState = StateMsg & { armed?: boolean }
@@ -73,6 +73,13 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   const passed = changingText(view.querySelector<HTMLElement>('.arrival-passed')!)
   const counter = view.querySelector('[data-testid="visitor-count"]')!
   const source = view.querySelector('[data-testid="arrival-source"]')!
+  const recent = host.querySelector<HTMLButtonElement>('[data-testid="what-happened"]')
+  if (recent) {
+    const ask = document.createElement('button')
+    ask.type = 'button'; ask.className = 'arrival-ask'; ask.dataset.testid = 'arrival-what-happened'; ask.textContent = 'What happened?'
+    ask.onclick = () => recent.click()
+    view.querySelector('.arrival-message')!.append(ask)
+  }
   const claim = view.querySelector('[data-testid="arrival-claim"]')!
   const arm = document.createElement('button')
   arm.type = 'button'
@@ -135,7 +142,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     clearTimeout(wake)
     wake = undefined
     // The one-spot kit has no camera at all; the camera lesson is the other layouts' story.
-    claim.textContent = hudLayout.zones.length === 1 ? 'No camera. No microphone.' : 'Taught by a camera. Runs without one.'
+    claim.textContent = 'A witness that never watches.'
     arm.textContent = state?.armed ? 'Disarm space' : 'Arm space'
     arm.disabled = !feed || stale
     source.textContent = sourceWords(state)
@@ -166,7 +173,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     }
     if (step === 'found' || step === 'fading') {
       // The words hold, then the card fades as the room flies from the hall down to the floor.
-      show('Found you.', foundLine(state.cam), false, step === 'fading' ? 'found' : 'waiting')
+      show('Found you.', hudLayout.zones.length === 1 ? 'By radio.' : foundLine(state.cam), false, step === 'fading' ? 'found' : 'waiting')
       if (step === 'found' || view.hidden) { fade?.forEach(animation => animation.cancel()); fade = undefined; return }
       // Only the words fade. The rail behind them keeps the page colour, so nothing shows through half-way.
       fade ??= [...view.children].filter(part => !part.classList.contains('privacy-line')).map(part => part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FOUND_FADE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }))
@@ -219,5 +226,6 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   // A tab brought back to the front, or a laptop that woke up: the card is worked out again at once.
   document.addEventListener('visibilitychange', render)
   render()
+  void loadHudLayout().then(() => { if (view.isConnected) render() })
   return () => { document.removeEventListener('visibilitychange', render); disposePrivacy(); cancelHold(); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
 }
