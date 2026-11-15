@@ -42,6 +42,7 @@ Ports:
 - web: http://192.168.77.2:8080. board/serve.py serves web/dist, /nodes.json and /proof.json, and answers POST /ask,
   GET /history and GET /report (section 10). Those three answer from the board's own records, need no internet and
   are reached on our own network only (the cable and the sensing hotspot).
+  GET /privacy is the live privacy meter (section 11).
   It also has /layout for the operator's align mode: GET gives {"room": {offset_m, yaw_deg, scale, cut_m} | null,
   "hall_beacons": [{node, xyz_m}]} (every hall beacon in nodes.json; xyz_m is [x, y, z] or null). POST takes the
   same shape with either key or both (a room is never null there), JSON only, and only from the board itself,
@@ -406,6 +407,7 @@ Hall paths: "movement on this path" when moving, "path busy" when busy, "not cal
 ```
 Board host: python -m bus | python -m radio.wifi_rssi | python -m radio.hci_scan --node unoq (root) |
             python -m teacher.camwatch | python -m brain.main | python board/serve.py |
+            python -m board.privacy (CAP_NET_ADMIN only, to read its counter) |
             llama-server (narrator/llm.service) | python -m narrator.narrate
 Board App Lab: the camera teacher app (teacher/applab/), set as the default app. Nothing else runs in App Lab.
 Pi A: python -m pi.radio_node --node pi5 (root) | the hotspot profile from pi/ap.sh
@@ -463,4 +465,23 @@ GET http://192.168.77.2:8080/report          // optional ?from_t=<epoch ms>&to_t
    // text = a short report in plain words. Every number in text equals a number in the other fields; the server
    //   checks this and uses a fixed template when it does not hold.
    // rows = how many stored records the report was built from. ms = the whole time for it on the board.
+```
+
+## 11. Privacy meter (GET /privacy on the board's web server)
+```jsonc
+// Polled about once a second. Always HTTP 200 and JSON, one of:
+{"ok": true, "images": 0, "bytes_out": 0, "since_t": 1763149512200, "t": 1763149513200}
+{"ok": false, "why": "privacy meter is not running"}
+   // images: image or video files present now in the folders board/privacy.py lists (the project's data/, the
+   //   App Lab apps folder, the teacher's mounted folders, and the files inside App Lab's running containers).
+   // bytes_out: bytes the board and its containers sent since since_t to any address outside 192.168.77.0/24,
+   //   10.42.0.0/24, loopback, link-local, multicast and broadcast (an nftables counter on postrouting). That is:
+   //   bytes sent to the internet. What our own laptop and phone receive on our own network is not counted.
+   // since_t: epoch ms when counting started. It changes only on an operator reset
+   //   (python -m board.privacy reset, logged with the time) or a reboot. t: epoch ms of this reading.
+   // ok is false when the meter isn't running, its last reading is more than 3 s old, or either number can't
+   //   be read; then there are no numbers. Never a zero in place of an unknown. why is for the operator.
+   // A network error or a 404 means the same as ok:false.
+   // These are not proof.json's bytes_out and images_stored: those come from PROOF.md's own procedure
+   //   (board/egress.sh over one measured run) and stay as measured.
 ```
