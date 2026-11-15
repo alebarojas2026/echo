@@ -27,6 +27,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`presenter commands an
  clockBusy=true;await panel.getByRole('button',{name:'Read board clock',exact:true}).click();await expect(page.getByTestId('clock-status')).toHaveText('recording is open');await expect(panel.getByRole('button',{name:'Set from this computer',exact:true})).toBeDisabled()
  clockBusy=false;await panel.getByRole('button',{name:'Read board clock',exact:true}).click();await expect(panel.getByRole('button',{name:'Set from this computer',exact:true})).toBeEnabled();refuse=true;await panel.getByRole('button',{name:'Set from this computer',exact:true}).click();await expect(page.getByTestId('clock-status')).toHaveText('armed: disarm first')
  await expect(page.getByTestId('replay-last')).toBeVisible()
+ await page.locator('.hud-operator').evaluate(el=>el.scrollTop=0)
  if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-presenter.png`)})}
  await page.keyboard.press('Escape');await expect(panel).toBeHidden()
  if(process.env.HUD_SCREENSHOTS)await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-hall.png`)})
