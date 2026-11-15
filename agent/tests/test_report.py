@@ -123,9 +123,9 @@ def test_report_with_several_intrusions_a_hall_link_and_a_tamper():
     assert out["intrusions"] == [{"t": T0 + 20_000, "zone": 1}, {"t": T0 + 30_000, "link": "h>unoq:ble"},
                                  {"t": T0 + 35_000, "zone": 2}]
     assert out["tamper"] == [{"t": T0 + 41_000, "node": "east"}]
-    assert "Intrusion alerts: 3, the first on the left" in out["text"] and "Tamper alerts: 1, the first on the device east" in out["text"]
+    assert "Intrusion alerts: 3, the first on the left" in out["text"] and "Tamper alerts: 1; the device east went quiet first, at " in out["text"]
     assert R.problem(out["text"], out) is None
-    assert "the first on the East beacon at " in R.template(out, ZONES, {"east": "East beacon"})
+    assert "the East beacon went quiet first, at " in R.template(out, ZONES, {"east": "East beacon"})
     assert "the first in the Hall zone at " in R.template(out, {1: "Hall"})
 
 

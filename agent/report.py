@@ -81,8 +81,8 @@ def template(f: dict, zones: dict, names=None) -> str:
     if f["tamper"]:
         node = f["tamper"][0]["node"]
         device = (device_names() if names is None else names).get(node)
-        tamper = (f" Tamper alerts: {len(f['tamper'])}, the first on {'the ' + device if device else 'the device ' + str(node)}"
-                  f" at {clock(f['tamper'][0]['t'])}.")
+        said = (device if device.startswith("Pi ") else f"the {device}") if device else f"the device {node}"
+        tamper = (f" Tamper alerts: {len(f['tamper'])}; {said} went quiet first, at {clock(f['tamper'][0]['t'])}.")
     blind = f" The sensor was blind for {f['blind_s']} s." if f["blind_s"] else ""
     return f"{armed} {intrusion} Someone was here for {f['present_s']} s.{tamper}{blind}"
 
