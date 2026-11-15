@@ -294,3 +294,42 @@ def test_the_core_links_state_is_the_same_with_and_without_hall_beacons(monkeypa
     assert seen_moving and json.loads(plain[-1])["model"]["trained"]
     assert all(m["link"] in brain.links for s in brain.sessions.values() for m in s["messages"] or []
                if m["type"] == "rssi")     # the recordings held for training carry no hall readings
+
+
+def busy_hall(empty=None):
+    doc = nodes_doc()
+    if empty is not None:
+        doc["hall"]["empty_quiet_db"] = empty
+    return H.Hall.from_nodes(doc)
+
+
+def crowd(seconds):
+    """People on the path all the time: a crossing every 2.5 s for the whole stretch."""
+    return [(s, s + 2.4) for s in range(0, int(seconds), 3)]
+
+
+def test_a_path_that_is_busy_all_the_time_says_busy_and_never_moving():
+    link = "h>unoq:ble"
+    hall = busy_hall({link: 0.5})                              # measured once with the hall empty
+    rows = play(hall, link, far_link(180, seed=3, walks=crowd(180)), 180)
+    late = [r for s, r in rows if s >= 60]
+    assert all(r["busy"] is True and r["moving"] is False for r in late)
+    assert set(late[-1]) == ROW_KEYS | {"busy"}
+
+
+def test_the_same_path_when_quiet_is_not_busy_and_still_sees_one_crossing():
+    link = "h>unoq:ble"
+    hall = busy_hall({link: 0.5})
+    rows = play(hall, link, far_link(120, seed=4, walks=[(90, 94)]), 120)
+    assert not any(r["busy"] for _, r in rows)
+    assert any(r["moving"] for s, r in rows if 90 <= s <= 96)
+    assert not any(r["moving"] for s, r in rows if 40 <= s < 88)
+
+
+def test_a_link_with_no_empty_hall_level_has_no_busy_in_its_row():
+    link = "h>unoq:ble"
+    for hall in (busy_hall(), busy_hall({"j>pi5:ble": 0.5}), busy_hall({link: "quiet"}), busy_hall({link: 0})):
+        rows = play(hall, link, far_link(40, seed=5), 40)
+        assert set(rows[-1][1]) == ROW_KEYS                    # not calibrated: the row is what it was
+    stale = play(busy_hall({link: 0.5}), link, far_link(5, seed=6), 20)
+    assert stale[-1][1]["stale"] is True and stale[-1][1]["busy"] is False and stale[-1][1]["moving"] is False

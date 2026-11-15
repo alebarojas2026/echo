@@ -20,6 +20,12 @@ next, while an empty or still path gives a steady level. So per link:
   more by chance: its spread wanders up to about three times its quiet level with nobody there.
 - moving turns true at activity >= 0.5 (four times quiet) and false after activity has stayed
   < 0.25 (three times) for 1 s.
+- busy (wording in issue #584): the quiet level is the link's own, so in a hall that is full all
+  the time it climbs, and "four times quiet" then means nothing. empty_quiet_db is the link's
+  quiet level measured once with the hall empty (nodes.json, hall.empty_quiet_db: {link id: dB}).
+  While the current quiet level is above twice that, the path is busy: moving is false and busy
+  is true. A link with no empty_quiet_db has no busy in its row: it is not calibrated, and the
+  screen says so.
 
 Nothing is learned and no baseline capture is needed. The thresholds are first values, to be tuned
 on the real hardware in the real hall (issue #95).
@@ -52,6 +58,7 @@ QUIET_FLOOR_DB = 0.5      # readings are whole dBm: a quiet level under this is 
 ZERO_AT, ONE_AT = 2.0, 6.0   # spread / quiet: activity is 0 up to ZERO_AT and 1 from ONE_AT
 ON, OFF = 0.5, 0.25       # moving turns on at ON, and off after OFF_HOLD_MS under OFF
 OFF_HOLD_MS = 1000
+BUSY_AT = 2.0             # busy while the quiet level is above this many times the empty hall's
 
 log = logging.getLogger("brain.hall")
 
@@ -78,8 +85,9 @@ def quiet_db(samples) -> Optional[float]:
 
 
 class _Link:
-    def __init__(self, link_id: str, tx: str, rx: str, xy_m):
+    def __init__(self, link_id: str, tx: str, rx: str, xy_m, empty_quiet_db: Optional[float] = None):
         self.id, self.tx, self.rx, self.xy_m = link_id, tx, rx, xy_m
+        self.empty_quiet_db = empty_quiet_db   # the quiet level with the hall empty; None = not calibrated
         self.heard = False
         self.reset()
 
@@ -111,7 +119,7 @@ class _Link:
                 self.enough_since = now
             if now - self.enough_since >= STALE_CLEAR_MS:
                 self.stale = False
-        activity = 0.0
+        activity, busy = 0.0, False
         if self.stale:
             self.moving, self.under_since = False, None
         else:
@@ -123,7 +131,11 @@ class _Link:
             quiet = quiet_db(s)
             if quiet is not None:
                 activity = min(1.0, max(0.0, (spread / quiet - ZERO_AT) / (ONE_AT - ZERO_AT)))
-            if activity >= ON:
+            busy = self.empty_quiet_db is not None and quiet is not None \
+                and quiet > BUSY_AT * self.empty_quiet_db
+            if busy:
+                self.moving, self.under_since = False, None   # a full hall: "movement" would always be true
+            elif activity >= ON:
                 self.moving, self.under_since = True, None
             elif activity >= OFF:
                 self.under_since = None
@@ -133,19 +145,24 @@ class _Link:
                 if now - self.under_since >= OFF_HOLD_MS:
                     self.moving, self.under_since = False, None
         rate = sum(1 for t, _ in r if now - t < RATE_MS) / (RATE_MS / 1000)
-        return {"id": self.id, "tx": self.tx, "rx": self.rx, "xy_m": self.xy_m,
-                "activity": round(activity, 2), "moving": self.moving,
-                "rate_hz": round(rate, 1), "stale": self.stale}
+        out = {"id": self.id, "tx": self.tx, "rx": self.rx, "xy_m": self.xy_m,
+               "activity": round(activity, 2), "moving": self.moving,
+               "rate_hz": round(rate, 1), "stale": self.stale}
+        if self.empty_quiet_db is not None:
+            out["busy"] = busy            # absent = this link has no empty-hall level yet
+        return out
 
 
 class Hall:
-    def __init__(self, beacons=None, receivers=()):
+    def __init__(self, beacons=None, receivers=(), empty_quiet_db=None):
         """beacons: {hall beacon node: [x, y] in metres, or None while it hasn't been measured}.
         receivers: the receiver nodes, in nodes.json order. A link is listed once it has a reading,
-        ordered by receiver, then by beacon."""
+        ordered by receiver, then by beacon.
+        empty_quiet_db: {hall link id: its quiet level with the hall empty, dB}, for busy."""
         self._beacons = dict(beacons or {})
+        empty = dict(empty_quiet_db or {})
         self._links: Dict[str, _Link] = {
-            f"{tx}>{rx}:ble": _Link(f"{tx}>{rx}:ble", tx, rx, xy)
+            f"{tx}>{rx}:ble": _Link(f"{tx}>{rx}:ble", tx, rx, xy, empty.get(f"{tx}>{rx}:ble"))
             for rx in receivers for tx, xy in self._beacons.items()}
         self._told = False
 
@@ -166,7 +183,13 @@ class Hall:
             if core & set(beacons):
                 raise ValueError(f"hall beacons {sorted(core & set(beacons))} are also nodes of the square")
             receivers = [str(n["id"]) for n in doc["nodes"] if "receiver" in n.get("roles", [])]
-            return cls(beacons, receivers)
+            empty = {}
+            for link, db in (hall.get("empty_quiet_db") or {}).items():
+                if isinstance(db, (int, float)) and not isinstance(db, bool) and db > 0:
+                    empty[str(link)] = max(QUIET_FLOOR_DB, float(db))   # the same floor as the live quiet level
+                else:
+                    log.warning("hall.empty_quiet_db for %s is not a level in dB (%r): that link stays not calibrated", link, db)
+            return cls(beacons, receivers, empty)
         except Exception as e:
             log.warning("the hall section of nodes.json can't be read (%r): no hall links", e)
             return cls()
