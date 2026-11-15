@@ -26,6 +26,7 @@ from contextlib import nullcontext
 import time
 
 from teacher.lesson import EmptyTime, no_empty, script
+from proof.opkey import with_key
 
 TEACH_S = 30      # empty, the steps (left and right, or still and moving on one spot), a step out, the steps again
 STEP_S = 4        # seconds on each step
@@ -64,7 +65,7 @@ class Coach:
         self.empty = EmptyTime()
 
     def cmd(self, name, **args):
-        self.send_raw({"v": 2, "type": "cmd", "cmd": name, "args": args})
+        self.send_raw(with_key({"v": 2, "type": "cmd", "cmd": name, "args": args}))
 
     def start(self):
         self.cmd("label_mode", mode="person")

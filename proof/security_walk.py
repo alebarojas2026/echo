@@ -9,6 +9,7 @@ import time
 
 from proof.provenance import require_board
 from proof.security import hold_seconds
+from proof.opkey import with_key
 
 
 def run(session, walker, mode, layout, send, prompt=print, sleep=time.sleep, clock=time.time, repeats=3):
@@ -20,7 +21,7 @@ def run(session, walker, mode, layout, send, prompt=print, sleep=time.sleep, clo
     def command(cmd,args):
         nonlocal seq
         seq += 1
-        send({"v":2,"type":"cmd","seq":seq,"t":int(clock()*1000),"src":"live","cmd":cmd,"args":args})
+        send(with_key({"v":2,"type":"cmd","seq":seq,"t":int(clock()*1000),"src":"live","cmd":cmd,"args":args}))
     def wait(text, seconds):
         prompt(text)
         for remaining in range(seconds,0,-1):

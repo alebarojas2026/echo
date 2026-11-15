@@ -8,12 +8,13 @@ import time
 
 from proof.provenance import require_board
 from proof.trials import record
+from proof.opkey import with_key
 
 
 def run(session, mode, walker, layout, send, mark, ask=input, say=print, sleep=time.sleep, clock=time.time):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}",session) or not walker.strip(): raise ValueError("use a new simple id and walker pseudonym")
     if mode not in {"crowd","tamper","walk"}: raise ValueError("choose crowd, tamper or walk")
-    def command(name, **args): send({"v":2,"type":"cmd","cmd":name,"args":args})
+    def command(name, **args): send(with_key({"v":2,"type":"cmd","cmd":name,"args":args}))
     def now(): return int(clock()*1000)
     def save(kind, start, **extra): mark({"v":2,"src":"live","session":session,"kind":kind,"recv_t":start,"end_t":now(),**extra})
     def wait(text, seconds):

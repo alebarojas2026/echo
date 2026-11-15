@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 import json
+import os
 import logging
 from pathlib import Path
 import re
@@ -78,7 +79,7 @@ def script(purpose, doc=None):
     return steps
 
 
-def coach(session, purpose, walker, send, prompt=print, sleep=time.sleep, clock=time.time, object_trial=False):
+def coach(session, purpose, walker, send, prompt=print, sleep=time.sleep, clock=time.time, object_trial=False, key=None):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", session):
         raise ValueError("session must be a unique simple id, at most 64 characters")
     if not walker.strip():
@@ -90,7 +91,10 @@ def coach(session, purpose, walker, send, prompt=print, sleep=time.sleep, clock=
     def command(cmd, args):
         nonlocal seq
         seq += 1
-        send(dict(v=2, type="cmd", cmd=cmd, args=args, t=int(clock()*1000), seq=seq, src="live"))
+        msg = dict(v=2, type="cmd", cmd=cmd, args=args, t=int(clock()*1000), seq=seq, src="live")
+        if key:   # the board's operator key (CONTRACTS.md section 5): without it a locked board ignores us
+            msg["key"] = key
+        send(msg)
     command("record_start", dict(session=session, purpose=purpose, walker=walker))
     try:
         for text, seconds, mode, truth in steps:
@@ -150,7 +154,8 @@ def main():
     from websockets.sync.client import connect
     with connect(args.url) as ws:
         with drain_states(ws):
-            coach(args.session, args.purpose, args.walker, lambda msg: ws.send(json.dumps(msg)), object_trial=args.object_trial)
+            coach(args.session, args.purpose, args.walker, lambda msg: ws.send(json.dumps(msg)), object_trial=args.object_trial,
+                  key=os.environ.get("OPERATOR_KEY") or None)   # from the environment only, never a flag or a prompt
 
 
 if __name__ == "__main__":
