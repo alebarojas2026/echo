@@ -4,7 +4,7 @@ import type { Proof } from './state'
 import { fetchProof } from '../room/hud-host'
 import './ask-room.css'
 
-export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClient) {
+export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClient, onReplay?: (span: { from_t: number; to_t: number }) => void) {
   const trigger = document.createElement('button')
   trigger.type = 'button'
   trigger.className = 'ask-trigger'
@@ -18,7 +18,7 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
     <form><label for="room-question">Your question</label><div class="ask-input"><input id="room-question" name="question" required maxlength="500" autocomplete="off"><button class="ask-submit">Ask</button></div></form>
     <details class="ask-example-list" open><summary>Example questions</summary><div class="ask-examples" aria-label="Example questions"></div></details>
     <p role="status" data-testid="ask-progress" hidden>Reading the room records…</p>
-    <section class="ask-result" aria-live="polite" hidden><p data-testid="ask-answer"></p><div class="ask-evidence" hidden><h3>Records behind this answer</h3><ul data-testid="ask-rows"></ul></div><p data-testid="ask-time"></p><p data-testid="ask-privacy"></p></section>
+    <section class="ask-result" aria-live="polite" hidden><p data-testid="ask-answer"></p><button type="button" class="ask-replay" data-testid="ask-replay" hidden>Replay</button><div class="ask-evidence" hidden><h3>Records behind this answer</h3><ul data-testid="ask-rows"></ul></div><p data-testid="ask-time"></p><p data-testid="ask-privacy"></p></section>
     <p role="alert" data-testid="ask-error" hidden></p>`
   document.body.append(dialog)
   const input = dialog.querySelector<HTMLInputElement>('input')!
@@ -33,6 +33,7 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
   const timing = dialog.querySelector('[data-testid="ask-time"]')!
   const privacy = dialog.querySelector('[data-testid="ask-privacy"]')!
   const error = dialog.querySelector<HTMLElement>('[data-testid="ask-error"]')!
+  const replay = dialog.querySelector<HTMLButtonElement>('[data-testid="ask-replay"]')!
   dialog.querySelector('.ask-mode')!.textContent = client.mode === 'mock' ? 'Mock response · board connection pending' : 'Answers from records on the board'
   let controller: AbortController | undefined
   let generation = 0
@@ -84,6 +85,10 @@ export function mountAskRoom(host: HTMLElement, client: AskClient = mockAskClien
       const response = await client.ask(question, controller.signal)
       if (current !== generation) return
       answerText.set(response.answer)
+      // An answer about a stretch of time can be replayed from the same records.
+      const span = response.span
+      replay.hidden = !span || !onReplay
+      replay.onclick = span && onReplay ? () => { close(); onReplay(span) } : null
       rows.replaceChildren()
       for (const row of response.rows) {
         const item = document.createElement('li')

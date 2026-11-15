@@ -1,8 +1,12 @@
 import type { StateMsg } from '../room/contract'
 import { hudLayout, zoneName, zonePlace } from './layout'
+import { KIND_WORDS, type SecondKind } from './records'
 export { zoneName } from './layout'
 
 export function judgeMoment(state: StateMsg | null, stale: boolean, layout = hudLayout) {
+  // A replayed second with nothing to show says so. It is never drawn as an empty room.
+  const replayed = (state as { replay?: { kind: SecondKind } } | null)?.replay?.kind
+  if (replayed && replayed !== 'record') return KIND_WORDS[replayed]
   if (!state || stale) return ['No data', 'Last update more than 1 s ago']
   if (state.health.status === 'blind') return ['Sensor blind', 'A radio link stopped. Alerts are paused']
   if (state.router !== 'S-home') return ['Paused', 'The router is off its home spot']
