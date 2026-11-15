@@ -9,7 +9,8 @@ import type { RoomView } from './view'
 // the chosen desk (desks.ts, placementGuide), as a faint outlined box with "<name> here". One can be picked (Tab)
 // and moved by hand; S saves the positions of the ones that were moved, and from then on they are drawn there. A
 // place nobody moved is only the guide's suggestion and is never saved: stepping to a desk and pressing S saves the
-// alignment alone, as it always did.
+// alignment alone, as it always did. Enter takes the guide's places as they stand, so "step to a desk, Enter, S"
+// sets the whole kit down there; that is a choice, made with a key, never a side effect of saving.
 
 const BOX_M = 0.1
 const CLOSE_M = 0.25
@@ -19,9 +20,10 @@ const BIG_STEP_M = 0.2
  *  it, and "<name> here" would lie across that name. */
 const NEAR_M = 0.2
 
-/** What S saves: the places of the devices that were moved by hand, and nothing for the rest. */
-export function placesToSave(marks: readonly { id: string; xyz: Vec3; moved: boolean }[]): { id: string; xyz_m: Vec3 }[] {
-  return marks.filter((m) => m.moved).map((m) => ({ id: m.id, xyz_m: m.xyz }))
+/** What S saves: the places of the devices that were moved by hand or whose guide place was taken (Enter), and
+ *  nothing for the rest. */
+export function placesToSave(marks: readonly { id: string; xyz: Vec3; moved: boolean; taken?: boolean }[]): { id: string; xyz_m: Vec3 }[] {
+  return marks.filter((m) => m.moved || m.taken).map((m) => ({ id: m.id, xyz_m: m.xyz }))
 }
 
 /** Whether a guide box's words ("<name> here") are shown: not while the box is on or right beside where its
@@ -36,6 +38,8 @@ interface Mark {
   /** The guide's own words for it, until it is moved by hand. */
   words: string
   moved: boolean
+  /** The guide's place for it was taken as it stands (Enter): saved like one moved by hand. */
+  taken: boolean
   box: LineSegments<EdgesGeometry, LineBasicMaterial>
   label: HTMLElement
 }
@@ -89,12 +93,13 @@ export class PlacementGuide {
         box.renderOrder = 30
         this.view.scene.add(box)
         const label = this.view.addLabel(`${NODES[p.id]?.name ?? p.id} here`, v3(p.xyz), 'room-label--guide')
-        mark = { id: p.id, xyz: p.xyz, words: p.words, moved: false, box, label }
+        mark = { id: p.id, xyz: p.xyz, words: p.words, moved: false, taken: false, box, label }
         this.marks.push(mark)
       }
       mark.xyz = [...p.xyz]
       mark.words = p.words
       mark.moved = false
+      mark.taken = false
     }
     this.visible = true
     this.picked = null
@@ -113,6 +118,13 @@ export class PlacementGuide {
     const i = this.picked ? ids.indexOf(this.picked) : -1
     this.picked = ids[i + 1] ?? null
     this.draw()
+  }
+
+  /** Enter: takes every device's place as the guide has it now, to be saved with S. Returns how many. */
+  take(): number {
+    if (!this.visible) return 0
+    for (const m of this.marks) m.taken = true
+    return this.marks.length
   }
 
   release() {

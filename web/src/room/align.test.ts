@@ -109,6 +109,14 @@ describe('what the guide saves and says', () => {
     expect(JSON.parse(layoutBody({}, undefined, placesToSave(moved))).nodes).toEqual([{ id: 'pi5b', xyz_m: [0.4, -0.2, 0.75] }])
   })
 
+  it('saves the guide\u2019s own places only once they were taken with Enter', () => {
+    expect(placesToSave(marks.map((m) => ({ ...m, taken: false })))).toEqual([])
+    const taken = placesToSave(marks.map((m) => ({ ...m, taken: true })))
+    expect(taken.map((p) => p.id)).toEqual(['pi5', 'unoq', 'pi5b'])
+    expect(taken[2].xyz_m).toEqual([0.4, -0.37, 0.8])
+    expect(JSON.parse(layoutBody({}, undefined, taken)).nodes).toHaveLength(3)
+  })
+
   it('leaves the words off a box that sits on or right beside its device, and shows them once it is moved away', () => {
     expect(guideWordsShown([0.36, 0.88, 0.8], [0.36, 0.8, 0.75])).toBe(false) // 9 cm from Pi A as drawn
     expect(guideWordsShown([0.4, -0.37, 0.8], [0.4, -0.2, 0.75])).toBe(false) // 18 cm from Pi B as drawn
