@@ -529,6 +529,8 @@ Board App Lab: the camera teacher app (teacher/applab/), set as the default app.
 Pi A: python -m pi.radio_node --node pi5 (root) | the hotspot profile from pi/ap.sh
 Pi B: python -m pi.radio_node --node pi5b (root) | WIFI_LINK=pi5>pi5b:wifi python -m radio.wifi_rssi |
       joined to the sensing hotspot, with BUS_HOST=192.168.77.2 for both programs. No hotspot, no Ethernet, no model.
+Pi A and Pi B, optional: python -m pi.witness (the unit radio-sight-witness, section 13). With no key on the Pi it says
+      "not enrolled" and ends; nothing else on the Pi waits on it.
 Screen: a laptop's browser on the sensing hotspot (section 2). Nothing is started for it, and no Pi runs a kiosk.
 Every folder that's run as a module has an __init__.py.
 ```
