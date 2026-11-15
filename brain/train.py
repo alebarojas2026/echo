@@ -96,10 +96,10 @@ class Model:
 
     def predict(self, window: dict) -> dict:
         """The contract's pred block for one window (still_s is the alert's job)."""
-        x = np.asarray([F.vector(window)], dtype=float)
+        x = np.asarray([F.vector(window)], dtype=np.float32)   # the trees' own input type
         probs = _probs(self.zone, x, ZONES)
         zone = int(np.argmax(probs))
-        kind = str(self.kind.predict(x)[0])
+        kind = str(_pick(self.kind, x))
         present = zone != 0
         if present:
             kind = "person"
@@ -107,7 +107,7 @@ class Model:
             kind = "none"  # the zone forest says empty; never report a person nowhere
         motion = None
         if present and self.motion is not None:
-            motion = str(self.motion.predict(x)[0]) or None
+            motion = str(_pick(self.motion, x)) or None
         zone_set = ([z for z in ZONES[1:] if probs[z] >= ZONE_SET_MIN_P] or [zone]) if present else []
         return {
             "present": present, "kind": kind, "zone": zone,   # 0 = nobody there (section 3)
@@ -139,10 +139,33 @@ def _forest(X, y) -> RandomForestClassifier:
     return forest
 
 
+def _forest_proba(forest, x) -> np.ndarray:
+    """forest.predict_proba(x)[0] for one float32 row, without the forest's per-call overhead.
+
+    A forest's probability is the mean of its trees' probabilities. Asking each tree directly
+    (the public predict_proba, input check off) gives the same numbers bit for bit, and skips
+    the job dispatch and input validation the forest repeats for every tree: for one window at
+    a time that overhead is most of the cost, and the decision runs ten times a second on the
+    live loop. Anything unexpected falls back to the forest's own call.
+    """
+    try:
+        total = np.zeros(len(forest.classes_))
+        for tree in forest.estimators_:
+            total += tree.predict_proba(x, check_input=False)[0]
+        return total / len(forest.estimators_)
+    except Exception:
+        return forest.predict_proba(x)[0]
+
+
+def _pick(forest, x):
+    """forest.predict(x)[0]: the class with the highest mean probability."""
+    return forest.classes_[int(np.argmax(_forest_proba(forest, x)))]
+
+
 def _probs(forest, x, classes) -> np.ndarray:
     """Probabilities over every class in `classes`, 0 for ones never seen in training."""
     out = np.zeros(len(classes))
-    p = forest.predict_proba(x)[0]
+    p = _forest_proba(forest, x)
     for c, v in zip(forest.classes_, p):
         out[classes.index(int(c))] = v
     return out
