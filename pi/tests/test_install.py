@@ -135,3 +135,76 @@ def test_the_hotspots_own_address_is_not_a_join(pi):
 def test_an_unknown_node_is_refused(pi):
     _, calls = install(pi, "--node", "east", code=2)
     assert calls == []
+
+
+# Roles and the advert (RADIO_ROLE and ADV_MODE in .env), and Pi B's Wi-Fi off for a while
+
+def run_install(pi, *args, code=0, **extra):
+    """install() with systemd-run and journalctl standing in as echo."""
+    repo, tmp = pi
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHON", "ROLE", "RADIO_NODE", "WIFI_IFACE")}
+    env.update(PATH=str(tmp / "bin") + os.pathsep + env["PATH"], FAKE_LOG=str(tmp / "calls.log"),
+               VENV=(tmp / "venv").as_posix(), UNIT_DIR=(tmp / "units").as_posix(),
+               SYSTEMCTL="echo systemctl", SUDO="", NMCLI=(tmp / "bin" / "nmcli").as_posix(),
+               IP=(tmp / "bin" / "ip").as_posix(), WIFI_JOIN=(tmp / "bin" / "join").as_posix(),
+               FAKE_ADDR="", CHECK_WAIT_S="0", SYSTEMD_RUN="echo systemd-run", JOURNALCTL="echo journalctl",
+               **extra)
+    r = subprocess.run([BASH, "pi/install.sh", *args], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == code, r.stdout + r.stderr
+    log = tmp / "calls.log"
+    return r.stdout + r.stderr, (log.read_text().splitlines() if log.exists() else [])
+
+
+def test_beacon_only_on_pi_b_sets_the_role_restarts_the_node_and_skips_the_radio_check(pi):
+    repo, _ = pi
+    out, calls = run_install(pi, "--node", "pi5b", "--beacon-only")
+    assert (repo / ".env").read_text().splitlines()[0] == "RADIO_ROLE='beacon-only'"
+    assert "systemctl restart radio-sight-radio-node.service" in out
+    assert "python3 -m pi.check --node pi5b" not in calls
+    assert "journalctl -u radio-sight-radio-node -n 3" in out
+
+
+def test_a_new_role_replaces_the_old_and_auto_removes_it(pi):
+    repo, _ = pi
+    (repo / ".env").write_text("BUS_HOST=192.168.77.2\nRADIO_ROLE='beacon-only'\nADV_MODE='connectable'\n",
+                               newline="\n")
+    run_install(pi, "--listen-only", "--adv", "auto")
+    assert (repo / ".env").read_text().splitlines() == ["BUS_HOST=192.168.77.2", "RADIO_ROLE='listen-only'"]
+    out, _ = run_install(pi, "--role", "auto", "--adv", "connectable")
+    assert (repo / ".env").read_text().splitlines() == ["BUS_HOST=192.168.77.2", "ADV_MODE='connectable'"]
+    assert "systemctl restart radio-sight-radio-node.service" in out
+
+
+def test_no_role_option_restarts_nothing_extra(pi):
+    out, _ = run_install(pi)
+    assert "restarted radio-sight-radio-node with the new .env" not in out
+
+
+@pytest.mark.parametrize("args", [("--role", "beacon"), ("--adv", "fast"), ("--wifi-off", "0", "--node", "pi5b"),
+                                  ("--wifi-off", "45", "--node", "pi5b"), ("--wifi-off", "5"),
+                                  ("--node", "pi5b", "--wifi-off", "5", "--beacon-only")])
+def test_bad_values_are_refused_and_change_nothing(pi, args):
+    repo, _ = pi
+    out, calls = run_install(pi, *args, code=2)
+    assert calls == [] and not (repo / ".env").exists() and "systemd-run" not in out
+
+
+def test_wifi_off_schedules_its_own_return_first_and_saves_nothing(pi):
+    repo, tmp = pi
+    out, calls = run_install(pi, "--node", "pi5b", "--wifi-off", "4")
+    runs = [line for line in out.splitlines() if line.startswith("systemd-run")]
+    assert len(runs) == 2
+    back, off = runs
+    assert "--unit radio-sight-wifi-back --on-active=4min" in back and back.endswith("device connect wlan0")
+    assert "link set wlan0 up" in back
+    assert "--unit radio-sight-wifi-off --on-active=5s" in off
+    assert "device disconnect wlan0" in off and off.endswith("link set wlan0 down")
+    assert calls == []                                    # nothing else of the install ran
+    assert not (repo / ".env").exists() and not list((tmp / "units").glob("*.service"))
+    assert "comes back by itself in 4 min" in out
+
+
+def test_wifi_on_cancels_the_timers_and_rejoins_now(pi):
+    out, calls = run_install(pi, "--node", "pi5b", "--wifi-on")
+    assert "systemctl stop radio-sight-wifi-off.timer radio-sight-wifi-back.timer" in out
+    assert calls == ["nmcli device connect wlan0"]
