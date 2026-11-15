@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Room feature checks</title><style>body{margin:0;background:var(--bg)}</style></head>
+<body><div id="room"></div><script type="module">
+import '../src/hud/tokens.css'
+import { mountRoom } from '../src/room'
+import { createFeed } from '../src/room/feed'
+import { loadLayout } from '../src/room/layout'
+await loadLayout()
+mountRoom(document.querySelector('#room'), createFeed())
+</script></body></html>
