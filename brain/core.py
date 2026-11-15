@@ -190,6 +190,7 @@ class Brain:
         self._base_log: List[dict] = []       # every baseline of this run, when nothing is written to disk
         self.place_t: Optional[int] = None    # when the operator's last baseline finished: "this place"
         self.expected_hz: Dict[str, float] = {}
+        self.quiet_db: Dict[str, float] = {}  # link -> the std of its 0.5 s means over the baseline capture
         self.windower: Optional[F.Windower] = None
         self.window: Optional[dict] = None
         self.capture: Optional[dict] = None   # a running baseline capture
@@ -533,12 +534,17 @@ class Brain:
         for link in self.links:
             if link in self.router_links:   # the router as tx or rx; "pi5b" is another node
                 m = self._median(link, start)
-                if m is None or abs(m - self.base[link]) > SETTLE_DB:
+                if m is None or abs(m - self.base[link]) > self._settle_db(link):
                     self.recalibrating, self._old_base = True, dict(self.base)
                     self._cmd_label_mode({"mode": "off"})
                     self._start_capture(new_place=False, by_hand=False)
                     self.emit("recalibrating", {"link": link})
                     return
+
+    def _settle_db(self, link: str) -> float:
+        """How far a link may sit from its base and still count as back: 1 dB, or
+        settings.settle_x_quiet x its own quiet level when that is more."""
+        return max(SETTLE_DB, self.settings.settle_x_quiet * self.quiet_db.get(link, 0.0))
 
     def _update_advice(self, now, xray: dict, links: List[dict]) -> None:
         if self.router == HOME:
@@ -581,8 +587,14 @@ class Brain:
         except KeyError:
             pass                         # not a spot in nodes.json
 
-    def _set_baseline(self, base: Dict[str, float], expected_hz: Dict[str, float]) -> None:
-        self.base, self.expected_hz = dict(base), dict(expected_hz)
+    def _set_baseline(self, base: Dict[str, float], expected_hz: Dict[str, float],
+                      quiet_db: Optional[Dict[str, float]] = None) -> None:
+        self.base, self.expected_hz, self.quiet_db = dict(base), dict(expected_hz), dict(quiet_db or {})
+        # The fixed dB numbers give way to a link's own quiet level where a setting says so
+        # (brain/settings.py; all three are off by default).
+        s = self.settings
+        self.health.set_quiet(self.quiet_db, s.steady_x_quiet)
+        self.watch.checkin_rule.other_db_of = {k: s.checkin_x_quiet * q for k, q in self.quiet_db.items()}
         self.windower, self.window = F.Windower(self.base, self.links), None
         self.health.set_base(self.base)
         self.health.set_expected(self.expected_hz)
@@ -594,7 +606,8 @@ class Brain:
             return
         session = self.open_session["meta"].get("session") if self.open_session else None
         doc = {"t": now, "session": session,
-               "links": {link: {"base_dbm": self.base[link], "expected_hz": self.expected_hz[link]}
+               "links": {link: {"base_dbm": self.base[link], "expected_hz": self.expected_hz[link],
+                                **({"quiet_db": round(self.quiet_db[link], 2)} if link in self.quiet_db else {})}
                          for link in self.base}}
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         (self.sessions_dir / "baseline.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
@@ -632,10 +645,12 @@ class Brain:
             links = doc["links"]
             base = {k: float(v["base_dbm"]) for k, v in links.items() if k in self.links}
             expected = {k: float(v["expected_hz"]) for k, v in links.items() if k in self.links}
+            quiet = {k: float(v["quiet_db"]) for k, v in links.items()
+                     if k in self.links and isinstance(v.get("quiet_db"), (int, float))}   # a file from before has none
         except (OSError, ValueError, KeyError, TypeError):
             return   # no file, or not one of ours: start without a baseline
         if base:
-            self._set_baseline(base, expected)
+            self._set_baseline(base, expected, quiet)
             self.place_t = self._read_place(doc.get("t"))
 
     def _read_place(self, baseline_t) -> Optional[int]:
@@ -733,7 +748,7 @@ class Brain:
                 self._wait_said = ()
                 expected = {link: round(sum(1 for m in msgs if m["link"] == link) / (BASELINE_MS / 1000), 1)
                             for link in self.links}
-                self._set_baseline(F.baseline(msgs), expected)
+                self._set_baseline(F.baseline(msgs), expected, F.quiet(msgs))
                 self._base_log.append({"t": now, "base": dict(self.base)})
                 if new_place or self.place_t is None:
                     self._new_place(now)
@@ -743,8 +758,9 @@ class Brain:
                     self.recalibrating = False
                     moved = {link: abs(self.base[link] - old) for link, old in self._old_base.items()
                              if link in self.base}
-                    worst = max(moved, key=moved.get, default=None)
-                    if worst and moved[worst] > SETTLE_DB:
+                    over = {link: by - self._settle_db(link) for link, by in moved.items()}   # past its own limit
+                    worst = max(over, key=over.get, default=None)
+                    if worst and over[worst] > 0:
                         self.emit("drift", {"link": worst})   # the screen offers relearn
         self._check_settle(now)
         self._decide(now)

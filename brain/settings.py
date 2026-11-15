@@ -20,6 +20,20 @@ in brain/ carries its own copy.
                           has had a reading for this long
     tamper_clear_ms       ... and back when they all have for this long       2000
 
+Three more make a fixed dB number give way to the link's own quiet level where that is larger.
+A link's quiet level is the std of its 0.5 s means over the baseline capture (quiet_db in
+baseline.json): about 0.2 dB on the Wi-Fi links and 1 to 3 dB on the Bluetooth links, measured
+on the kit. 0 switches a setting off, and the rule then uses the contract's number alone.
+
+    steady_x_quiet        Link health, the jump rule: a drop is steady when   0 (0.8 dB only)
+                          the std of its 0.5 s means is under 0.8 dB, or
+                          under this x the link's quiet level
+    checkin_x_quiet       Check-in: no other link may change by over 3 dB,    0 (3 dB only)
+                          or by over this x its quiet level
+    settle_x_quiet        Router: after router_home a pi5 link sits within    0 (1 dB only)
+                          1 dB of base, or within this x its quiet level
+                          (the same for the drift event)
+
 One number of these rules is not here because the contract puts it in radio/nodes.json: how
 long an armed space waits before an appearance is an intrusion, armed.hold_s (3 s when the file
 has none). brain.settings.hold_s(nodes) reads it.
@@ -53,6 +67,9 @@ class Settings:
     motion_links: Optional[Tuple[str, ...]] = None
     tamper_silent_ms: int = 3000
     tamper_clear_ms: int = 2000
+    steady_x_quiet: float = 0.0
+    checkin_x_quiet: float = 0.0
+    settle_x_quiet: float = 0.0
 
     def __post_init__(self):
         for f in fields(self):
@@ -63,6 +80,10 @@ class Settings:
                 if isinstance(value, str) or not value or not all(isinstance(k, str) for k in value):
                     raise ValueError("motion_links is a list of link ids, or null for every link")
                 object.__setattr__(self, f.name, tuple(value))
+            elif f.name.endswith("_x_quiet"):
+                if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 20:
+                    raise ValueError(f"{f.name} must be a number from 0 (off) to 20 (got {value!r})")
+                object.__setattr__(self, f.name, float(value))
             elif not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise ValueError(f"{f.name} must be a whole number, 1 or more (got {value!r})")
         for part, whole in (("smooth_majority", "smooth_decisions"), ("intrusion_majority", "intrusion_decisions")):
