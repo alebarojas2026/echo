@@ -18,7 +18,7 @@ mountRoom(document.querySelector('#room'), feed)
 const dispose = mountHud(document.querySelector('#hud'), feed)
 let seq = 0
 window.arrival = {
-  commands, dispose,
+  commands, dispose, peek: name => mockState(name, 0, 7000),
   update(name, overrides = {}, isStale = false) { state = { ...mockState(name, 0, 7000), armed: false, ...overrides }; stale = isStale; listeners.forEach(fn => fn(current())) },
   event(kind, id = String(++seq)) { events.forEach(fn => fn({ v: 2, type: 'event', src: 'sim', seq, t: state.t, id, kind, info: {} })) },
 }

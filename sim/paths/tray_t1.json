@@ -1,7 +1,9 @@
 {
   "name": "tray_t1",
-  "about": "Empty room for 25 s (time for a baseline), then the metal tray sits at T1 (1.0, 0.2) for 30 s, then it is taken away.",
+  "about": "Empty room for 25 s (time for a baseline), then the metal tray sits at T1 for 30 s, then it is taken away.",
   "duration_s": 60,
   "person": null,
-  "objects": [{"x": 1.0, "y": 0.2, "drop_db": 10, "t_on": 25, "t_off": 55}]
+  "objects": [
+    {"spot": "T1", "drop_db": 10, "t_on": 25, "t_off": 55}
+  ]
 }

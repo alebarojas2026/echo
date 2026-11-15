@@ -148,6 +148,9 @@ class Brain:
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
         self.armed = Armed()                  # after hours: a person appearing is an intrusion
         self.tamper = Tamper.from_nodes(nodes)   # ... and a device going silent is tampering
+        # The optional hall beacons (nodes.json "hall"): not core links, but tamper counts them.
+        self._hall_nodes = {b.get("node") for b in (nodes.get("hall") or {}).get("beacons") or []}
+        self._hall_seen: Dict[str, Dict[str, int]] = {}   # hall beacon -> {its link: recv_t of the last reading}
         self._heard = set()                   # links with at least one reading
         self._last_seen: Dict[str, int] = {}  # link -> recv_t of its last reading
         self._last_dbm: Dict[str, float] = {} # link -> the last dbm we sent (or its last reading)
@@ -220,6 +223,10 @@ class Brain:
         if kind == "label" and not _is_label(msg):
             return   # a zone or a count that isn't a number: the windows would choke on it
         self.feed_t = max(self.feed_t, int(t))
+        if kind == "rssi" and self._hall_nodes and isinstance(msg.get("link"), str):
+            tx = _ends(msg["link"])[0]
+            if tx in self._hall_nodes and msg["link"] not in self.links:
+                self._hall_seen.setdefault(tx, {})[msg["link"]] = int(t)
         if kind == "rssi":
             # state.src mirrors the radio feed. The camera and the bus's meta say "live"
             # even over a sim feed, and must not flip the screen's badge to LIVE.
@@ -829,7 +836,7 @@ class Brain:
             {"xray": None, "objects": [], "events": []}
         for e in health["events"] + xray["events"]:
             self.emit(e["kind"], e["info"])
-        for kind, info in self.tamper.update(now, self.armed.on, self._last_seen):
+        for kind, info in self.tamper.update(now, self.armed.on, self._last_seen, self._hall_seen):
             self.emit(kind, info)   # judged whatever health says: blind is exactly when it matters
         self._watch_events()
         weights = self._why_weights()

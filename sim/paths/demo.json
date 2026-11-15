@@ -1,20 +1,42 @@
 {
   "name": "demo",
-  "about": "The whole demo in order: walk in, wave a check-in, tray at T1 and the advice, router moved and home, camera off, stand still until the alert, a wave that clears it, a blind link, walk out.",
+  "about": "The whole demo in order: walk in, wave a check-in, tray at T1 and the advice, router moved and home, camera off (all while stepping about in the calm zone, so no alert counts), then stand still in the alert zone until the alert, a wave that clears it, a blind link, walk out.",
   "duration_s": 64,
   "person": [
     {"t": 0, "x": null},
-    {"t": 3, "x": 2.0, "y": 1.5},
-    {"t": 4, "x": 1.5, "y": 1.5},
-    {"t": 32, "x": 1.5, "y": 1.5},
-    {"t": 34, "x": 1.5, "y": 0.5},
-    {"t": 60, "x": 1.5, "y": 0.5},
-    {"t": 61, "x": 2.0, "y": 0.5},
+    {"t": 3, "zone": "calm", "outside": "near"},
+    {"t": 4, "zone": "calm", "dx": -0.15},
+    {"t": 8, "zone": "calm", "dx": -0.15},
+    {"t": 9, "zone": "calm", "dx": 0.15},
+    {"t": 14, "zone": "calm", "dx": 0.15},
+    {"t": 15, "zone": "calm", "dx": -0.15},
+    {"t": 20, "zone": "calm", "dx": -0.15},
+    {"t": 21, "zone": "calm", "dx": 0.15},
+    {"t": 26, "zone": "calm", "dx": 0.15},
+    {"t": 27, "zone": "calm", "dx": -0.15},
+    {"t": 32, "zone": "calm", "dx": -0.15},
+    {"t": 34, "zone": "still"},
+    {"t": 60, "zone": "still"},
+    {"t": 61, "zone": "still", "outside": "near"},
     {"t": 61.1, "x": null}
   ],
-  "waves": [{"t_on": 6, "t_off": 8.5}, {"t_on": 47, "t_off": 49.5}],
-  "objects": [{"x": 1.0, "y": 0.2, "drop_db": 10, "t_on": 10, "t_off": 25}],
-  "router": [{"t": 0, "spot": "S-home"}, {"t": 18, "spot": "S-W30"}, {"t": 27, "spot": "S-home"}],
-  "camera": [{"t": 0, "state": "on"}, {"t": 30, "state": "off"}],
-  "outages": [{"node": "east", "t_on": 50, "t_off": 56}]
+  "waves": [
+    {"t_on": 6, "t_off": 8.5},
+    {"t_on": 47, "t_off": 49.5}
+  ],
+  "objects": [
+    {"spot": "T1", "drop_db": 10, "t_on": 10, "t_off": 25}
+  ],
+  "router": [
+    {"t": 0, "spot": "S-home"},
+    {"t": 18, "spot": "clear"},
+    {"t": 27, "spot": "S-home"}
+  ],
+  "camera": [
+    {"t": 0, "state": "on"},
+    {"t": 30, "state": "off"}
+  ],
+  "outages": [
+    {"node": "east", "t_on": 50, "t_off": 56}
+  ]
 }

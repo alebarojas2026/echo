@@ -76,6 +76,11 @@ class DeskView:
       zones      [the zone below the split in x, the zone from the split up], from the zone rule
       view_m     how much of the strip the frame spans at the standing line, for the moving rule
       side_edge  "clipped" (a box cut by the left or right frame edge is dropped) or "keep"
+      near_width how wide a person's box is, as a share of the frame width, when they stand in the
+                 strip. A narrower box is someone standing back, behind the line of the arm
+                 beacons, where no link sees them: never labelled present. It is measured, by
+                 `python -m teacher.calibrate --near` (at the desk edge, then one step back).
+                 Without it nobody is labelled present: the teacher does not guess a distance.
     A box cut by the top or bottom edge is normal here and is kept.
     """
     def __init__(self, config, image_size):
@@ -86,12 +91,19 @@ class DeskView:
         self.dead_band = _number(config.get("dead_band"), "dead_band", 0.0, 0.4)
         self.view_m = _number(config.get("view_m"), "view_m", 0.1, 100.0)
         self.mirror, self.side_edge = config.get("mirror"), config.get("side_edge", "clipped")
+        self.near_width = (None if config.get("near_width") is None
+                           else _number(config["near_width"], "near_width", 0.02, 1.0))
         zones = config.get("zones")
         if not isinstance(self.mirror, bool) or self.side_edge not in ("clipped", "keep"):
             raise ValueError("desk view needs mirror true or false and side_edge clipped or keep")
         if not isinstance(zones, list) or len(zones) != 2 or zones[0] == zones[1]                 or not all(isinstance(z, int) and not isinstance(z, bool) and z > 0 for z in zones):
             raise ValueError("desk view zones must be the two zone ids either side of the split")
         self.zones = tuple(zones)
+
+    def near(self, width):
+        """True when a box this wide (pixels) is someone standing in the strip, False when they
+        are standing back. Always False until near_width has been measured."""
+        return self.near_width is not None and width / self.width >= self.near_width
 
     def side(self, x, width):
         """(zone, metres along the strip from the split line) for a box's left edge and width in
@@ -139,6 +151,7 @@ class Teacher:
         self.confidence = confidence
         self.frame = 0
         self.motion = Motion()
+        self.box_w = None   # desk view: the one person's box width as a share of the frame, for calibration
 
     def processed(self, boxes):
         """Called once for an explicit bounding_boxes list, including []."""
@@ -180,10 +193,15 @@ class Teacher:
 
     def _desk(self, people):
         """The same from the box's place across the frame. There is no foot point, so foot_m is null;
-        motion follows the box centre along the strip. Anyone in view counts as present."""
+        motion follows the box centre along the strip. Someone standing back (a box narrower than
+        near_width) is in view but not in the strip: clipped, never present, so the window is
+        dropped and the radio is not taught that links nobody is touching can mean a person."""
+        self.box_w = round(people[0][2] / self.projection.width, 4) if len(people) == 1 else None
         if len(people) != 1:
             return bool(people), 0, None, None, 0.0, len(people) > 1
         x, _, w, _, value = people[0]
+        if not self.projection.near(w):
+            return False, 0, None, None, 0.0, True
         zone, along_m = self.projection.side(x, w)
         return True, zone, None, [along_m, 0.0], value, zone is None
 

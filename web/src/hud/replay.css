@@ -1,0 +1,19 @@
+@import './tokens.css';
+/* The replay banner sits under the floor in the room for as long as a replay plays, so a recording never passes for live. */
+.replay { position:fixed; bottom:72px; left:672px; right:32px; z-index:25; box-sizing:border-box; padding:20px 24px; display:grid; gap:12px; background:var(--floor); border:1px solid var(--edge); border-radius:var(--r-card); color:var(--text); font:500 28px/1.2 var(--sans); font-variant-numeric:tabular-nums; }
+.replay[hidden] { display:none; }
+.replay-line { display:flex; align-items:center; gap:12px; white-space:nowrap; }
+.replay-line strong { font-weight:600; letter-spacing:.04em; }
+.replay-line span { color:var(--text-2); }
+.replay-line span::before { content:'·'; margin-right:12px; }
+.replay-line span:empty { display:none; }
+.replay-line [data-testid="replay-time"] { color:var(--text); }
+.replay button { margin-left:auto; font:inherit; min-height:48px; padding:8px 20px; color:var(--text); background:transparent; border:1px solid var(--square); border-radius:var(--r-control); cursor:pointer; }
+.replay button:focus-visible,.replay-track:focus-visible { outline:2px solid var(--text); outline-offset:4px; }
+.replay-track { position:relative; height:24px; cursor:pointer; touch-action:none; }
+.replay-track canvas { position:absolute; left:0; top:8px; width:100%; height:8px; border-radius:var(--r-bar); background:var(--bg); }
+.replay-track i { position:absolute; left:-2px; top:0; width:4px; height:24px; border-radius:var(--r-bar); background:var(--text); transition:transform 100ms linear; }
+.replay-foot { display:flex; align-items:center; gap:24px; }
+.replay[data-kind="notice"] :is(.replay-track,.replay-line span) { visibility:hidden; }
+@media(max-width:1100px) { .replay { left:16px; right:16px; } }
+@media(prefers-reduced-motion:reduce) { .replay-track i { transition:none; } }

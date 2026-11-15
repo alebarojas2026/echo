@@ -15,6 +15,7 @@ from pathlib import Path
 from teacher.applab.python.labels import DeskView, area_of, zone_in
 
 NODES = Path(__file__).resolve().parents[1] / "radio" / "nodes.json"
+NEAR_SAMPLES, NEAR_FRESH_MS, NEAR_RATIO = 8, 3000, 1.15
 DESK_DEAD_BAND = 0.08   # half the band around the split line where a label is dropped, as a share of the frame width
 
 
@@ -49,6 +50,51 @@ def desk_config(nodes, cam_x_m=None, view_m=None, dead_band=DESK_DEAD_BAND, mirr
               "dead_band": dead_band, "mirror": bool(mirror), "side_edge": side_edge, "view_m": view_m,
               "zones": [zone_in(place, split_x / 2, h / 2), zone_in(place, (split_x + w) / 2, h / 2)]}
     DeskView(config, [1, 1])   # the same checks the teacher runs when it starts
+    return config
+
+
+def box_width(read, clock, sleep, samples=NEAR_SAMPLES, give_up_s=10.0):
+    """The median width of the one person's box (a share of the frame width) over `samples` fresh
+    frames, from the teacher app's heartbeat. read() returns the heartbeat dict or None."""
+    seen, widths, deadline = set(), [], clock() + give_up_s
+    while len(widths) < samples:
+        if clock() > deadline:
+            raise ValueError("no steady box from the teacher: is the app running, with exactly one person in view?")
+        beat = read() or {}
+        if isinstance(beat.get("frame"), int) and beat["frame"] not in seen:
+            seen.add(beat["frame"])
+            if isinstance(beat.get("box_w"), (int, float)) and not isinstance(beat["box_w"], bool):
+                widths.append(float(beat["box_w"]))
+        sleep(0.05)
+    return round(sorted(widths)[len(widths) // 2], 4)
+
+
+def near_width(edge_w, back_w):
+    """The share of the frame width that splits "in the strip" from "standing back": halfway between
+    the box at the desk edge and the box one step back. Refused when the two are too alike to tell apart."""
+    if not (0 < back_w < edge_w <= 1) or edge_w < back_w * NEAR_RATIO:
+        raise ValueError(f"the box at the desk edge ({edge_w:g} of the frame) must be clearly wider than one step "
+                         f"back ({back_w:g}): take a bigger step back, and stand square to the camera")
+    return round((edge_w + back_w) / 2, 4)
+
+
+def calibrate_near(config_path, read, ask=input, clock=None, sleep=None, say=print):
+    """The two-step calibration: at the desk edge, then one step back. Writes near_width to the desk file."""
+    import time
+    clock, sleep = clock or time.monotonic, sleep or time.sleep
+    config = json.loads(Path(config_path).read_text(encoding="utf-8"))
+    if config.get("view") != "desk":
+        raise ValueError(f"{config_path} is not a desk view file; run `python -m teacher.calibrate --desk` first")
+    ask("1 of 2. One person stands at the desk edge, where a judge stands. Then press Enter. ")
+    edge = box_width(read, clock, sleep)
+    say(f"   box width at the desk edge: {edge:g} of the frame")
+    ask("2 of 2. The same person takes one step back. Then press Enter. ")
+    back = box_width(read, clock, sleep)
+    say(f"   box width one step back: {back:g} of the frame")
+    config.update(near_width=near_width(edge, back), near_edge_w=edge, near_back_w=back)
+    DeskView(config, [1, 1])
+    Path(config_path).write_text(json.dumps(config, indent=2, allow_nan=False) + "\n")
+    say(f"Saved near_width {config['near_width']:g} to {config_path}. Copy it to the app and restart it.")
     return config
 
 
@@ -170,13 +216,31 @@ def main():
     parser.add_argument("--dead-band", type=float, default=DESK_DEAD_BAND, help="desk: half the dropped band around the split, as a share of the frame width")
     parser.add_argument("--no-mirror", action="store_true", help="desk: the camera looks the same way as the person (it normally faces them)")
     parser.add_argument("--keep-side-edge", action="store_true", help="desk: keep a box cut by the left or right frame edge")
+    parser.add_argument("--near", action="store_true", help="desk: measure how near 'in the strip' is (desk edge, then one step back)")
+    parser.add_argument("--heartbeat", type=Path, help="--near: the teacher app's heartbeat file in the shared directory")
     args = parser.parse_args()
+    if args.near:
+        if not args.heartbeat:
+            parser.error("--near needs --heartbeat <shared-directory>/heartbeat.json")
+
+        def read():
+            try:
+                return json.loads(args.heartbeat.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+        try:
+            calibrate_near(args.output, read)
+        except ValueError as error:
+            parser.exit(1, f"{error}\n")
+        return
     if args.desk:
         config = desk_config(json.loads(args.nodes.read_text(encoding="utf-8")), args.cam_x_m, args.view_m,
                              args.dead_band, not args.no_mirror, "keep" if args.keep_side_edge else "clipped")
         args.output.write_text(json.dumps(config, indent=2, allow_nan=False) + "\n")
         print(f"Saved the desk view to {args.output}: split at {config['split']} of the frame width, "
               f"zone {config['zones'][0]} on the {'right' if config['mirror'] else 'left'} of the frame")
+        print("Not ready for a lesson yet: with the teacher app running, run `python -m teacher.calibrate --near "
+              "--heartbeat <shared-directory>/heartbeat.json` (desk edge, then one step back).")
         return
     if args.side_m:
         area_m, split = None, None
