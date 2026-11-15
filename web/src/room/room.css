@@ -537,8 +537,11 @@ html[data-room-placed] .room-place-open {
 }
 
 /* Just after a save the camera comes down to the saved place: the operator drawer (open again when the page was
-   loaded with ?op=1) steps aside for those seconds, so the place is seen. */
-html[data-room-placed] .hud-operator {
+   loaded with ?op=1) steps aside for those seconds, so the place is seen. The operator's caption and key would
+   then show under the headline and its control, so they wait too. */
+html[data-room-placed] .hud-operator,
+html[data-room-placed] .room-hall-caption,
+html[data-room-placed] .room-legend {
   visibility: hidden;
 }
 
@@ -682,6 +685,12 @@ html[data-judge-layout='hall'] .room::before {
 html[data-judge-layout='hall'] .room::after {
   bottom: 0;
   height: calc(clamp(56px, 4.375vw, 84px) + 1.2 * clamp(28px, 2.084vw, 40px) + 96px);
+}
+
+/* The saved place is said under the top band, not on the name, the claim and the sealed record's line that stand
+   on it (the band is 104 px, below the "Simulated data" strip when there is one). */
+html[data-judge-layout='hall'] .room-placed {
+  top: calc(var(--hall-sim, 0px) + 120px);
 }
 
 /* Placing the kit is the whole hall from above with its own words: no bands over it. */

@@ -104,6 +104,19 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await expect(room(page)).toHaveAttribute('data-scan-at', [...fit.offset_m, fit.yaw_deg].join(','), { timeout: 30000 })
     await expect(page.locator('html')).not.toHaveAttribute('data-room-placing', '1')
     await expect(page.locator('.hud-operator')).toBeHidden() // it would lie over the place just saved
+    // The note lies on none of the words at the top of the page: the "Simulated data" strip, the name and the claim.
+    const covered = await page.evaluate(() => {
+      const note = document.querySelector('[data-testid="place-saved"]').getBoundingClientRect()
+      const seen = (e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden'
+      const words = [...document.querySelectorAll('.room-sim, .judge > header > *, .hud-arrival > header > *, .sealed-record')].filter(seen)
+      return words
+        .filter((e) => {
+          const r = e.getBoundingClientRect()
+          return r.bottom > note.top && r.top < note.bottom && r.right > note.left && r.left < note.right
+        })
+        .map((e) => (e.textContent ?? '').trim().slice(0, 40))
+    })
+    if ((await page.locator('html').getAttribute('data-judge-layout')) === 'hall') expect(covered).toEqual([])
     await shot(page, `place-${width}-4-saved`)
     await expect(room(page)).toHaveAttribute('data-view', 'square', { timeout: 20000 })
     await page.waitForTimeout(400)
