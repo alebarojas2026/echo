@@ -379,14 +379,23 @@ def test_baseline_needs_every_link_through_the_capture():
     baseline_feed(brain, edit=east_goes_quiet)
     assert not brain.base
 
-    def east_blips(m):        # east is quiet from 5 to 8 s: the 20 s start again at 8 s
-        return None if m["type"] == "rssi" and m["tx"] == "east" and 5_000 < m["recv_t"] - T0_MS < 8_000 else m
+    def east_blips(m):        # east is quiet from 5 to 9.5 s: over 3 s of silence, so the 20 s start again when it is back
+        return None if m["type"] == "rssi" and m["tx"] == "east" and 5_000 < m["recv_t"] - T0_MS < 9_500 else m
 
     brain = Brain()
     done_at = []
     baseline_feed(brain, edit=lambda m: (done_at.append(m["recv_t"]) if brain.base and not done_at else None,
                                          east_blips(m))[1])
-    assert 28_000 <= done_at[0] - T0_MS < 28_400
+    assert 29_500 <= done_at[0] - T0_MS < 29_900
+
+    def east_pauses(m):       # a 2 s gap is a slow link, not a dead one: the capture carries on (#634)
+        return None if m["type"] == "rssi" and m["tx"] == "east" and 5_000 < m["recv_t"] - T0_MS < 7_000 else m
+
+    brain = Brain()
+    done_at = []
+    baseline_feed(brain, edit=lambda m: (done_at.append(m["recv_t"]) if brain.base and not done_at else None,
+                                         east_pauses(m))[1])
+    assert done_at[0] - T0_MS < 20_400
     assert all(hz > 13 for hz in brain.expected_hz.values())   # counted over a full 20 s
 
 
