@@ -62,6 +62,7 @@ export function moveWords(advice: Pick<Advice, 'move_m'>, desk = !!STRIP_M, layo
 export type DeadZoneStep = 'found' | 'measuring' | 'better' | 'worse'
 export interface DeadZone {
   step: DeadZoneStep
+  fixed?: boolean
   headline: string
   detail: string
   /** The card's large line: what to do, then "Measuring…", then the gain the board measured. */
@@ -75,14 +76,19 @@ export interface DeadZone {
 /** The board's last advice, kept while the router stays on the spot it advised: a feed that drops the advice
  *  once the link is clear (the room's mock does) still shows "measuring" instead of a paused screen. */
 let kept: Advice | null = null
-export function holdAdvice<T extends StateMsg | null>(state: T): T {
+export function holdAdvice<T extends StateMsg | null>(state: T, layout: HudLayout = hudLayout): T {
   if (!state) return state
+  if (layout.zones.length === 1) {
+    kept = null
+    return state.narration && /move (?:the )?router|router moved/i.test(state.narration.text) ? {...state,narration:null} : state
+  }
   if (state.advice) kept = state.advice
   else if (state.router === HOME_SPOT || state.router !== kept?.to_spot) kept = null
   return kept && !state.advice ? { ...state, advice: kept } : state
 }
 
-export function deadZone(state: StateMsg | null, stale: boolean): DeadZone | null {
+export function deadZone(state: StateMsg | null, stale: boolean, layout: HudLayout = hudLayout): DeadZone | null {
+  if (layout.zones.length === 1) return fixedLine(state, stale, layout)
   const advice = !stale ? state?.advice : null
   if (!state || !advice) return null
   const where = moveWords(advice)
@@ -106,4 +112,54 @@ export function deadZone(state: StateMsg | null, stale: boolean): DeadZone | nul
   return gain > 0
     ? { ...base, step: 'better', headline: 'Dead zone fixed', detail: moved, text: `+${size} stronger` }
     : { ...base, step: 'worse', headline: 'No gain at this spot', detail: moved, text: gain < 0 ? `−${size} weaker` : 'No change' }
+}
+
+const measured = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
+function spotLink(state: StateMsg, layout: HudLayout) {
+  const id = layout.links.find(link => link.kind === 'wifi' && link.crosses_spot)?.id
+  return state.links.find(link => link.id === id && link.status === 'ok' && measured(link.dbm) && measured(link.drop_db))
+}
+function restored(before: number, after: number): DeadZone | null {
+  const gain = Math.round((after - before) * 10) / 10
+  return gain > 0 ? {fixed:true,step:'better',headline:'Wi-Fi line clear',detail:'',text:`+${gain.toFixed(1)} dB back`,way:0,before,after} : null
+}
+function fixedLine(state: StateMsg | null, stale: boolean, layout: HudLayout): DeadZone | null {
+  if (!state || stale || state.health.status === 'blind' || state.armed || !state.pred || state.pred.present || state.src === 'replay') return null
+  const link = spotLink(state,layout)
+  if (!link) return null
+  if (state.pred.kind === 'object' && link.drop_db! >= WEAK_DB) return {
+    fixed:true,step:'found',headline:'Something was left in the Wi-Fi line',detail:'',
+    text:`Wi-Fi down ${link.drop_db!.toFixed(1)} dB`,way:0,before:link.dbm,after:null,
+  }
+  const advice = state.advice
+  if (state.pred.kind === 'none' && link.drop_db! < WEAK_DB && advice?.link === link.id && measured(advice.before_dbm) && measured(advice.after_dbm)) return restored(advice.before_dbm,advice.after_dbm)
+  return null
+}
+
+/** A recovery compares two actual readings of the same link, across a confirmed object-to-empty transition. */
+export class LineRecovery {
+  private before: {id:string;dbm:number} | null = null
+  private result: {zone:DeadZone;t:number} | null = null
+  private last = -Infinity
+  reset() { this.before=null; this.result=null; this.last=-Infinity }
+  update(state: StateMsg | null, stale: boolean, layout: HudLayout = hudLayout): DeadZone | null {
+    if (layout.zones.length !== 1) { this.reset(); return deadZone(state,stale,layout) }
+    if (!state || stale || state.health.status === 'blind' || state.armed || !state.pred || state.pred.present || state.src === 'replay') { this.reset(); return null }
+    if (state.t < this.last) this.reset()
+    this.last=state.t
+    const link=spotLink(state,layout)
+    if (!link) { this.reset(); return null }
+    const zone=fixedLine(state,false,layout)
+    if (zone?.step==='found') { this.before={id:link.id,dbm:link.dbm!}; this.result=null; return zone }
+    if (zone?.step==='better') return zone
+    if (state.pred.kind!=='none' || link.drop_db!>=WEAK_DB) { this.result=null; return null }
+    if (this.before) {
+      const recovered=this.before.id===link.id ? restored(this.before.dbm,link.dbm!) : null
+      this.before=null
+      if (recovered) this.result={zone:recovered,t:state.t}
+    }
+    if (this.result && state.t-this.result.t<8000) return this.result.zone
+    this.result=null
+    return null
+  }
 }

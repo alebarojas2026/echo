@@ -7,7 +7,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`three spot headlines 
   const update = () => page.evaluate(({scene,layout})=>{const s=window.arrival.peek(scene==='object'?'object':'still');window.arrival.update(scene==='object'?'object':'still',{pred:{...s.pred,motion:scene==='object'?null:scene},advice:null,links:layout.links.map(l=>({id:l.id,dbm:-61,base_dbm:-45,drop_db:16,status:'ok',rate_hz:25,why:0}))})},{scene,layout})
   await update();await page.waitForTimeout(450);await update();await page.waitForTimeout(200)
   await expect(page.getByTestId('judge-headline')).toHaveText(text)
-  if(scene==='object')await expect(page.getByTestId('judge-detail')).toHaveText('−16.0 dB')
+  if(scene==='object'){await expect(page.getByTestId('judge-detail')).toBeEmpty();await expect(page.getByTestId('advice-text')).toHaveText('Wi-Fi down 16.0 dB')}
   await expect(page.getByTestId('judge-headline')).toBeInViewport({ratio:1})
   if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-${scene}.png`)})}
  }
