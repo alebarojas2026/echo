@@ -6,9 +6,12 @@ is at the same height.
 """
 import json
 import math
+import os
 from pathlib import Path
 
-NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
+# RADIO_SIGHT_NODES names another layout file, as it does for the brain. Unset, it is radio/nodes.json.
+NODES_JSON = Path(os.environ.get("RADIO_SIGHT_NODES")
+                  or Path(__file__).resolve().parent.parent / "radio" / "nodes.json")
 MARGIN_M = 0.2   # section 6: the X-ray grid covers the layout plus 0.2 m on each side
 
 
@@ -20,7 +23,11 @@ class Layout:
         self.split_x_m = frame.get("zone_split_x_m")
         # section 6, Armed: how long an appearance must last to be an intrusion (3 s when the file has none)
         self.hold_s = float((nodes.get("armed") or {}).get("hold_s", 3.0))
+        # "presence" in the file: the one line that decides whether somebody is there (the gate: the Wi-Fi line
+        # from Pi A to Pi B, which fell 15 to 21 dB with a person on the kit). The fake feed drops it that far.
+        self.presence_line = (nodes.get("presence") or {}).get("line")
         self.nodes = {n["id"]: tuple(n["xyz_m"][:2]) for n in nodes["nodes"]}
+        self.node_names = {n["id"]: n.get("name") or n["id"] for n in nodes["nodes"]}
         self.links = [(l["tx"], l["rx"], l["kind"]) for l in nodes["links"]]
         self.router_spots = {s["id"]: tuple(s["xyz_m"][:2]) for s in nodes.get("router_spots") or []}
         self.zones = {int(z["id"]): z.get("still_alert_s") for z in nodes["zones"]}
@@ -63,18 +70,55 @@ class Layout:
     def calm_zone(self) -> int:
         """A zone that never alerts, next to the still zone if there is one."""
         calm = [z for z, s in self.zones.items() if not s] or [z for z in self.zones if z != self.still_zone()]
+        if not calm:
+            return self.still_zone()   # one zone: there is nowhere else to stand
         still = self.centres[self.still_zone()]
         return min(calm, key=lambda z: (abs(self.centres[z][1] - still[1]), abs(self.centres[z][0] - still[0])))
 
     def zone_of(self, x: float, y: float) -> int:
-        """Section 3. The square: 1 + (x >= half) + 2*(y < half). The strip: 1 + (x >= split), 0 off it."""
+        """Section 3. The square: 1 + (x >= half) + 2*(y < half). The strip: 1 + (x >= split), 0 off it.
+        A strip with no split is one spot: its one zone anywhere on it."""
         if self.strip_m:
             w, h = self.strip_m
-            return 1 + int(x >= self.split_x_m) if 0 <= x <= w and 0 <= y <= h else 0
+            if not (0 <= x <= w and 0 <= y <= h):
+                return 0
+            return min(self.zones) if self.split_x_m is None else 1 + int(x >= self.split_x_m)
         w, h = self.size_m
         if not (0 <= x <= w and 0 <= y <= h):
             return 0
         return 1 + int(x >= w / 2) + 2 * int(y < h / 2)
+
+    def prop_node(self) -> str:
+        """The device that gets unplugged in a path ({"node": "prop"}): the east beacon where the layout
+        has one, else the first node that only sends, else the device farthest from the board that
+        isn't the router (the gate: Pi B)."""
+        if "east" in self.nodes:
+            return "east"
+        heard = {rx for _, rx, _ in self.links}
+        only_sends = [tx for tx, _, _ in self.links if tx not in heard]
+        if only_sends:
+            return only_sends[0]
+        routers = {tx for tx, _, kind in self.links if kind == "wifi"}
+        board = self.nodes.get("unoq") or next(iter(self.nodes.values()))
+        others = [n for n in self.nodes if n not in routers and n != "unoq"] or list(self.nodes)
+        return max(others, key=lambda n: math.dist(self.nodes[n], board))
+
+    def presence_ends(self):
+        """(tx, rx) of the presence line, or None on a layout without one."""
+        if not self.presence_line:
+            return None
+        tx, _, rest = self.presence_line.partition(">")
+        return tx, rest.partition(":")[0]
+
+    def in_the_line(self) -> tuple:
+        """Where a thing left "in the line" stands ({"on": "line"} in a path): the middle of the presence
+        line, or on a layout without one the tray spot, on the router's link."""
+        ends = self.presence_ends()
+        if not ends and self.tray:
+            return self.tray
+        ends = ends or self.links[0][:2]   # no tray spot either: the middle of the layout's first link
+        (ax, ay), (bx, by) = self.nodes[ends[0]], self.nodes[ends[1]]
+        return (round((ax + bx) / 2, 3), round((ay + by) / 2, 3))
 
     def area_width(self) -> float:
         return (self.strip_m or self.size_m)[0]
@@ -105,12 +149,17 @@ class Layout:
         {"t", "zone": z, "edge": "west" | "east" | "near"} is at that end of the area, level with zone z;
         {"t", "zone": z, "outside": "west" | "east" | "near"} is 0.4 m past that end (not in the area);
         an object {"spot": "T1"} sits on that tray spot, {"near": node, "inset_m": d} next to the
-        node, d metres in from it along x. Points and objects already in metres are kept."""
+        node, d metres in from it along x. Points and objects already in metres are kept.
+        An outage {"node": "prop"}, or an object {"near": "prop"}, is at the device this layout
+        unplugs (prop_node). An object {"on": "line"} stands in the line the dead-zone advice is about
+        (in_the_line)."""
         out = dict(path)
         if path.get("person"):
             out["person"] = [self._waypoint(p) for p in path["person"]]
         if path.get("objects"):
             out["objects"] = [self._object(o) for o in path["objects"]]
+        if path.get("outages"):
+            out["outages"] = [dict(o, node=self.prop_node()) if o.get("node") == "prop" else o for o in path["outages"]]
         if path.get("router") and out.get("objects"):
             first = out["objects"][0]
             out["router"] = [dict(r, spot=self.clear_spot((first["x"], first["y"]))) if r["spot"] == "clear" else r
@@ -146,8 +195,12 @@ class Layout:
         o = dict(o)
         if "spot" in o:
             o["x"], o["y"] = self.spots[o.pop("spot")]
+        elif o.get("on") == "line":
+            del o["on"]
+            o["x"], o["y"] = self.in_the_line()
         elif "near" in o:
-            x, y = self.nodes[o.pop("near")]
+            near = o.pop("near")
+            x, y = self.nodes[self.prop_node() if near == "prop" else near]
             inset = o.pop("inset_m", 0.15)
             o["x"], o["y"] = round(x - inset if x >= self.area_width() / 2 else x + inset, 3), y
         return o

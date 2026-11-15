@@ -68,7 +68,7 @@ def test_hall_readings_are_weak_few_and_uneven_and_in_time_order():
         assert 4 < len(quiet) / 34 < 11                          # about 30% of 22 adverts a second
         gaps = [b["t"] - a["t"] for a, b in zip(quiet, quiet[1:])]
         assert max(gaps) > 4 * min(gaps)                         # uneven, not a steady beat
-        core = fake.baseline("east", "unoq", "ble")
+        core = fake.baseline(*next(link for link in fake.LINKS if link[2] == "ble"))   # a Bluetooth link of the layout in use
         assert max(e["dbm"] for e in quiet) < core - 15          # far weaker than a link of the square
     walked = [e["dbm"] for e in events if e.get("link") == "h>unoq:ble" and 36 <= e["t"] < 37]
     before = [e["dbm"] for e in events if e.get("link") == "h>unoq:ble" and 10 <= e["t"] < 34]

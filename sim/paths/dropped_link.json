@@ -6,6 +6,6 @@
     {"t": 0, "zone": "tour4"}
   ],
   "outages": [
-    {"node": "east", "t_on": 10, "t_off": 20}
+    {"node": "prop", "t_on": 10, "t_off": 20}
   ]
 }
