@@ -20,6 +20,9 @@ export interface Scan {
   bounds(): Box3
   /** The cutaway in front of the strip (ghostBox): 0 solid, 1 fully see-through. */
   ghost(amount: number): void
+  /** The height (scene y) of the model's highest surface at or below `top` under the scene point (x, z): a desk
+   *  top, a chair, the floor. Null when the model has nothing there. What the clear box leaves out doesn't count. */
+  under(x: number, z: number, top: number): number | null
   /** The model's own box, in its own metres, before any alignment. */
   box: { min: number[]; max: number[] }
   /** The desk it stands at only because nothing was saved yet (desks.ts), named for the operator; else unset. */
@@ -159,7 +162,9 @@ function scanMaterial(shared: Shared, colored: boolean, pass: 'solid' | 'ghost')
     vertexColors: colored, // three defines USE_COLOR (and USE_COLOR_ALPHA for RGBA) and declares `color`
     defines: pass === 'ghost' ? { GHOST_PASS: '' } : {},
     transparent: pass === 'ghost',
-    depthWrite: pass === 'solid',
+    // Both passes write depth: the see-through one draws its triangles in no particular order, and without depth
+    // a far face (a desk's dark inside) could land on a near one, which showed as a dark slot while it faded.
+    depthWrite: true,
     uniforms: {
       uFloor: { value: new Color(FLOOR) },
       uWall: { value: new Color(0x23272d) },
@@ -242,7 +247,7 @@ const TRIANGLE_BUDGET: Record<Quality, number> = { pi: 150_000, hi: 400_000 }
 
 /** Puts our material on every mesh (coloured where it has vertex colours) and drops textures, and gives each mesh a
  *  hidden see-through twin for the cutaway. Returns the triangle count and the twins. */
-function flatten(root: Object3D, shared: Shared): { triangles: number; twins: Mesh[] } {
+function flatten(root: Object3D, shared: Shared): { triangles: number; twins: Mesh[]; solids: Mesh[] } {
   const solid = { flat: scanMaterial(shared, false, 'solid'), colored: scanMaterial(shared, true, 'solid') }
   const ghost = { flat: scanMaterial(shared, false, 'ghost'), colored: scanMaterial(shared, true, 'ghost') }
   let triangles = 0
@@ -266,7 +271,55 @@ function flatten(root: Object3D, shared: Shared): { triangles: number; twins: Me
     obj.add(twin)
     return twin
   })
-  return { triangles, twins }
+  return { triangles, twins, solids: meshes }
+}
+
+/** How far around the layout's middle under() looks for what a device stands on. */
+const NEAR_M = 4
+
+/** The triangles of the placed model within NEAR_M (east and north) of the scene's middle, nine numbers each
+ *  (three corners, scene coordinates). One pass over the model; a few thousand of its triangles are left. */
+function nearTriangles(solids: readonly Mesh[], holder: Object3D): Float32Array {
+  holder.updateMatrixWorld(true)
+  const out: number[] = []
+  const v = [new Vector3(), new Vector3(), new Vector3()]
+  for (const mesh of solids) {
+    const pos = mesh.geometry.getAttribute('position')
+    const index = mesh.geometry.getIndex()
+    const count = index ? index.count : pos.count
+    for (let i = 0; i < count; i += 3) {
+      for (let k = 0; k < 3; k++) v[k].fromBufferAttribute(pos, index ? index.getX(i + k) : i + k).applyMatrix4(mesh.matrixWorld)
+      if (Math.min(v[0].x, v[1].x, v[2].x) > NEAR_M || Math.max(v[0].x, v[1].x, v[2].x) < -NEAR_M) continue
+      if (Math.min(v[0].z, v[1].z, v[2].z) > NEAR_M || Math.max(v[0].z, v[1].z, v[2].z) < -NEAR_M) continue
+      for (const p of v) out.push(p.x, p.y, p.z)
+    }
+  }
+  return new Float32Array(out)
+}
+
+/**
+ * The highest surface among `tris` (nearTriangles) straight under the scene point (x, z), at or below `top`, as a
+ * scene height; null when none is there. Points of the surface inside `skip` (what the clear box leaves out of the
+ * drawing) don't count.
+ */
+export function surfaceUnder(tris: Float32Array, x: number, z: number, top: number, skip?: Box3): number | null {
+  let best: number | null = null
+  const at = new Vector3()
+  for (let i = 0; i < tris.length; i += 9) {
+    const [ax, ay, az, bx, by, bz, cx, cy, cz] = [tris[i], tris[i + 1], tris[i + 2], tris[i + 3], tris[i + 4], tris[i + 5], tris[i + 6], tris[i + 7], tris[i + 8]]
+    if (x < Math.min(ax, bx, cx) || x > Math.max(ax, bx, cx) || z < Math.min(az, bz, cz) || z > Math.max(az, bz, cz)) continue
+    // Barycentric weights of (x, z) in the triangle seen from above; a triangle on edge has no area there.
+    const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz)
+    if (Math.abs(d) < 1e-9) continue
+    const u = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d
+    const w = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d
+    if (u < 0 || w < 0 || u + w > 1) continue
+    const y = u * ay + w * by + (1 - u - w) * cy
+    if (y > top + 1e-3 || (best !== null && y <= best)) continue
+    if (skip?.containsPoint(at.set(x, y, z))) continue
+    best = y
+  }
+  return best
 }
 
 /** ?lift=1.2 brightens the hall model's own colours (a projector washes dark tones out); 1 when not set. Only
@@ -293,7 +346,9 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
     const box = new Box3().setFromObject(gltf.scene)
     const cut = { value: DEFAULT_CUT_M }
     const shared: Shared = { cut, lift: { value: hallLift(params) }, clear: clearBox(), ghost: ghostBox(), ghostOn: { value: 0 } }
-    const { triangles, twins } = flatten(gltf.scene, shared)
+    const { triangles, twins, solids } = flatten(gltf.scene, shared)
+    // The model's triangles near the layout, in scene coordinates, for under(): gathered once per placement.
+    let near: Float32Array | null = null
     if (triangles > TRIANGLE_BUDGET[quality]) {
       console.warn(
         `room scan: ${Math.round(triangles)} triangles, over the ${quality} budget of ${TRIANGLE_BUDGET[quality]}. ` +
@@ -307,6 +362,7 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
       fit: source.fit,
       apply(fit) {
         handle.fit = fit
+        near = null
         const p = placeScan(box.min.toArray(), box.max.toArray(), fit)
         gltf.scene.position.set(...p.inner)
         holder.scale.setScalar(p.scale)
@@ -324,6 +380,10 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
         view.requestRender()
       },
       box: { min: box.min.toArray(), max: box.max.toArray() },
+      under(x, z, top) {
+        near ??= nearTriangles(solids, holder)
+        return surfaceUnder(near, x, z, top, shared.clear)
+      },
     }
     handle.apply(source.fit)
     drawnRoom.visible = false
