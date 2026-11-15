@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from store import Store, summary
+from store import SCHEMA, Store, summary
 from store.__main__ import fill_from_sim
 
 T0 = 1_763_149_500_000
@@ -28,6 +28,64 @@ def test_one_summary_a_second():
     s = Store(":memory:")
     assert [s.add(state(T0 + ms)) for ms in (0, 100, 900, 1000, 1100)] == [True, False, False, True, False]
     assert [r["t"] for r in s.seconds()] == [T0, T0 + 1000]
+
+
+def test_clock_backwards_keeps_new_rows_and_replaces_collisions(tmp_path, caplog):
+    path = tmp_path / "clock.db"
+    s = Store(path)
+    for second in (*range(100, 111), *range(50, 56)):
+        s.add(state(second * 1000))
+    assert len(s.seconds()) == 17
+    assert s.latest()["t"] == 55_000
+    assert len(caplog.records) == 1
+    s.add(state(100_000, armed=True))
+    assert s.latest()["armed"] == 1
+    assert len(s.seconds()) == 17
+    s.close()
+    s = Store(path)
+    assert s.latest()["t"] == 100_000
+
+
+def test_legacy_epoch_primary_key_migration_preserves_rows_and_optional_columns(tmp_path):
+    path = tmp_path / "legacy.db"
+    db = sqlite3.connect(path)
+    db.executescript(SCHEMA.replace("t int primary key", "t integer primary key"))
+    for second in (100, 110):
+        row = summary(state(second * 1000, tamper=["pi5"],
+                            pred={"present": True, "kind": "person", "zone": 1, "zone_set": [1], "motion": "still"}))
+        db.execute(f"insert into seconds({', '.join(row)}) values ({', '.join('?' * len(row))})", tuple(row.values()))
+    db.commit()
+    db.close()
+    s = Store(path)
+    assert [r["t"] for r in s.seconds()] == [100_000, 110_000]
+    assert all(r["tamper"] == ["pi5"] and r["zone_set"] == [1] and r["model"]["ver"] == "m3" for r in s.seconds())
+    assert s.latest()["t"] == 110_000
+    assert s.add(state(50_000)) and s.latest()["t"] == 50_000
+    assert s.add(state(100_000, armed=True)) and s.latest()["armed"] == 1
+    assert len(s.seconds()) == 3
+    s.close()
+    s = Store(path)
+    assert s.latest()["t"] == 100_000 and len(s.seconds()) == 3
+
+
+def test_history_limits_rows_in_sql():
+    s = Store(":memory:")
+    for second in range(3600):
+        s.add(state(second * 1000))
+    count = []
+    s.db.create_function("count_returned", 1, lambda t: count.append(t) or t)
+    s.db.execute("alter table seconds rename to source_seconds")
+    s.db.execute("create view seconds as select count_returned(t) as observed, * from source_seconds")
+    assert len(s.history(100_000, 110_000)["rows"]) == 11
+    assert len(count) == 11
+
+
+def test_advice_ignores_rows_outside_requested_minutes():
+    from agent.tools import explain_advice
+    s = Store(":memory:")
+    s.add(state(T0, advice={"text": "Old advice"}))
+    assert explain_advice(s, T0 + 120_000, {}, minutes=1)["rows"] == []
+    assert explain_advice(s, T0 - 1000, {}, minutes=1)["rows"] == []
 
 
 def test_summary_keeps_what_the_agent_needs():
