@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CmdMsg } from './contract'
-import { feedFrom, wsTransport, type Transport } from './feed'
-import { mockState } from './mock'
+import { feedFrom, feedSource, servedByBoard, wsTransport, type Transport } from './feed'
+import { mockScenario, mockState } from './mock'
 
 function fakeTransport() {
   const sent: CmdMsg[] = []
@@ -86,5 +86,43 @@ describe('websocket transport', () => {
     expect(deliver).not.toHaveBeenCalled()
     expect(() => sock.onmessage!({ data: '{"boom":true}' })).toThrow('subscriber failed')
     vi.unstubAllGlobals()
+  })
+})
+
+describe('live or mock (#642)', () => {
+  const q = (query: string) => new URLSearchParams(query)
+  const page = (meta: string | null) => ({
+    querySelector: (sel: string) => (sel === 'meta[name="radio-sight-board"]' && meta !== null ? ({ getAttribute: () => meta } as unknown as Element) : null),
+  })
+
+  it('reads the mark the board puts on the page it serves', () => {
+    expect(servedByBoard(page('live'))).toBe(true)
+    expect(servedByBoard(page(null))).toBe(false)
+    expect(servedByBoard(page('preview'))).toBe(false)
+  })
+
+  it('is live on the board with no query, a bookmark or a restart: never the tour', () => {
+    expect(feedSource(q(''), true, true)).toBe('ws')
+    expect(feedSource(q('q=hi&view=hall'), true, true)).toBe('ws')
+    expect(feedSource(q('src=ws'), true, true)).toBe('ws')
+  })
+
+  it('plays the mock on the board only when the address asks for it in so many words', () => {
+    expect(feedSource(q('mock=1'), true, true)).toBe('mock')
+    expect(feedSource(q('mock=still'), true, true)).toBe('mock')
+    expect(feedSource(q('src=mock'), true, true)).toBe('mock')
+  })
+
+  it('is live for any built page, and the mock by default only under the dev server', () => {
+    expect(feedSource(q(''), false, true)).toBe('ws')
+    expect(feedSource(q(''), false, false)).toBe('mock')
+    expect(feedSource(q('src=ws'), false, false)).toBe('ws')
+  })
+
+  it('plays the tour for ?mock=1 or an unknown name, and the named scenario otherwise', () => {
+    expect(mockScenario('1')).toBe('tour')
+    expect(mockScenario('')).toBe('tour')
+    expect(mockScenario(null)).toBe('tour')
+    expect(mockScenario('still')).toBe('still')
   })
 })
