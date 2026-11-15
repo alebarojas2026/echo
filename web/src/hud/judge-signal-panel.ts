@@ -38,6 +38,7 @@ function createView(variant: 'strip' | 'arrival') {
         row.dataset.testid = 'signal-row'
         row.dataset.zone = String(side.zone)
         row.dataset.links = side.links.join(',')
+        row.dataset.primary = side.primary ?? ''
         row.innerHTML = '<span class="signal-name"></span><canvas aria-hidden="true"></canvas><span class="signal-value" data-testid="signal-value"></span>'
         row.querySelector('.signal-name')!.textContent = side.name
         rowsEl.append(row)
@@ -55,9 +56,12 @@ function createView(variant: 'strip' | 'arrival') {
       if (!el.isConnected || rowsEl.hidden || !rowsEl.offsetParent) return
       const css = getComputedStyle(el)
       colours ??= { link: css.getPropertyValue('--link').trim(), person: css.getPropertyValue('--person').trim(), edge: css.getPropertyValue('--edge').trim() }
-      const all = rows.map((_, i) => traceRuns(history.samples, i, now))
+      const all = rows.map((_, i) => {
+        const side = history.sides[i]
+        return side.traces?.map(trace => ({...trace, runs:traceRuns(history.samples, i, now, trace.id)})) ?? [{id:'',width:3,runs:traceRuns(history.samples,i,now)}]
+      })
       let peak = 0
-      for (const runs of all) for (const run of runs) for (const p of run) if (p.age <= WINDOW_MS && p.drop > peak) peak = p.drop
+      for (const paths of all) for (const {runs} of paths) for (const run of runs) for (const p of run) if (p.age <= WINDOW_MS && p.drop > peak) peak = p.drop
       const target = Math.max(FLOOR_DB, Math.ceil(peak + 1))
       scale += (target - scale) * Math.min(1, (now - lastDraw) / 300)
       lastDraw = now
@@ -84,30 +88,33 @@ function createView(variant: 'strip' | 'arrival') {
         ctx.moveTo(0, zero)
         ctx.lineTo(w, zero)
         ctx.stroke()
-        ctx.lineWidth = 3
         ctx.lineJoin = 'round'
         ctx.lineCap = 'round'
-        const runs = all[i]
-        for (const present of [false, true]) {
-          ctx.strokeStyle = present ? colours!.person : colours!.link
-          ctx.beginPath()
-          for (const run of runs) {
-            for (let k = 1; k < run.length; k++) {
-              if (run[k].present !== present) continue
-              ctx.moveTo(x(run[k - 1]), y(run[k - 1]))
-              ctx.lineTo(x(run[k]), y(run[k]))
+        const paths = [...all[i]].sort((a,b)=>a.width-b.width)
+        for (const {width,runs} of paths) {
+          ctx.lineWidth = width
+          for (const present of [false, true]) {
+            ctx.strokeStyle = present ? colours!.person : colours!.link
+            ctx.beginPath()
+            for (const run of runs) {
+              for (let k = 1; k < run.length; k++) {
+                if (run[k].present !== present) continue
+                ctx.moveTo(x(run[k - 1]), y(run[k - 1]))
+                ctx.lineTo(x(run[k]), y(run[k]))
+              }
             }
+            ctx.stroke()
           }
-          ctx.stroke()
         }
-        const pen = runs.at(-1)?.at(-1)
+        const main = paths.find(trace => trace.id === history.sides[i].primary) ?? paths.at(-1)
+        const pen = main?.runs.at(-1)?.at(-1)
         if (pen && pen.age === 0) {
           ctx.fillStyle = pen.present ? colours!.person : colours!.link
           ctx.beginPath()
           ctx.arc(x(pen), y(pen), 5, 0, Math.PI * 2)
           ctx.fill()
         }
-        const drawn = String(runs.length)
+        const drawn = String(paths.reduce((sum,trace)=>sum+trace.runs.length,0))
         if (row.el.dataset.runs !== drawn) row.el.dataset.runs = drawn
       })
     },

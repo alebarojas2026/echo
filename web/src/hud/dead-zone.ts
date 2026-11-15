@@ -15,9 +15,9 @@ export const dbm = (value: number | null | undefined) =>
 
 /** The router's Wi-Fi link to the receiver, from the layout: the link advice is about. */
 export function wifiLinkId(advice?: Advice | null, layout: HudLayout = hudLayout): string | null {
-  if (advice?.link) return advice.link
   const crossing = layout.zones.length === 1 && layout.links.find(link => link.kind === 'wifi' && link.crosses_spot)
   if (crossing) return crossing.id
+  if (advice?.link) return advice.link
   const router = routerId()
   const wifi = LINK_IDS.filter((id) => parseLinkId(id)?.kind === 'wifi')
   return wifi.find((id) => parseLinkId(id)?.tx === router) ?? wifi[0] ?? null
