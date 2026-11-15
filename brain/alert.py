@@ -170,75 +170,90 @@ class CheckIn:
 
 
 TAMPER_SILENT_MS = 3000   # a node is silent when none of its links has had a reading for this long
-TAMPER_FRESH_MS = 1000    # a link is fresh when its last reading is at most this old
-TAMPER_CLEAR_MS = 2000    # ... and a node is back when its links have been fresh for this long
+TAMPER_CLEAR_MS = 2000    # a node is back when every link of its has gone this long without such a gap
 
 
 class Tamper:
-    """Tamper while armed (contract proposal, issue #533): a device unplugged or silenced is noticed.
+    """Tamper while armed (section 6; proposed in issue #533): a device unplugged or silenced is noticed.
 
     A node is silent when every link it sends or receives on has had no reading for 3 s. While
-    armed, a node that goes silent raises `tamper` once and is listed until its links have been
-    fresh for 2 s, or until disarm. Arming with a node already silent raises it at once. It does
-    not look at health or pred: it works while the sensor is blind, which is the point.
+    armed, a node that goes silent raises `tamper` once and is listed until all its links have
+    had readings for 2 s without a 3 s gap, or until disarm. Arming with a node already silent
+    raises it at once. It does not look at health or pred: it works while the sensor is blind,
+    which is the point.
 
     Ordinary packet loss never gets there: at 10 readings a second and 60% loss, a link going
     3 s without a single reading would take 30 losses in a row, on every link of the node at once.
+    The way back uses the same 3 s, so the same loss can't keep a device listed once it is back.
 
-    One step past the proposal's wording, so two devices can come back one at a time: a node's
+    One step past the contract's wording, so two devices can come back one at a time: a node's
     links to another node that is itself still listed are left out when judging whether it is
     back (it can't be blamed for the other one's silence), as long as one of its links remains.
+
+    The optional hall beacons (nodes.json "hall") count as nodes too, each once it has been heard
+    since arming, on the links it has been heard on since then. One that was never switched on, or
+    was already off when the space was armed, is not a tamper.
     """
 
-    def __init__(self, links_of: Dict[str, List[str]]):
+    def __init__(self, links_of: Dict[str, List[str]], silent_ms: int = TAMPER_SILENT_MS,
+                 clear_ms: int = TAMPER_CLEAR_MS):
         """links_of: {node: [link ids it sends or receives on]}, from radio/nodes.json."""
         self.links_of = {node: list(links) for node, links in links_of.items() if links}
+        self.silent_ms, self.clear_ms = silent_ms, clear_ms
         self.silent: List[str] = []                     # listed nodes, in the order they went silent
-        self._fresh_since: Dict[str, int] = {}
+        self._back_since: Dict[str, int] = {}
         self._start: Optional[int] = None
+        self._core = dict(self.links_of)                # the layout's own nodes
+        self._armed_at: Optional[int] = None
 
     @classmethod
-    def from_nodes(cls, doc) -> "Tamper":
+    def from_nodes(cls, doc, **settings) -> "Tamper":
         links_of: Dict[str, List[str]] = {}
         for link in doc["links"]:
             for node in (link["tx"], link["rx"]):
                 links_of.setdefault(node, []).append(link["id"])
-        return cls(links_of)
+        return cls(links_of, **settings)
 
-    def update(self, now: int, armed: bool, last_seen: Dict[str, int]) -> List[tuple]:
-        """One tick. last_seen: {link: recv_t of its last reading}. Returns (kind, {"node": id}) events."""
-        events = []
+    def update(self, now: int, armed: bool, last_seen: Dict[str, int],
+               hall_seen: Optional[Dict[str, Dict[str, int]]] = None) -> List[tuple]:
+        """One tick. last_seen: {link: recv_t of its last reading}. hall_seen: the same per hall
+        beacon, {node: {link: recv_t}}. Returns (kind, {"node": id}) events."""
         if self._start is None:
             self._start = now
         if not armed:
             events = [("tamper_cleared", {"node": node}) for node in self.silent]
-            self.silent, self._fresh_since = [], {}
+            self.silent, self._back_since = [], {}
+            self.links_of, self._armed_at = dict(self._core), None   # hall beacons are counted afresh next time
             return events
+        if self._armed_at is None:
+            self._armed_at = now
+        for node, seen in (hall_seen or {}).items():
+            if node in self._core:
+                continue
+            known = self.links_of.get(node, [])
+            heard = [link for link, t in seen.items() if t >= self._armed_at and link not in known]   # since arming
+            if known or heard:
+                self.links_of[node] = known + heard
+                last_seen = {**last_seen, **{link: seen[link] for link in self.links_of[node]}}
 
-        if self._start is None:
-            self._start = now
+        def quiet(link):   # a link never heard counts from when this rule first ran, not from for ever
+            return now - last_seen.get(link, self._start) >= self.silent_ms
 
-        def age(link):   # a link never heard counts from when this rule first ran, not from for ever
-            return now - last_seen.get(link, self._start)
-
+        events = []
         for node, links in self.links_of.items():
-            if node not in self.silent:
-                if all(age(link) >= TAMPER_SILENT_MS for link in links):
-                    self.silent.append(node)
-                    self._fresh_since.pop(node, None)
-                    events.append(("tamper", {"node": node}))
+            if node not in self.silent and all(quiet(link) for link in links):
+                self.silent.append(node)
+                self._back_since.pop(node, None)
+                events.append(("tamper", {"node": node}))
         for node in list(self.silent):
             others = [k for k in self.links_of[node]
                       if not any(k in self.links_of[n] for n in self.silent if n != node)]
-            judged = others or self.links_of[node]
-            if all(age(link) <= TAMPER_FRESH_MS for link in judged):
-                since = self._fresh_since.setdefault(node, now)
-                if now - since >= TAMPER_CLEAR_MS:
-                    self.silent.remove(node)
-                    self._fresh_since.pop(node, None)
-                    events.append(("tamper_cleared", {"node": node}))
-            else:
-                self._fresh_since.pop(node, None)
+            if any(quiet(link) for link in others or self.links_of[node]):
+                self._back_since.pop(node, None)
+            elif now - self._back_since.setdefault(node, now) >= self.clear_ms:
+                self.silent.remove(node)
+                self._back_since.pop(node, None)
+                events.append(("tamper_cleared", {"node": node}))
         return events
 
 
