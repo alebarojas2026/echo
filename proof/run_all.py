@@ -88,12 +88,19 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
             for pair in negative_pairs[1:]:
                 command.extend(["--more-pairs", *pair])
             commands.append(command)
+        if timing_pairs:
+            command = [sys.executable,"-m","proof.security","--train",*groups["train"],*groups["object"],
+                       "--baseline",str(baseline),"--proof",str(output)]
+            for pair in timing_pairs: command.extend(["--pair",*pair])
+            commands.append(command)
         commands.append([sys.executable, "-m", "proof.render_table", "--proof", str(output),
                          "--document", str(document), "--output", str(document)])
     return commands, missing
 
 
 def missing_metrics(proof):
+    security = proof.get("security") or {}
+    detection, alarms = security.get("detection") or {}, security.get("false_alarms") or {}
     fields = [("zone agreement", (proof.get("zone") or {}).get("total")),
               ("person/object agreement", (proof.get("person_vs_object") or {}).get("total")),
               ("training time on board", proof.get("train_s")),
@@ -104,7 +111,15 @@ def missing_metrics(proof):
               ("teaching power measurement", (proof.get("watts") or {}).get("teaching")),
               ("measured images stored", proof.get("images_stored")),
               ("installed model inventory", proof.get("models_on_board")),
-              ("measured egress bytes", proof.get("bytes_out"))]
+              ("measured egress bytes", proof.get("bytes_out")),
+              ("entry detection", detection.get("entries")),
+              ("armed intrusion detection", detection.get("armed_entries")),
+              ("false presences per hour", alarms.get("presence_per_hour")),
+              ("false intrusions per hour", alarms.get("intrusions_per_hour"))]
+    for name in ("all", "four_nodes", "router_receiver"):
+        subset = next((r for r in security.get("fewer_devices", []) if r["name"] == name), {})
+        fields.extend([(f"{name} zone agreement", (subset.get("zone") or {}).get("total")),
+                       (f"{name} entry detection", (subset.get("presence") or {}).get("entries"))])
     return [label for label, value in fields if value is None]
 
 

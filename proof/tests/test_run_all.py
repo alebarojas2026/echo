@@ -28,7 +28,7 @@ def test_plan_runs_stages_in_order_and_never_trains_on_heldout(tmp_path):
     baseline.write_text("{}")
     commands, missing = plan(tmp_path, tmp_path / "proof.json", baseline, tmp_path / "PROOF.md", True)
     assert not missing
-    assert [cmd[2] for cmd in commands] == ["proof.score", "proof.latency", "proof.false_alarms", "proof.render_table"]
+    assert [cmd[2] for cmd in commands] == ["proof.score", "proof.latency", "proof.false_alarms", "proof.security", "proof.render_table"]
     assert str(heldout) not in commands[0][commands[0].index("--train"):commands[0].index("--heldout")]
     assert "--on-board" in commands[0]
 
