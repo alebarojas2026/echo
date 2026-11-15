@@ -22,8 +22,8 @@ Every number shown on screen or in the pitch has a row here: what was measured, 
 - **Train/test split (everyone):** decide before recording which sessions are for training and which are held out for testing. Never test on training sessions.
 
 ## Honest limits
-- Detects presence, zone and movement. The no-movement alert notices that someone has stopped moving, not why.
-- Trained and tested in one room layout; accuracy in other rooms is not measured.
+- The current gate demo senses presence and still/moving at one spot; it does not locate a person within a room. The no-movement alert notices that someone has stopped moving, not why.
+- The results here cover one person in one room. Placement matters, including the failed placements recorded below; performance in other rooms is not measured.
 
 <!-- proof-json:start -->
 
@@ -148,3 +148,65 @@ Recorded on the kit the night of 14 November 2026 (board build `4d87ebd`); the l
 flutter-102623: recording SHA256 `1ea2260380442cdfdfb2f21483e5303991d9c0d93e55ef8e15bd1a00a13b9527`. The truth is the operator's count (how many stands, how long empty); there is no timed log, so no delay and no per-second number comes from this run. See proof/said_live.py.
 
 <!-- proof-json:end -->
+
+## Kit-5 acceptance checks reported from the real board
+
+Source: [Ivan's hardware report on #95, posted 15 November 2026 at 12:43 UTC][kit5-report].
+These are the operator's reported measurements from one completed acceptance run, with the
+board and both Pis on `kit-5` (`c79da9b78b20f2556e39e56e5b299c781e64066c`), gate layout,
+camera unplugged and no lesson. They have not been independently recomputed in this proof
+workspace. They establish what was observed in that run; they are not a held-out accuracy
+study or a reliability estimate across people, rooms or repeated failures.
+
+These rows are maintained outside the generated block. They do not fill missing fields in
+`proof.json`, replace the replayed results above, or supply a privacy-meter zero.
+
+| Number / check | Reported value | Method and scope | N | Date (UTC) | Board build |
+|---|---|---|---|---|---|
+| Live presence during the completed stands | 10 of 10 stands found | Operator report from the brain's states, logged about 8 times/s; each stand lasted about 10 s. The interrupted earlier run is excluded. | 1 person, 1 completed run | 2026-11-15 | c79da9b |
+| Empty spot after those stands | 0 false presences, objects or SENSOR BLIND reported during 120 s | Operator's state-log observation. This short interval is not an empty-hour result or evidence of a zero long-term false-alarm rate. | 1 empty interval | 2026-11-15 | c79da9b |
+| No-movement alert | 9.7 s after the brain's enter event | Event-to-event time in one still stand; physical entry and screen latency were not independently timed here. | 1 rehearsal | 2026-11-15 | c79da9b |
+| Step-aside-and-back check-in | Check-in and alert-off on return after 4.4 s out | The reported gesture cleared the alert on the presence line. A separate unintended check-in is retained under limits below. | 1 rehearsed gesture | 2026-11-15 | c79da9b |
+| Armed stand | 1 intrusion, 3.1 s after the brain's enter event | Event-to-event time for one armed stand. | 1 armed stand | 2026-11-15 | c79da9b |
+| Report response | 0.63 s observed request time; response ms field 515 ms | One GET /report after disarming; client elapsed time and the server's timing field are separate measurements. | 1 request | 2026-11-15 | c79da9b |
+| What happened response | 0.10 s observed request time; response ms field 80 ms | One POST /ask story answer, chain_ok true, 56 record citations and 5 listed steps; the engine room was not checked by eye. | 1 request | 2026-11-15 | c79da9b |
+| Enrolled witnesses | 2 with sig_ok true, silent false, advancing last_seq | Both Pis' journal summaries reported 12 signatures/min. This is an observation during this run, not a long-duration availability claim. | 2 Pis | 2026-11-15 | c79da9b |
+| Altered-copy verification | Record 1627 altered and reported as first bad; 6.9 ms | POST /chain/prove checked a 600-record copy and returned ok false. | 1 copy check | 2026-11-15 | c79da9b |
+| Real chain after the copy check | ok true, 1,926 records checked, 84.2 ms | GET /chain/verify after Prove it; first_bad_seq null. | 1 full verification | 2026-11-15 | c79da9b |
+| Pi B absence recorded | First observed silent by 13.9 s after unplug | /chain sampled about every 1.6 s; this bounds an observation, not the exact transition instant. Pi B was unplugged for 19 s. | 1 unplug | 2026-11-15 | c79da9b |
+| Pi B witness recovery | First observed nonsilent by 58.8 s after unplug | Recovery happened without a manual witness restart, including device boot and network rejoin; it is not a 58.8 s signing-only latency. | 1 recovery | 2026-11-15 | c79da9b |
+| Chain during that outage check | Head rose from 2008 to 2159; verified true at every poll | Two-minute observation. Pi A also had unexpected silent episodes, recorded below. | 1 outage observation | 2026-11-15 | c79da9b |
+| Presence-line receive rate | 25.0 readings/s | radio.check for pi5>pi5b:wifi on the real board. | 1 reported check | 2026-11-15 | c79da9b |
+| Serve and store CPU during the observation | Serve 4.8 s CPU; store 7.2 s CPU over 284 s elapsed | Operator's CPUUsageNSec deltas, approximately 1.7% and 2.5% of one core respectively; not whole-board CPU use or power draw. | 1 interval, 2 services | 2026-11-15 | c79da9b |
+| Live privacy-counter result for this run | __ | No successful counter measurement accompanies this acceptance report. The nft failure remains tracked in #889. | __ | __ | __ |
+
+Limits and failures retained from the same report:
+
+- An earlier stands run stopped when Pi B lost power. It is not part of the completed
+  ten-stand count. Its bus capture continued into the later run: `flutter-122029` contains
+  the interrupted run, outage and counted run together. Do not pass its whole-file arrival
+  count to `proof.said_live` as if it were one uninterrupted ten-stand trial.
+- A check-in occurred during stand 9 with no alert active, on `pi5>unoq:wifi`, which is
+  not the presence line. This is a kit-5 fault, not a successful check-in trial; the
+  later fix belongs to a different build.
+- Pi A, which was not unplugged, was also marked silent: one episode lasted about 4 s
+  and another 57 ms. Do not claim that the other witnesses never miss a beat.
+- Pi B's clock returned behind after power loss. The operator reset the clock and took
+  a fresh baseline before leaving the kit disarmed. No claim of clock continuity or
+  synchronized clocks across a reboot follows from these checks.
+- The report's roughly 0.1 s presence timing is referenced to the radio line reaching
+  its drop, not an independently logged physical entry or screen update. It is therefore
+  not added as a body-to-screen latency result.
+- An HTTP 200 from /engine/ and valid /ask fields do not establish that the engine-room
+  page was visually correct: the operator had not looked at it by eye.
+
+Reproduction inputs still needed here: the scrubbed `flutter-122029`, `flutter-123232`
+and `flutter-123447` files, their INDEX.md, the completed run's exact boundaries and any
+saved state/HTTP captures. The hardware report places them in the hardware laptop's
+`~/radio-sight-recordings/2026-11-14/sessions/`. File hashes and independently recomputed
+scores remain unavailable in this workspace until those inputs arrive. The request is
+[on #95][kit5-inputs]. The reported checks above are attributed observations, not substitutes
+for those missing recordings.
+
+[kit5-report]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6894490243
+[kit5-inputs]: https://github.com/alebarojas2026/echo/issues/95#issuecomment-6894671044
