@@ -3,7 +3,7 @@
     python -m contracts.check session.jsonl            # one message per line
     python -m sim.fake zone_tour --fast | python -m contracts.check -
     python -m contracts.check proof.json               # a .json file is checked as proof.json
-    python -m contracts.check --as ask_reply replies.jsonl   # the bodies of POST /ask (ask_question, ask_reply)
+    python -m contracts.check --as ask_reply replies.jsonl   # a web server body: ask_question, ask_reply, history, report
 
 Prints file:line and the error for every bad line and exits 1 if any line fails.
 A jump in a producer's seq (lost messages) is a warning, not a failure.
@@ -32,7 +32,9 @@ def _load():
 
 
 VALIDATORS = _load()
-NOT_MESSAGES = {"proof", "ask_question", "ask_reply"}  # proof.json (section 7) and the two bodies of POST /ask (section 10)
+# proof.json (section 7) and the bodies of the board's web server (section 10): POST /ask, GET /history, GET /report
+NOT_MESSAGES = {"proof", "ask_question", "ask_reply", "history", "report"}
+HISTORY_MAX_MS = 30 * 60 * 1000
 TYPES = sorted(set(VALIDATORS) - NOT_MESSAGES)
 
 
@@ -54,6 +56,29 @@ def errors(msg, schema=None):
         things = [(f"$.objects[{i}]", o) for i, o in enumerate(msg["objects"])] + [("$.advice", msg["advice"])]
         nodes = {**NODES, "pi5": ROUTER_SPOTS[msg["router"]]}  # the router sits at its current spot
         out += [err for where, thing in things if thing for err in _near(where, thing, nodes)]
+    if schema in ("ask_reply", "history", "report") and not out:
+        out += _stretch(msg, schema)
+    return out
+
+
+def _stretch(msg, schema):
+    """Section 10: a stretch of time runs forwards; a history is at most 30 minutes, oldest row first."""
+    if schema == "report":
+        end = msg["armed_to_t"]
+        return [] if end is None or msg["armed_from_t"] <= end else [f"$.armed_to_t: {end} is before armed_from_t"]
+    span, where = (msg, "$") if schema == "history" else (msg.get("span"), "$.span")
+    if not span:
+        return []
+    if span["from_t"] > span["to_t"]:
+        return [f"{where}.to_t: {span['to_t']} is before from_t"]
+    if schema != "history":
+        return []
+    out = [f"$.to_t: more than 30 minutes after from_t"] if span["to_t"] - span["from_t"] > HISTORY_MAX_MS else []
+    times = [row["t"] for row in msg["rows"]]
+    if times != sorted(set(times)):
+        out.append("$.rows: not oldest first, or one second twice")
+    if times and not (span["from_t"] <= times[0] and times[-1] <= span["to_t"]):
+        out.append("$.rows: a row outside from_t..to_t")
     return out
 
 
@@ -120,7 +145,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m contracts.check", description=__doc__.splitlines()[0])
     ap.add_argument("files", nargs="+", help="JSON-lines files, - for stdin; a .json file is checked as proof.json")
     ap.add_argument("--as", dest="schema", choices=sorted(NOT_MESSAGES - {"proof"}), default=None,
-                    help="check every line as one of the POST /ask bodies instead of by its type")
+                    help="check every line as one of the web server's bodies instead of by its type")
     args = ap.parse_args(argv)
     return 0 if all([check_file(f, args.schema) for f in args.files]) else 1
 

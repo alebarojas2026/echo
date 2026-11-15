@@ -14,7 +14,8 @@
              "additionalProperties": false},
     "picked_by": {"enum": ["llm", "rules"]},
     "src": {"enum": ["live", "sim", "replay", null]},
-    "ms": {"type": "integer", "minimum": 0}
+    "ms": {"type": "integer", "minimum": 0},
+    "span": {"$comment": "Optional: the stretch of time the answer is about.", "$ref": "common.json#/$defs/span"}
   },
   "required": ["answer", "rows", "tool", "args", "picked_by", "src", "ms"],
   "additionalProperties": false,
