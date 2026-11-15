@@ -18,6 +18,11 @@ Built at MadHacks 2026 for the Qualcomm / N+1 Institute track. In this demo our 
 3. The board combines all links into a radio image of the room: what stays put is an obstruction or dead zone, what moves is a person.
 4. The screen shows the room, the radio links, where people are, and plain-language explanations. No image is ever saved and nothing is sent to the internet.
 
+## What this demo is and isn't
+- A building already has access points and other radios. In this demo our own Pi, UNO Q and beacons stand in for them, on our own hotspot. Running on a building's installed equipment is not tested.
+- The camera is needed for the lesson, and a new place needs a new lesson. It is not needed afterwards.
+- Every number we quote is measured and has a row in [PROOF.md](PROOF.md). A row with no value has not been measured yet.
+
 How the parts connect: [docs/network.md](docs/network.md)
 
 ## Repo layout
@@ -27,12 +32,12 @@ How the parts connect: [docs/network.md](docs/network.md)
 | `web/src/room/`, `web/index.html`, `web/src/main.ts`, `web/package.json` | 3D room, radio links, radio image, web shell | Ivan |
 | `web/src/hud/`, `web/tests/`, `scripts/` | Screen panels, demo tests and demo check script | Ivan |
 | `radio/`, `pi/` | Signal readers on the UNO Q, Pi router and beacon setup | Alexander |
-| `advisor/` | Dead-zone placement advice | Alexander |
+| `advisor/` | Dead-zone placement advice | Izet |
 | `board/`, `mcu/`, `bus/` | Board startup, LED grid, web server (port 8080), message bus and session recorder | Alexander |
 | `brain/` | Features, on-board training, live predictions | Izet |
-| `teacher/` | Camera labels during setup (no images saved) | Izet |
+| `teacher/` | Camera labels during setup (no images saved) | Alejandro |
 | `proof/` | Accuracy and latency measurements | Izet |
-| `narrator/` | On-board plain-language explanations | Ivan |
+| `narrator/` | On-board plain-language explanations | Alejandro |
 | `sim/` | Simulated data and replay for development | Alejandro |
 | `docs/`, `web/src/game/` | Docs and the "Can you hide from Wi-Fi?" scoreboard | Alejandro |
 
