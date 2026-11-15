@@ -189,20 +189,35 @@ def _make_message(dbm: int, seq: int) -> bytes:
 
 
 class Reader:
-    """Turns polls into fresh readings: a poll counts only when rx packets went up since the last one."""
+    """Turns polls into fresh readings: a poll counts only when rx packets went up since the last one.
 
-    def __init__(self, iface: str, bssid: str, read=_read_station_info, say=log, link=_iw_link):
+    A poll that reads nothing (iw timed out on a busy radio, or the station is gone) sends nothing.
+    Once joined, it says "no signal" only after MISS_S of polls that read nothing, so a crowded hall
+    where iw sometimes misses doesn't fill the log. The rx counter is kept across misses: a rejoin
+    restarts it lower, which just costs one reading.
+    """
+
+    MISS_S = 1.0
+
+    def __init__(self, iface: str, bssid: str, read=_read_station_info, say=log, link=_iw_link,
+                 clock=time.monotonic):
         self.iface, self.bssid, self.read, self.say, self.link = iface, bssid, read, say, link
+        self.clock = clock
         self.prev_rx: int | None = None
         self.joined: bool | None = None
+        self.missing_since: float | None = None
 
     def poll(self) -> int | None:
         """The signal of a frame heard since the last poll, or None."""
         dbm, rx = self.read(self.iface, self.bssid)
         if dbm is None or rx is None:
-            self._joined(False)
-            self.prev_rx = None  # a rejoin starts the station's counters again
+            now = self.clock()
+            if self.missing_since is None:
+                self.missing_since = now
+            if self.joined is None or now - self.missing_since >= self.MISS_S:
+                self._joined(False)
             return None
+        self.missing_since = None
         self._joined(True)
         fresh = self.prev_rx is not None and rx > self.prev_rx
         self.prev_rx = rx
