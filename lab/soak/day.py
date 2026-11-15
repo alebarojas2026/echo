@@ -630,15 +630,13 @@ class Day:
            '{"type":"cmd","cmd":"__init__","args":{}}', '{"type":"cmd","cmd":"_tick","args":{}}',
            '{"type":"cmd","cmd":"train","args":{}}', '{"type":"cmd","cmd":"relearn","args":"x"}',
            '{"v":2,"type":"cmd","cmd":"record_start","args":{"session":{"a":1},"purpose":7}}',
-           '{"v":2,"type":"cmd","cmd":"baseline","args":{"keep_model":"true"},"extra":' + '1' * 400 + '}']
+           '{"v":2,"type":"cmd","cmd":"reset_alert","args":{},"extra":' + '1' * 400 + '}']
 
     def fault_bad_cmds(self):
         async def go():
             from websockets.asyncio.client import connect
             async with connect(f"ws://127.0.0.1:{WS}/ws", open_timeout=5, max_size=None) as ws:
                 for raw in self.rng.sample(self.BAD, self.rng.randint(3, len(self.BAD))):
-                    if '"baseline"' in raw and self.segment not in ("talk", "between", "still"):
-                        continue
                     await ws.send(raw)
                 if self.rng.random() < 0.3:
                     await ws.send(b"\x00\x01binary")
@@ -800,7 +798,7 @@ class Day:
                 null_since = None
             if s["alert"]["state"] != "none":
                 alert_since = alert_since or t
-                if self.reset_t and self.reset_t > alert_since + 5:
+                if self.reset_t and self.reset_t > alert_since and t - self.reset_t > 3:   # a reset came and went
                     self.problem("alert_survives_reset", key="alert", once_per=600, alert=s["alert"])
             else:
                 alert_since = None
