@@ -93,7 +93,7 @@ def test_desk_beats_show_in_good_time(desk):
     assert shown["found: the judge steps up"] <= 2.0
     assert shown["lesson: a model within 5 s of train"] <= 5.0
     assert 10.0 <= shown["still: no-movement alert"] <= 13.0                  # the 10 s limit, then the smoothing
-    assert shown["intrusion while armed"] <= 2.0                              # armed, then the judge steps back in
+    assert 3.0 <= shown["intrusion while armed"] <= 5.0                       # steps back in, and is still there 3 s later
 
 
 def test_nobody_stands_long_enough_to_alert_before_the_still_beat():
