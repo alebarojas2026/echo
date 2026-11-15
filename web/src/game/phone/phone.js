@@ -1,6 +1,7 @@
 // Page wiring for the caregiver's phone: the brain's state socket in, one big card out, a chime on the alert.
 import { swap } from '../fade.js'
 import { card, checkinText, isState, MOCKS, shouldChime, wsUrl } from './card.js'
+import { loadZones } from '../zones.js'
 
 const $ = (id) => document.getElementById(id)
 const mock = MOCKS[new URLSearchParams(location.search).get('mock')]
@@ -73,6 +74,7 @@ function connect() {
 }
 
 show()
+loadZones().then((changed) => changed && show()) // the zone names from nodes.json
 if (!mock) {
   setInterval(show, 250) // so NO DATA appears when the feed goes quiet
   connect()

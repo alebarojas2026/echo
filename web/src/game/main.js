@@ -1,5 +1,6 @@
 // Page wiring for the crowd game: the brain's state socket in, taps on the zone buttons out.
 import { swap } from './fade.js'
+import { compass, loadZones, zoneList } from './zones.js'
 import { addRound, counts, emptyTally, isState, judge, load, resultText, save, status, tallyText, truthCmd, undo, wsUrl, ZONES } from './tally.js'
 
 const $ = (id) => document.getElementById(id)
@@ -33,10 +34,11 @@ function age() {
 }
 
 // Zone names take the person colour; the rest of the sentence stays plain.
-const ZONE_NAMES = new RegExp(`(${Object.values(ZONES).join('|')})`)
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const zoneNames = () => new RegExp(`(${Object.values(ZONES).map(escape).join('|')})`)
 function showResult(text, outcome) {
   resultEl.dataset.outcome = outcome
-  swap(resultEl, text, () => resultEl.replaceChildren(...text.split(ZONE_NAMES).map((part, i) =>
+  swap(resultEl, text, () => resultEl.replaceChildren(...text.split(zoneNames()).map((part, i) =>
     i % 2 ? Object.assign(document.createElement('span'), { className: 'zone', textContent: part }) : part)))
 }
 
@@ -87,12 +89,27 @@ function connect() {
   socket.onerror = () => socket.close()
 }
 
-for (const button of document.querySelectorAll('[data-zone]')) {
-  button.addEventListener('click', () => play(Number(button.dataset.zone)))
+// The floor's buttons, one per zone, from nodes.json once it loads (the page starts with the contract's four).
+function renderFloor() {
+  const zones = zoneList()
+  $('floor').replaceChildren(...zones.map(({ id, name, hint }) => {
+    const button = Object.assign(document.createElement('button'), { type: 'button' })
+    button.dataset.zone = id
+    button.append(Object.assign(document.createElement('strong'), { textContent: name }),
+      Object.assign(document.createElement('span'), { textContent: hint }))
+    return button
+  }))
+  $('compass').replaceChildren(...compass().map((text) => Object.assign(document.createElement('span'), { textContent: text })))
+  const ids = zones.map((z) => z.id)
+  $('hint').textContent = `Tap the zone, or press ${ids.length > 1 ? `${Math.min(...ids)} to ${Math.max(...ids)}` : ids[0]}.`
 }
+$('floor').addEventListener('click', (event) => {
+  const button = event.target.closest?.('[data-zone]')
+  if (button) play(Number(button.dataset.zone))
+})
 document.addEventListener('keydown', (event) => {
   if (event.target.closest?.('input, textarea') || event.metaKey || event.ctrlKey || event.altKey) return
-  if (['1', '2', '3', '4'].includes(event.key)) play(Number(event.key))
+  if (ZONES[event.key]) play(Number(event.key))
 })
 $('undo').addEventListener('click', () => {
   tally = undo(tally)
@@ -120,10 +137,17 @@ $('reset').addEventListener('click', () => {
 
 showTally()
 showStatus()
-if (mock?.tap) {
+function mockTap() {
+  if (!mock?.tap) return
   const result = judge(state, 0, mock.tap)
   showResult(resultText(result), result.outcome)
 }
+mockTap()
+loadZones().then((changed) => {
+  if (!changed) return
+  renderFloor()
+  mockTap() // the mock's result in the zone names that just arrived
+})
 if (!mock) {
   setInterval(showStatus, 250)
   connect()
