@@ -245,6 +245,29 @@ def test_two_programs_opening_a_new_file_at_the_same_moment_both_start(tmp_path)
     assert len(list(tmp_path.glob("s*.db"))) == 50 and Store(tmp_path / "s49.db").verify()["ok"]
 
 
+def test_a_check_that_runs_while_the_store_prunes_never_names_the_anchor_as_broken(tmp_path):
+    # The web server checks the chain while the store, another process, prunes it. The check read the
+    # rows and then the anchor in two looks; a prune between them left rows from before it beside the
+    # anchor from after it, and the check said "does not verify" at the anchor's record (1 in 80 rounds).
+    path = tmp_path / "store.db"
+    writer = filled(Store(path, keep_records=40), 40)
+    reader = Store(path)
+    look = reader._before
+
+    def prune_between_the_two_looks(seq):
+        filled(writer, 30, T0 + 100_000)
+        with writer.db:
+            writer.prune()                                # the oldest 30 go, and the anchor moves to record 30
+        return look(seq)
+    reader._before = prune_between_the_two_looks
+    before = reader.verify(1, None)
+    assert before["ok"] and (before["from"], before["checked"]) == (1, 40)   # the file as it stood at the first look
+    reader._before = look
+    after = reader.verify(1, None)
+    assert after["ok"] and (after["from"], after["to"]) == (31, 70) and reader.chain_info()["anchor"]["seq"] == 30
+    assert not reader.db.in_transaction                   # and no read is left open to hold the file's log back
+
+
 def test_an_edited_record_is_named():
     s = filled(Store(":memory:"), 20)
     body = json.loads(s.db.execute("select body from chain where seq = 12").fetchone()[0])
