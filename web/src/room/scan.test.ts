@@ -38,6 +38,15 @@ describe('which hall model to load', () => {
     expect(scanUrl({ hi: 'models/hall-hi.glb', fit: {} }, 'pi')).toBe('models/hall-hi.glb')
     expect(scanUrl({ fit: {} }, 'hi')).toBeUndefined()
   })
+
+  it('picks a look to compare with ?hall=A, and the usual files for an unknown one or none', () => {
+    const src = { hi: 'models/hall-hi.glb', lo: 'models/hall-lo.glb', fit: {}, families: { A: { hi: 'models/hall-hi-A.glb', lo: 'models/hall-lo-A.glb' }, B: { hi: 'models/hall-hi-B.glb' } } }
+    expect(scanUrl(src, 'hi', 'A')).toBe('models/hall-hi-A.glb')
+    expect(scanUrl(src, 'pi', 'A')).toBe('models/hall-lo-A.glb')
+    expect(scanUrl(src, 'pi', 'B')).toBe('models/hall-hi-B.glb') // B has only the detailed file
+    expect(scanUrl(src, 'hi', 'C')).toBe('models/hall-hi.glb')
+    expect(scanUrl(src, 'hi', null)).toBe('models/hall-hi.glb')
+  })
 })
 
 describe('?lift', () => {
