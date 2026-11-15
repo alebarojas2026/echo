@@ -194,6 +194,48 @@ describe('the fly', () => {
     expect(view.host.dataset.view).toBe('square')
   })
 
+  it('stays at the desk when the hall model loads after someone was found, and keeps the hall for later', () => {
+    for (const close of [roomShot, (w: number, h: number) => ({ ...roomShot(w, h), elevDeg: 45, target: roomShot(w, h).target.clone().add(new Vector3(0.2, 0.3, 0)) })]) {
+      const view = fakeView()
+      const wides: number[] = []
+      const fly = new Fly(view as unknown as RoomView, null, (w) => wides.push(w))
+      fly.hold() // the arrival screen, before the model is in
+      fly.arrive() // found: the camera is at the desk
+      view.run(3000)
+      fly.setClose(close)
+      const before = view.shots.length
+      fly.setHall(hall) // the model arrives seconds into the visit
+      view.run(FLY_MS + 100)
+      expect(Math.max(0, ...wides)).toBeLessThan(0.05) // never out to the hall
+      const shots = view.shots.slice(before)
+      expect(shots.every((s) => s.radiusM < hall.radiusM / 2)).toBe(true)
+      const steps = shots.slice(1).map((s, i) => s.target.distanceTo(shots[i].target))
+      expect(Math.max(0, ...steps)).toBeLessThan(0.05) // and to the new close framing by a glide, not a jump
+      expect(view.shot.target.distanceTo(close(...view.size).target)).toBeLessThan(1e-6)
+      expect(fly.wide).toBe(0)
+      expect(view.host.dataset.view).toBe('square')
+      fly.reset() // the hall was kept: between judges the camera still goes out to it
+      view.run(FLY_MS + 100)
+      expect(fly.wide).toBe(1)
+    }
+  })
+
+  it('still shows the hall first when the model loads while the arrival screen waits or was never up', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.arrive() // nothing was waiting (the page's first call, with no arrival state yet)
+    fly.setHall(hall)
+    expect(fly.wide).toBe(1)
+    const next = fakeView()
+    const again = new Fly(next as unknown as RoomView, null, () => {})
+    again.hold()
+    again.arrive()
+    again.hold() // the person left before the model was in: waiting again
+    again.setHall(hall)
+    next.run(FIRST_LOOK_MS + FLY_MS + 100)
+    expect(again.wide).toBe(1)
+  })
+
   it('goes back to the hall when waiting starts again, and ignores found when nothing was waiting', () => {
     const view = fakeView()
     const fly = new Fly(view as unknown as RoomView, null, () => {})
