@@ -4,5 +4,5 @@
   "duration_s": 40,
   "person": [{"t": 0, "x": null}],
   "commands": [{"t": 3, "cmd": "arm", "args": {"on": true}}, {"t": 36, "cmd": "arm", "args": {"on": false}}],
-  "outages": [{"node": "east", "t_on": 10, "t_off": 20}]
+  "outages": [{"node": "prop", "t_on": 10, "t_off": 20}]
 }

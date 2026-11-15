@@ -164,7 +164,7 @@ def privacy_rows(proof, evidence):
     return rows
 
 
-def render(document, proof, evidence=()):
+def render(document, proof, line_report=None, evidence=()):
     primary, extras = measurements(proof)
     privacy = privacy_rows(proof,evidence)
     date, commit = proof.get("measured_at"), proof.get("commit")
@@ -205,6 +205,9 @@ def render(document, proof, evidence=()):
         if key in {"Images stored","Bytes sent outside our network"} and value!="__":
             method,n,row_date = privacy.get(key,(method,"__","__"))
         block.append("| " + " | ".join(cell(c) for c in (label, value, method, n, row_date, row_commit)) + " |")
+    if line_report:
+        from proof.line_stats import table
+        block.extend(table(line_report))
     block.extend(["", END])
     return "\n".join(lines).rstrip() + "\n\n" + "\n".join(block) + "\n"
 
@@ -215,10 +218,14 @@ def main():
     parser.add_argument("--proof", type=Path, default=root / "proof" / "proof.json")
     parser.add_argument("--document", type=Path, default=root / "PROOF.md")
     parser.add_argument("--output", type=Path, help="explicit output path; omit to preview on stdout")
+    parser.add_argument("--lines", type=Path, help="measured per-line companion report")
     args = parser.parse_args()
     log = args.proof.with_suffix(".manual.jsonl")
     evidence = [json.loads(line) for line in log.read_text().splitlines() if line.strip()] if log.exists() else []
-    output = render(args.document.read_text(encoding="utf-8"), json.loads(args.proof.read_text(encoding="utf-8")),evidence)
+    from proof.provenance import empty_proof
+    proof = empty_proof() if args.lines and not args.proof.exists() else json.loads(args.proof.read_text(encoding="utf-8"))
+    lines = json.loads(args.lines.read_text()) if args.lines else None
+    output = render(args.document.read_text(encoding="utf-8"), proof, lines, evidence)
     if args.output:
         args.output.write_text(output, encoding="utf-8")
     else:

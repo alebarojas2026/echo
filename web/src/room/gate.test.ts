@@ -262,8 +262,9 @@ describe('the desk layout, after the gate', () => {
     expect(frame.LINK_IDS.some(mainLine)).toBe(false) // a file that marks no link has no main line
     const advice = { to_spot: 'S-W30', move_m: [-0.3, 0], dist_change_m: 0, why: ['pi5>unoq:wifi'], before_dbm: -66, after_dbm: null }
     expect(adviceArrow(advice as never, 'S-home')).toEqual({ from: 'S-home', to: 'S-W30', done: false }) // the desk's router still moves
-    // Two zones on a strip still need their split; a single zone does not.
-    expect(frame.applyLayout({ ...DESK_LAYOUT, frame: { ...DESK_LAYOUT.frame, zone_split_x_m: undefined } })).toBe(false)
-    expect(frame.STRIP_M).toEqual([1.6, 0.6])
+    // Two zones with no split meet halfway between their centres (zones.test.ts has the rest of that rule).
+    expect(frame.applyLayout({ ...DESK_LAYOUT, frame: { ...DESK_LAYOUT.frame, zone_split_x_m: undefined } })).toBe(true)
+    expect(frame.ZONE_SPLIT_X_M).toBeCloseTo(0.8)
+    expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)
   })
 })

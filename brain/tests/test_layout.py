@@ -205,7 +205,8 @@ def test_on_the_repos_own_nodes_json_every_state_and_event_passes_the_contract()
         assert state["pred"]["zone"] == zone and len(state["pred"]["probs"]) == 1 + len(zones)
     state = play([(5, 0)], 30)
     assert state["pred"]["present"] is False
-    assert len(state["links"]) == len(doc["links"]) and state["xray"]["n_links"] == len(doc["links"])
+    classifier = [link for link in doc["links"] if link.get("classifier") is not False]   # the x-ray leaves the others out
+    assert len(state["links"]) == len(doc["links"]) and state["xray"]["n_links"] == len(classifier)
     w, h = grid_shape(doc["frame"])
     assert (state["xray"]["w"], state["xray"]["h"]) == (w, h) and len(state["xray"]["static_db"]) == w * h
     assert not bad, bad[:5]

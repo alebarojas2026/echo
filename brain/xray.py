@@ -67,10 +67,15 @@ def zone_rule(doc):
     """zone(x, y) for the layout in radio/nodes.json.
 
     A frame with strip_m and zone_split_x_m is the desk layout: zone = 1 + (x >= split) inside
-    the strip, 0 anywhere else (the desk top is never a zone). Otherwise the square's four.
+    the strip, 0 anywhere else (the desk top is never a zone). A strip with no split and one zone
+    in the file is one spot: that zone inside the strip, 0 anywhere else. Otherwise the square's four.
     """
     frame = (doc or {}).get("frame", {})
     strip, split = frame.get("strip_m"), frame.get("zone_split_x_m")
+    zones = (doc or {}).get("zones") or []
+    if strip and split is None and len(zones) == 1:
+        sx, sy, only = float(strip[0]), float(strip[1]), int(zones[0]["id"])
+        return lambda x, y: only if 0 <= x <= sx and 0 <= y <= sy else 0
     if strip and split is not None:
         sx, sy, split = float(strip[0]), float(strip[1]), float(split)
         return lambda x, y: 1 + int(x >= split) if 0 <= x <= sx and 0 <= y <= sy else 0
@@ -241,6 +246,7 @@ class Xray:
         self.grid = Grid(w, h, square_m=square_m, size_m=size_m)
         self.alpha = alpha
         self.excess_m = excess_m
+        self.object_min_db = {}                 # link -> its own floor for an object, where that is over OBJECT_MIN_DB
         self.rebuild()
         self.reset()
 
@@ -359,7 +365,7 @@ class Xray:
             if xy is None or on_peak.size == 0:
                 continue
             k = on_peak[int(np.argmax(static[on_peak]))]
-            if static[k] >= OBJECT_MIN_DB:
+            if static[k] >= max(OBJECT_MIN_DB, self.object_min_db.get(self.links[k], 0.0)):
                 found.append({"xy": xy, "near": self.nearest_node(xy),
                               "drop": float(static[k]), "link": self.links[k]})
         return found

@@ -20,6 +20,10 @@ except S-home we draw the new link from that spot to the receiver and add up
 static_db over the cells inside its ellipse (excess path <= 0.1 m, as in
 Wilson & Patwari). The spot with the lowest sum wins.
 
+On one spot (a layout with one zone: the gate) there is never advice. The router (Pi A) is cabled to
+the hub beside the board and can't be moved, so there is no spot to send it to; the dead zone there
+is something left standing in the Wi-Fi line across the gap, and the cure is clearing it.
+
 The router is assumed to sit at S-home. before_dbm and after_dbm stay null;
 the brain fills them around router_moved. The advice id comes from the peak
 cell and the chosen spot, so it stays the same while nothing changes.
@@ -38,6 +42,8 @@ NEXT_TO_M = 0.5        # an object without "near" is next to a node only this cl
 
 def advise(xray, links, nodes, objects):
     """Return the section 5 advice dict, or None."""
+    if fixed_router(nodes):
+        return None
     if not xray or xray.get("static_db") is None or len(xray["static_db"]) == 0 or not objects:
         return None
     # Only advise while the Wi-Fi link is actually dropping now. The X-ray can keep an
@@ -106,6 +112,11 @@ def advise(xray, links, nodes, objects):
         "after_dbm": None,
         "why": why,
     }
+
+
+def fixed_router(nodes) -> bool:
+    """True on one spot (one zone in the layout): the router is cabled beside the board and is never moved."""
+    return len(nodes.get("zones") or []) == 1
 
 
 def _grid(xray):

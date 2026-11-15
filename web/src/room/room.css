@@ -135,6 +135,12 @@
   color: var(--fault);
 }
 
+/* While the walk-up card is up it says the same state in larger words beside the room ("No data", "Sensor blind"):
+   the room's own notice would say it a second time, over the hall. A replay's notices are the room's alone. */
+.room--arrival:not([data-replay='on']) .room-notice {
+  display: none;
+}
+
 /* NO DATA and SENSOR BLIND: said in words over the room, never only a dimmed picture. */
 .room-notice {
   position: absolute;

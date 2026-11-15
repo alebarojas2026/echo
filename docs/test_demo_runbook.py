@@ -1,11 +1,20 @@
 import unittest
 from pathlib import Path
 
+from beats import BEATS, CORE
+
 
 RUNBOOK = Path(__file__).with_name("demo-runbook.md")
 
 
 class DemoRunbookTest(unittest.TestCase):
+    def test_judge_day_preparation_and_freeze_are_explicit(self):
+        steps = ("Power up", "Set the board's clock", "--before-lesson", "commit the deploy printed", "Capture the empty baseline", "morning lesson", "outside the team", "real local model", "Copy what the board learned")
+        positions = [self.text.index(step) for step in steps]
+        self.assertEqual(positions, sorted(positions))
+        for phrase in ("**From Sunday 9:30 AM", "**Before any restart", "board/deploy.sh <last-good-tag>", "board/push-web.sh --back", "tracked in #678 and #679"):
+            self.assertIn(phrase, self.text)
+
     @classmethod
     def setUpClass(cls):
         cls.text = RUNBOOK.read_text(encoding="utf-8")
@@ -48,27 +57,25 @@ class DemoRunbookTest(unittest.TestCase):
         self.assertIn("required classifier link is unhealthy", self.lower)
 
     def test_primary_beats_are_in_order(self):
-        beats = (
-            "**found you:**",
-            "**teach the room:**",
-            "**camera unplug:**",
-            "**still follows:**",
-            "**arm the space:**",
-            "**intrusion alert:**",
-            "**ask the room:**",
-            "**proof:**",
-        )
+        beats = [f"**{beat.lower()}**" for beat in BEATS]
         positions = [self.lower.index(beat) for beat in beats]
         self.assertEqual(positions, sorted(positions))
+
+    def test_timed_round_has_speakers_actions_and_screens(self):
+        desk = self.text.split("## Three-minute desk round", 1)[1].split("## Camera-unplug proof", 1)[0]
+        for phrase in ("0:00–0:25", "0:25–1:05", "1:05–1:35", "1:35–2:00",
+                       "2:00–2:30", "2:30–3:00", "Speaker and actions", "Screen and gate"):
+            self.assertIn(phrase, desk)
+        for phrase in ("cut optional Replay, Incident report and Tamper alert",
+                       "Keep Found you, Camera unplug", "at least one of Intrusion alert or Dead zone"):
+            self.assertIn(phrase, desk)
 
     def test_demo_includes_privacy_and_proof_moments(self):
         for phrase in (
             "unplug the camera",
             "teacher` becomes null",
-            "lesson time: __ s",
-            "images stored: __",
-            "bytes sent outside local network: __",
-            "go directly to **proof**",
+            "never invented zeros",
+            "counts come from the live privacy meter and proof",
             "no-movement alert",
             "json `null` must render as `__`",
         ):
@@ -89,20 +96,21 @@ class DemoRunbookTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.lower)
 
-    def test_finalist_advice_waits_for_the_live_wifi_drop(self):
-        finalist = self.lower.split("## five-minute finalist round", 1)[1].split(
-            "## if asked", 1
+    def test_dead_zone_beat_waits_for_the_live_wifi_drop(self):
+        desk = self.lower.split("## three-minute desk round", 1)[1].split(
+            "## camera-unplug proof", 1
         )[0]
-        self.assertIn("pi5>unoq:wifi", finalist)
-        self.assertIn("drop_db` of at least `3 db`", finalist)
-        self.assertIn("advice does not appear without that live drop", finalist)
+        self.assertIn("pi5>pi5b:wifi", desk)
+        self.assertIn("configured drop threshold", desk)
+        self.assertIn("stop this beat if it still targets the short desk link", desk)
+        for phrase in ("requires nobody present and an object decision", "a person is never a dead zone", "pi a stays beside the cabled hub", "clearing the object or moving pi b"):
+            self.assertIn(phrase, desk)
 
     def test_finish_order_clears_optional_hardware_before_reset(self):
         steps = (
             "remove it",
             "object marker and static change to clear",
-            "return the pi to its home spot",
-            "send `router_home`",
+            "return pi b to its recorded position",
             "everyone steps away from the sensing area and its edge",
             "stays out until a prediction returns or `baseline_done` appears",
             "send `reset`",
@@ -117,17 +125,16 @@ class DemoRunbookTest(unittest.TestCase):
             "the template path remains available",
             "warms its normal sentence prompt again in the background after the recap",
             "do not hold the next judge for that warmup",
-            "template recap",
         ):
             self.assertIn(phrase, self.lower)
 
     def test_desk_layout_and_same_layout_recovery_are_explicit(self):
         for phrase in (
             "power pi b",
-            "three `25 cm` boxes",
-            "two cardboard arms",
-            "string knotted at `0`, `0.5`, `0.8`, `1.1`, and `1.6 m`",
-            "step up to the desk",
+            "three devices for one spot",
+            "pi b about a metre away at desk height",
+            "wi-fi from pi a to pi b is the main presence sensor",
+            "lean aside",
             "baseline {keep_model: true}",
             "camera unplugged",
             "keeps the trained model",

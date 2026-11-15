@@ -104,20 +104,20 @@ def test_privacy_first_measurement_and_render_own_date(tmp_path):
     proof['measured_at'] = '2026-11-14T12:00:00Z'
     assert proof['images_stored'] == 0 and proof['zone']['correct'] is None
     template = '| Images stored | __ | audit | __ | __ | __ |'
-    output = render(template,proof,[evidence])
+    output = render(template,proof,evidence=[evidence])
     assert '| 0 |' in output and '1 folders; 0 mounted files; 1 containers' in output
     assert '2026-11-15T04:00:00Z' in output and 'meter and one-off' not in output
     captured['meter_images_agree'] = True
-    assert 'meter and one-off audit agree' in render(template,proof,[evidence])
+    assert 'meter and one-off audit agree' in render(template,proof,evidence=[evidence])
     stale = dict(evidence,commit='def5678')
-    assert '| 0 | audit | __ | __ | abc1234 |' in render(template,proof,[stale])
+    assert '| 0 | audit | __ | __ | abc1234 |' in render(template,proof,evidence=[stale])
 
 
 def test_egress_row_has_own_interval_and_requires_no_default(monkeypatch):
     proof,evidence = update(empty_proof(),'abc1234','2026-11-15T04:00:00Z',egress='0',
                             egress_source='full rehearsal',egress_duration_s=180)
     evidence['no_default_route'] = True
-    result = render('| Bytes sent outside our network | __ | counter | __ | __ | __ |',proof,[evidence])
+    result = render('| Bytes sent outside our network | __ | counter | __ | __ | __ |',proof,evidence=[evidence])
     assert '180 s' in result and 'no IPv4 or IPv6 default route' in result
     monkeypatch.setattr('proof.manual.subprocess.check_output',lambda *a,**k:'')
     check_routes()

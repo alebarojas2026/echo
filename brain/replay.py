@@ -115,7 +115,8 @@ def prepared(sessions_dir, settings: Optional[S.Settings] = None, train: Optiona
             sessions.append({"meta": meta, "messages": read_session(path, meta.get("recv_t")),
                              "base": base_at(history, meta.get("recv_t"))})
         brain.model = Model(brain.base, ver="replay", links=brain.model_links, zones=brain.zone_ids,
-                            motion_links=brain.settings.motion_links).fit(sessions)
+                            motion_links=brain.settings.motion_links, crossing=brain.crossing,
+                            motion_line=brain.presence_line).fit(sessions)
     if brain.model is None:
         raise SystemExit(f"no model: {src} has no model.pkl for this baseline and layout; name recordings with --train")
     return brain

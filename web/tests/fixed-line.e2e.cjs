@@ -1,0 +1,15 @@
+const {test,expect}=require('@playwright/test'),fs=require('node:fs'),path=require('node:path')
+const layout=require('../../radio/layouts/gate-3.json')
+for(const [width,height] of [[1920,1080],[1440,900]])test(`fixed router obstruction and recovery at ${width}`,async({page})=>{
+ await page.route('**/nodes.json',r=>r.fulfill({json:layout}));await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'})
+ await page.goto('/tests/arrival-harness.html?op=1');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000});await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
+ const send=async(scene,t,drop)=>page.evaluate(({scene,t,drop,layout})=>{const s=window.arrival.peek('object');window.arrival.update(scene,{t,seq:t,advice:s.advice,narration:{text:'Move the router 30 cm west',source:'template'},links:layout.links.map(l=>({id:l.id,dbm:-45-drop,base_dbm:-45,drop_db:drop,status:'ok',rate_hz:25,why:0}))})},{scene,t,drop,layout})
+ const shot=async name=>{if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-${name}.png`)})}}
+ await send('object',1000,16)
+ await expect(page.getByTestId('advice-text')).toHaveText('Wi-Fi down 16.0 dB');await expect(page.locator('.dead-zone svg')).toBeHidden();await expect(page.locator('.dead-zone dl')).toBeHidden()
+ expect(await page.locator('body').innerText()).not.toMatch(/move the router/i);await shot('blocked')
+ await send('empty',2000,1);await page.waitForTimeout(450);await send('empty',2100,1);await page.waitForTimeout(200)
+ await expect(page.getByTestId('advice-text')).toHaveText('+15.0 dB back');await expect(page.getByTestId('before-dbm')).toHaveText('−61.0 dBm');await expect(page.getByTestId('after-dbm')).toHaveText('−46.0 dBm');await shot('clear')
+ await send('empty',10000,1);await expect(page.getByTestId('dead-zone')).toBeHidden()
+ await send('object',11000,16);await send('still',12000,16);await expect(page.getByTestId('dead-zone')).toBeHidden()
+})

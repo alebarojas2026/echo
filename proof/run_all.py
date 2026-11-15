@@ -15,6 +15,7 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
     start, open_session = place_start(baseline)
     groups = {"train": [], "heldout": [], "object": []}
     sessions = []
+    line_pairs = []
     missing = []
     for path in sorted(folder.glob("*.jsonl")):
         if path.name.endswith((".states.jsonl", ".events.jsonl", ".trials.jsonl")):
@@ -29,6 +30,10 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
                 left_out.append(str(path))
             continue
         purpose = session["meta"].get("purpose")
+        intervals = path.with_suffix(".line-intervals.json")
+        if intervals.exists():
+            line_pairs.append((str(path), str(intervals)))
+            continue  # Operator-labelled line measurements are not classifier accuracy/training sessions.
         if purpose in groups:
             # Camera-off lesson walks and tamper trials have their own reports;
             # they are not unseen-walker zone evaluation recordings.
@@ -121,9 +126,16 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
         command = [sys.executable,"-m","proof.presence",*cycles[0],"--train",*groups["train"],*groups["object"],"--proof",str(output)]
         for record in cycles[1:]: command.extend(["--more-record",*record])
         commands.append(command)
+    line_report = output.with_suffix(".lines.json")
+    if line_pairs:
+        command = [sys.executable, "-m", "proof.line_stats", "--output", str(line_report)]
+        for pair in line_pairs:
+            command.extend(["--pair", *pair])
+        commands.append(command)
     if commands:
         commands.append([sys.executable, "-m", "proof.render_table", "--proof", str(output),
-                         "--document", str(document), "--output", str(document)])
+                         "--document", str(document), "--output", str(document)]
+                        + (["--lines", str(line_report)] if line_pairs else []))
     return commands, missing
 
 

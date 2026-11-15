@@ -25,10 +25,10 @@ from pathlib import Path
 from contextlib import nullcontext
 import time
 
-from teacher.lesson import NO_EMPTY, EmptyTime, script
+from teacher.lesson import EmptyTime, no_empty, script
 
-TEACH_S = 30      # empty, left and right, a step out, left and right again, before the first fit
-STEP_S = 4        # seconds on each side
+TEACH_S = 30      # empty, the steps (left and right, or still and moving on one spot), a step out, the steps again
+STEP_S = 4        # seconds on each step
 REPORT_S = 40     # when the agreement is read off (10 s after train, as before)
 
 
@@ -48,7 +48,7 @@ class Coach:
     """Feed it every message from the brain's WebSocket; it sends the commands and says what it sees."""
 
     def __init__(self, session, walker, send, say=print, teach_s=TEACH_S, step_s=STEP_S, report_s=REPORT_S,
-                 purpose="train", train=True):
+                 purpose="train", train=True, one_zone=None):
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", session):
             raise ValueError("session must be a unique simple id, at most 64 characters")
         if not walker.strip():
@@ -56,10 +56,11 @@ class Coach:
         self.session, self.walker, self.send_raw, self.say = session, walker, send, say
         self.teach_s, self.step_s, self.report_s = (teach_s if train else float("inf")), step_s, report_s
         self.purpose, self.train = purpose, train
+        self.one_zone = one_spot() if one_zone is None else one_zone   # one spot: no left and right to say
         self.t0 = self.model_s = self.follows_s = self.report = None
         self.said_s = self.side = 0
         self.trained_sent = self.cam_off_said = self.no_empty_said = False
-        self.steps = script(teach_s, step_s) if train else []
+        self.steps = script(teach_s, step_s, self.one_zone) if train else []
         self.empty = EmptyTime()
 
     def cmd(self, name, **args):
@@ -93,16 +94,16 @@ class Coach:
             if self.empty.ok():
                 self.trained_sent = True
                 self.cmd("train")
-                self.say("\ntrain sent. Keep stepping left and right; unplug the camera when you like.")
+                self.say(f"\ntrain sent. {KEEP_GOING[self.one_zone]}; unplug the camera when you like.")
             elif not self.no_empty_said:
                 self.no_empty_said = True
-                self.say("\n" + NO_EMPTY)
+                self.say("\n" + no_empty(self.one_zone))
         training = (msg.get("model") or {}).get("training") or {}
         lesson = training.get("lesson")
         if self.follows_s is None and pred and teacher and teacher["present"] and pred["present"] \
                 and pred["zone"] == teacher["zone"]:
             self.follows_s = round(s, 1)
-            self.say(f"the radio first gave the camera's zone {self.follows_s} s after the start")
+            self.say(f"the radio first gave the camera's answer {self.follows_s} s after the start")
         if self.train and self.report is None and s >= self.report_s:
             self.report = (lesson["agree"], lesson["of"], lesson["fits"]) if lesson else ()
             self.say(f"{self.report_s} s after the start: " + self.agreement())
@@ -111,7 +112,8 @@ class Coach:
             self.say("\nthe camera is off. The radio carries on:")
         if int(s) != self.said_s:
             self.said_s = int(s)
-            self.say(f"{int(s):3d} s  camera: {_zone(teacher, msg.get('cam'))}   radio: {_zone(pred)}   "
+            self.say(f"{int(s):3d} s  camera: {_zone(teacher, msg.get('cam'), self.one_zone)}   "
+                     f"radio: {_zone(pred, one_zone=self.one_zone)}   "
                      + (f"learning: {lesson['agree']} of {lesson['of']}   fits: {lesson['fits']}" if lesson else ""))
 
     def agreement(self):
@@ -126,16 +128,18 @@ class Coach:
             return f"\nrecorded {self.session} ({self.purpose}); no lesson was asked for"
         unknown = "never"
         return (f"\nfirst model: {self.model_s if self.model_s is not None else unknown} s after the start\n"
-                f"radio first right: {self.follows_s if self.follows_s is not None else unknown} s after the start\n"
+                f"radio first agreed: {self.follows_s if self.follows_s is not None else unknown} s after the start\n"
                 f"at {self.report_s} s: {self.agreement()}\n" + self.empty.summary())
 
 
-def _zone(block, cam="on"):
+def _zone(block, cam="on", one_zone=False):
     if cam != "on":
         return "off     "
     if not block:
         return "--      "
-    return f"zone {block['zone']}  " if block["present"] else "nobody  "
+    if not block["present"]:
+        return "nobody  "
+    return "someone " if one_zone else f"zone {block['zone']}  "
 
 
 def label_summary(lines) -> str:

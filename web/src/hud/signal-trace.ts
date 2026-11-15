@@ -16,10 +16,13 @@ export interface Side {
   zone: number
   name: string
   links: string[]
+  traces?: { id: string; width: number }[]
+  primary?: string
 }
 
 export interface Sample {
   t: number
+  links?: Record<string, number | null>
   /** Per side: the deepest drop among its fresh links in dB, or null when none of them has a reading. */
   drop: (number | null)[]
   /** Per side: the board says a person is on this side. */
@@ -38,8 +41,11 @@ export interface Point { age: number; drop: number; present: boolean }
  */
 export function signalSides(layout: HudLayout = hudLayout): Side[] {
   if (layout.zones.length === 1 && layout.links.some((link) => typeof link.crosses_spot === 'boolean')) {
-    const links = layout.links.filter((link) => link.crosses_spot === true).map((link) => link.id)
-    return links.length ? [{ zone: layout.zones[0].id, name: layout.zones[0].name, links }] : []
+    const crossing = layout.links.filter((link) => link.crosses_spot === true)
+    const links = crossing.map(link => link.id)
+    const primary = crossing.find(link => link.kind === 'wifi')?.id
+    const traces = crossing.map(link => ({id:link.id, width:link.kind === 'wifi' ? 4 : 1.5}))
+    return links.length ? [{ zone: layout.zones[0].id, name: layout.zones[0].name, links, traces, primary }] : []
   }
   const [fw, fh] = floorSize()
   const steps = 200
@@ -71,6 +77,10 @@ export function signalSides(layout: HudLayout = hudLayout): Side[] {
 
 /** The deepest drop among a side's fresh links, or null when none has a reading against a baseline. */
 export function sideDrop(side: Side, links: LinkState[]): number | null {
+  if (side.primary) {
+    const row = links.find(link => link.id === side.primary && link.status === 'ok')
+    return typeof row?.drop_db === 'number' && Number.isFinite(row.drop_db) ? row.drop_db : null
+  }
   let deepest: number | null = null
   for (const link of links) {
     if (!side.links.includes(link.id) || link.status !== 'ok' || typeof link.drop_db !== 'number' || !Number.isFinite(link.drop_db)) continue
@@ -121,6 +131,7 @@ export class SignalHistory {
     const person = state.pred?.present && state.pred.kind === 'person' ? state.pred : null
     this.samples.push({
       t,
+      links: Object.fromEntries(this.sides.flatMap(side => side.traces ?? []).map(trace => [trace.id, sideDrop({zone:0,name:'',links:[trace.id]}, state.links)])),
       drop: this.sides.map((side) => sideDrop(side, state.links)),
       present: this.sides.map((side) => !!person && (person.zone === side.zone || person.zone_set.includes(side.zone))),
     })
@@ -134,7 +145,7 @@ export class SignalHistory {
  * reading or a pause in the feed. The newest run stops at the drawing edge: its last point lies on the straight
  * line between the two readings around the edge.
  */
-export function traceRuns(samples: Sample[], side: number, now: number): Point[][] {
+export function traceRuns(samples: Sample[], side: number, now: number, link?: string): Point[][] {
   const edge = now - DELAY_MS
   const runs: Point[][] = []
   let run: Point[] = []
@@ -144,7 +155,7 @@ export function traceRuns(samples: Sample[], side: number, now: number): Point[]
     run = []
   }
   for (const sample of samples) {
-    const drop = sample.drop[side]
+    const drop = link ? sample.links?.[link] ?? null : sample.drop[side]
     if (drop === null) {
       close()
       prev = null

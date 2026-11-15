@@ -4,10 +4,11 @@
 .stillness-card[data-tone="action"] { color:var(--action); }
 .stillness-card p { font-size:32px; color:inherit; }
 /* The alert: one strong line in the fault colour and one plain line under it. The zone's name is already in the
-   first line ("on the right"), so its own line is kept for readers of the page, not drawn a second time. */
+   first line , so its own line is kept for readers of the page, not drawn a second time. */
 .stillness-card[data-tone="fault"] [data-testid="alert-banner"] { font-weight:600; }
 .stillness-card [data-testid="alert-seconds"] { font-size:28px; color:var(--text-2); margin-top:4px; }
 .stillness-card [data-testid="alert-zone"] { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.stillness-card [data-testid="checkin-instruction"] { font-size:28px; color:var(--text); margin-top:8px; }
 .stillness-card p:empty { display:none; }
 .stillness-track { height:8px; background:var(--edge); margin-top:16px; }
 .stillness-track span { display:block; height:100%; background:var(--person); transform-origin:left; }

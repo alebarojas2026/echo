@@ -41,12 +41,16 @@ class ArchitectureDocTest(unittest.TestCase):
         ):
             self.assertIn(endpoint, self.text)
 
-    def test_pi_radio_role_is_bluetooth_only(self):
-        self.assertIn(
-            "Bluetooth beacon S and east/west readings",
-            self.text,
-        )
-        self.assertNotIn("Wi-Fi and Bluetooth readings", self.text)
+    def test_current_kit_and_records_are_drawn(self):
+        diagram = self.text.split("```mermaid", 1)[1].split("```", 1)[0]
+        for phrase in ("Pi A", "Pi B", "main presence and dead-zone sensor",
+                       "Bluetooth second opinion", "lean aside", "store/",
+                       "agent/", "Recorded replay", "Incident report", "Tamper rule"):
+            self.assertIn(phrase, diagram)
+        for stale in ("east/west", "beacon S", "#FAF7EF", "#4F5E2E"):
+            self.assertNotIn(stale, diagram)
+        for token in ("#111316", "#1A1D21", "#353B43", "#E6E8EB", "#858E99"):
+            self.assertIn(token, diagram)
 
     def test_advisor_is_drawn_inside_brain(self):
         brain = re.search(

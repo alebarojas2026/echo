@@ -36,6 +36,9 @@ PATHS_DIR = Path(__file__).parent / "paths"
 
 REF_DBM = {"wifi": -40.0, "ble": -55.0}  # empty-room level at 1 m
 PERSON_DROP_DB = 8.0   # peak drop when a person stands on the link line
+PRESENCE_DROP_DB = 18.0   # ... on the line the layout says decides presence (measured on the kit: 15 to 21 dB)
+# The presence line as the kit gave it: 25 readings a second, and within 1 dB when the spot is empty.
+PRESENCE_HZ, PRESENCE_NOISE_DB = 25.0, 0.3
 PERSON_WIDTH_M = LAYOUT.width_m   # how fast the drop fades with distance from the line (sim/layout.py)
 PERSON_BODY_M = LAYOUT.body_m     # the full drop within this distance of the line
 MOVING_SPEED = 0.25    # m/s over 1 s, contract section 6
@@ -217,6 +220,7 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
     # "teacher": "desk" = the webcam on the desk (teacher/DESK.md): no foot point, and no usable
     # label within dead_band_m of the line between left and right.
     desk, split = path.get("teacher") == "desk", LAYOUT.split_x_m if LAYOUT.strip_m else SIZE / 2
+    band = 0.0 if split is None else path.get("dead_band_m", 0.0)   # one spot has no line between sides
     for i in range(int(path["duration_s"] * rate)):
         t = round(i / rate, 3)
         while h < len(hall) and hall[h]["t"] <= t:   # hall readings come at their own uneven moments
@@ -226,44 +230,56 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
         moving = is_moving(waypoints, t)
         nodes = {**NODES, "pi5": ROUTER_SPOTS[latest(path.get("router"), t, "spot", "S-home")]}
         others = bystanders(path, t)
+        later = []   # the presence line's readings inside this step, sent in time order after the rest
         for tx, rx, kind in LINKS:
             link = link_id(tx, rx, kind)
             if any(active(o, t) and (o.get("link") == link or o.get("node") in (tx, rx))
                    for o in path.get("outages") or []):
                 continue  # this link is silent: nothing is sent at all
-            dbm = baseline(tx, rx, kind, nodes) + rng.gauss(0.0, noise_db)
-            for o in path.get("objects") or []:  # static: the same drop on every reading
-                if active(o, t):
-                    dbm -= drop((o["x"], o["y"]), nodes[tx], nodes[rx],
-                                o.get("drop_db", 6.0), o.get("width_m", 0.25))
-            for w in path.get("waves") or []:  # a hand waving in one link's path
-                if active(w, t) and w.get("link", "pi5>unoq:wifi") == link:
-                    dbm += w.get("amp_db", 4.0) * math.sin(
-                        2 * math.pi * w.get("hz", 2.0) * (t - w.get("t_on", 0.0)))
-            for j in path.get("jumps") or []:   # a link whose level shifts for no reason in the room
-                if active(j, t) and j["link"] == link:
-                    dbm += j["db"] + j.get("wobble_db", 0.0) * math.sin(2 * math.pi * 0.4 * (t - j.get("t_on", 0.0)))
-            if pos:
-                d = person_drop(pos, nodes[tx], nodes[rx])
-                if moving:  # a moving body makes the drop flutter
-                    d *= max(0.0, 1.0 + rng.gauss(0.0, 0.25))
-                dbm -= d
-            for x, y, walking, arm in others:   # someone outside: blocks only if close, shakes when walking
-                d = person_drop((x, y), nodes[tx], nodes[rx])
-                if walking:
-                    d *= max(0.0, 1.0 + aisle.gauss(0.0, 0.25))
-                    d -= aisle.gauss(0.0, SCATTER_DB * math.exp(-((dist_to_link((x, y), nodes[tx], nodes[rx]) / SCATTER_M) ** 2)))
-                if arm:
-                    d += drop(arm, nodes[tx], nodes[rx], ARM_DROP_DB, ARM_WIDTH_M)
-                dbm -= d
-            yield {"type": "rssi", "t": t, "link": link,
-                   "kind": kind, "tx": tx, "rx": rx, "dbm": round(dbm)}
+            # The presence line comes PRESENCE_HZ times a second with its own small noise, whatever `rate` is.
+            main = link == LAYOUT.presence_line and rate < PRESENCE_HZ
+            times = [n / PRESENCE_HZ for n in range(math.ceil(i * PRESENCE_HZ / rate - 1e-9),
+                                                    math.ceil((i + 1) * PRESENCE_HZ / rate - 1e-9))] if main else [t]
+            for at in times:
+                dbm = baseline(tx, rx, kind, nodes) + rng.gauss(0.0, min(noise_db, PRESENCE_NOISE_DB) if main else noise_db)
+                for o in path.get("objects") or []:  # static: the same drop on every reading
+                    if active(o, t):
+                        dbm -= drop((o["x"], o["y"]), nodes[tx], nodes[rx],
+                                    o.get("drop_db", 6.0), o.get("width_m", 0.25))
+                for w in path.get("waves") or []:  # a hand waving in one link's path
+                    if active(w, t) and w.get("link", "pi5>unoq:wifi") == link:
+                        dbm += w.get("amp_db", 4.0) * math.sin(
+                            2 * math.pi * w.get("hz", 2.0) * (at - w.get("t_on", 0.0)))
+                for j in path.get("jumps") or []:   # a link whose level shifts for no reason in the room
+                    if active(j, t) and j["link"] == link:
+                        dbm += j["db"] + j.get("wobble_db", 0.0) * math.sin(2 * math.pi * 0.4 * (at - j.get("t_on", 0.0)))
+                if pos:
+                    d = person_drop(pos, nodes[tx], nodes[rx])
+                    if link == LAYOUT.presence_line:
+                        d *= PRESENCE_DROP_DB / PERSON_DROP_DB
+                    if moving:  # a moving body makes the drop flutter
+                        d *= max(0.0, 1.0 + rng.gauss(0.0, 0.25))
+                    dbm -= d
+                for x, y, walking, arm in others:   # someone outside: blocks only if close, shakes when walking
+                    d = person_drop((x, y), nodes[tx], nodes[rx])
+                    if walking:
+                        d *= max(0.0, 1.0 + aisle.gauss(0.0, 0.25))
+                        d -= aisle.gauss(0.0, SCATTER_DB * math.exp(-((dist_to_link((x, y), nodes[tx], nodes[rx]) / SCATTER_M) ** 2)))
+                    if arm:
+                        d += drop(arm, nodes[tx], nodes[rx], ARM_DROP_DB, ARM_WIDTH_M)
+                    dbm -= d
+                reading = {"type": "rssi", "t": round(at, 3), "link": link,
+                           "kind": kind, "tx": tx, "rx": rx, "dbm": round(dbm)}
+                if round(at, 3) > t:
+                    later.append(reading)
+                else:
+                    yield reading
         cam = latest(path.get("camera"), t, "state", "on")
         if cam == "on" and i % label_every == 0:  # one label per camera frame, empty frames too
             # clipped: the camera sees the person but not their feet, so no zone, foot point or motion
             inside = bool(pos) and zone_of(*pos) != 0   # section 4: present only with a foot point inside the area
             clipped = inside and (any(active(c, t) for c in path.get("clipped") or [])
-                                  or (desk and abs(pos[0] - split) < path.get("dead_band_m", 0.0)))
+                                  or (desk and band > 0 and abs(pos[0] - split) < band))
             yield {"type": "label", "t": t, "frame": i // label_every,
                    "mode": path.get("label_mode", "person"),
                    "persons_in_frame": int(pos is not None) + len(others), "present": inside,
@@ -275,6 +291,11 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
             yield {"type": "cam", "t": t, "state": cam,
                    "fps": rate / label_every if cam == "on" else 0.0}
         cam_was = cam
+        for reading in later:
+            while h < len(hall) and hall[h]["t"] <= reading["t"]:
+                yield hall[h]
+                h += 1
+            yield reading
 
 
 def load_path(name_or_file: str) -> dict:

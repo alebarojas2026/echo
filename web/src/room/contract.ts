@@ -71,7 +71,7 @@ export interface Advice {
   near: string
   xy_m: [number, number]
   link: string
-  to_spot: string
+  to_spot: string | null // null = nothing to move: on one spot the router is cabled (CONTRACTS.md section 5)
   move_m: [number, number]
   dist_change_m: number | null
   text: string
