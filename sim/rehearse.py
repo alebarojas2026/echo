@@ -237,6 +237,8 @@ def aisle_script():
         ("aisle: armed", arm, arm + 2, "event", lambda e: e["kind"] == "armed"),
         ("aisle: armed, walking past is nobody", arm, disarm, "every state", nobody),
         ("aisle: armed, walking past is no intrusion", arm, disarm, "no event", lambda e: e["kind"] == "intrusion"),
+        # Since the 3 s hold (#582) a short appearance while armed is a passed_by, not an intrusion: allowed, counted.
+        ("aisle: armed, passed_by events while people walk past", arm, disarm, "count", lambda e: e["kind"] == "passed_by"),
         ("aisle: the judge steps in and is found", back, still_from + 4, "state", person_here),
         ("aisle: the judge stands still while others pass: no-movement alert", still_from + 9.5, still_from + 16,
          "event", lambda e: e["kind"] == "alert_on"),
@@ -392,6 +394,8 @@ def rehearse(script=None, seed: int = 0, lesson: bool = False) -> list:
                 results.append((name, bool(inside) and len(hits) == len(inside), None))
             elif where == "no event":    # it must never happen in the window
                 results.append((name, not hits, None))
+            elif where == "count":       # allowed any number of times: how many is the result
+                results.append((name, True, len(hits)))
             else:
                 results.append((name, bool(hits), round(hits[0], 1) if hits else None))
         if lesson:
@@ -410,7 +414,7 @@ def main(argv=None) -> int:
     results = (rehearse(lesson=True) if args.lesson else rehearse(desk_script()) if args.desk
                else rehearse(aisle_script()) if args.aisle else rehearse())
     for name, passed, shown in results:
-        took = "" if shown is None else f"  shown after {shown:.1f} s"
+        took = "" if shown is None else f"  {shown} seen" if isinstance(shown, int) else f"  shown after {shown:.1f} s"
         print(f"{'PASS' if passed else 'FAIL'}  {name}{took}")
     failed = [name for name, passed, _ in results if not passed]
     print(f"{len(results) - len(failed)} of {len(results)} beats passed" + (f"; failed: {', '.join(failed)}" if failed else ""))

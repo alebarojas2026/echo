@@ -168,7 +168,7 @@ def test_aisle_beat(aisle, beat):
 def test_aisle_script_has_the_beats_it_promises():
     path, commands, beats = rehearse.aisle_script()
     kinds = {kind for _, _, _, kind, _ in beats}
-    assert kinds == {"every state", "no event", "event", "state"}
+    assert kinds == {"every state", "no event", "count", "event", "state"}
     assert [c[1:] for c in commands] == [("arm", {"on": True}), ("arm", {"on": False})]
     assert sum(1 for p in path["passers"] if p.get("reach_m")) == 2   # a brush before and while armed
     assert path["neighbours"] == [{"end": "east", "past_m": 1.0}] and path["camera"] == [{"t": 0, "state": "off"}]
