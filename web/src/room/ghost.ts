@@ -109,6 +109,8 @@ export class Presence {
   private labelText = ''
   private readonly at = new Vector3()
   private readonly vel = new Vector3()
+  /** Walking (one zone, moving) or standing, as the held motion says. */
+  private walking = false
   private readonly to = new Vector3()
   private alpha = 0
   private alphaTo = 0
@@ -168,6 +170,7 @@ export class Presence {
       this.placed = false
       this.zones.set('')
       this.motion.set('')
+      this.walking = false
     } else {
       const key = zonesKey(spots)
       if (!this.placed) {
@@ -186,7 +189,7 @@ export class Presence {
       }
       this.alphaTo = 1
       const motion = this.motion.update(pred!.motion ?? 'still', nowMs)
-      this.figure.setMoving(zones.length === 1 && motion === 'moving')
+      this.walking = zones.length === 1 && motion === 'moving' // the pace is set every frame in ease()
       // Very little text (AGENTS.md Style): the walk already shows moving or still, and the lit zone names and
       // tiles show which zones the radio is weighing. The figure only speaks for the check-in, because green
       // always comes with a word.
@@ -248,8 +251,11 @@ export class Presence {
     ;[this.at.x, this.vel.x] = springStep(this.at.x, this.vel.x, this.to.x, GHOST_OMEGA, dt)
     ;[this.at.z, this.vel.z] = springStep(this.at.z, this.vel.z, this.to.z, GHOST_OMEGA, dt)
     busy ||= this.at.distanceTo(this.to) > 0.002 || this.vel.length() > 0.002
-    // Face the way the figure is gliding; hold the heading while it stands.
-    if (Math.hypot(this.vel.x, this.vel.z) > TURN_SPEED_MPS) this.figure.setHeading(Math.atan2(this.vel.x, this.vel.z))
+    // Face the way the figure is gliding; hold the heading while it stands. The walk takes the glide's speed, so
+    // its stride and cadence match how fast the floor point travels and the planted foot doesn't slide.
+    const speed = Math.hypot(this.vel.x, this.vel.z)
+    if (speed > TURN_SPEED_MPS) this.figure.setHeading(Math.atan2(this.vel.x, this.vel.z))
+    this.figure.setMoving(this.walking, speed)
 
     this.alpha = fade(this.alpha, this.alphaTo, dt)
     busy ||= this.alpha !== this.alphaTo
