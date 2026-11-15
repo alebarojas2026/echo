@@ -30,17 +30,19 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
             continue
         purpose = session["meta"].get("purpose")
         if purpose in groups:
-            # Post-lesson camera-off walks have independent operator truth, but the
-            # model was taught on that walker. They belong to the lesson report.
+            # Camera-off lesson walks and tamper trials have their own reports;
+            # they are not unseen-walker zone evaluation recordings.
             annotations = path.with_suffix(".trials.jsonl")
             try:
-                post_lesson = purpose == "heldout" and annotations.exists() and any(
-                    json.loads(line).get("kind") == "walk" for line in annotations.read_text().splitlines() if line.strip())
+                separate_trial = purpose == "heldout" and annotations.exists() and any(
+                    json.loads(line).get("kind") in {"walk","unplug","tamper"}
+                    for line in annotations.read_text().splitlines() if line.strip())
             except (OSError, ValueError, AttributeError) as error:
                 missing.append(f"readable trial annotations: {annotations} ({error})")
                 continue
-            if not post_lesson:
+            if not separate_trial and not path.with_suffix(".presence.csv").exists():
                 groups[purpose].append(str(path))
+        if purpose in {*groups, "crowd"}:
             sessions.append((path, session))
     if not groups["train"]:
         missing.append("training session: meta.purpose=train")
@@ -103,6 +105,23 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
                        "--baseline",str(baseline),"--proof",str(output)]
             for pair in timing_pairs: command.extend(["--pair",*pair])
             commands.append(command)
+    trials = [sys.executable,"-m","proof.trials","--proof",str(output)]
+    for path, session in sessions:
+        states, annotations = path.with_suffix(".states.jsonl"), path.with_suffix(".trials.jsonl")
+        if states.is_file() and (annotations.is_file() or session["meta"].get("purpose") == "train"):
+            trials.extend(["--record",str(path),str(states),str(annotations) if annotations.is_file() else "-"])
+    if "--record" in trials: commands.append(trials)
+    cycles = []
+    for path, session in sessions:
+        log, states = path.with_suffix(".presence.csv"), path.with_suffix(".states.jsonl")
+        if session["meta"].get("purpose") == "heldout" and log.exists():
+            if not states.exists(): missing.append(f"presence state capture: {states}")
+            elif groups["train"] or groups["object"]: cycles.append((str(path),str(states),str(log)))
+    if cycles:
+        command = [sys.executable,"-m","proof.presence",*cycles[0],"--train",*groups["train"],*groups["object"],"--proof",str(output)]
+        for record in cycles[1:]: command.extend(["--more-record",*record])
+        commands.append(command)
+    if commands:
         commands.append([sys.executable, "-m", "proof.render_table", "--proof", str(output),
                          "--document", str(document), "--output", str(document)])
     return commands, missing
@@ -111,7 +130,8 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
 def missing_metrics(proof):
     security = proof.get("security") or {}
     detection, alarms = security.get("detection") or {}, security.get("false_alarms") or {}
-    fields = [("zone agreement", (proof.get("zone") or {}).get("total")),
+    fields = [("presence agreement", (proof.get("presence") or {}).get("total")),
+              ("zone agreement", (proof.get("zone") or {}).get("total")),
               ("person/object agreement", (proof.get("person_vs_object") or {}).get("total")),
               ("training time on board", proof.get("train_s")),
               ("decision p95 on board", (proof.get("ms_per_decision") or {}).get("p95")),
@@ -130,6 +150,12 @@ def missing_metrics(proof):
         subset = next((r for r in security.get("fewer_devices", []) if r["name"] == name), {})
         fields.extend([(f"{name} zone agreement", (subset.get("zone") or {}).get("total")),
                        (f"{name} entry detection", (subset.get("presence") or {}).get("entries"))])
+    trials = proof.get("security_trials") or {}
+    for block, key, label in [("passers_by","trials","outside-only passes"),("passers_by","intrusions_per_hour","crowd intrusions per hour"),
+                              ("passers_by","still_trials","crowd no-movement alerts"),("tamper","unplugs","tamper detection"),
+                              ("tamper","false_per_hour","false tamper per hour"),("lesson","median_s","lesson convergence")]:
+        fields.append((label,(trials.get(block) or {}).get(key)))
+    fields.append(("post-unplug agreement",((trials.get("lesson") or {}).get("unplugged_walk") or {}).get("total")))
     return [label for label, value in fields if value is None]
 
 

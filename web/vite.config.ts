@@ -71,6 +71,15 @@ function hallFamilies(): Record<string, { hi?: string; lo?: string }> {
   return out
 }
 
+/** radio/nodes.json as it is when the page is built: what the room falls back to if /nodes.json can't be read. */
+function buildLayout(): string {
+  try {
+    return JSON.stringify(JSON.parse(readFileSync(NODES, 'utf8')))
+  } catch {
+    return 'null'
+  }
+}
+
 function roomScan() {
   const hi = model('hall-hi.glb')
   const hall = hi ?? model('hall-lo.glb')
@@ -189,7 +198,7 @@ function pagePaths(): Plugin {
 
 export default defineConfig({
   plugins: [boardFiles(), pagePaths()],
-  define: { __ROOM_SCAN__: JSON.stringify(roomScan()) },
+  define: { __ROOM_SCAN__: JSON.stringify(roomScan()), __BUILD_LAYOUT__: buildLayout() },
   build: {
     chunkSizeWarningLimit: 700, // three.js is most of the bundle; the board serves it locally
     rolldownOptions: { input: { main: 'index.html', ...Object.fromEntries(pages) } },

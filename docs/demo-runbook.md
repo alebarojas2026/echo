@@ -2,6 +2,34 @@
 
 Use this checklist for the live building-safety demo. It follows `CONTRACTS.md` v2. The desk round is the primary path; the finalist extension comes second. A result missing from `PROOF.md` stays `__`.
 
+## At the desk
+
+| Role | Name | Does | Never |
+|---|---|---|---|
+| Talker | __ | Says the round, hands over the camera cable and phone | Touches the laptop |
+| Operator | __ | Drives the laptop: arm, reset between judges, and Ask | Explains while typing |
+| Hardware | __ | Handles the board, beacons, camera hand-off, and anything knocked | Leaves the desk |
+| Spotter | __ | Keeps the aisle behind the judge clear and places a second judge | Blocks the sensing strip |
+
+Keep at least two people at the desk for every half hour:
+
+| Time | Person | Person |
+|---|---|---|
+| 1:00–1:30 PM | __ | __ |
+| 1:30–2:00 PM | __ | __ |
+| 2:00–2:30 PM | __ | __ |
+| 2:30–3:00 PM | __ | __ |
+
+The Hardware role answers radio and hardware questions. The Operator answers model and proof-number questions. The Talker answers cost and what's next.
+
+While the Operator fixes a failure, the Talker says exactly one of these:
+
+- **Sensor blind:** “That's the honest failure. A radio link dropped, so it says blind instead of guessing the room is empty. Give us ten seconds.”
+- **No data:** “The screen lost the board's feed, so it says no data, not empty. Reconnecting.”
+- **The lesson fails:** “The lesson needs a moment with nobody in view. Step out for three seconds and back in.” If it fails twice: “We'll use the lesson it learned this morning.”
+- **Ask the room is slow or wrong:** “The language model on this board is tiny. The records it reads from are right; here they are.” Press Replay.
+- **The board will not return in 30 s:** “This is a recording of the real board from this morning.” Play the time-titled recording kept on the demo laptop, never the simulated demo.
+
 ## Preflight
 
 - [ ] Connect the UNO Q and Pi with the direct Ethernet cable.
@@ -12,7 +40,9 @@ Use this checklist for the live building-safety demo. It follows `CONTRACTS.md` 
 - [ ] Confirm `/nodes.json` and `/proof.json` load from that address.
 - [ ] Confirm `ws://192.168.77.2:8765/ws` produces contract v2 `state` messages.
 - [ ] Confirm the source is `live`, the feed is fresh, and `health.status` is `ok`.
-- [ ] Place every radio from `radio/nodes.json`; do not rely on remembered zone or node positions.
+- [ ] Power Pi B, join it to Pi A's hotspot, and confirm its reader sends through Pi A to the board.
+- [ ] Place every radio from `radio/nodes.json`: three `25 cm` boxes on the desk and two cardboard arms over the aisle. Do not rely on remembered zone or node positions.
+- [ ] Use the string knotted at `0`, `0.5`, `0.8`, `1.1`, and `1.6 m` to mark the strip, its Left/Right split, and the desk positions.
 - [ ] Connect the temporary setup camera and confirm `cam-status` reports `on`.
 - [ ] Clear people and movable objects from the sensing area before the baseline.
 - [ ] Let the narrator warm its local model in the background. The template path remains available, so do not delay the demo.
@@ -22,7 +52,7 @@ Do not start while the screen says `NO DATA` or `SENSOR BLIND`. Neither state me
 
 ## Baseline and training
 
-1. Set label mode to `off`, clear the sensing area, and start the baseline.
+1. Set label mode to `off`, clear the sensing strip and desk, and start the baseline.
 2. Wait for `baseline_done`; confirm every required link is healthy and health returns to `ok`.
 3. Start a named training recording and set label mode to `person`.
 4. Walk the configured zones while the camera teacher supplies zone and motion labels.
@@ -35,7 +65,7 @@ If a step fails, fix it and repeat the baseline or lesson. Do not carry failed c
 
 Use these exact beat names and keep them in this order.
 
-1. **Found you:** Start with the camera disconnected. Ask the judge to step into the sensing area. Show a fresh `person` prediction and say, “Found you. Camera disconnected.” Do not substitute a numeric camera claim while proof remains pending.
+1. **Found you:** Start with the camera disconnected. Ask the judge to step up to the desk, into the sensing strip. Show a fresh `person` prediction and say, “Found you. Camera disconnected.” Do not substitute a numeric camera claim while proof remains pending.
 2. **Teach the room:** Connect the camera, start the fresh judge lesson, and display `Lesson time: __ s`. Show labels, not an image. Wait for successful training before continuing.
 3. **Camera unplug:** Unplug the camera in one continuous shot. Follow the camera-unplug proof below and leave the cable visible.
 4. **Still follows:** Ask the judge to move and then stand still. Show presence, zone, and motion state continuing from radio alone. If a required link goes blind, say so and stop; never call it empty.
@@ -44,7 +74,7 @@ Use these exact beat names and keep them in this order.
 7. **Ask the room:** Ask the prepared question only if the current build can answer from its local timestamped event records. Read the returned facts; do not improvise an answer.
 8. **Proof:** Finish on `/proof.json`. Say only completed values. Close with `Images stored: __` and `Bytes sent outside local network: __` until proof records replace them.
 
-If the feature gate for **Arm the space**, **Intrusion alert**, or **Ask the room** fails, stop the live sequence after **Still follows**. State that the remaining integrations are not ready, then go directly to **Proof**.
+If the feature gate for **Arm the space**, **Intrusion alert**, or **Ask the room** fails, stop the live sequence after **Still follows**, use the matching **At the desk** sentence, then go directly to **Proof**.
 
 ## Camera-unplug proof
 
@@ -85,6 +115,8 @@ Alexander handles the tray and Pi; the operator handles software controls.
 5. Disarm if needed, stop active recording, and send `reset`.
 6. If the recap was used, keep the screen visible until the fact-based recap appears. The narrator warms its normal sentence prompt again in the background after the recap; do not hold the next judge for that warmup.
 
+If a cardboard arm or node was knocked, secure it and restore the positions from `radio/nodes.json`. Keep everyone out of the strip, then start `baseline {keep_model: true}` and wait for its `20 s` capture to finish. It can run with the camera unplugged and keeps the trained model; do not use plain `baseline {}` for this same-layout recovery.
+
 ## Proof check
 
 Open `/proof.json` and match each displayed value to the file:
@@ -117,7 +149,7 @@ Disarm, keep the judge outside the sensing area, and verify the live phone feed.
 
 ### Room-question failure
 
-Do not answer from memory. Show the local event record if it is available, or state that the question feature is not ready and continue to **Proof**.
+Do not answer from memory. Use the **Ask the room is slow or wrong** sentence, show the local event records with Replay, and continue to **Proof**.
 
 ### Router move does not recover
 

@@ -1,7 +1,6 @@
 """A full disk when a baseline finishes (#588): baseline_done still goes out and no file is cut short."""
 import json
 import logging
-from pathlib import Path
 
 from brain.core import Brain
 from brain.tests.simdata import T0_MS
@@ -35,10 +34,13 @@ def baseline(tmp_path):
 
 
 def full_disk(monkeypatch):
-    """Every write of a file's text fails from now on, as on a full disk."""
-    def no_space(self, *args, **kwargs):
+    """Every file the brain flushes to disk fails from now on, as on a full disk: the temporary
+    file is created, and the write to it can't be completed."""
+    import os
+
+    def no_space(fd):
         raise OSError(28, "No space left on device")
-    monkeypatch.setattr(Path, "write_text", no_space)
+    monkeypatch.setattr(os, "fsync", no_space)
 
 
 def test_baseline_done_still_goes_out_when_the_disk_is_full(tmp_path, monkeypatch, caplog):

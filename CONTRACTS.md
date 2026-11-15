@@ -39,9 +39,12 @@ Ports:
   - the App Lab camera teacher sends to msgpack-rpc-router:5600 (App Lab's host alias; gate 3 confirms it).
 - bus -> brain: UDP 127.0.0.1:5601.
 - brain: WebSocket ws://192.168.77.2:8765/ws (bound to 127.0.0.1 and 192.168.77.2 only).
-- web: http://192.168.77.2:8080. board/serve.py serves web/dist, /nodes.json and /proof.json, and answers POST /ask,
+- web: http://192.168.77.2:8080. board/serve.py serves web/dist (index.html goes out with
+  <meta name="radio-sight-board" content="live"> added), /nodes.json and /proof.json, and answers POST /ask,
   GET /history and GET /report (section 10). Those three answer from the board's own records, need no internet and
   are reached on our own network only (the cable and the sensing hotspot).
+  GET /privacy is the live privacy meter (section 11). GET and POST /clock set the board's clock from the
+  operator's laptop (section 12; as proposed, not built yet).
   It also has /layout for the operator's align mode: GET gives {"room": {offset_m, yaw_deg, scale, cut_m} | null,
   "hall_beacons": [{node, xyz_m}]} (every hall beacon in nodes.json; xyz_m is [x, y, z] or null). POST takes the
   same shape with either key or both (a room is never null there), JSON only, and only from the board itself,
@@ -63,6 +66,9 @@ Nodes, every antenna 1.0 m high (the desk plus a 25 cm box):
   pi5b  (0.5, 0.6, 1.0)   Pi B, at the desk's judge edge: beacon B + receiver
   east  (1.6, 0.25, 1.0)  ESP32 beacon E, on the tip of a cardboard arm over the aisle
   west  (0.0, 0.25, 1.0)  ESP32 beacon W, on the tip of a cardboard arm over the aisle
+  A node in nodes.json may carry "device": the kind of hardware it is (unoq, pi5, esp32, phone). The screen picks
+  the model it draws by device, never by matching the node's id. Missing, or a device the screen has no model
+  for: a plain marker.
 Link id = "<tx>><rx>:<kind>". Twelve links, always in this order (nodes.json, feature vectors):
    #  id              kind  tx    rx    where it runs
    1  pi5>unoq:wifi   wifi  pi5   unoq  over the desk
@@ -78,8 +84,14 @@ Link id = "<tx>><rx>:<kind>". Twelve links, always in this order (nodes.json, fe
   11  west>pi5b:ble   ble   west  pi5b  across the strip, West
   12  pi5b>pi5:ble    ble   pi5b  pi5   over the desk
   Two are Wi-Fi (1 and 8: the board's and Pi B's reading of Pi A's hotspot signal). Ten are Bluetooth.
-  Links 1-6 keep the ids they had on the old layout; 7-12 are new with Pi B. All twelve are classifier links.
+  Links 1-6 keep the ids they had on the old layout; 7-12 are new with Pi B. All twelve are classifier links
+  unless nodes.json says otherwise for one.
   Each link in nodes.json carries expected_hz, written after the baseline capture.
+  A link may also carry "classifier": false (missing means true). It is for a link too thin to classify on: under
+  4 readings a second at the baseline. Such a link is read and sent like any other, is listed in state.links, is
+  judged by the stale and blind rules and counts for Tamper. But it never makes health blind, never goes into
+  health.blind, never nulls pred, and is left out of feature vectors, pred.why, xray, objects, checkin and advice.
+  The order and numbers of the twelve links do not change when one is switched off this way.
 Zones: two, in the strip only, split at x = 0.8 (frame.zone_split_x_m).
   zone = 1 + (x >= 0.8) when 0 <= x <= 1.6 and 0 <= y <= 0.6; anywhere else 0 = empty.
   1 West "Left", centre (0.4, 0.3). 2 East "Right", centre (1.2, 0.3). The names are the sides as seen on the screen.
@@ -90,6 +102,10 @@ router_spots: S-home (0.8, 1.1, 1.0), S-W30 (0.5, 1.1, 1.0), S-E30 (1.1, 1.1, 1.
 tray_spots: T1 (0.86, 1.0, 1.0).
 Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'B' | 'E' | 'W'>, never by MAC.
   S = pi5, B = pi5b, E = east, W = west.
+  Gate 2 passes a Bluetooth link on what its beacon can give, never on a fixed number such as 20/s: the beacon is
+  heard on at least 30% of its advertising events, and never under 7/s. A beacon sends one event every interval
+  + 5 ms on average, and a scanner hears at most one copy of each. So E and W (ESP32, 35 ms) can give 25/s and pass
+  at 7.5/s; S and B (a Pi, 20 ms) can give 40/s and pass at 12/s. radio/GATE.md has the procedure.
 Hall links (optional): up to two more beacons far outside the layout, as tripwires.
   Hall beacons: manufacturer data FFFF 52 53 'H' and FFFF 52 53 'J' -> nodes h and j (beacon only, never a receiver).
   They live in nodes.json under "hall", with their positions (same frame, metres; may be many metres outside the
@@ -100,6 +116,10 @@ Hall links (optional): up to two more beacons far outside the layout, as tripwir
   (h>unoq:ble, j>pi5:ble, h>pi5b:ble, ...). The scanners send them as ordinary section 4 rssi messages (kind ble).
   The core links are the twelve listed in nodes.json "links". Hall links are never core links: they are not listed
   there and never appear in state.links, health, pred.why, xray, objects, checkin or advice.
+  A hall link that has been calibrated is listed under "hall" too: "links": [{"id": "h>unoq:ble", "empty_quiet_db": n}]
+  (optional). empty_quiet_db is that link's quiet level measured once with the hall empty (Hall activity, section 6).
+Armed (optional): "armed": {"hold_s": n} = how long a person must stay before an intrusion is raised (Armed, section 6).
+  Missing means 3. Use 4 for a very busy aisle.
 Code takes ids, positions, links, zones and spots from nodes.json, not from constants of its own.
 ```
 
@@ -140,6 +160,8 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
         // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
         // Not sure where: when somebody is there but the links read unlike anything in training (a feature more than
         // 6 dB outside what the model saw), zone_set lists every zone the model knows. zone is still its best guess.
+        // That is the only way pred says "not sure". There is no separate field for it, and present:false is never
+        // qualified: nobody is there, or pred is null.
  "objects":[{"xy_m":[0.86,1.0],"near":"pi5","since_s":14.0,"drop_db":9.8}],
         // near (here and in advice) = the closest node within 0.5 m of xy_m, or null when no node is that close.
         // Node positions are where the nodes are now: the router at its current spot after router_moved.
@@ -153,11 +175,14 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
            "before_dbm":-71.2,"after_dbm":null,"why":["pi5>unoq:wifi","east>pi5:ble"]},   // or null
  "narration":{"text":"...","event_id":"e123","t":1763149513000,"source":"llm","gen_ms":6120},
  "teacher":{"present":true,"zone":1,"motion":"still"},                       // null when the camera is off
- "hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[14.0,9.5],"activity":0.62,"moving":true,"rate_hz":6.5,"stale":false}],
+ "hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[14.0,9.5],"activity":0.62,"moving":true,"rate_hz":6.5,"stale":false,
+          "busy":false}],
         // Optional: may be missing, and a screen reads a missing hall as []. One row per hall link once it has a reading,
         // by receiver in nodes.json order, then by beacon. xy_m = the far beacon's position (the tx end), or null when
         // nodes.json has none; the other end is the rx node. activity is 0-1. rate_hz = readings over the last 2 s.
         // It means "movement on this path": never who, where along it, or how many. stale:true -> activity 0, moving false.
+        // busy is optional and missing means false. busy:true = too much foot traffic on the path to pick out one
+        // movement (Hall activity, section 6); then moving is false. A stale row is never busy.
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
         // training is null unless a fit is running or a lesson is on. While a fit runs:
         //   {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
@@ -179,7 +204,7 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
    // kinds: enter, exit, zone_change, checkin, object_on, object_off, advice, advice_result, router_moved, router_home,
    // recalibrating, cam_off, cam_on, cam_stalled, alert_on, alert_off, blind_on, blind_off, trained, baseline_done, drift,
    // reset (after the reset cmd), recording (info: {on, session}) after record_start/record_stop,
-   // armed, disarmed, intrusion (info: {zone} or {link} for a hall link),
+   // armed, disarmed, intrusion (info: {zone} or {link} for a hall link), passed_by (info: {zone}),
    // tamper, tamper_cleared (info: {node}, e.g. {"node":"east"}; a hall beacon is h or j).
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
 ```
@@ -219,8 +244,11 @@ Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, 
   {"t": epoch ms of that baseline_done}. The automatic baseline after router_home ("recalibrating") keeps the place:
   the model, the recordings and place.json stay as they were. proof/ scores only sessions whose meta recv_t is at or
   after place.json's t.
-  While a baseline started by the `baseline` cmd runs, no link is stale by rate; the capture sets expected_hz again.
-  A link with no reading for 1 s restarts the capture.
+  While a plain `baseline {}` (a new place) runs, no link is stale by rate; the capture sets expected_hz again.
+  A link with no reading for 1 s restarts the capture, as it does for the automatic baseline.
+  For baseline {keep_model: true}, only a link silent for 3 s, or health blind, restarts the capture. A stale link
+  does not: the capture also runs while health is degraded, and links are still judged against the old expected_hz
+  until it ends. (The same layout set down at a new desk, in a hall full of phones, must be able to finish.)
   A baseline asked for by the `baseline` cmd (with or without keep_model) that still cannot start 120 s after the cmd
   is given up: nothing changes and pred returns. The old baseline, the model and the recordings stay. There is no
   event for it; the brain logs why it never started. A capture that is running at 120 s goes on, and is given up if
@@ -245,6 +273,10 @@ Link health:
   whose reading is below its base and steady: the std of its 0.5 s means, over the time since it went off base (2 s at least,
   5 s at most), is < 0.8 dB. A steady drop is an object, not a broken link. Above base, or off base and not steady, is still a jump.
 - health is blind when any classifier link is blind. Then pred is null and the screen shows SENSOR BLIND (never "empty").
+  A link with "classifier": false in nodes.json (section 3) is not one: stale or blind, it shows it in state.links
+  and health.status is then degraded, as for the links Pi B hears below.
+- A link whose baseline counted under 4/s is judged on rate only once its expected_hz is 4/s or more. Below that it
+  shows status stale while it reads under 0.4 x expected_hz, but is never blind by rate.
   Alert timers pause. It clears after 3 s ok.
 - The links Pi B hears (rx pi5b: links 8, 9, 10 and 11) are the exception. Their readings reach the board over the
   hotspot, which can lose packets for reasons that have nothing to do with the radio path. Each of them is still
@@ -261,9 +293,12 @@ Alert:
 - It clears on a checkin or on reset_alert.
 Armed (after hours: the space should be empty):
 - arm {on:true} sets state.armed and sends the event armed; arm {on:false} or reset clears it and sends disarmed.
-- While armed, an intrusion event is sent once each time a person appears: pred.present is true with kind person for
-  the majority of the last 10 decisions, after it was not. It names the zone. Objects never raise it.
-- While health is blind or pred is null, no intrusion is raised and the screen says so (never "all clear").
+- While armed, a person appears when pred.present is true with kind person for the majority of the last 10
+  decisions, after it was not. Still there 3 s later: one intrusion event, naming the zone. Gone first (not present
+  for the majority of the last 10 decisions): a passed_by event instead, naming the zone. Objects raise neither.
+  The 3 s is armed.hold_s in nodes.json (default 3; 4 for a very busy aisle).
+- While health is blind or pred is null, no intrusion and no passed_by is raised and the screen says so (never
+  "all clear"). An appearance that is still waiting then is judged once pred is back.
 Tamper (a rule, not learned; while armed only):
 - A node is silent when every link it sends or receives on has had no reading for 3 s. This is its own test on the
   readings, not the blind rule: it does not wait for a link to be judged stale or blind, it counts Pi B's links
@@ -288,6 +323,12 @@ Hall activity (a rule, not learned; per hall link, from that link's readings onl
 - activity = (spread_db / quiet_db - 2) / 4, held to 0-1 (0 up to twice the quiet level, 1 at six times).
 - moving turns true when activity >= 0.5 (four times quiet), and false again after activity has stayed < 0.25
   (three times) for 1 s.
+- empty_quiet_db (nodes.json, per hall link) is the link's quiet level measured once with the hall empty. While
+  quiet_db, the link's current quiet level, is above twice that, the path is busy: moving is false, busy is true, and
+  the screen says "path busy" (never "movement on this path", never "clear"). Stale comes first: a stale link is
+  not busy.
+- Without an empty_quiet_db the brain still sends the row as above, with no busy, but the screen never shows that
+  link as anything but "not calibrated".
 - The thresholds are first values, tuned at the hardware test (#95).
 X-ray:
 - The grid covers the whole layout rectangle (frame.size_m: the strip and the desk top, 1.6 x 1.1 m) plus 0.2 m on each
@@ -331,13 +372,17 @@ The values below show the format only; they are not results.
  "false_alarms_per_min":null, "train_s":8.4, "ms_per_decision":{"p50":3.1,"p95":4.0},
  "watts":{"idle":null,"teaching":null,"radio_only":null,"source":null},
  "bytes_out":0, "images_stored":0, "models_on_board":3, "measured_at":"...", "commit":"...",
+   // bytes_out = bytes sent to the internet over the measured run. The privacy claim is "nothing is sent to the
+   // internet", never "nothing leaves the board": our own laptop and phone, on our own network, receive the
+   // screen's data.
  "security":{
    "detection":{"entries":null,"detected":null,"ci95":null,"armed_entries":null,"intrusions":null,"intrusion_ci95":null,"within_s":2},
    "false_alarms":{"presence_events":null,"intrusions":null,"duration_s":null,"armed_duration_s":null,
                    "presence_per_hour":null,"intrusions_per_hour":null},
    "fewer_devices":[{"name":"...","nodes":["unoq","pi5"],"links":["pi5>unoq:wifi"],
                      "zone":{"correct":null,"total":null},"presence":{"entries":null,"detected":null,"ci95":null}}]}}
-   // A number not yet measured is null and shows as "__". Never invent one.
+   // A number not yet measured is null. Never invent one. PROOF.md, the docs and the operator's view show it as "__".
+   // The judge-facing screen leaves its tile out (section 8). A measured 0 is a number and is shown.
    // security is optional (the whole object may be missing). Every unmeasured value in it is null.
    // detection: entries are independently labeled empty -> present transitions; a trial counts only with continuous
    //   truth and captured predictions through the deadline (within_s). Intrusion trials also need captured armed coverage.
@@ -355,12 +400,24 @@ router-spot, train-button, train-seconds, zone-score, person-object-score, ms-pe
 models-count, hide-tally
 3D mirror (web/src/room): xray (data-max-db, data-max-xy) and beam-<link id> (data-drop-db, data-status, data-why),
   inside a visually hidden <ul data-testid="beams">.
+Arrival: "Found you." is shown once pred has been present for 1.5 s, then held 3 s. Someone walking past the desk
+  does not get it.
+While armed: a passed_by is shown small and calm ("Someone passed by"), never in the fault colour. The intrusion
+  alert is the only armed message in the fault colour.
+Proof tiles (judge-facing screen): a tile with no measured value is not drawn at all. When no tile has one, the
+  proof block and its divider are not drawn either. The test ids above stay in the page, hidden. A measured 0 is
+  drawn. Nothing on any screen shows a number that is not measured.
+Hall paths: "movement on this path" when moving, "path busy" when busy, "not calibrated" for a link with no
+  empty_quiet_db in nodes.json. Never "clear".
 ```
 
 ## 9. Entry points (board/units/ start exactly these)
 ```
 Board host: python -m bus | python -m radio.wifi_rssi | python -m radio.hci_scan --node unoq (root) |
-            python -m teacher.camwatch | python -m brain.main | python board/serve.py |
+            python -m teacher.camwatch | python -m brain.main |
+            python -m store (the unit radio-sight-store, started after the brain) | python board/serve.py |
+            python -m board.privacy (CAP_NET_ADMIN only, to read its counter) |
+            python -m board.clock (root: it sets the clock and restarts the stack; as proposed, section 12) |
             llama-server (narrator/llm.service) | python -m narrator.narrate
 Board App Lab: the camera teacher app (teacher/applab/), set as the default app. Nothing else runs in App Lab.
 Pi A: python -m pi.radio_node --node pi5 (root) | the hotspot profile from pi/ap.sh
@@ -383,7 +440,8 @@ POST http://192.168.77.2:8080/ask      {"question":"was anyone here in the last 
    // args = what the tool was run with: minutes (1-1440, 10 when the question names none), zone (a zone id in
    //   nodes.json, or null for anywhere) and link (a core link id, or null for any).
    // rows = the stored records the answer was filled from. Every number in answer is in a row, or is args.minutes.
-   // picked_by = llm (the on-board model chose the tool) | rules (the model was down or slow; keywords chose it).
+   // picked_by = rules (keywords chose the tool: tried first, because they are right more often on plain questions) |
+   // llm (no keyword matched, so the on-board model chose the tool). Either way the answer comes from the rows.
    //   The model only picks the tool and its args. It never writes the answer.
    // src = the src of the newest stored record (live | sim | replay), or null when nothing is stored.
    // ms = the whole time for the answer on the board.
@@ -398,6 +456,8 @@ GET http://192.168.77.2:8080/history?from_t=<epoch ms>&to_t=<epoch ms>
               "health":"ok","tamper":[]},
              {"t":1763149302000,"present":null,"zone":null,"zone_set":[],"motion":null,"armed":true,"alert":false,
               "health":"blind","tamper":["east"]}]}
+   // The store is python -m store on the board (section 9). With it not running there are no records, so Ask,
+   //   the replay and the report have nothing to answer from.
    // rows = what the store saved, one row for each second it saved, oldest first. A second with no saved row is
    //   simply missing: nothing is filled in or smoothed.
    // present:null = the brain did not know (blind, no model). It is never turned into false; zone and motion are then
@@ -408,13 +468,57 @@ GET http://192.168.77.2:8080/history?from_t=<epoch ms>&to_t=<epoch ms>
 GET http://192.168.77.2:8080/report          // optional ?from_t=<epoch ms>&to_t=<epoch ms>; default = the last armed stretch
 200 {"armed_from_t":1763149300000,"armed_to_t":null,
      "intrusions":[{"t":1763149312000,"zone":2},{"t":1763149340000,"link":"h>unoq:ble"}],
-     "present_s":43,"passed_by":null,"tamper":[{"t":1763149350000,"node":"east"}],"blind_s":6,
+     "present_s":43,"passed_by":3,"tamper":[{"t":1763149350000,"node":"east"}],"blind_s":6,
      "text":"Armed at 18:21:40 and still armed. Intrusion alerts: 2. Someone was here for 43 s. ...",
      "rows":61,"ms":38}
    // armed_to_t is null while the space is still armed. An intrusion names a zone, or the hall link it was seen on
    //   (the same id as in the intrusion event). tamper lists each tamper event in the stretch.
-   // passed_by is null unless the brain has a passed-by rule (it has none today).
+   // passed_by = the number of passed_by events in the stretch (Armed, section 6). null only from a server that
+   //   does not count them.
    // text = a short report in plain words. Every number in text equals a number in the other fields; the server
    //   checks this and uses a fixed template when it does not hold.
    // rows = how many stored records the report was built from. ms = the whole time for it on the board.
+```
+
+## 11. Privacy meter (GET /privacy on the board's web server)
+```jsonc
+// Polled about once a second. Always HTTP 200 and JSON, one of:
+{"ok": true, "images": 0, "bytes_out": 0, "since_t": 1763149512200, "t": 1763149513200}
+{"ok": false, "why": "privacy meter is not running"}
+   // images: image or video files present now in the folders board/privacy.py lists (the project's data/, the
+   //   App Lab apps folder, the teacher's mounted folders, and the files inside App Lab's running containers).
+   // bytes_out: bytes the board and its containers sent since since_t to any address outside 192.168.77.0/24,
+   //   10.42.0.0/24, loopback, link-local, multicast and broadcast (an nftables counter on postrouting). That is:
+   //   bytes sent to the internet. What our own laptop and phone receive on our own network is not counted.
+   // since_t: epoch ms when counting started. It changes only on an operator reset
+   //   (python -m board.privacy reset, logged with the time) or a reboot. t: epoch ms of this reading.
+   // ok is false when the meter isn't running, its last reading is more than 3 s old, or either number can't
+   //   be read; then there are no numbers. Never a zero in place of an unknown. why is for the operator.
+   // A network error or a 404 means the same as ok:false.
+   // These are not proof.json's bytes_out and images_stored: those come from PROOF.md's own procedure
+   //   (board/egress.sh over one measured run) and stay as measured.
+```
+
+## 12. Board clock (GET and POST /clock on the board's web server; as proposed in #632, not built yet)
+```jsonc
+// The closed network has no time source, so the board's clock is set from the operator's laptop.
+// Both are answered only from the board itself, the cable and the sensing hotspot (403 otherwise). Always JSON.
+// GET /clock: the board's time, and whether a step would be taken now.
+{"t": 1763149512200, "busy": null, "last": null}
+   // t: the board's epoch ms when it answered. The page's difference = its own clock - t (half the round trip is noise).
+   // busy: null, or why POST would be refused right now, in plain words.
+   // last: the last step the helper made since the board booted, or null:
+   //   {"t": epoch ms after the step, "stepped_ms": n, "took_s": n, "ok": true} or {..., "ok": false, "why": "..."}
+// POST /clock {"t": epoch ms}, the laptop's clock when it sends:
+{"ok": true, "diff_ms": 520000, "stepping": true}    // 202: more than 2 s off; the clock is stepped and the stack restarts
+{"ok": true, "diff_ms": 830, "stepping": false}      // 200: within 2 s; nothing happens
+{"ok": false, "diff_ms": 520000, "why": "armed: disarm first"}   // 409: refused; nothing happens
+{"ok": false, "why": "send {\"t\": epoch ms}"}       // 400 (bad body), 503 (the clock helper isn't running)
+   // diff_ms = t - the board's clock when the request arrived; positive means the board is behind.
+   // Refused while armed, while a recording is open (a lesson is one), while a fit is running, while a
+   //   baseline is being captured, while the brain isn't answering, and while a step is already under way.
+   // A step stops the bus, the readers, camwatch, the brain, the narrator and the privacy meter, sets
+   //   the clock, and starts the ones that were running, in that order. The web server and the model server keep
+   //   running. The screen's WebSocket drops for a few seconds and the page reconnects.
+   // Operator only: the control is in the operator drawer, never on the judge-facing screen.
 ```

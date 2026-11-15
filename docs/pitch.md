@@ -8,13 +8,13 @@ Radio Sight brings safety and after-hours security to buildings using the Wi-Fi 
 
 _Start with the setup camera disconnected. Ask the judge to step into the sensing area._
 
-> This is Radio Sight: Wi-Fi that understands the room. The radio links changed when you stepped in, so it found a person without identifying you. The laptop shows the local interface. The Raspberry Pi supplies network and radio, but it runs no model.
+> This is Radio Sight: Wi-Fi that understands the room. The radio links changed when you stepped in, so it found a person without identifying you. That decision was made on the Arduino UNO Q.
 
 ### Teach the room
 
 _Connect the setup camera and start a fresh lesson on the judge._
 
-> Buildings and people differ, so we teach the radio here. This temporary camera provides zone and motion labels for __ seconds. The Arduino UNO Q learns the radio pattern locally on its Dragonwing CPU. It saves no image.
+> Buildings and people differ, so we teach the radio here. This temporary camera provides zone and motion labels for a short lesson. The Arduino UNO Q learns the radio pattern locally on its Qualcomm Dragonwing CPU. It saves no image.
 
 ### Camera unplug
 
@@ -50,7 +50,7 @@ _Use the prepared room question only when the local event-record feature gate pa
 
 _Finish on the proof strip._
 
-> The measured results are zone accuracy __, presence accuracy __, decision latency __, images stored __, and bytes sent outside our local network __. Blank means unmeasured, not estimated. Radio Sight is taught by a camera, then runs without one.
+> Every measured result is on the proof screen with its method. Anything unmeasured is left out, not estimated. Radio Sight is taught by a camera, then runs without one.
 
 ## Five-minute finalist extension
 
@@ -65,4 +65,4 @@ The Pi and optional beacons stand in for radios and access points already spread
 
 ## Feature gates
 
-Armed-mode event logic is now in `main`, but the live phone display and room-question path are not complete. Until both integrations merge and pass local tests, stop after **Still follows**, explain the planned continuation in one sentence, and close on **Proof**. Never stage a fake alert or answer.
+A beat is shown only after it passes preflight on the day. If a gate fails, skip that beat and close on **Proof**. Never stage a fake alert or answer.

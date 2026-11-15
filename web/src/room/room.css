@@ -30,6 +30,35 @@
   }
 }
 
+/* Mock data: a plain band across the room says so the whole time, and the room starts below it. Card colour and
+   secondary text: it is a fact about the page, not a status. Above the arrival card (20), under align mode (30). */
+.room--sim {
+  top: 56px;
+}
+
+.room-sim {
+  position: fixed;
+  z-index: 25;
+  top: 0;
+  left: 640px;
+  right: 0;
+  box-sizing: border-box;
+  height: 56px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--edge);
+  background: var(--floor);
+  color: var(--text-2);
+  font: 600 28px/56px 'Hanken Grotesk', system-ui, sans-serif;
+  text-align: center;
+  pointer-events: none;
+}
+
+@media (max-width: 1100px) {
+  .room-sim {
+    left: 0;
+  }
+}
+
 .room-canvas {
   display: block;
   width: 100%;
@@ -92,6 +121,11 @@
   translate: -100% -50%;
 }
 
+/* On the desk: just outside the strip on the aisle side, centred under its zone. */
+.room-label--zone-south {
+  translate: -50% 0;
+}
+
 .room-label--zone-set {
   color: var(--person);
 }
@@ -129,6 +163,16 @@
 }
 
 /* "Movement on this path": person amber, at node-label size, readable from the wide hall framing. */
+/* The whole hall: where we are, above the person's column. */
+.room-label--ourdesk {
+  translate: -50% -100%;
+  padding: 4px 10px;
+  background: var(--floor);
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 600;
+}
+
 .room-label--hall {
   translate: -50% -50%;
   padding: 4px 10px;
@@ -210,9 +254,9 @@
   translate: -100% -50%;
 }
 
-/* On the desk: in the aisle, centred under its zone. */
+/* On the desk: in the aisle, centred under its zone's name (one line of the zone names' size, and a gap). */
 .room-label--alert-south {
-  translate: -50% 0;
+  translate: -50% calc(max(32px, 48px * var(--room-k, 1)) + 10px);
 }
 
 .room-label--caption {
@@ -330,6 +374,13 @@
 .room-align p {
   margin: 0;
   white-space: pre-line;
+}
+
+.room-align-guide {
+  margin: 8px 0;
+  white-space: pre-line;
+  font-size: 20px;
+  line-height: 1.3;
 }
 
 .room-align-keys,

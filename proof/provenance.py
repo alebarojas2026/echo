@@ -13,6 +13,16 @@ def measured(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+def empty_proof():
+    """A first measurement can be presence/privacy alone; all other values stay unknown."""
+    return {"zone":{"correct":None,"total":None,"ci95":None,"sessions":[],"walkers":None,"method":"not measured"},
+            "threshold_zone":{"correct":None,"total":None},
+            "person_vs_object":{"correct":None,"total":None,"tray_placements":None},
+            "false_alarms_per_min":None,"train_s":None,"ms_per_decision":{"p50":None,"p95":None},
+            "watts":{"idle":None,"teaching":None,"radio_only":None,"source":None},
+            "bytes_out":None,"images_stored":None,"models_on_board":None,"commit":"","measured_at":""}
+
+
 def prepare_update(proof, commit, measured_at=None):
     if measured(proof) and proof.get("commit") not in {None, commit}:
         raise ValueError("proof has measurements from another commit; rerun proof.score at this commit")

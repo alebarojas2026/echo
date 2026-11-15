@@ -472,7 +472,8 @@ def test_baseline_json_is_written_and_read_back_at_start(tmp_path):
     assert set(doc) == {"t", "session", "links"} and doc["session"] is None and doc["t"] > T0_MS
     assert set(doc["links"]) == set(F.LINKS)
     assert doc["links"]["pi5>unoq:wifi"] == {"base_dbm": brain.base["pi5>unoq:wifi"],
-                                             "expected_hz": brain.expected_hz["pi5>unoq:wifi"]}
+                                             "expected_hz": brain.expected_hz["pi5>unoq:wifi"],
+                                             "quiet_db": round(brain.quiet_db["pi5>unoq:wifi"], 2)}   # #734, on by default
     again = Brain(sessions_dir=tmp_path)                 # a restart picks it up
     assert again.base == brain.base and again.expected_hz == brain.expected_hz
     assert again.windower is not None

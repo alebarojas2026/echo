@@ -19,9 +19,9 @@ import { roomShot, type RoomView, type Shot, type ShotFor } from './view'
 
 export type Framing = 'hall' | 'square'
 
-export const FLY_MS = 3000
-/** On load, how long the hall shows before the camera flies down. */
-const FIRST_LOOK_MS = 1200
+export const FLY_MS = 2500
+/** On load, how long the hall shows before the camera flies down: with the fly, 3 s from the hall to the desk. */
+export const FIRST_LOOK_MS = 500
 /** On reset, how long the camera stays on the hall before flying back. */
 const RESET_HOLD_MS = 2000
 /** While the arrival screen waits (#552), the hall shot drifts east and west this far, about once a minute. */
@@ -56,6 +56,15 @@ export function wideness(shot: Shot, square: Shot, hall: Shot): number {
   if (span <= 0) return 0
   return Math.min(1, Math.max(0, Math.log(shot.radiusM / square.radiusM) / span))
 }
+
+/** How see-through the row in front of the strip is (0 solid, 1 fully) for how wide the camera is: solid until the
+ *  camera is nearly down, then fading in smoothly over the last part of the move. Opened sooner, it showed as a
+ *  dark slot in the row from far away. */
+export function cutaway(wide: number): number {
+  const u = Math.min(1, Math.max(0, 1 - wide / CUTAWAY_FROM))
+  return u * u * (3 - 2 * u)
+}
+const CUTAWAY_FROM = 0.3
 
 /** ?view=hall or ?view=square, else null. */
 export function pinnedFraming(params: URLSearchParams): Framing | null {
@@ -207,13 +216,17 @@ export class Fly {
   }
 }
 
-const COLUMN_M = 2.4
-const COLUMN_PX = 6
+const COLUMN_M = 3
+const COLUMN_PX = 8
+/** "Our desk" stands this far above the floor, clear of the column's top. */
+const DESK_WORD_M = 3.9
 
 /** The marks that keep the square and the person readable from the hall framing. */
 export class HallMarks {
   private readonly outline: Line2
   private readonly column: Mesh<BoxGeometry, MeshBasicMaterial>
+  /** Says where we are in the whole hall, where the layout is a few pixels across. */
+  private readonly word: HTMLElement
   private readonly scratch = new Vector3()
 
   constructor(
@@ -235,6 +248,8 @@ export class HallMarks {
     this.column.renderOrder = 21
     this.outline.visible = this.column.visible = false
     view.scene.add(this.outline, this.column)
+    this.word = view.addLabel('Our desk', new Vector3(0, DESK_WORD_M, 0), 'room-label--ourdesk', true)
+    this.word.hidden = true
     // Runs every frame something else moves (the figure, the fly); never asks for frames itself.
     view.addAnimator(() => {
       this.place()
@@ -249,7 +264,10 @@ export class HallMarks {
     const { at, alpha } = this.standing()
     const cam = this.view.camera
     // Only in the wide half of the fly: closer in, the figure itself reads, and a pole through it would not.
-    this.column.material.opacity = 0.9 * alpha * Math.min(1, Math.max(0, (wide - 0.5) / 0.5))
+    const far = Math.min(1, Math.max(0, (wide - 0.5) / 0.5))
+    this.word.hidden = far === 0
+    this.word.style.opacity = String(far)
+    this.column.material.opacity = 0.9 * alpha * far
     this.column.visible = this.column.material.opacity > 0
     if (!this.column.visible) return
     // A fixed width on screen: metres per pixel at the column's distance from the camera.

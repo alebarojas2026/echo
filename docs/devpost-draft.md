@@ -8,7 +8,7 @@ Radio Sight brings safety and after-hours security to buildings using the Wi-Fi 
 
 Patient rooms, bathrooms, study rooms, and offices after hours all need a simple answer to the same question: is someone present, and are they moving? A camera often captures far more than that question requires. We wanted the radio links already crossing a room to provide a smaller, private signal that can be understood locally.
 
-We built Radio Sight at MadHacks twenty twenty-six for the Qualcomm / N+1 track and the theme “Let’s Dig In.” We dug into the way people and objects reshape radio paths and turned those changes into a room-aware local system.
+We built Radio Sight at MadHacks 2026 for the Qualcomm / N+1 track and the theme “Let’s Dig In.” We dug into the way people and objects reshape radio paths and turned those changes into a room-aware local system.
 
 ## What it does
 
@@ -34,9 +34,22 @@ The primary story uses the same eight beats as our runbook:
 - **Arm the space:** armed mode says the room should be empty.
 - **Intrusion alert:** a new sustained person appearance creates one local event and phone-page alert.
 - **Ask the room:** a question is answered from timestamped local records.
-- **Proof:** every public measurement comes from the proof record; missing results stay `__`.
+- **Proof:** every public measurement comes from the proof record; missing results stay unpublished.
 
-The measured zone accuracy is __ ([method](../PROOF.md)). The measured presence accuracy is __ ([method](../PROOF.md)). The measured person-vs-object accuracy is __ ([method](../PROOF.md)). The measured update latency is __ ([method](../PROOF.md)). The measured no-movement alert latency is __ ([method](../PROOF.md)). The measured dead-zone improvement is __ ([method](../PROOF.md)). Images stored is __ and bytes sent outside the local network is __ until those proof rows are complete.
+### Proof
+
+Every value below comes from the repository's [measured proof record](https://github.com/alebarojas2026/echo/blob/main/PROOF.md). A blank stays blank until that record contains the result.
+
+| Result | Measured value |
+|---|---:|
+| Zone accuracy | __ |
+| Presence accuracy | __ |
+| Person versus object | __ |
+| Update latency | __ |
+| No-movement alert latency | __ |
+| Dead-zone improvement | __ |
+| Images stored | __ |
+| Bytes sent outside the local network | __ |
 
 ### How it is different
 
@@ -50,7 +63,7 @@ The radio X-ray, person-vs-object result, no-movement alert, check-in, dead-zone
 
 The Arduino UNO Q is the computing hub. Versioned local messages bring in radio signal measurements, temporary teacher labels, link health, commands, and events. The board forms time windows, rejects unusable inputs, trains a compact model, and makes learned decisions on the Dragonwing CPU.
 
-The setup camera sends labels, not saved images. After a successful lesson, the camera is then unplugged. A blind required link produces no prediction rather than an empty-room claim, and unmeasured proof values render as `__`.
+The setup camera sends labels, not saved images. After a successful lesson, the camera is then unplugged. A blind required link produces no prediction rather than an empty-room claim, and unmeasured proof values stay unpublished.
 
 Our development boards stand in for access points and radios that are already distributed through a building. The Pi supplies the private hotspot and one radio path; the UNO Q and beacon nodes supply the other measured paths. A production deployment would integrate with compatible building radios instead of placing this exact set of boards in every room.
 
@@ -70,7 +83,7 @@ We built a private local loop that learns radio patterns, keeps sensing after th
 
 We also built the no-movement alert, deliberate check-in, caregiver phone page, dead-zone advisor, on-board narrator, and a fact-based end-of-demo recap. The primary story now gives each feature a clear place instead of trying to show everything at once.
 
-Privacy and proof are part of the architecture. The camera is temporary, images are not saved, learned work runs on the UNO Q, and every incomplete measurement stays `__` rather than becoming a demo estimate.
+Privacy and proof are part of the architecture. The camera is temporary, images are not saved, learned work runs on the UNO Q, and every incomplete measurement stays unpublished rather than becoming a demo estimate.
 
 One honest line about what does not work yet: armed-mode event logic is in `main`, while the live phone display and room-question path are still being integrated, and no unfinished beat will be staged as live.
 
@@ -97,7 +110,7 @@ After the hackathon, we want to test more building layouts, materials, access-po
 - glTF Transform and meshoptimizer
 - Arduino App Bricks
 
-The complete versions, licenses, research, and project links are in [credits.md](credits.md).
+The complete versions, licenses, research, and project links are in the [credits](https://github.com/alebarojas2026/echo/blob/main/docs/credits.md).
 
 ## Team
 

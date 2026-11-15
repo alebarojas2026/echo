@@ -1,5 +1,6 @@
+import { Box3, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
-import { hallLift, placeScan, scanUrl } from './scan'
+import { hallLift, placeScan, scanUrl, surfaceUnder } from './scan'
 
 describe('scan placement', () => {
   it('puts the scan floor under the square, centred, by default', () => {
@@ -55,5 +56,26 @@ describe('?lift', () => {
     expect(hallLift(new URLSearchParams('lift=1.4'))).toBe(1.4)
     expect(hallLift(new URLSearchParams('lift=5'))).toBe(1)
     expect(hallLift(new URLSearchParams('lift=nope'))).toBe(1)
+  })
+})
+
+describe('what stands under a point of the model', () => {
+  // A floor at -0.03 (two triangles, 4 m square) and a desk top at 0.72 over its northern strip (scene z -1..-0.5).
+  const quad = (x0: number, z0: number, x1: number, z1: number, y: number) => [x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z0, x1, y, z1, x0, y, z1]
+  const tris = new Float32Array([...quad(-2, -2, 2, 2, -0.03), ...quad(-2, -1, 2, -0.5, 0.72)])
+
+  it('is the desk top over the desk and the floor beside it', () => {
+    expect(surfaceUnder(tris, 0, -0.75, 1)).toBeCloseTo(0.72)
+    expect(surfaceUnder(tris, 0, 0.5, 1)).toBeCloseTo(-0.03)
+  })
+
+  it('is the floor for something lower than the desk top, and nothing outside the model', () => {
+    expect(surfaceUnder(tris, 0, -0.75, 0.5)).toBeCloseTo(-0.03)
+    expect(surfaceUnder(tris, 5, 0, 1)).toBeNull()
+  })
+
+  it('leaves out what the clear box leaves out of the drawing', () => {
+    const clear = new Box3(new Vector3(-1, 0, -1.2), new Vector3(1, 1.35, -0.4))
+    expect(surfaceUnder(tris, 0, -0.75, 1, clear)).toBeCloseTo(-0.03)
   })
 })

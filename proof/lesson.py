@@ -22,6 +22,8 @@ import argparse
 import json
 import re
 from pathlib import Path
+from contextlib import nullcontext
+import time
 
 from teacher.lesson import NO_EMPTY, EmptyTime, script
 
@@ -157,6 +159,7 @@ def main():
     parser.add_argument("--labels", type=Path, help="count the camera labels in a recorded session file and stop")
     parser.add_argument("--url", default="ws://192.168.77.2:8765/ws")
     parser.add_argument("--teach-s", type=float, default=TEACH_S, help="seconds of stepping before the first fit")
+    parser.add_argument("--capture", type=Path, help="exclusive numeric state/event capture, on the board only")
     args = parser.parse_args()
     if args.labels:
         print(label_summary(args.labels.read_text(encoding="utf-8").splitlines()))
@@ -166,14 +169,21 @@ def main():
     recorded = Path(__file__).resolve().parents[1] / "data/sessions" / (args.session + ".jsonl")
     if recorded.exists():
         parser.error("session already exists; use a new id")
+    if args.capture:
+        from proof.provenance import require_board
+        require_board()
     from websockets.sync.client import connect
-    with connect(args.url) as ws:
+    with (args.capture.open("x",encoding="utf-8") if args.capture else nullcontext()) as output, connect(args.url) as ws:
         coach = Coach(args.session, args.walker, lambda msg: ws.send(json.dumps(msg)), teach_s=args.teach_s,
                       purpose=args.purpose, train=not args.no_train)
         coach.start()
         try:
             for raw in ws:
-                coach.on_message(json.loads(raw))
+                msg = json.loads(raw)
+                if output is not None:
+                    from proof.trials import record
+                    record(msg,output,time.time)
+                coach.on_message(msg)
         except KeyboardInterrupt:
             pass
         finally:

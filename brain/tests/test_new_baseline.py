@@ -185,3 +185,26 @@ def test_a_keep_model_baseline_still_restarts_for_a_link_silent_3_s():
     unplugged = lambda link, ms: link == "east>unoq:ble" and 5000 <= ms < 9500   # noqa: E731
     done, feed.t = lossy_capture(brain, feed.t, 60, unplugged)
     assert done is not None and 28 <= done <= 36          # the 20 s started again once the link was back
+
+
+def test_a_keep_model_baseline_finishes_with_a_link_slower_here_than_at_the_last_desk():
+    """The taught baseline had this link at 15 readings a second; here it gives about 1.7, at uneven
+    moments. Judged against the old rate it would be stale, then blind, and never finish (#634)."""
+    import random
+    brain, feed = taught()
+    model = brain.model
+    rng, slow, next_ok = random.Random(5), "west>pi5:ble", [0.0]
+
+    def thin(link, ms):
+        if link != slow:
+            return False
+        if ms < next_ok[0]:
+            return True
+        next_ok[0] = ms + rng.expovariate(1.7) * 1000
+        return False
+
+    brain.on_cmd(cmd("baseline", keep_model=True))
+    done, feed.t = lossy_capture(brain, feed.t, 60, thin)
+    assert done is not None and done <= 45                 # one fresh start at most
+    assert 1.0 <= brain.expected_hz[slow] <= 2.5           # the capture measured that link's own rate
+    assert brain.model is model

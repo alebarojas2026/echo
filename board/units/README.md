@@ -40,6 +40,28 @@ Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sud
 | radio-sight-llm | llama-server, from `narrator/llm.service` | arduino | |
 | radio-sight-narrate | `python -m narrator.narrate` | `@USER@` | |
 | radio-sight-store | `python -m store`: the brain's events and a summary each second, into data/sessions/store.db (what /ask, /history and /report read) | `@USER@` | |
+| radio-sight-privacy | `python -m board.privacy run` | `@USER@`, with CAP_NET_ADMIN only | |
+| radio-sight-clock | `python -m board.clock helper`: sets the clock when the operator asks (POST /clock), then restarts the stack in order | root | |
 | radio-sight-radio-node (Pi only) | `python -m pi.radio_node` | root | no: it advertises and scans without the Ethernet link, and forwards once it's up |
 
 A unit whose program doesn't exist yet still installs and keeps restarting until it does; `journalctl -u <unit>` shows why. If an older `llm.service` from the narrator README is installed, deploy removes it, so two model servers don't fight over port 8091.
+
+## The privacy meter
+`radio-sight-privacy` measures, every second, the image or video files on the board and the bytes it has sent out; the screen reads it from `GET /privacy` (board/serve.py, contract issue #620). `python -m board.privacy` prints one line; `python -m board.privacy reset` counts bytes from zero again and writes the time to `/var/lib/radio-sight-privacy/resets.log` and the journal.
+
+Folders it checks for images and video (by name, and by their first bytes): every place the camera pipeline or our code could write a frame, and nothing else.
+- `data/` in this checkout: everything our own code writes (sessions, the store, layout saves);
+- the camera teacher's own App Lab folder, `~/ArduinoApps/<app>` from `TEACHER_APP` in `.env` (App Lab gives it to the teacher's container). Other apps and App Lab's examples are not checked: their icons are not stored pictures. Without `TEACHER_APP` it's printed as "not there";
+- the folders holding `TEACHER_HEARTBEAT`, `TEACHER_MODE_FILE` and `TEACHER_CALIB` from `.env` (the folders mounted into the teacher's container);
+- any folder listed in `PRIVACY_DIRS` in `.env` (separated by `:`), if another one is ever mounted;
+- inside each running container (App Lab's), every file it added or changed, from Docker's API.
+
+It skips installed library files (`site-packages`, `dist-packages`, `node_modules`), `.git` and `__pycache__`. A folder that isn't there is printed as "not there", never counted as checked.
+
+Bytes out come from the counter in `board/privacy.nft`: every packet leaving the board, its containers included, to an address outside 192.168.77.0/24, 10.42.0.0/24, loopback, link-local, multicast and broadcast. The unit's one root step (`ExecStartPre=+`) loads that table; reading it needs CAP_NET_ADMIN, the only privilege the meter has. It needs the `nft` command (package `nftables`). If anything can't be read, `/privacy` says `"ok": false` and why, never a zero.
+
+`sudo python3 -m board.privacy --explain` lists the bytes out by protocol and destination port (board/privacy-ports.nft, loaded on its own line so it can never stop the meter), with what each port usually is: udp 123 time sync, udp 53 name lookups, tcp 443 updates. These count since the table was loaded, so a reset doesn't clear them.
+
+**The quiet step.** On the closed network the board's own background services still try to reach the internet: the time-sync client, apt's daily timers, firmware checks. Their packets go nowhere, but they leave the board, so the meter counts them. Every `deploy.sh` run on the board stops and disables the ones it finds (`QUIET_UNITS` in deploy.sh) and remembers them in `/var/lib/radio-sight/quieted-units`; the board's clock is set from the laptop instead (POST /clock). Before installing anything over a phone hotspot, run `sudo board/deploy.sh --install --online`: it starts exactly those services again. Deploy again without `--online` afterwards. Anything else that still sends shows in `--explain`, and the meter shows its bytes as they are. No firewall rule blocks anything; the only nftables rules are the meter's counters.
+
+`board/egress.sh` is the proof run's own counter, a separate table: it doesn't touch this one.

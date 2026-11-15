@@ -14,7 +14,7 @@ import {
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
-import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, type NodeId, type Vec3 } from './frame'
+import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, alertWordAt, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, type NodeId, type Vec3 } from './frame'
 import type { Hearing } from './heard'
 import { fade, Glide3 } from './motion'
 import { EDGE, FAULT, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
@@ -140,6 +140,25 @@ export function standBase([x, y]: Vec3): Vec3 {
   return STRIP_M && y >= STRIP_M[1] - 0.01 ? [x, y, DESK_TOP_M] : [x, y, 0]
 }
 
+/** How far around its middle a device rests on things: its stand runs to the highest surface within this of it,
+ *  so a device on a desk's very edge stands on the desk, not on the floor beside it. */
+const FOOT_M = 0.05
+
+/**
+ * Where a device's stand starts when a model of the room says what is under it (the hall): on the highest thing
+ * within its footprint at or below it (our desk, the next row's desk, a chair), else on the floor under it,
+ * free-standing. `under(x, y, z)` is the model's surface height (contract z) under a contract point, or null.
+ * Whatever nodes.json says, a device is drawn where it is; nothing assumes it is on our desk.
+ */
+export function standOn([x, y, z]: Vec3, under: (x: number, y: number, z: number) => number | null): Vec3 {
+  let top: number | null = null
+  for (const [dx, dy] of [[0, 0], [FOOT_M, 0], [-FOOT_M, 0], [0, FOOT_M], [0, -FOOT_M]]) {
+    const h = under(x + dx, y + dy, z)
+    if (h !== null && h <= z && (top === null || h > top)) top = h
+  }
+  return [x, y, top ?? 0]
+}
+
 /** Stands are drawn in the devices' own colour, fainter than the head, and wide enough to read on a desk top. */
 const STAND_ALPHA = 0.45
 const STAND_PX = 2
@@ -179,8 +198,11 @@ export class Stage {
     for (const z of ZONES) {
       const [x0, y0, x1, y1] = zoneRect(z.id)!
       const { east, north } = zoneSide(z.id)
-      const at = v3([east ? x1 - inX : x0 + inX, north ? y1 - inY : y0 + inY, 0])
-      this.zoneLabels.set(z.id, view.addLabel(`${z.id} ${z.name}`, at, `room-label--zone${east ? ' room-label--zone-east' : ''}`))
+      // On the desk the person stands in the middle of a zone 0.6 m deep, on top of any name inside it: the name
+      // goes just outside the strip on the aisle side, under its zone (where alertWordAt puts the alert's word).
+      const at = STRIP_M ? v3(alertWordAt(z.id)[0]) : v3([east ? x1 - inX : x0 + inX, north ? y1 - inY : y0 + inY, 0])
+      const side = STRIP_M ? ' room-label--zone-south' : east ? ' room-label--zone-east' : ''
+      this.zoneLabels.set(z.id, view.addLabel(`${z.id} ${z.name}`, at, `room-label--zone${side}`))
     }
 
     // Devices are live (heard.ts): each starts unseen and fades in once the board hears it.
@@ -212,14 +234,38 @@ export class Stage {
     this.view.requestRender()
   }
 
+  /** The room model's surface height under a contract point, when there is a model (setGround). */
+  private ground: ((x: number, y: number, z: number) => number | null) | null = null
+
+  /** A model of the room is there (or was moved): the stands run to what it really has under each device. */
+  setGround(under: ((x: number, y: number, z: number) => number | null) | null) {
+    this.ground = under
+    this.stood.clear()
+    this.putNodes()
+  }
+
+  /** Looking down through the model costs a pass over its triangles: once per device and 5 cm spot, not per frame
+   *  (the router glides). */
+  private readonly stood = new Map<string, Vec3>()
+
+  private standFor(id: string, p: Vec3): Vec3 {
+    if (!this.ground) return standBase(p)
+    const key = `${id}:${p.map((v) => Math.round(v * 20)).join(',')}`
+    let base = this.stood.get(key)
+    if (!base) this.stood.set(key, (base = standOn(p, this.ground)))
+    return [p[0], p[1], base[2]]
+  }
+
   private putNodes() {
     const router = routerId()
     for (const n of this.nodes) {
       const p = n.id === router ? this.routerGlide.now() : nodePosition(n.id, null)
       const top = v3(p)
       n.head.position.copy(top)
-      // The stand: a post from the floor or the desk top up to the head.
-      n.post.geometry.setPositions([...v3(standBase(p)).toArray(), ...top.toArray()])
+      // The stand: a post up to the head from what is under it in the room's model, else from the drawn desk top
+      // or the floor.
+      const base = this.standFor(n.id, p)
+      n.post.geometry.setPositions([...v3(base).toArray(), ...top.toArray()])
       // Each label hangs off the cube's face on its side, so the cube never sits on its own label.
       const [dx, dz] = { above: [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0], 'below-right': [0, -HEAD_M / 2], 'below-left': [0, -HEAD_M / 2] }[nodeLabelSide(n.id)]
       this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))

@@ -7,17 +7,20 @@ import { startAlign } from './align'
 import { standAtDefaultDesk } from './desks'
 import { HallBeacons } from './devices'
 import { HallPaths } from './hall'
-import { Fly, HallMarks, hallShot, pinnedFraming } from './fly'
+import { Fly, HallMarks, cutaway, hallShot, pinnedFraming } from './fly'
 import { Presence } from './ghost'
 import { HeardNodes } from './heard'
 import { Replay, rowAlert, rowPred, secondKind, type HistoryRow, type ReplayFrame } from './replay'
-import { NODES, STRIP_M } from './frame'
+import { NODES, SIZE_M, STRIP_M } from './frame'
 import { DEFAULT_CUT_M, loadScan, type Scan } from './scan'
 import { Mirror } from './mirror'
 import { RouterSpots } from './spots'
 import { Stage } from './stage'
 import { RoomView, inSituShot, viewOptions } from './view'
 import { XrayLayer } from './xray'
+
+/** What the band across the room says while mock data plays. */
+export const SIM_WORDS = 'Simulated data'
 
 export interface Room {
   view: RoomView
@@ -27,6 +30,16 @@ export interface Room {
 /** Builds the 3D room inside `host` and keeps it in step with the feed. */
 export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchParams(location.search)): Room {
   host.classList.add('room')
+  // Mock data says so in plain words across the room, the whole time it plays (#642). The room starts below the
+  // band, so nothing is ever drawn under it.
+  if (feed.source === 'mock') {
+    host.classList.add('room--sim')
+    const band = document.createElement('div')
+    band.className = 'room-sim'
+    band.setAttribute('role', 'status')
+    band.textContent = SIM_WORDS
+    document.body.append(band)
+  }
   const options = viewOptions(params)
   const view = new RoomView(host, options)
   host.dataset.quality = options.quality
@@ -47,7 +60,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     view.labelLayer.style.opacity = String(Math.max(0, 1 - wide * 4))
     // In situ, the desk run between the camera and the strip turns see-through as the camera comes in, and solid
     // again on the way out, so the whole hall never shows a gap.
-    situ?.ghost(1 - Math.min(1, wide * 2))
+    situ?.ghost(cutaway(wide))
   })
   new HallMarks(view, fly, () => presence.standing())
   if (params.get('align') === '1') {
@@ -60,6 +73,9 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
       // is in situ, at our desk among the real rows.
       if (STRIP_M) {
         situ = s
+        // Every device stands on what the hall really has under it, wherever nodes.json puts it.
+        const [fw, fh] = SIZE_M
+        stage.setGround((x, y, z) => s.under(x - fw / 2, fh / 2 - y, z))
         presence.setTrueSize(true)
         fly.setClose(inSituShot)
       }
@@ -125,7 +141,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   }
   const replay = new Replay(showRecorded, (reason) => {
     // Back to live: the figure starts fresh where live puts it, and the next state redraws the rest.
-    presence.update(null, [], null)
+    presence.clear()
     host.classList.remove('room--norecord')
     host.dataset.replay = ''
     say('', '')
@@ -146,7 +162,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   window.addEventListener('room:replay', (e) => {
     const detail = (e as CustomEvent<{ rows?: HistoryRow[]; speed?: number }>).detail ?? {}
     replayBase = performance.now()
-    presence.update(null, [], null, replayBase) // the figure starts fresh, in place, with the first recorded second
+    presence.clear(replayBase) // the figure starts fresh, in place, with the first recorded second
     replay.play(detail.rows ?? [], detail.speed)
     view.requestRender()
   })

@@ -22,8 +22,13 @@ import { HALL_BEACONS, HOME_SPOT, LINK_IDS, SIZE_M, STRIP_M, TRAY_SPOTS, ZONES, 
 //   power   the tour, with the East beacon switched off for 6 s in every 16 (see powerOff)
 //   demo    the whole demo on a 90 s loop, in the planned running order (see demo.ts)
 
-export type MockScenario =
-  | 'tour' | 'still' | 'checkin' | 'camera' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall' | 'demo' | 'power'
+const SCENARIOS = ['tour', 'still', 'checkin', 'camera', 'between', 'object', 'blind', 'empty', 'waiting', 'stall', 'demo', 'power'] as const
+export type MockScenario = (typeof SCENARIOS)[number]
+
+/** The scenario ?mock= names; anything else (?mock=1, or no name) is the tour. */
+export function mockScenario(name: string | null): MockScenario {
+  return (SCENARIOS as readonly string[]).includes(name ?? '') ? (name as MockScenario) : 'tour'
+}
 
 /** ?mock=power: someone walks the tour while the East beacon is switched off for 6 s in every 16. Its links go
  *  stale, then blind after 3 s (SENSOR BLIND), and the beacon fades to "not heard" until it is back. Hall beacon

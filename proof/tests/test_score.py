@@ -139,7 +139,7 @@ def test_real_brain_replay_never_receives_camera_truth():
     assert rows and all(row["pred"]["zone"] == 4 for row in rows)
 
 
-def test_sim_paths_match_the_exact_proof_schema():
+def test_sim_paths_match_the_score_report_fields():
     from brain.features import LINKS, Windower
     from brain.tests.simdata import sim_to_v2
 
@@ -161,7 +161,8 @@ def test_sim_paths_match_the_exact_proof_schema():
     result = score(sessions, SimReplay(), allow_sim=True)
     assert result["zone"]["total"] and result["threshold_zone"]["total"]
     expected = {
-        "zone": {"correct", "total", "ci95", "sessions", "walkers", "method"},
+        "zone": {"correct", "total", "ci95", "sessions", "walkers", "method", "majority_class_correct"},
+        "presence": {"correct", "total", "always_empty_correct", "cycles", "method"},
         "threshold_zone": {"correct", "total"},
         "person_vs_object": {"correct", "total", "tray_placements"},
         "ms_per_decision": {"p50", "p95"},

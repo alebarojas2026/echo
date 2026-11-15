@@ -214,8 +214,37 @@ def confusion_report(pairs, doc=None):
     """
     classes = zone_classes(doc)
     counts = [[pairs.get((a, p), 0) for p in classes] for a in classes]
+    totals = [sum(row) for row in counts]
+    total = sum(totals)
     return {"classes": classes, "rows_are": "camera zone", "columns_are": "radio zone",
-            "counts": counts, "chance": round(1 / len(classes), 4)}
+            "counts": counts, "chance": round(1 / len(classes), 4),
+            "majority_class_correct":max(totals) if total else None,"total":total or None}
+
+
+def presence_from_confusion(confusion, cycles=None, method="held-out 1 Hz camera windows; empty versus any zone; see PROOF.md"):
+    classes, counts = confusion["classes"], confusion["counts"]
+    if classes.count(0) != 1 or len(counts) != len(classes) or any(len(row)!=len(classes) for row in counts):
+        raise ValueError("presence needs a square confusion matrix including empty")
+    if any(type(n) is not int or n<0 for row in counts for n in row): raise ValueError("invalid confusion counts")
+    total = sum(sum(row) for row in counts)
+    correct = sum(n for i,row in enumerate(counts) for j,n in enumerate(row) if (classes[i]==0)==(classes[j]==0))
+    return {"correct":correct if total else None,"total":total or None,
+            "always_empty_correct":sum(counts[classes.index(0)]) if total else None,"cycles":cycles,"method":method}
+
+
+def supported_fields(report, schema):
+    """Keep proposed measurements in the sidecar until the served schema supports them."""
+    from copy import deepcopy
+    out = deepcopy(report)
+    if "presence" not in schema.get("properties",{}): out.pop("presence",None)
+    zone = schema.get("properties",{}).get("zone",{}).get("properties",{})
+    if "majority_class_correct" not in zone: out["zone"].pop("majority_class_correct",None)
+    return out
+
+
+def validate_report(report, schema):
+    from contracts.check import VALIDATORS
+    VALIDATORS["proof"].evolve(schema=schema).validate(report)
 
 
 def score(sessions, replay, on_board=False, allow_sim=False, commit=None, details=None):
@@ -234,12 +263,13 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None, detail
             raise ValueError(f"training/held-out walker leakage: {walker}")
     correct = total = baseline_correct = baseline_total = po_correct = po_total = 0
     false_alarms = empty_ms = 0
-    pairs = Counter()
+    pairs, presence_pairs = Counter(), Counter()
     durations, clusters, used, walkers = [], [], [], set()
     for session in sessions:
         ordered = sorted(session["messages"], key=lambda m: m["recv_t"])
         times = [m["recv_t"] for m in ordered]
         sc = sn = 0
+        presence_seconds = set()
         previous_end, active_false = None, False
         for row in replay.replay(dict(session, messages=ordered)):
             end, prediction = row["end"], row["pred"]
@@ -256,6 +286,10 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None, detail
             sc += int(zone == actual["zone"])
             sn += 1
             pairs[(actual["zone"], zone)] += 1
+            second = int(end//1000)
+            if second not in presence_seconds:
+                presence_seconds.add(second)
+                presence_pairs[(actual["zone"],zone)] += 1
             baseline = threshold_zone(row["links"])
             if baseline is not None:
                 baseline_correct += int(baseline == actual["zone"])
@@ -276,13 +310,19 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None, detail
             walkers.add(walker_id(session["meta"].get("walker"), "held-out session"))
         correct += sc
         total += sn
+    confusion = confusion_report(pairs)
+    presence = presence_from_confusion(confusion_report(presence_pairs))
+    if allow_sim: presence["method"] = "SYNTHETIC SELF-TEST; " + presence["method"]
     if details is not None:
-        details["confusion"] = confusion_report(pairs)
+        details["confusion"] = confusion
+        details["presence"] = presence
         details["walkers"] = {"training": len(trained_walkers), "heldout": len(walkers) if used else None,
                               "walker_independent": True}
     return {"zone": {"correct": correct if total else None, "total": total or None,
+                     "majority_class_correct":confusion["majority_class_correct"],
                      "ci95": cluster_interval(clusters), "sessions": used, "walkers": len(walkers) if used else None,
                      "method": ("SYNTHETIC SELF-TEST; " if allow_sim else "") + f"walker-independent; {len(trained_walkers)} training walkers; held-out recv_t windows; 95% session bootstrap, 2000 draws; see proof/README.md"},
+            "presence":presence,
             "threshold_zone": {"correct": baseline_correct if baseline_total else None, "total": baseline_total or None},
             "person_vs_object": {"correct": po_correct if po_total else None, "total": po_total or None,
                                  "tray_placements": None},
@@ -337,6 +377,7 @@ def merge_scored(proof, report):
     out = prepare_update(proof, report["commit"], report["measured_at"])
     for key in ("zone", "threshold_zone", "person_vs_object"):
         out[key] = report[key]
+    if (report.get("presence") or {}).get("total") is not None: out["presence"] = report["presence"]
     if report["train_s"] is not None:
         out["train_s"] = report["train_s"]
     if report["ms_per_decision"]["p50"] is not None:
@@ -391,10 +432,14 @@ def main():
     report = score(heldout, adapter, args.on_board, args.allow_sim, commit, details)
     if args.output.exists():
         report = merge_scored(json.loads(args.output.read_text()), report)
+    if not args.allow_sim:
+        schema = json.loads((Path(__file__).resolve().parents[1]/"contracts/schemas/proof.json").read_text())
+        report = supported_fields(report,schema)
+        validate_report(report,schema)
     args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     # The confusion and chance level sit next to proof.json, which has no field for them.
     side = args.output.with_name(args.output.stem + ".confusion.json")
-    side.write_text(json.dumps(dict(details["confusion"], walkers=details["walkers"], commit=commit), indent=2) + "\n")
+    side.write_text(json.dumps(dict(details["confusion"], presence=details["presence"],walkers=details["walkers"], commit=commit), indent=2) + "\n")
     c = details["confusion"]
     print(f"zone confusion (rows camera, columns radio; classes {c['classes']}, chance {c['chance']:.2f}):")
     for cls, row in zip(c["classes"], c["counts"]):

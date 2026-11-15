@@ -1,7 +1,7 @@
 import type { Material, Object3D } from 'three'
-import { deskFit, deskName, loadDesks, modelPoint, nearestSpot, slideDesk, stepDesk, type DeskSpot, type DeskStep, type HallDesks } from './desks'
+import { GAPS, GAP_WORDS, deskFit, deskName, loadDesks, modelPoint, nearestSpot, placementGuide, slideDesk, stepDesk, type DeskSpot, type DeskStep, type HallDesks } from './desks'
 import type { HallBeacons } from './devices'
-import { SIZE_M, STRIP_M, toScene } from './frame'
+import { NODES, SIZE_M, STRIP_M, toScene } from './frame'
 import { DEFAULT_CUT_M, type Scan, type ScanFit } from './scan'
 import type { Stage } from './stage'
 import { roomShot, topShot, type RoomView } from './view'
@@ -22,6 +22,8 @@ import { roomShot, topShot, type RoomView } from './view'
 //   I / K   the next row toward the front / up the tiers
 //   J / L   the next block west / east
 //   U / O   along the desk, west / east: 10 cm (Shift: 50 cm)
+//   G       which side of our desk people stand on: behind it, in front of it, or at the row's end
+// At a desk the panel also says where each device goes on the furniture that is there (desks.ts, placementGuide).
 // Hall beacons (devices.ts): Tab picks the next heard one (or a click on it); while one is picked the arrows move
 // it on the floor (10 cm, Shift 1 m) and it can be dragged, from the "new beacon" tray too; Esc lets go. S saves
 // their positions into radio/nodes.json as well.
@@ -132,9 +134,10 @@ async function saveAll(fit: ScanFit, beacons: HallBeacons | undefined): Promise<
 export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beacons?: HallBeacons) {
   const panel = document.createElement('div')
   panel.className = 'room-align'
-  panel.innerHTML = '<h2>Align the scan</h2><p class="room-align-fit"></p><p class="room-align-beacon"></p><p class="room-align-keys"></p><p class="room-align-status"></p><pre hidden></pre>'
+  panel.innerHTML = '<h2>Align the scan</h2><p class="room-align-fit"></p><p class="room-align-beacon"></p><p class="room-align-guide" hidden></p><p class="room-align-keys"></p><p class="room-align-status"></p><pre hidden></pre>'
   document.body.append(panel) // over the panels' rail, outside the room's stacking context
   const [fitLine, beaconLine, keys, status, pre] = ['.room-align-fit', '.room-align-beacon', '.room-align-keys', '.room-align-status', 'pre'].map((q) => panel.querySelector<HTMLElement>(q)!)
+  const guide = panel.querySelector<HTMLElement>('.room-align-guide')!
   view.host.dataset.align = scan ? 'on' : 'no-scan'
   if (!scan) {
     fitLine.textContent = 'No scan loaded.'
@@ -153,7 +156,7 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
   if (STRIP_M) {
     void loadDesks().then((h) => {
       hall = h
-      if (h) keys.innerHTML += '<br>D nearest desk · I K rows · J L blocks · U O along it'
+      if (h) keys.innerHTML += '<br>D nearest desk · I K rows · J L blocks · U O along it<br>G gap behind, in front or at the row end'
     })
   }
   const here = (h: HallDesks): DeskSpot => {
@@ -167,7 +170,12 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
     spot = next
     const fit = deskFit(hall, next, scan.box, tidyFit(scan.fit).cut_m)
     scan.apply(fit)
-    fitLine.textContent = `${describeFit(fit)}\n${deskName(next.desk)}`
+    fitLine.textContent = `${describeFit(fit)}\n${deskName(next.desk)}, ${GAP_WORDS[next.gap ?? 'behind']}`
+    // Where each device goes at this desk, in words. Left and right as you stand in the spot, facing our desk.
+    const places = placementGuide(hall, next, Object.values(NODES), STRIP_M ?? SIZE_M)
+    guide.hidden = false
+    guide.textContent = ['Where the devices go (left and right as you stand in the spot, facing our desk):', ...places.map((p) => p.words)].join('\n')
+    view.host.dataset.placement = JSON.stringify(places.map((p) => [p.id, ...p.xyz]))
     status.textContent = ''
     return true
   }
@@ -176,6 +184,10 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
     const k = key.toLowerCase()
     const step: Record<string, DeskStep> = { i: 'north', k: 'south', j: 'west', l: 'east' }
     if (k === 'd') return standAt(here(hall))
+    if (k === 'g') {
+      const at = here(hall)
+      return standAt({ ...at, gap: GAPS[(GAPS.indexOf(at.gap ?? 'behind') + 1) % GAPS.length] })
+    }
     if (step[k]) return standAt(stepDesk(hall, here(hall), step[k])) || true // no desk that way: stay
     if (k === 'u' || k === 'o') return standAt(slideDesk(here(hall), (k === 'o' ? 1 : -1) * (shift ? 0.5 : 0.1)))
     return false
@@ -211,6 +223,7 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
       const fit = nudge(scan.fit, key, event.shiftKey)
       if (!fit) return
       spot = null // moved by hand: no longer at a desk
+      guide.hidden = true
       scan.apply(fit)
       fitLine.textContent = describeFit(fit)
       status.textContent = ''

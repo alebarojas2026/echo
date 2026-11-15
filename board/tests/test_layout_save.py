@@ -61,7 +61,7 @@ def nodes_json(url):
 
 def test_nothing_saved_yet(url):
     assert call(url) == (200, {"room": None, "hall_beacons": [{"node": "h", "xyz_m": None},
-                                                               {"node": "j", "xyz_m": None}]})
+                                                               {"node": "j", "xyz_m": None}], "nodes": []})
 
 
 def test_a_good_save_is_returned_and_drawn(url, site):
@@ -69,7 +69,7 @@ def test_a_good_save_is_returned_and_drawn(url, site):
     status, view = call(url, {"room": ROOM, "hall_beacons": [{"node": "h", "xyz_m": [3.8, 14.1, 2.0]}]})
     assert status == 200
     assert view == {"room": ROOM, "hall_beacons": [{"node": "h", "xyz_m": [3.8, 14.1, 2.0]},
-                                                   {"node": "j", "xyz_m": None}]}
+                                                   {"node": "j", "xyz_m": None}], "nodes": []}
     assert call(url) == (200, view)
     served = nodes_json(url)
     assert served["hall"]["beacons"][0]["xyz_m"] == [3.8, 14.1, 2.0]
@@ -154,7 +154,7 @@ def test_save_networks_are_the_contracts():
 def test_a_broken_store_file_reads_as_nothing_saved(site):
     site["layout_path"].parent.mkdir(parents=True)
     site["layout_path"].write_text("{")
-    assert layout.Store(site["layout_path"]).load() == {"room": None, "hall": {}}
+    assert layout.Store(site["layout_path"]).load() == {"room": None, "hall": {}, "nodes": {}}
 
 
 # floor_m (#547): the square on a tier of the hall. The screen sends it only when it isn't 0.
@@ -203,3 +203,27 @@ def test_a_restart_keeps_floor_m(site):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_a_refused_post_is_answered_not_reset(monkeypatch, url):
+    # A reply sent before the body is read, then a close, makes Linux reset the connection,
+    # and the page sees "connection reset" instead of the reason. Seen on Debian, not on Windows.
+    monkeypatch.setattr(serve, "SAVE_FROM", [serve.ipaddress.ip_network("10.42.0.0/24")])
+    body = json.dumps({"room": ROOM, "pad": "x" * (layout.MAX_BODY - 200)}).encode()
+    for _ in range(20):
+        assert call(url, raw=body)[0] == 403
+
+
+def test_a_post_with_the_wrong_type_is_answered_not_reset(url):
+    body = json.dumps({"room": ROOM, "pad": "x" * (layout.MAX_BODY - 200)}).encode()
+    for _ in range(20):
+        assert call(url, raw=body, content_type="text/plain")[0] == 415
+
+
+def test_a_post_that_is_too_big_is_answered_not_reset(url):
+    # The same reset, for a body over the limit: the "too big" answer has to arrive (seen on Debian
+    # as "connection reset" in two runs of three, because the oversize body was left unread).
+    for size in (layout.MAX_BODY + 1, 4 * layout.MAX_BODY, 300_000):
+        for _ in range(10):
+            assert call(url, raw=b"x" * size)[0] == 413
+
