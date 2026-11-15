@@ -232,6 +232,14 @@ def test_dropping_no_pi_starts_the_pi_units(repo):
     assert restarted == set() and calls(out, "enable") == BOARD_UNITS and calls(out, "disable") == set()
 
 
+def test_pi_b_installs_its_node_and_its_wifi_reader(repo):
+    # The desk layout's second Pi (#460): ROLE=pib, given by pi/install.sh.
+    restarted, out = deploy(repo, "--install", role="pib")
+    assert calls(out, "enable") == {"radio-sight-radio-node", "radio-sight-wifi-rssi"}
+    assert restarted == {"radio-sight-radio-node", "radio-sight-wifi-rssi"}
+    assert installed(repo) == {"radio-sight-radio-node", "radio-sight-wifi-rssi"}
+
+
 def test_no_pi_on_the_pi_keeps_beacon_s_running(repo):
     # The radio node advertises and scans without the cable, so --no-pi must not stop it.
     restarted, out = deploy(repo, "--install", "--no-pi", role="pi")

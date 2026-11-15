@@ -61,3 +61,22 @@ def test_joined_to_something_else_fails(fakes):
     assert r.returncode == 1
     assert "NOT joined" in r.stderr
     assert "PI-HOTSPOT" not in r.stdout + r.stderr   # the BSSID never goes in the output
+
+
+def test_pi_b_routes_the_board_through_pi_a(fakes):
+    # Pi B has no cable and the profile never takes the default route: without this route its
+    # readings to 192.168.77.2 can't leave (#460).
+    with open(fakes / "env", "a", newline="\n") as f:
+        f.write("RADIO_NODE=pi5b\nWIFI_LINK='pi5>pi5b:wifi'\n")
+    r, calls = join(fakes, "pi-hotspot")
+    assert r.returncode == 0, r.stderr
+    add = next(c for c in calls if c.startswith("connection add"))
+    assert "ipv4.routes 192.168.77.0/24 10.42.0.1" in add and "ipv4.never-default yes" in add
+    assert "route: 192.168.77.0/24 (the board) via Pi A's hotspot" in r.stdout
+    assert not (REPO / "pi5b:wifi").exists()   # the quoted WIFI_LINK is not a redirect when sourced
+
+
+def test_the_board_gets_no_route(fakes):
+    r, calls = join(fakes, "pi-hotspot")
+    add = next(c for c in calls if c.startswith("connection add"))
+    assert "ipv4.routes" not in add and "route:" not in r.stdout
