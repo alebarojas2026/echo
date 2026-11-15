@@ -2,6 +2,7 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -54,14 +55,15 @@ def repo(tmp_path):
     return r
 
 
-def deploy(repo, *args, role="board", ok=True, **env_extra):
+def deploy(repo, *args, role="board", ok=True, check=False, **env_extra):
     unit_dir = (repo.parent / "units").as_posix()
     env = {k: v for k, v in os.environ.items() if k != "PYTHON"}
     # The quiet step looks for real unit files; by default the test machine's are never touched.
     quiet = {"QUIET_UNIT_DIRS": (repo.parent / "no-systemd").as_posix(),
              "QUIET_STATE": (repo.parent / "quieted-units").as_posix()}
-    env.update(ROLE=role, UNIT_DIR=unit_dir, SYSTEMCTL="echo systemctl", SUDO="", **{**quiet, **env_extra})
-    r = subprocess.run([BASH, "board/deploy.sh", *args], cwd=repo, env=env, capture_output=True, text=True)
+    env.update({"ROLE":role,"UNIT_DIR":unit_dir,"SYSTEMCTL":"echo systemctl","SUDO":"",**quiet,**env_extra})
+    options = [] if check else ["--no-check"]
+    r = subprocess.run([BASH, "board/deploy.sh", *args, *options], cwd=repo, env=env, capture_output=True, text=True)
     assert (r.returncode == 0) == ok, r.stdout + r.stderr
     return calls(r.stdout, "restart"), r.stdout + r.stderr
 
@@ -355,3 +357,45 @@ def test_someone_elses_llm_service_is_left_alone(repo):
 def test_bad_arguments_show_usage(repo, args):
     _, out = deploy(repo, *args, ok=False)
     assert "usage" in out or "unknown option" in out
+
+
+def check_tools(repo):
+    systemctl = repo.parent / 'systemctl'
+    systemctl.write_text('#!/usr/bin/env bash\ncase $1 in\n'
+                        'list-units) [ -z "${FAILED_UNIT:-}" ] || echo "$FAILED_UNIT loaded failed failed";;\n'
+                        'is-active) exit 0;;\n*) echo "systemctl $*";;\nesac\n',newline='\n')
+    systemctl.chmod(0o755)
+    write(repo,'scripts/demo_check.py','import os,sys\nprint("PASS demo check")\nsys.exit(int(os.environ.get("DEMO_FAIL","0")))\n')
+    commit(repo)
+    return {'SYSTEMCTL':systemctl.as_posix(),'PYTHON':sys.executable}
+
+
+def test_checked_deploy_reports_running_and_replaced_commits(repo):
+    env = check_tools(repo)
+    old = git(repo,'rev-parse','HEAD')
+    write(repo,'bus/core.py','# next\n')
+    new = commit(repo)
+    git(repo,'checkout','-q',old)
+    _,out = deploy(repo,new,check=True,**env)
+    assert 'PASS demo check' in out
+    assert f'running {new}; replaced {old}; to go back: board/deploy.sh {old}' in out
+
+
+def test_checked_deploy_names_failed_unit_and_returns_failure(repo):
+    env = check_tools(repo)
+    _,out = deploy(repo,'--install',check=True,ok=False,FAILED_UNIT='radio-sight-brain.service',**env)
+    assert 'radio-sight-brain.service loaded failed failed' in out and 'to go back:' in out
+
+
+def test_demo_check_failure_fails_deploy_but_pi_does_not_run_it(repo):
+    env = check_tools(repo)
+    deploy(repo,'--install',check=True,ok=False,DEMO_FAIL='1',**env)
+    _,out = deploy(repo,'--install',check=True,role='pi',DEMO_FAIL='1',**env)
+    assert 'PASS demo check' not in out
+
+
+def test_no_check_skips_failed_units_and_demo_check(repo):
+    env = check_tools(repo)
+    _,out = deploy(repo,'--install',FAILED_UNIT='radio-sight-brain.service',DEMO_FAIL='1',**env)
+    assert 'checks skipped' in out and 'PASS demo check' not in out
+    assert 'loaded failed failed' not in out

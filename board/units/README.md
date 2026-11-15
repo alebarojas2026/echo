@@ -5,10 +5,17 @@ systemd units for every program in CONTRACTS.md section 9. Install them with `bo
 ## Install on the board
 From the repo root, with the Python env already at /opt/rs/venv:
 ```sh
-sudo board/deploy.sh --install --no-pi   # before the Pi is connected
+sudo board/deploy.sh --install --no-pi --no-check   # first install, before the Pi is connected
 sudo board/deploy.sh --install           # once the Pi's hotspot and the Ethernet link are up (pi/eth.sh on the Pi, board/eth.sh here)
 ```
 Each run installs every unit, reloads systemd, enables them, and starts any that aren't running. It restarts only units whose file changed. Running it again is safe.
+
+Deploy waits up to 20 s for its required units, prints any failed Radio Sight
+units, and runs the read-only `scripts/demo_check.py` against localhost on the
+board. Either failed check makes deploy exit non-zero. Pi roles check units only.
+The final line gives the running commit, the commit replaced, and the command to
+go back. `--no-check` skips these checks for a first install; run again without
+it once the stack and radios are available.
 
 `--no-pi` still installs the units that need the Pi (`radio-sight-wifi-rssi` and `radio-sight-hci-scan`, the BLE scan), but stops and disables them until the Pi's hotspot and beacons are there. Run it again without `--no-pi` to start them. Once started, the Wi-Fi reader waits for the hotspot by itself (it says so once in its journal) and the BLE scan starts itself again when it goes quiet, so a Pi that comes up late or reboots needs nothing here.
 

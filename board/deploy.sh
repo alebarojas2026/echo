@@ -37,7 +37,7 @@
 
 set -euo pipefail
 
-USAGE="usage: board/deploy.sh <tag|sha> [--no-pi] [--online]  or  sudo board/deploy.sh --install [--no-pi] [--online]"
+USAGE="usage: board/deploy.sh <tag|sha> [--no-pi] [--online] [--no-check]  or  sudo board/deploy.sh --install [--no-pi] [--online] [--no-check]"
 
 # Services that call out to the internet by themselves, quieted on the board (see the top).
 QUIET_UNITS='systemd-timesyncd.service chrony.service ntpsec.service ntp.service apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service fwupd-refresh.timer packagekit.service'
@@ -143,13 +143,38 @@ check_web() {
     fi
 }
 
+verify_stack() {
+    local role=$1; shift
+    local ready=0 attempt unit failed status=0
+    for ((attempt=0; attempt<20; attempt++)); do
+        ready=1
+        for unit in "$@"; do
+            $systemctl is-active --quiet "$unit" || ready=0
+        done
+        [ "$ready" -eq 1 ] && break
+        sleep 1
+    done
+    if [ "$ready" -ne 1 ]; then say "stack did not become active within 20 s"; status=1; fi
+    if failed=$($systemctl list-units 'radio-sight-*' --state=failed --no-legend --no-pager); then
+        if [ -n "$failed" ]; then printf '%s\n' "$failed"; status=1; fi
+    else
+        say "could not inspect failed units"
+        status=1
+    fi
+    if [ "$role" = board ]; then
+        "$python" scripts/demo_check.py --http http://127.0.0.1:8080 --ws ws://127.0.0.1:8765/ws || status=1
+    fi
+    return "$status"
+}
+
 main() {
-    local ref="" install=0 no_pi=0 network=quiet arg
+    local ref="" install=0 no_pi=0 no_check=0 network=quiet arg
     for arg in "$@"; do
         case $arg in
             --install) install=1 ;;
             --no-pi) no_pi=1 ;;
             --online) network=online ;;
+            --no-check) no_check=1 ;;
             -*) die "unknown option $arg; $USAGE" ;;
             *) [ -z "$ref" ] || die "$USAGE"; ref=$arg ;;
         esac
@@ -163,7 +188,7 @@ main() {
     local role=${ROLE:-$(detect_role)}
     local unit_dir=${UNIT_DIR:-/etc/systemd/system}
     local systemctl=${SYSTEMCTL:-systemctl}
-    local user; user=$(stat -c %U "$repo")
+    local user; user=$(stat -c %U "$repo" 2>/dev/null || stat -f %Su "$repo")
     local sudo=${SUDO-sudo}
     if [ "$(id -u)" -eq 0 ]; then
         sudo=""
@@ -174,7 +199,7 @@ main() {
     local python=${PYTHON:-/opt/rs/venv/bin/python}
     [ -x "$python" ] || say "warning: $python isn't there yet; the units can't start until it is (or set PYTHON)"
 
-    local changed="" label
+    local changed="" label previous; previous=$(g rev-parse HEAD)
     if [ -n "$ref" ]; then
         git diff --quiet && git diff --cached --quiet || die "uncommitted changes in $repo; commit or stash them first"
         timeout 30 git fetch --quiet --tags origin 2>/dev/null || say "fetch failed (no network?); using refs already here"
@@ -253,6 +278,14 @@ main() {
     for req in $(grep 'requirements.txt$' <<< "$changed" || true); do
         say "$req changed; run pip install -r $req"
     done
+    local status=0 running; running=$(g rev-parse HEAD)
+    if [ "$no_check" -eq 1 ]; then
+        say "checks skipped (--no-check)"
+    else
+        verify_stack "$role" "${want[@]}" || status=1
+    fi
+    say "running $running; replaced $previous; to go back: board/deploy.sh $previous"
+    return "$status"
 }
 
 # Everything is in functions so a checkout that rewrites this file can't
