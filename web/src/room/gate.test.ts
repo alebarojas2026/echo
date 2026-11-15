@@ -61,7 +61,7 @@ describe('the gate layout', () => {
     expect(Math.max(...rows.get(desk)!)).toBeCloseTo(z(0.8)) // the desk part starts at the desk's edge
   })
 
-  it('stands at the desk's end by default, where the stair aisle has room for a gate a metre deep', () => {
+  it('stands at the end of the desk by default, where the stair aisle has room for a gate a metre deep', () => {
     const hall: HallDesks = { centre_m: [0, 0], desk_depth_m: 0.45, desk_height_m: 0.75, desks: [{ row: 0, wedge: 0, r_m: 5, th0_deg: -10, th1_deg: 10, floor_m: 0 }] }
     expect(defaultSpot(hall).gap).toBe('end')
     // The hall is placed with its desk's edge under the layout's (y = 0.8), not under the spot's north edge.
