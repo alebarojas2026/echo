@@ -6,6 +6,7 @@ import { mountPrivacyLine } from './privacy'
 import { mountIncidentReport } from './report'
 import { publishHealth } from './health-words'
 import './health-words.css'
+import { sourceWords } from './source-words'
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import { routerWords } from './router-words'
@@ -85,6 +86,10 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const offPanelEvents = live?.onEvent(event => { if (event.kind === 'reset') panels.forEach(panel => panel.reset?.()) })
   const operator = root.querySelector<HTMLElement>('.hud-operator')!
   operator.hidden = new URLSearchParams(location.search).get('op') !== '1'
+  const publishOperator = () => { document.documentElement.dataset.hudOperator = operator.hidden ? 'closed' : 'open' }
+  const operatorVisibility = new MutationObserver(publishOperator)
+  operatorVisibility.observe(operator, { attributes: true, attributeFilter: ['hidden'] })
+  publishOperator()
   Object.values(controlModule)[0]?.mountHudControls(root.querySelector('.operator-controls')!, message => feed?.send(message.cmd, message.args))
   const key = (event: KeyboardEvent) => {
     if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || (event.target as HTMLElement)?.closest('input,select,textarea,[contenteditable]')) return
@@ -122,7 +127,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
     headlineText.set(headline, !!(state as { replay?: unknown } | null)?.replay)
     set('judge-detail', detail)
-    set('source-badge', state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO')
+    set('source-badge', sourceWords(state))
     if (!Object.keys(extraPanels).some(path => path.includes('camera'))) set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] ?? 'Camera status unknown' : '')
     nextNarration = !stale ? state?.narration?.text ?? '' : ''
     clearNarration = stale || !state
@@ -157,7 +162,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); narratorText.dispose(); clearInterval(narrationTimer); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { operatorVisibility.disconnect(); delete document.documentElement.dataset.hudOperator; offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); narratorText.dispose(); clearInterval(narrationTimer); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
