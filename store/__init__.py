@@ -15,6 +15,7 @@ same transaction that adds a link, so the chain carries on over a restart, and a
 (the web server, adding the witnesses' signatures) can add links too. Order is seq, never t: the
 board's clock can be stepped.
 """
+import contextlib
 import json
 import logging
 import os
@@ -256,7 +257,7 @@ class Store:
 
     def chain_info(self) -> dict:
         """What GET /chain says about the log itself: head, records, since_t, first_seq, anchor, unsealed."""
-        with self.lock:
+        with self.lock, self._snapshot():
             seq, digest = self._head()
             first, last = self.db.execute("select min(seq), max(seq) from chain").fetchone()
             n = 0 if first is None else last - first + 1   # seq has no gaps: no need to count the rows on every call
@@ -284,10 +285,24 @@ class Store:
         anchor = self._meta("anchor")
         return anchor["hash"] if anchor and anchor["seq"] == seq - 1 else None
 
+    @contextlib.contextmanager
+    def _snapshot(self):
+        """One read transaction: every read inside sees the file as it stood at the first of them. The
+        store prunes from another process, and a check whose reads straddled a prune saw rows from
+        before it and the anchor from after it, and named the anchor's record as broken."""
+        mine = not self.db.in_transaction
+        if mine:
+            self.db.execute("begin")
+        try:
+            yield
+        finally:
+            if mine:
+                self.db.rollback()
+
     def _range(self, from_seq, to_seq):
         """The links from from_seq to to_seq as (rows, the hash before the first, from, to), clamped to
         what is kept. Without from_seq: the VERIFY_DEFAULT links up to to_seq."""
-        with self.lock:
+        with self.lock, self._snapshot():
             first, last = self.db.execute("select min(seq), max(seq) from chain").fetchone()
             if first is None:
                 return [], ZERO, None, None
