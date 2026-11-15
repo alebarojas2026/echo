@@ -33,6 +33,15 @@ def test_two_walk_throughs_in_one_minute_are_said_once_with_twice():
     assert items[0]["cites"] == [1, 2, 3, 4, 5, 6]
 
 
+def test_a_walk_straight_through_the_one_spot_is_one_plain_sentence_with_its_time():
+    # the brain's passed_by on the one spot comes alone: no enter, no exit, armed or not
+    items = s.timeline([ev(5, "passed_by", 7, zone=1)], [], SPOT, DEVICES, T0, T0 + 59_000)
+    assert [(i["text"], i["cites"]) for i in items] == [("Somebody walked through at the desk.", [7])]
+    assert s.tell(items) == f"{s.hm(T0 + 5000)}. Somebody walked through at the desk."
+    text = s.tell(s.timeline([ev(5, "passed_by", 7, zone=1)], [], {1: "Spot"}, DEVICES, T0, T0 + 59_000))
+    assert text.endswith("Somebody walked through.") and not any(w in text.lower() for w in ("left", "right", "people", "two"))
+
+
 def test_a_visit_says_its_still_stretch_and_how_long_until_they_left():
     seconds = [second(i, 10 + i, present=1, motion="moving" if i < 2 else "still") for i in range(0, 42)]
     events = [ev(0, "enter", 1, zone=1), ev(42, "exit", 2, zone=1)]
