@@ -101,6 +101,9 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     return null
   }
   host.dataset.quality = options.quality
+  // ?op=1: the operator's view. Set-up words (the new-beacon tray) show only with it, in align mode, or while the
+  // panels' operator controls are open (room.css).
+  if (params.get('op') === '1') host.dataset.op = '1'
   if (params.get('fps') === '1') startFpsMeter(view)
   const stage = new Stage(view)
   const scan = loadScan(view, stage.drawnRoom, params, options.quality).then(standAtDefaultDesk)
@@ -148,11 +151,13 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     // and drifting; "found" (or "closed") lifts the dim and flies down to the floor. The HUD sends window event
     // 'hud:arrival' {state: 'waiting' | 'found' | 'closed'} and keeps the latest on <html data-hud-arrival>, so a
     // state set before the room was ready still counts. With neither, the room flies down on load as before.
+    // An intrusion while armed closes the card with `cut` (detail.cut, or <html data-hud-arrival-cut="1"> for a
+    // state set before the room was ready): the room jumps to the floor instead of flying.
     // Safety net (fly.ts, comesDownAlone): with the card still waiting and a person present for 4 s by the board's
     // word, the room lifts the dim and comes down by itself. `alone` holds while it has.
     const run = new PresentRun()
     let alone = false
-    const arrival = (state: unknown) => {
+    const arrival = (state: unknown, cut = false) => {
       if (state !== 'waiting' && state !== 'found' && state !== 'closed') return
       // The card saying "waiting" again while the person it has not noticed is still there changes nothing.
       if (state === 'waiting' && alone && comesDownAlone('waiting', run.ms)) return
@@ -160,10 +165,14 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
       host.classList.toggle('room--arrival', state === 'waiting')
       host.dataset.arrival = state
       if (state === 'waiting') fly.hold()
+      else if (state === 'closed' && cut) fly.cutToFloor()
       else fly.arrive()
     }
-    window.addEventListener('hud:arrival', (e) => arrival((e as CustomEvent<{ state?: string }>).detail?.state))
-    arrival(document.documentElement.dataset.hudArrival)
+    window.addEventListener('hud:arrival', (e) => {
+      const detail = (e as CustomEvent<{ state?: string; cut?: boolean }>).detail
+      arrival(detail?.state, detail?.cut === true)
+    })
+    arrival(document.documentElement.dataset.hudArrival, document.documentElement.dataset.hudArrivalCut === '1')
     const net = () => {
       const { state, stale } = feed.current()
       if (stale || !state) return // nothing current to go by: stay as we are
@@ -185,7 +194,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     // take the card's and the board's latest word and be there at once, with no fly to watch.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState !== 'visible') return
-      if (!alone) arrival(document.documentElement.dataset.hudArrival)
+      if (!alone) arrival(document.documentElement.dataset.hudArrival, document.documentElement.dataset.hudArrivalCut === '1')
       net()
       fly.settle()
     })

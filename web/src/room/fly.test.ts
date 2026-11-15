@@ -335,6 +335,49 @@ describe('the fly', () => {
     expect(again.wide).toBe(1)
   })
 
+  it('cuts straight to the floor on an intrusion: no fly, also in the middle of one, and stays there', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.hold()
+    fly.setHall(hall)
+    view.run(2000)
+    expect(fly.wide).toBe(1)
+    fly.cutToFloor()
+    expect(fly.wide).toBe(0) // at once, before any frame
+    expect(view.host.dataset.view).toBe('square')
+    view.run(FLY_MS)
+    expect(fly.wide).toBe(0) // and it does not drift back to the hall
+    // In the middle of the fly down after "found".
+    fly.hold()
+    view.run(16)
+    fly.arrive()
+    view.run(FLY_MS / 2)
+    expect(view.host.dataset.view).toBe('flying')
+    fly.cutToFloor()
+    expect(view.host.dataset.view).toBe('square')
+    view.run(FLY_MS)
+    expect(fly.wide).toBe(0)
+    // The next visitor's arrival screen still goes back to the hall.
+    fly.hold()
+    view.run(16)
+    expect(fly.wide).toBe(1)
+  })
+
+  it('leaves a pinned framing pinned on an intrusion, and waits at the desk when the hall is not in yet', () => {
+    const pinned = fakeView()
+    const kept = new Fly(pinned as unknown as RoomView, 'hall', () => {})
+    kept.setHall(hall)
+    kept.cutToFloor()
+    expect(kept.wide).toBe(1)
+    const early = fakeView()
+    const fly = new Fly(early as unknown as RoomView, null, () => {})
+    fly.hold()
+    fly.cutToFloor() // before the model has loaded: the camera is at the desk already
+    fly.setHall(hall)
+    early.run(FLY_MS + 100)
+    expect(fly.wide).toBe(0) // the late model does not pull the camera out
+  })
+
   it('goes back to the hall when waiting starts again, and ignores found when nothing was waiting', () => {
     const view = fakeView()
     const fly = new Fly(view as unknown as RoomView, null, () => {})

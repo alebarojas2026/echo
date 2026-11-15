@@ -84,3 +84,38 @@ def test_the_real_wiring_reads_the_store_file(tmp_path):
     fill_from_sim(Store(db), "demo")
     reply = serve.room_ask(db, "http://127.0.0.1:9")("was anyone here in the last 10 minutes?")   # no model there
     assert reply["picked_by"] == "rules" and reply["answer"].startswith("Yes. Someone was here")
+
+
+def get(url):
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        return e.code, json.load(e)
+
+
+def test_ask_last_is_the_latest_story_from_memory_and_null_before_one(tmp_path, store, monkeypatch):
+    from agent import ask as A
+    from agent import endpoints
+    monkeypatch.setattr(A, "_LAST", {"reply": None})   # as at start
+    server = serve.make_server("127.0.0.1", 0, dist=tmp_path, nodes=tmp_path / "n.json", proof=tmp_path / "p.json",
+                               ask=lambda q: ask(q, store, None, now_ms=NOW), routes={("GET", "/ask/last"): endpoints.ask_last})
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        assert get(url + "/ask/last") == (200, None)
+        status, story = post(url + "/ask", json.dumps({"question": "what happened?"}).encode())
+        assert status == 200 and story["tool"] == "story"
+        post(url + "/ask", json.dumps({"question": "any alerts?"}).encode())   # not a story: the last story stays
+        status, last = get(url + "/ask/last")
+        assert status == 200 and last == {**story, "question": "what happened?", "asked_t": NOW}
+        assert {"rows", "steps", "answer"} <= set(last) and store.events(NOW + 1) == []   # nothing written
+        monkeypatch.setattr(serve, "SAVE_FROM", [serve.ipaddress.ip_network("10.42.0.0/24")])
+        status, doc = get(url + "/ask/last")
+        assert status == 403 and "board's own networks" in doc["error"]
+    finally:
+        server.shutdown()
+
+
+def test_the_real_wiring_mounts_ask_last(tmp_path):
+    assert ("GET", "/ask/last") in serve.agent_routes(str(tmp_path / "store.db"), "http://127.0.0.1:9")

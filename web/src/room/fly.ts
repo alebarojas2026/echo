@@ -162,6 +162,22 @@ export class Fly {
     this.begin()
   }
 
+  /**
+   * An intrusion while armed (#552): straight to the floor, no fly, so the person who should not be there is on
+   * screen at once. Also when a fly is already under way, and whether or not the arrival screen was waiting. A
+   * pinned framing stays pinned. Before the hall model is in, the camera is at the desk already; it is then left
+   * there when the model arrives (as for someone found early).
+   */
+  cutToFloor() {
+    this.foundEarly = this.holding ? !this.hall : this.foundEarly
+    this.holding = false
+    if (!this.hall || this.pinned) return
+    this.cut('square')
+    this.from = this.shot
+    this.elapsed = 0
+    this.view.requestRender()
+  }
+
   /** Between judges: out to the hall, a pause, and back. Not when pinned or under reduced motion. */
   reset() {
     if (!this.hall || this.pinned || this.reduced) return
