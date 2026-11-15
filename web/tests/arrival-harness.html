@@ -20,9 +20,10 @@ let seq = 0
 window.arrival = {
   commands, dispose, peek: name => mockState(name, 0, 7000),
   update(name, overrides = {}, isStale = false) { state = { ...mockState(name, 0, 7000), armed: false, ...overrides }; stale = isStale; listeners.forEach(fn => fn(current())) },
-  event(kind, id = String(++seq)) { events.forEach(fn => fn({ v: 2, type: 'event', src: 'sim', seq, t: state.t, id, kind, info: {} })) },
+  event(kind, id = String(++seq), info = {}) { events.forEach(fn => fn({ v: 2, type: 'event', src: 'sim', seq, t: state.t, id, kind, info })) },
 }
 const mock = new URLSearchParams(location.search).get('mock')
 if (mock === 'arrival') setTimeout(() => { window.arrival.event('enter'); window.arrival.update('still') }, 2000)
+if (mock === 'passed') { window.arrival.update('empty', { armed: true }); setTimeout(() => window.arrival.event('passed_by', undefined, { zone: state.pred?.zone_set[0] ?? 1 }), 2000) }
 if (mock === 'armed') { window.arrival.update('empty', { armed: true }); setTimeout(() => { window.arrival.update('still', { armed: true }); window.arrival.event('intrusion') }, 2000) }
 </script></body></html>
