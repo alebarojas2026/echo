@@ -38,8 +38,9 @@ def stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
-def run(sessions, map_jobs: Callable, score_heldout: Callable, scrubbed: bool = False, nodes=None,
-        out=OUT, ledger_path=None, grid=None, cpu: float = C.CPU_PER_JOB, now: Optional[str] = None) -> dict:
+def run(sessions, map_jobs: Callable, score_heldout: Callable, curve: Optional[Callable] = None, scrubbed: bool = False, nodes=None,
+        out=OUT, ledger_path=None, grid=None, cpu: float = C.CPU_PER_JOB, now: Optional[str] = None,
+        startup_s_per_job: float = 0.0) -> dict:
     """Returns {"folder": the output folder, "refused": reason or None, ...}."""
     t_start = time.monotonic()
     grid = grid or C.GRID
@@ -61,13 +62,13 @@ def run(sessions, map_jobs: Callable, score_heldout: Callable, scrubbed: bool = 
     jobs, posts = C.model_jobs(grid), C.post_settings(grid)
     results = map_jobs(blob, jobs, posts)
     rows = [r for res in results for r in res["variants"]]
-    job_s = sum(res["seconds"] for res in results)
+    job_s = sum(res["seconds"] for res in results) + startup_s_per_job * len(jobs)
     winner = C.pick(rows)
     default = next((r for r in rows if r["key"] == C.variant_key(C.DEFAULTS)), None)
     gains = {k: C.paired_gain(winner[k]["per_session"], default[k]["per_session"])
              for k in ("walker", "desk") if default and k in winner and k in default}
-    curve = next((res["lesson_curve"] for res in results if res["job"]["lesson_s"] is None and
-                  all(res["job"][k] == winner["variant"][k] for k in ("window_ms", "features", "trees", "depth", "links"))), [])
+    # The lesson table may come back as a handle to collect later, so it runs beside the held-out score.
+    curve = (curve or C.lesson_curve)(blob, dict(winner["variant"], lesson_s=None))
     links = link_table(rows, data["layout"], winner)
 
     held = None
@@ -79,6 +80,7 @@ def run(sessions, map_jobs: Callable, score_heldout: Callable, scrubbed: bool = 
         ledger.save()
         held = {"sessions": sealed.ids, "chosen": _strip(scored[0]), "defaults": _strip(scored[1]),
                 "gain": C.paired_gain(scored[0]["per_session"], scored[1]["per_session"])}
+    curve = curve() if callable(curve) else curve
     report = {"label": label, "folder": str(folder), "refused": None, "readiness": ready,
               "variants": len(rows), "jobs": len(jobs), "winner": winner, "default": default, "gains": gains,
               "lesson_curve": curve, "links": links, "heldout": held, "spent_heldout": [s["id"] for s in spent],
@@ -153,9 +155,11 @@ def summary_text(rep: dict) -> str:
     h = rep["heldout"]
     if h:
         hg = h["gain"]
+        rough = f" (only {len(h['sessions'])} held-out sessions, so the interval is rough)" if len(h["sessions"]) < 5 else ""
         parts.append(f"The honest check, the sealed held-out recordings scored once: {pct(h['chosen']['score'])} for "
                      f"these settings against {pct(h['defaults']['score'])} for today's (difference "
-                     f"{hg['gain']:+.1%}, 95% interval {C.fmt_ci(hg['ci95']) if hg['ci95'] else 'n/a: under two sessions'}).")
+                     f"{hg['gain']:+.1%}, 95% interval {C.fmt_ci(hg['ci95']) if hg['ci95'] else 'n/a: under two sessions'}"
+                     f"{rough}).")
     else:
         parts.append("There was no unscored held-out recording, so nothing here is an honest score yet.")
     gw = (rep.get("gains") or {}).get("walker")
@@ -224,7 +228,8 @@ def write(folder: Path, rep: dict, rows: List[dict]) -> None:
     (folder / "links.json").write_text(json.dumps({"data": label, "rows": rep["links"]}, indent=1) + "\n", encoding="utf-8")
     (folder / "summary.md").write_text(f"# Sweep summary ({label})\n\n{summary_text(rep)}\n\n"
                                        f"{rep['variants']} variants in {rep['jobs']} jobs; {rep['wall_s']} s end to end; "
-                                       f"{rep['job_seconds']:.0f} container-seconds, about ${rep['cost_usd']}.\n",
+                                       f"about {rep['job_seconds']:.0f} container-seconds, about ${rep['cost_usd']} "
+                                       "(an estimate; modal billing report --for today has the bill).\n",
                                        encoding="utf-8")
     with open(folder / "variants.jsonl", "w", encoding="utf-8") as f:
         for r in rows:
@@ -235,4 +240,4 @@ def write(folder: Path, rep: dict, rows: List[dict]) -> None:
 
 def local_map(blob, jobs, posts, n_jobs=2):
     """Run the jobs one after another in this process (tests, or no Modal)."""
-    return [C.run_job(blob, j, posts, n_jobs=n_jobs, lesson_curve=j["lesson_s"] is None) for j in jobs]
+    return [C.run_job(blob, j, posts, n_jobs=n_jobs) for j in jobs]

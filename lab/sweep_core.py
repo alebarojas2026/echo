@@ -562,7 +562,7 @@ def summarize(per_session: Dict[str, List[float]]) -> dict:
 _PREPARED: dict = {}
 
 
-def run_job(blob: bytes, job: dict, posts: List[dict], n_jobs: int = 2, lesson_curve: bool = False) -> dict:
+def run_job(blob: bytes, job: dict, posts: List[dict], n_jobs: int = 2) -> dict:
     """Every post setting for one model setting, on every fold. Runs in a container."""
     import time
     t_start = time.monotonic()
@@ -607,8 +607,7 @@ def run_job(blob: bytes, job: dict, posts: List[dict], n_jobs: int = 2, lesson_c
         objs = [row[kind]["objective"] for kind in ("walker", "desk") if kind in row and row[kind]["objective"] is not None]
         row["objective"] = sum(objs) / len(objs) if objs else None
         variants.append(row)
-    curve = lesson_rows(sessions, by_id, job, n_jobs) if lesson_curve else []
-    return {"job": job, "variants": variants, "lesson_curve": curve, "fit_s": fit_s,
+    return {"job": job, "variants": variants, "fit_s": fit_s,
             "seconds": time.monotonic() - t_start}
 
 
@@ -638,6 +637,19 @@ def lesson_rows(sessions, by_id, job, n_jobs) -> List[dict]:
         if per:
             rows.append(dict(summarize(per), lesson_s=L, sessions=len(per), per_session=per))
     return rows
+
+
+def lesson_curve(blob: bytes, job: dict, n_jobs: int = 2) -> List[dict]:
+    """The lesson-length table for one model setting (the winner's), after the sweep."""
+    doc = unpack(blob)
+    assert_tunable(doc["sessions"])
+    links = next(r["links"] for r in doc["subsets"] if r["name"] == job["links"])
+    by_id = {}
+    for s in doc["sessions"]:
+        p = prepare(s, session_windows(s, links, job["window_ms"]), links, job["features"])
+        p["walker"], p["desk"], p["id"] = s["walker"], s["desk"], s["id"]
+        by_id[s["id"]] = p
+    return lesson_rows(doc["sessions"], by_id, job, n_jobs)
 
 
 def score_heldout(train_blob: bytes, sealed_blob: bytes, settings: List[dict], n_jobs: int = 2) -> List[dict]:

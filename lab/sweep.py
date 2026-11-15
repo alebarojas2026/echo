@@ -22,8 +22,9 @@ REMOTE = "/root/repo"
 sys.path.insert(0, REMOTE if Path(REMOTE).exists() else str(ROOT))
 
 CPU = 2.0
-JOBS_PER_CALL = 2        # model settings per container call: more calls, shorter ones
+JOBS_PER_CALL = 1        # model settings per container call: more calls, shorter ones
 IGNORE = ["**/__pycache__/**", "tests/**"]
+STARTUP_S = 12.0         # per container, start-up the calls don't see (from the Modal bill of a dry run)
 
 image = (
     modal.Image.debian_slim(python_version="3.13")      # the board's Python
@@ -42,13 +43,13 @@ QUICK = {"window_ms": [1000], "features": ["absolute", "relative"], "forest": [[
          "moving_run": [5], "unsure_p": [0.0, 0.55]}
 
 
-@app.function(cpu=CPU, memory=2048, timeout=600, max_containers=300)
+@app.function(cpu=CPU, memory=2048, timeout=600, max_containers=600)
 def run_jobs(jobs: list, store=None, posts=None) -> list:
     import time
     t0 = time.monotonic()
     from lab import sweep_core as C
     blob = store["train"]
-    out = [C.run_job(blob, j, posts, n_jobs=int(CPU), lesson_curve=j["lesson_s"] is None) for j in jobs]
+    out = [C.run_job(blob, j, posts, n_jobs=int(CPU)) for j in jobs]
     for res in out:   # the whole call, start-up and unpacking included, goes into the cost
         res["seconds"] = (time.monotonic() - t0) / len(out)
     return out
@@ -58,6 +59,12 @@ def run_jobs(jobs: list, store=None, posts=None) -> list:
 def score_heldout(train_blob: bytes, sealed_blob: bytes, settings: list) -> list:
     from lab import sweep_core as C
     return C.score_heldout(train_blob, sealed_blob, settings, n_jobs=int(CPU))
+
+
+@app.function(cpu=CPU, memory=2048, timeout=600)
+def lesson_curve(train_blob: bytes, job: dict) -> list:
+    from lab import sweep_core as C
+    return C.lesson_curve(train_blob, job, n_jobs=int(CPU))
 
 
 @app.local_entrypoint()
@@ -73,19 +80,22 @@ def main(sessions: str, scrubbed: bool = False, nodes: str = "", quick: bool = F
             calls = [jobs[i:i + JOBS_PER_CALL] for i in range(0, len(jobs), JOBS_PER_CALL)]
             print(f"{len(jobs)} model settings x {len(posts)} post settings = {len(jobs) * len(posts)} variants, "
                   f"{len(calls)} containers")
+            t_map = time.monotonic()
             out = []
             for res in run_jobs.map(calls, kwargs={"store": store, "posts": posts}, return_exceptions=True):
                 if isinstance(res, Exception):
                     print(f"a call failed and is left out: {res}")
                     continue
                 out += res
+            print(f"containers done in {time.monotonic() - t_map:.0f} s")
             return out
 
         def held(train_blob, sealed_blob, settings):
             return score_heldout.remote(train_blob, sealed_blob, settings)
 
-        rep = R.run(sessions, map_jobs, held, scrubbed=scrubbed, nodes=nodes or None,
-                    ledger_path=ledger or None, grid=QUICK if quick else None, cpu=CPU)
+        rep = R.run(sessions, map_jobs, held, curve=lambda b, j: lesson_curve.spawn(b, j).get, scrubbed=scrubbed, nodes=nodes or None,
+                    ledger_path=ledger or None, grid=QUICK if quick else None, cpu=CPU,
+                    startup_s_per_job=STARTUP_S / JOBS_PER_CALL)
     print()
     if rep.get("refused"):
         print(rep["refused"])
