@@ -104,7 +104,10 @@ def led_grid():
 class CheckIn:
     """Finds a wave on the check-in link. push() returns True when one completes."""
 
-    def __init__(self):
+    def __init__(self, cross_db=CROSS_DB, crossings=CROSSINGS, window_ms=CROSS_WINDOW_MS, other_db=OTHER_LINK_DB):
+        """The defaults are the rule the brain runs. brain/tune_checkin.py tries others on a
+        recording (other_db None = other links are not looked at)."""
+        self.cross_db, self.n_crossings, self.window_ms, self.other_db = cross_db, crossings, window_ms, other_db
         self.wifi: deque = deque()                 # (t, dbm), last MEDIAN_MS
         self.others: Dict[str, deque] = {}         # link -> (t, dbm), last CROSS_WINDOW_MS
         self.crossings: deque = deque()            # (t, +1 | -1), alternating
@@ -119,7 +122,7 @@ class CheckIn:
         if link != CHECKIN_LINK:
             q = self.others.setdefault(link, deque())
             q.append((t, dbm))
-            while q and q[0][0] < t - CROSS_WINDOW_MS:
+            while q and q[0][0] < t - self.window_ms:
                 q.popleft()
             return False
         self.wifi.append((t, dbm))
@@ -134,30 +137,32 @@ class CheckIn:
         if len(last) < SMOOTH_N:
             last = values[-SMOOTH_N:]
         dev = sum(last) / len(last) - statistics.median(values)
-        side = 1 if dev >= CROSS_DB else -1 if dev <= -CROSS_DB else 0
+        side = 1 if dev >= self.cross_db else -1 if dev <= -self.cross_db else 0
         if t < self.quiet_until:
             return False
         if side and (not self.crossings or self.crossings[-1][1] != side):
             self.crossings.append((t, side))
-        while self.crossings and self.crossings[0][0] < t - CROSS_WINDOW_MS:
+        while self.crossings and self.crossings[0][0] < t - self.window_ms:
             self.crossings.popleft()
-        if len(self.crossings) < CROSSINGS:
+        if len(self.crossings) < self.n_crossings:
             return False
         first = self.crossings[0][0]
         if self.zone_since > first or not self._others_quiet(first, t):
             return False
         self.crossings.clear()
-        self.quiet_until = t + CROSS_WINDOW_MS
+        self.quiet_until = t + self.window_ms
         return True
 
     def _others_quiet(self, t0: int, t1: int) -> bool:
+        if self.other_db is None:
+            return True
         for q in self.others.values():
             bins: Dict[int, List[float]] = {}
             for t, d in q:
                 if t0 <= t <= t1:
                     bins.setdefault((t - t0) // OTHER_BIN_MS, []).append(d)
             means = [sum(v) / len(v) for v in bins.values() if len(v) >= 2]
-            if means and max(means) - min(means) > OTHER_LINK_DB:
+            if means and max(means) - min(means) > self.other_db:
                 return False
         return True
 
