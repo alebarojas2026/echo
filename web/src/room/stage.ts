@@ -117,7 +117,8 @@ function buildShell(): { room: Group; square: Group } {
     const depth = SIZE_M[1] - STRIP_M[1]
     const [dx, , dz] = toScene([SIZE_M[0] / 2, STRIP_M[1] + depth / 2, 0])
     const top: Part = { geom: new BoxGeometry(SIZE_M[0], 0.03, depth), light: mix(FLOOR, EDGE, 0.5), dark: mix(FLOOR, WALL_SHADE, 0.6), at: at(dx, DESK_TOP_M - 0.015, dz) }
-    sq.add(new Mesh(shadedGeometry([top]), new MeshBasicMaterial({ vertexColors: true })))
+    // With the drawn floor and walls: a loaded hall has its own desk, and our devices stand on that one.
+    g.add(new Mesh(shadedGeometry([top]), new MeshBasicMaterial({ vertexColors: true })))
   }
   return { room: g, square: sq }
 }

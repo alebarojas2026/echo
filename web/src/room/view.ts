@@ -152,13 +152,13 @@ export interface Anchor {
 
 const wordsPx = (text: string) => text.length * CHAR_EM * NAME_PX
 
-export function deskAnchors(): Anchor[] {
+export function deskAnchors(personM = FIGURE_HEIGHT_M): Anchor[] {
   const [sw, sh] = STRIP_M ?? SIZE_M
   const [fw, fh] = SIZE_M
   const out: Anchor[] = []
   const add = (p: Vec3, left = 0, right = 0, up = 0, down = 0) => out.push({ at: new Vector3(...toScene(p)), left, right, up, down })
   for (const p of [[0, 0, 0], [sw, 0, 0], [0, sh, 0], [sw, sh, 0], [0, fh, DESK_TOP_M], [fw, fh, DESK_TOP_M]] as Vec3[]) add(p)
-  for (const x of [0.15, sw - 0.15]) for (const y of [0.1, sh - 0.1]) add([x, y, FIGURE_HEIGHT_M])
+  for (const x of [0.15, sw - 0.15]) for (const y of [0.1, sh - 0.1]) add([x, y, personM])
   // A name sits 12 px above its device's head, centred, or just below it reading inward; two lines when it says
   // "not heard".
   const tall = 12 + 2 * LINE_PX
@@ -233,6 +233,23 @@ export function fitShot(anchors: readonly Anchor[], width: number, height: numbe
 /** The desk's framing for this canvas. */
 export function deskShot(width = 1280, height = 1080): Shot {
   return fitShot(deskAnchors(), width, height, DESK_ELEV_DEG)
+}
+
+// Inside the hall model, the desk's close view is in situ: the person at true size at our desk, with the real desk
+// run, its chairs and the neighbouring rows around them. Seen from behind the person (up the tiers), north up,
+// 45 degrees up. The next row's desk stands 0.75 m high a third of a metre behind the strip; from this angle it
+// would hide the strip's floor and the person's legs, so that span is drawn see-through (scan.ts, ghostBox).
+// Fitted like the desk's own view (every word on the canvas), but on the 1280 px canvas never tighter than
+// SITU_MIN_RADIUS_M, so the rows around stay in view; a narrower canvas keeps the same share of its width for them
+// (the words would crowd otherwise).
+const SITU_ELEV_DEG = 45
+const PERSON_M = 1.7
+const SITU_MIN_RADIUS_M = 1.7
+
+/** The close view inside the hall, for the desk layout. */
+export function inSituShot(width = 1280, height = 1080): Shot {
+  const shot = fitShot(deskAnchors(PERSON_M), width, height, SITU_ELEV_DEG)
+  return { ...shot, radiusM: Math.max(shot.radiusM, SITU_MIN_RADIUS_M * Math.min(1, width / 1280)) }
 }
 
 /** Straight down on the square, north up: for lining a scan up by eye (align mode). */

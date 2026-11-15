@@ -6,8 +6,9 @@ import { buildState, mockState } from './mock'
 import { FIGURE_HEIGHT_M } from './figure'
 import { LINK_IDS, NODES, alertWordAt, applyLayout, nodeLabelSide, toScene, type Vec3 } from './frame'
 import { DESK_LAYOUT } from './layouts.fixture'
+import { clearBox, ghostBox } from './scan'
 import { DESK_TOP_M, standBase } from './stage'
-import { FOV_DEG, deskAnchors, fitCamera, roomShot } from './view'
+import { FOV_DEG, deskAnchors, fitCamera, inSituShot, roomShot } from './view'
 
 // The whole room on the desk layout of the contract PR (#415): this file applies it once; every other test file
 // keeps the built-in square.
@@ -126,5 +127,44 @@ describe('the room drawn on the desk layout', () => {
     expect(standBase(NODES.pi5.xyz)).toEqual([0.8, 1.1, DESK_TOP_M])
     expect(standBase(NODES.unoq.xyz)).toEqual([1.1, 0.6, DESK_TOP_M])
     expect(standBase(NODES.east.xyz)).toEqual([1.6, 0.6, 1.0])
+  })
+})
+
+describe('the desk inside the hall model', () => {
+  const at = (x: number, y: number, z: number) => new Vector3(...toScene([x, y, z]))
+
+  it('keeps the strip clear of the hall\'s furniture up to above head height, and stops short of the desk', () => {
+    const box = clearBox()
+    expect(box.containsPoint(at(0.05, 0.05, 0.5))).toBe(true) // a chair in the strip's corner
+    expect(box.containsPoint(at(1.55, 0.55, 1.2))).toBe(true)
+    expect(box.containsPoint(at(-0.2, -0.2, 0.9))).toBe(true) // a chair straddling the west end, toward the aisle
+    expect(box.containsPoint(at(0.8, 0.6, 0.5))).toBe(false) // the desk begins
+    expect(box.containsPoint(at(0.8, 0.3, -0.02))).toBe(false) // the floor stays
+  })
+
+  it('draws only the next row behind the strip see-through: never the strip, our desk or the floor', () => {
+    const ghost = ghostBox()
+    expect(ghost.containsPoint(at(0.8, -0.6, 0.7))).toBe(true) // the next row's desk, behind the person
+    expect(ghost.containsPoint(at(0.8, 0.3, 0.7))).toBe(false)
+    expect(ghost.containsPoint(at(0.8, 0.9, 0.7))).toBe(false)
+    expect(ghost.containsPoint(at(0.8, -0.6, -0.02))).toBe(false)
+  })
+
+  it('frames the close view in situ: 45 degrees up, the rows around in view, every word on the canvas', () => {
+    for (const [w, h] of [[1280, 1080], [800, 900]]) {
+      const shot = inSituShot(w, h)
+      expect(shot.elevDeg).toBe(45)
+      expect(shot.radiusM).toBeGreaterThanOrEqual(1.7 * Math.min(1, w / 1280) - 1e-9)
+      const c = new PerspectiveCamera(FOV_DEG, 1, 0.1, 60)
+      fitCamera(c, w, h, shot)
+      for (const a of deskAnchors(1.7)) {
+        const v = a.at.clone().project(c)
+        const [x, y] = [((v.x + 1) / 2) * w, ((1 - v.y) / 2) * h]
+        expect(x - a.left).toBeGreaterThan(23)
+        expect(x + a.right).toBeLessThan(w - 23)
+        expect(y - a.up).toBeGreaterThan(23)
+        expect(y + a.down).toBeLessThan(h - 71)
+      }
+    }
   })
 })
