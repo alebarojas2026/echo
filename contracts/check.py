@@ -7,7 +7,7 @@
     python -m contracts.check --layout gate session.jsonl    # against radio/layouts/gate.json, not radio/nodes.json
 
 A state message is checked against a layout: where its nodes stand (near) and how many zones it has (probs).
-That layout is radio/nodes.json (or the file named in RADIO_SIGHT_NODES), unless --layout names another, or
+That layout is radio/nodes.json, unless --layout names another, or
 the file sits in a folder named after one of radio/layouts/ (contracts/fixtures/gate/ is checked against
 radio/layouts/gate.json whichever layout is in use).
 
@@ -17,7 +17,6 @@ A jump in a producer's seq (lost messages) is a warning, not a failure.
 import argparse
 import json
 import math
-import os
 import sys
 from pathlib import Path
 
@@ -32,9 +31,10 @@ LAYOUTS = RADIO / "layouts"   # whole layout files; radio/nodes.json is a copy o
 
 def load_layout(name=None) -> dict:
     """A layout file, parsed. name: a file, or the name of one in radio/layouts/ ("gate"). None = the layout
-    in use: the file named in RADIO_SIGHT_NODES, else radio/nodes.json."""
+    in use, radio/nodes.json. (Not RADIO_SIGHT_NODES: tests that pin the brain to a layout of their own
+    still check what a brain on the repo's layout sends; they name a layout here when they mean another.)"""
     if name is None:
-        path = Path(os.environ.get("RADIO_SIGHT_NODES") or RADIO / "nodes.json")
+        path = RADIO / "nodes.json"
     else:
         path = Path(name) if Path(name).is_file() else LAYOUTS / f"{name}.json"
     return json.loads(path.read_text(encoding="utf-8"))

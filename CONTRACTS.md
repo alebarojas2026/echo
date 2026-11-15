@@ -124,7 +124,7 @@ Layout files: radio/layouts/<name>.json are whole layout files. python -m radio.
   radio/nodes.json; radio/nodes.json is always a copy of one of them. The text above is radio/layouts/desk.json.
   The schemas list the union of the layout files (nodes, links, spots, the largest zone count), so a message of
   any of them passes its schema; what belongs to one layout (the length of probs, near) is checked against the
-  layout in use (contracts/check.py; --layout <name> names another).
+  layout in use, radio/nodes.json (contracts/check.py; --layout <name> names another).
 The gate layout (radio/layouts/gate.json): one spot between Pi B and the desk. Frame: metres. Origin = the spot's
   west corner on the side away from the desk; x east along the desk, y north towards the desk.
   The spot is 0.8 x 0.6 m: 0 <= x <= 0.8, 0 <= y <= 0.6 (frame.strip_m). It is the only place a person stands.
