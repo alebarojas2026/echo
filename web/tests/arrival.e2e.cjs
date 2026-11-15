@@ -223,7 +223,7 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await page.clock.runFor(1000)
     await expect(title).toHaveText('Armed.')
     await expect(title).not.toHaveCSS('color', 'rgb(242, 85, 90)')
-    await expect(line).toHaveText(/^Someone passed by (on the (left|right)|in the bathroom)$/)
+    await expect(line).toHaveText(/^Someone passed by (on the (left|right)|in the bathroom|at the desk)$/)
     await expect(line).toHaveCSS('color', 'rgb(154, 163, 173)')
     await expect(line).toHaveCSS('font-size', '28px')
     await settled()

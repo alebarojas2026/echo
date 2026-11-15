@@ -124,12 +124,21 @@ def test_every_configured_link_must_be_reporting():
 
 
 def test_untrained_model_fails_or_warns_before_the_lesson():
-    demo_check.model_check(good_state())
+    no_line = {"links": []}
+    demo_check.model_check(good_state(), layout=no_line)
     untrained = good_state(model={"trained": False})
     with pytest.raises(ValueError, match="not trained"):
-        demo_check.model_check(untrained)
+        demo_check.model_check(untrained, layout=no_line)
     with pytest.raises(demo_check.Warn):
-        demo_check.model_check(untrained, before_lesson=True)
+        demo_check.model_check(untrained, before_lesson=True, layout=no_line)
+
+
+def test_a_presence_line_needs_no_trained_model():
+    line = {"links": [], "presence": {"line": "pi5>pi5b:wifi"}}
+    deciding = good_state(model={"trained": False}, pred={"present": False, "kind": "none"})
+    demo_check.model_check(deciding, layout=line)
+    with pytest.raises(ValueError, match="take the baseline"):
+        demo_check.model_check(good_state(model={"trained": False}, pred=None), layout=line)
 
 
 def test_board_clock_within_a_minute_of_this_machine():
