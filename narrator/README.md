@@ -140,7 +140,7 @@ To check the recap on the board, with radio-sight-llm up:
 /opt/rs/venv/bin/python -m narrator.recap
 ```
 
-It writes one recap of a sample demo (a tour, the alert, a wave, the camera unplugged, walking out)
+It writes one recap of a sample demo in the zones from radio/nodes.json (a tour, the alert, a wave, the camera unplugged, walking out)
 and prints the narration and how long it took. Nothing is sent. Exit 1 means the template was used,
 with the reason. Recap time: __ ms. Limit 25000 ms.
 

@@ -221,5 +221,19 @@ def test_recap_check_prints_a_model_recap_and_fails_on_the_template(capsys, monk
 
 def test_sample_demo_gives_facts_without_numbers_beyond_the_times():
     lines = r.facts(r.sample(NOW))
-    assert len(lines) == 9 and lines[0] == "0:00 someone walked into the Hall zone"
+    assert len(lines) == 8 and lines[0] == "0:00 someone walked into the Bed zone"
+    assert "0:24 no-movement alert in the Bathroom zone" in lines   # the zone with the shortest limit
     assert "dBm" not in " ".join(lines)
+
+
+def test_sample_demo_on_the_desk_layout():
+    saved = dict(n.ZONES)
+    try:
+        n.set_zones({1: ("Living room", None), 2: ("Bathroom", 10)})
+        assert r.facts(r.sample(NOW)) == [
+            "0:00 someone walked into the Living room zone", "0:06 someone moved to the Bathroom zone",
+            "0:12 no-movement alert in the Bathroom zone", "0:18 a wave check-in was received",
+            "0:30 setup ended and sensing carried on by radio alone", "0:36 someone left the room"]
+        assert r.problem(r.template(r.sample(NOW)), r.facts(r.sample(NOW)), True) is None
+    finally:
+        n.set_zones(saved)
