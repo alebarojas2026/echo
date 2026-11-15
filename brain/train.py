@@ -28,6 +28,7 @@ from brain import features as F
 ZONES = [0, 1, 2, 3, 4]
 FOREST = dict(n_estimators=60, max_depth=12, min_samples_leaf=2, n_jobs=4, random_state=0)
 ZONE_SET_MIN_P = 0.25  # a zone joins zone_set when its probability is at least this
+UNSEEN_DB = 6.0        # a feature this far outside everything seen in training = "not sure"
 
 
 def kind_of(window: dict) -> Optional[str]:
@@ -45,7 +46,9 @@ def dataset(sessions: List[dict], base: Dict[str, float]) -> dict:
     X, zone, motion, kind, walker, session = [], [], [], [], [], []
     for s in sessions:
         meta = s.get("meta") or {}
-        for w in F.windows(s["messages"], base):
+        # A session is windowed against the baseline it was recorded on, when that is known:
+        # recordings from before a re-baseline keep their own drops.
+        for w in F.windows(s["messages"], s.get("base") or base):
             lb = w["label"]
             k = kind_of(w) if lb is not None else None
             if k is None:
@@ -71,6 +74,8 @@ class Model:
         self.train_s: Optional[float] = None
         self.windows = 0
         self.train_sessions: List[str] = []
+        self.features: List[str] = F.feature_names()   # what the forests were fit on; checked when a file is loaded
+        self.seen_lo = self.seen_hi = None             # per feature, the range seen in training
         self._link_weight = np.zeros(len(F.LINKS))
 
     @property
@@ -89,6 +94,7 @@ class Model:
         # How much each link matters to the zone forest, for the "why" list.
         imp = self.zone.feature_importances_.reshape(len(F.LINKS), len(F.STATS))
         self._link_weight = imp.sum(axis=1)
+        self.seen_lo, self.seen_hi = d["X"].min(axis=0), d["X"].max(axis=0)
         self.train_s = time.monotonic() - t0
         self.windows = len(d["X"])
         self.train_sessions = sorted({s for s in d["session"] if s})
@@ -109,11 +115,21 @@ class Model:
         if present and self.motion is not None:
             motion = str(_pick(self.motion, x)) or None
         zone_set = ([z for z in ZONES[1:] if probs[z] >= ZONE_SET_MIN_P] or [zone]) if present else []
+        if present and not self.familiar(x[0]):
+            # Somebody is there, but the links read like nothing the model was taught: say
+            # "not sure where" (every zone it knows) instead of naming one zone as if it knew.
+            zone_set = [z for z in ZONES[1:] if z in self.zone.classes_] or zone_set
         return {
             "present": present, "kind": kind, "zone": zone,   # 0 = nobody there (section 3)
             "zone_set": zone_set, "probs": [round(float(p), 3) for p in probs],
             "motion": motion, "still_s": None, "why": self.why(window),
         }
+
+    def familiar(self, x) -> bool:
+        """False when some feature lies more than UNSEEN_DB outside the range seen in training."""
+        if self.seen_lo is None:
+            return True
+        return bool(np.all(x >= self.seen_lo - UNSEEN_DB) and np.all(x <= self.seen_hi + UNSEEN_DB))
 
     def why(self, window: dict, top: int = 2) -> List[str]:
         """Links that most explain this decision: importance x how far they dropped."""

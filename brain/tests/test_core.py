@@ -828,7 +828,8 @@ def test_a_session_name_used_again_trains_on_the_new_recording_only(tmp_path):
 def _fitted(fit):
     """Run a fit and hand back the sessions it read (the closure's own list)."""
     fit()
-    return next(c.cell_contents for c in fit.__closure__ if isinstance(c.cell_contents, list))
+    return next(c.cell_contents for c in fit.__closure__ if isinstance(c.cell_contents, list)
+                and c.cell_contents and "meta" in c.cell_contents[0])
 
 
 def test_one_tray_gives_one_advice_that_does_not_flip_between_spots():
