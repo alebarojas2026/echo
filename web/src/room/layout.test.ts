@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import nodesJson from '../../../radio/nodes.json'
 import * as frame from './frame'
+import { loadLayout } from './layout'
 import { DESK_LAYOUT } from './layouts.fixture'
 
 // applyLayout changes module state, so the cases run in order on one copy of frame.ts. They pass whichever
@@ -89,5 +90,42 @@ describe('layout from nodes.json', () => {
     expect(frame.spotName('S-W20')).toBe('20 cm W')
     expect(frame.spotName('S-home')).toBe('home')
     expect(frame.ZONES.find((z) => z.id === 2)!.name).toBe('Desk')
+  })
+})
+
+describe('when /nodes.json cannot be read', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  const reply = (status: number, body: unknown) => () => Promise.resolve({ ok: status === 200, json: () => Promise.resolve(body) })
+  /** Some other layout on screen first, so the fallback is seen to replace it. */
+  const other = () => {
+    const moved = structuredClone(DESK_LAYOUT)
+    moved.frame.strip_m = [1.2, 0.6]
+    moved.frame.zone_split_x_m = 0.6
+    moved.nodes[2].name = 'Elsewhere'
+    return frame.applyLayout(moved)
+  }
+
+  it('uses the file when it is served', async () => {
+    vi.stubGlobal('fetch', reply(200, real))
+    expect(await loadLayout('/nodes.json', 50, DESK_LAYOUT)).toBe('nodes.json')
+    expect(frame.LINK_IDS).toEqual(real.links.map((l) => l.id))
+  })
+
+  it('falls back to the layout the page was built with, not the old square: offline, not found, or malformed', async () => {
+    for (const fetch of [() => Promise.reject(new Error('offline')), reply(404, null), reply(200, { v: 2, nodes: 'none' })]) {
+      expect(other()).toBe(true)
+      vi.stubGlobal('fetch', fetch)
+      expect(await loadLayout('/nodes.json', 50, DESK_LAYOUT)).toBe('contract')
+      expect(frame.STRIP_M).toEqual([1.6, 0.6])
+      expect(frame.NODES.pi5b.name).toBe('Pi B')
+    }
+  })
+
+  it('carries radio/nodes.json in the build as that fallback', async () => {
+    expect(__BUILD_LAYOUT__).toEqual(nodesJson)
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')))
+    expect(other()).toBe(true)
+    expect(await loadLayout()).toBe('contract')
+    expect(frame.LINK_IDS).toEqual(real.links.map((l) => l.id))
   })
 })
