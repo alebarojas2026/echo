@@ -30,6 +30,8 @@ for (const [width, height] of [[1920,1080], [1440,900]]) {
     await page.clock.runFor(100)
     await expect(page.locator('.hud-arrival')).toBeHidden()
     await expect(page.getByTestId('judge-headline')).toBeVisible()
+    expect(await page.locator('#hud').evaluate(el => el.getBoundingClientRect().x)).toBe(0)
+    await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(17, 19, 22)')
     await page.evaluate(() => window.arrival.update('empty', { armed: true }))
     await page.clock.runFor(300)
     await expect(title).toHaveText('Armed.')

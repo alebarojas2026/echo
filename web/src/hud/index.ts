@@ -1,4 +1,5 @@
 import { zoneName, zonePlace, linkName } from './layout'
+import { updateProofVisibility } from './proof-visibility'
 import './hud.css'
 import type { HudState } from './state'
 
@@ -101,6 +102,7 @@ export function renderHud(root: HTMLElement, state: HudState) {
   }
   const why = root.querySelector<HTMLElement>('[data-testid="why-links"]')
   if (why) why.dataset.links = pred?.why.join(',') ?? ''
+  updateProofVisibility(root)
   root.dataset.movement = state.checkin ? 'check-in' : state.movement
 }
 export { mountHud } from './judge'

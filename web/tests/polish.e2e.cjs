@@ -1,0 +1,33 @@
+const { test, expect } = require('@playwright/test')
+test('proof only shows measured tiles and hides an empty block', async ({ page }) => {
+  let proof = {}
+  await page.route('**/proof.json', route => route.fulfill({ json: proof }))
+  await page.clock.install()
+  await page.goto('/?mock=still')
+  await page.clock.runFor(4000)
+  const block = page.locator('#hud footer')
+  await expect(block).toBeHidden()
+  proof = { zone: { correct: 0, total: 2 }, train_s: 0, bytes_out: 0, images_stored: 0 }
+  await page.clock.fastForward(30000)
+  await expect(block).toBeVisible()
+  for (const id of ['zone-score', 'train-seconds', 'bytes-out', 'images-stored']) await expect(page.getByTestId(id)).toBeVisible()
+  for (const id of ['watts', 'models-count', 'ms-per-decision', 'person-object-score']) await expect(page.getByTestId(id)).toBeHidden()
+  await expect(page.getByTestId('bytes-out')).toHaveText('0')
+  proof = {}
+  await page.clock.fastForward(30000)
+  await expect(block).toBeHidden()
+})
+test('fresh arrival distinguishes training, recalibration and a moved router', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/tests/arrival-harness.html')
+  await page.waitForFunction(() => window.arrival)
+  await page.evaluate(() => window.arrival.update('empty', { pred: null, model: { trained: false } }))
+  await expect(page.getByTestId('arrival-title')).toHaveText('Not trained yet')
+  await page.evaluate(() => window.arrival.update('empty', { pred: null, model: { trained: true } }))
+  await expect(page.getByTestId('arrival-title')).toHaveText('Recalibrating')
+  await page.evaluate(() => window.arrival.update('empty', { pred: null, router: 'S-W30', armed: true }))
+  await expect(page.getByTestId('arrival-title')).toHaveText('Paused')
+  await expect(page.getByTestId('arrival-detail')).toHaveText('Armed, but not watching right now.')
+  await page.evaluate(() => window.arrival.update('still', { armed: true }))
+  await expect(page.getByTestId('arrival-title')).toHaveText('Someone is here.')
+})
