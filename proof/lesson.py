@@ -128,7 +128,7 @@ class Coach:
             return f"\nrecorded {self.session} ({self.purpose}); no lesson was asked for"
         unknown = "never"
         return (f"\nfirst model: {self.model_s if self.model_s is not None else unknown} s after the start\n"
-                f"radio first right: {self.follows_s if self.follows_s is not None else unknown} s after the start\n"
+                f"radio first agreed: {self.follows_s if self.follows_s is not None else unknown} s after the start\n"
                 f"at {self.report_s} s: {self.agreement()}\n" + self.empty.summary())
 
 
