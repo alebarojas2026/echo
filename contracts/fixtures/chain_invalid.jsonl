@@ -1,0 +1,6 @@
+{"head":{"seq":4127,"hash":"9f2c"},"records":4127,"since_t":1763146000000,"verified":true,"last_verify_t":1763149500000,"first_bad_seq":null,"witnesses":[]}
+{"head":{"seq":4127,"hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"},"records":4127,"since_t":1763146000000,"verified":"yes","last_verify_t":1763149500000,"first_bad_seq":null,"witnesses":[]}
+{"head":{"seq":4127,"hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"},"records":4127,"since_t":1763146000000,"verified":true,"last_verify_t":1763149500000,"first_bad_seq":12,"witnesses":[]}
+{"head":{"seq":4127,"hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"},"records":4127,"since_t":1763146000000,"verified":false,"last_verify_t":1763149500000,"first_bad_seq":null,"witnesses":[]}
+{"head":{"seq":4127,"hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"},"records":4127,"since_t":1763146000000,"verified":true,"last_verify_t":1763149500000,"first_bad_seq":null,"witnesses":[{"node":"pi5"}]}
+{"head":{"seq":4127,"hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"},"records":4127,"since_t":1763146000000,"verified":true,"last_verify_t":1763149500000,"first_bad_seq":null,"witnesses":[{"node":"camera","last_seq":4120,"last_t":1763149510400,"sig_ok":true,"silent":false}]}

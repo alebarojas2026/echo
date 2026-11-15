@@ -4,6 +4,7 @@
     python -m sim.fake zone_tour --fast | python -m contracts.check -
     python -m contracts.check proof.json               # a .json file is checked as proof.json
     python -m contracts.check --as ask_reply replies.jsonl   # a web server body (ask_question, ask_reply, history, report, layout) or nodes
+    python -m contracts.check --as chain chain.jsonl         # GET /chain; also chain_verify, chain_prove and record (section 13)
     python -m contracts.check --layout gate session.jsonl    # against radio/layouts/gate.json, not radio/nodes.json
 
 A state message is checked against a layout: where its nodes stand (near) and how many zones it has (probs).
@@ -58,8 +59,11 @@ def _load():
 
 VALIDATORS = _load()
 # proof.json (section 7), the optional parts of radio/nodes.json (section 3) and the bodies of the board's web
-# server: /layout (section 2), POST /ask, GET /history and GET /report (section 10)
-NOT_MESSAGES = {"proof", "ask_question", "ask_reply", "history", "report", "layout", "nodes", "privacy", "clock", "clock_set"}
+# server: /layout (section 2), POST /ask, GET /history and GET /report (section 10), the three /chain answers and a
+# sealed record (section 13)
+NOT_MESSAGES = {"proof", "ask_question", "ask_reply", "history", "report", "layout", "nodes", "privacy", "clock", "clock_set",
+                "chain", "chain_verify", "chain_prove", "chain_tail", "record"}   # section 13: the sealed record
+CHAIN_TYPES = {"chain_head", "chain_witness"}   # their seq is a record number of the chain, not a counter
 HISTORY_MAX_MS = 30 * 60 * 1000
 TYPES = sorted(set(VALIDATORS) - NOT_MESSAGES)
 
@@ -151,7 +155,7 @@ def check_lines(lines, schema=None, layout=None):
             continue
         failures += [(no, err) for err in errors(msg, schema, layout)]
         seq = msg.get("seq") if isinstance(msg, dict) else None
-        if type(seq) is not int:
+        if type(seq) is not int or msg.get("type") in CHAIN_TYPES:
             continue
         streams = last.setdefault(msg.get("src"), {})
         key = [msg.get("src"), msg.get("type")] + ([msg.get("rx"), msg.get("kind")] if msg.get("type") == "rssi" else [])

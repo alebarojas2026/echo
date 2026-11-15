@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain_prove.json",
+  "$comment": "Section 13: the answer of POST /chain/prove. Not a bus message. A copy with one record altered never verifies, so ok is false and first_bad_seq is the altered record. checked, kind and t (of the altered record) are optional.",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "const": false
+    },
+    "altered_seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "first_bad_seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "checked": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "t": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "ok",
+    "altered_seq",
+    "first_bad_seq",
+    "ms"
+  ],
+  "additionalProperties": false
+}
