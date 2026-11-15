@@ -86,6 +86,9 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     expect(await words()).toEqual(['Nobody is here.', 'Step up to the desk.'])
     await sound('nobody')
 
+    // The words wait 1.5 s before "Someone is here." (a walk through must not flash it): until then, nobody.
+    await hold('still', { chain, alert: { state: 'counting', zone: 1, still_s: 9.3, limit_s: 10 } }, 'still')
+    expect(await words()).toEqual(['Nobody is here.', 'Step up to the desk.'])
     await hold('still', { chain, alert: { state: 'counting', zone: 1, still_s: 9.3, limit_s: 10 } }, 'still')
     expect(await words()).toEqual(['Someone is here.', 'Standing still for 9 s'])
     await sound('still')
