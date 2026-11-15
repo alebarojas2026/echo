@@ -39,6 +39,23 @@ Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sud
 | radio-sight-serve | `python board/serve.py` | `@USER@` | |
 | radio-sight-llm | llama-server, from `narrator/llm.service` | arduino | |
 | radio-sight-narrate | `python -m narrator.narrate` | `@USER@` | |
+| radio-sight-privacy | `python -m board.privacy run` | `@USER@`, with CAP_NET_ADMIN only | |
 | radio-sight-radio-node (Pi only) | `python -m pi.radio_node` | root | no: it advertises and scans without the Ethernet link, and forwards once it's up |
 
 A unit whose program doesn't exist yet still installs and keeps restarting until it does; `journalctl -u <unit>` shows why. If an older `llm.service` from the narrator README is installed, deploy removes it, so two model servers don't fight over port 8091.
+
+## The privacy meter
+`radio-sight-privacy` measures, every second, the image or video files on the board and the bytes it has sent out; the screen reads it from `GET /privacy` (board/serve.py, contract issue #620). `python -m board.privacy` prints one line; `python -m board.privacy reset` counts bytes from zero again and writes the time to `/var/lib/radio-sight-privacy/resets.log` and the journal.
+
+Folders it checks for images and video (by name, and by their first bytes):
+- `data/` in this checkout: sessions, the store, layout saves;
+- `~/ArduinoApps`: App Lab's apps, the camera teacher included;
+- the folders holding `TEACHER_HEARTBEAT`, `TEACHER_MODE_FILE` and `TEACHER_CALIB` from `.env` (the folders mounted into the teacher's container);
+- any folder listed in `PRIVACY_DIRS` in `.env` (separated by `:`);
+- inside each running container (App Lab's), every file it added or changed, from Docker's API.
+
+It skips installed library files (`site-packages`, `dist-packages`, `node_modules`), `.git` and `__pycache__`. A folder that isn't there is printed as "not there", never counted as checked.
+
+Bytes out come from the counter in `board/privacy.nft`: every packet leaving the board, its containers included, to an address outside 192.168.77.0/24, 10.42.0.0/24, loopback, link-local, multicast and broadcast. The unit's one root step (`ExecStartPre=+`) loads that table; reading it needs CAP_NET_ADMIN, the only privilege the meter has. It needs the `nft` command (package `nftables`). If anything can't be read, `/privacy` says `"ok": false` and why, never a zero.
+
+`board/egress.sh` is the proof run's own counter, a separate table: it doesn't touch this one.
