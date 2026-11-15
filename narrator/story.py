@@ -190,7 +190,7 @@ def merge(items: list) -> list:
     out = []
     for it in items:
         last = out[-1] if out else None
-        if last and last["base"] == it["text"] and hm(last["t"]) == hm(it["t"]) and it["text"].endswith("through."):
+        if last and last["base"] == it["text"] and hm(last["t"]) == hm(it["t"]) and "walked through" in it["text"]:
             last["n"] += 1
             last["cites"] += it["cites"]
             last["text"] = last["base"][:-1] + " " + COUNTS.get(last["n"], f"{last['n']} times") + "."
