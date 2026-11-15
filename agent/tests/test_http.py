@@ -42,7 +42,7 @@ def room(tmp_path):
 
 def test_ask_answers_with_the_rows_and_the_time(room):
     status, reply = post(room + "/ask", json.dumps({"question": "any alerts?"}).encode())
-    assert status == 200 and reply["tool"] == "alerts" and reply["picked_by"] == "llm" and reply["src"] == "sim"
+    assert status == 200 and reply["tool"] == "alerts" and reply["picked_by"] == "rules" and reply["src"] == "sim"
     assert reply["answer"].startswith("No-movement alerts in the last 10 minutes: 1.")
     assert reply["rows"] and isinstance(reply["ms"], int)
 
