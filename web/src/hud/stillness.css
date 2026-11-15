@@ -2,7 +2,7 @@
 .stillness-card[data-tone="person"] { color:var(--person); }
 .stillness-card[data-tone="fault"] { color:var(--fault); }
 .stillness-card[data-tone="action"] { color:var(--action); }
-.stillness-card p { font-size:32px; }
+.stillness-card p { font-size:32px; color:inherit; }
 .stillness-track { height:8px; background:var(--edge); margin-top:16px; }
 .stillness-track span { display:block; height:100%; background:var(--person); transform-origin:left; }
 .stillness-card:not([data-tone="person"]) .stillness-track { display:none; }

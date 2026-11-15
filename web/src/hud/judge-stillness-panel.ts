@@ -1,5 +1,6 @@
 import type { StateMsg } from '../room/contract'
 import './stillness.css'
+import { zoneName } from './judge-moment'
 
 export function stillness(state: StateMsg | null, stale: boolean) {
   if (!state || stale || state.health.status === 'blind') return { text: '', tone: '', progress: 0, detail: '' }
@@ -15,10 +16,11 @@ export function stillness(state: StateMsg | null, stale: boolean) {
 
 export function mountPanel(root: HTMLElement) {
   root.className = 'stillness-card'
-  root.innerHTML = '<p data-testid="alert-banner"></p><p data-testid="checkin-toast"></p><p data-testid="alert-zone"></p><div class="stillness-track"><span></span></div>'
+  root.innerHTML = '<p data-testid="alert-banner"></p><p data-testid="checkin-toast"></p><p data-testid="alert-zone"></p><p data-testid="alert-seconds"></p><div class="stillness-track"><span></span></div>'
   const text = root.querySelector<HTMLElement>('[data-testid="alert-banner"]')!
   const wave = root.querySelector<HTMLElement>('[data-testid="checkin-toast"]')!
-  const detail = root.querySelector<HTMLElement>('[data-testid="alert-zone"]')!
+  const detail = root.querySelector<HTMLElement>('[data-testid="alert-seconds"]')!
+  const zone = root.querySelector<HTMLElement>('[data-testid="alert-zone"]')!
   const bar = root.querySelector<HTMLElement>('.stillness-track span')!
   let previous = ''
   let revision = 0
@@ -33,6 +35,7 @@ export function mountPanel(root: HTMLElement) {
       const value = stillness(state, stale)
       bar.style.transform = `scaleX(${value.progress})`
       detail.textContent = value.detail
+      zone.textContent = value.tone === 'fault' && state?.alert?.zone != null ? zoneName(state.alert.zone) : ''
       const identity = value.tone
       const apply = () => {
         root.hidden = !value.text
