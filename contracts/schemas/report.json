@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/report.json",
-  "$comment": "Section 10: the 200 answer of GET /report. Not a bus message: no envelope. armed_to_t is null while still armed. passed_by is null unless the brain has a passed-by rule.",
+  "$comment": "Section 10: the 200 answer of GET /report. Not a bus message: no envelope. armed_to_t is null while still armed. passed_by is the number of passed_by events in the stretch; null only from a server that does not count them.",
   "type": "object",
   "properties": {
     "armed_from_t": {"type": "integer", "minimum": 0},

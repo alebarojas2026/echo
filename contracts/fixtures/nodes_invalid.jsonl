@@ -1,0 +1,6 @@
+{"armed":{"hold_s":0}}
+{"armed":{"hold_s":"3"}}
+{"armed":{"wait_s":3}}
+{"hall":{"links":[{"id":"east>unoq:ble","empty_quiet_db":0.8}]}}
+{"hall":{"links":[{"id":"h>unoq:ble"}]}}
+{"hall":{"links":[{"id":"h>unoq:ble","empty_quiet_db":0}]}}

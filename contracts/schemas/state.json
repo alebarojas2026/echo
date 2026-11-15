@@ -68,14 +68,18 @@
       "properties": {"present": {"type": "boolean"}, "zone": {"$ref": "common.json#/$defs/zone"}, "motion": {"enum": ["moving", "still", null]}},
       "required": ["present", "zone", "motion"], "additionalProperties": false},
     "hall": {
-      "$comment": "Optional (section 5): a missing hall reads as []. One row per hall link that has a reading. stale -> activity 0 and moving false.",
+      "$comment": "Optional (section 5): a missing hall reads as []. One row per hall link that has a reading. stale -> activity 0 and moving false. busy is optional (missing means false): busy -> moving false, and a stale row is never busy.",
       "type": "array", "items": {
         "type": "object",
         "properties": {"id": {"$ref": "common.json#/$defs/hall_link"}, "tx": {"$ref": "common.json#/$defs/hall_node"}, "rx": {"$ref": "common.json#/$defs/receiver"},
                        "xy_m": {"anyOf": [{"$ref": "common.json#/$defs/xy_m"}, {"type": "null"}]}, "activity": {"type": "number", "minimum": 0, "maximum": 1},
-                       "moving": {"type": "boolean"}, "rate_hz": {"type": "number", "minimum": 0}, "stale": {"type": "boolean"}},
+                       "moving": {"type": "boolean"}, "rate_hz": {"type": "number", "minimum": 0}, "stale": {"type": "boolean"},
+                       "busy": {"type": "boolean"}},
         "required": ["id", "tx", "rx", "xy_m", "activity", "moving", "rate_hz", "stale"], "additionalProperties": false,
-        "if": {"properties": {"stale": {"const": true}}}, "then": {"properties": {"activity": {"const": 0}, "moving": {"const": false}}}}},
+        "allOf": [
+          {"if": {"properties": {"stale": {"const": true}}}, "then": {"properties": {"activity": {"const": 0}, "moving": {"const": false}, "busy": {"const": false}}}},
+          {"if": {"properties": {"busy": {"const": true}}, "required": ["busy"]}, "then": {"properties": {"moving": {"const": false}}}}
+        ]}},
     "armed": {"$comment": "Optional (section 6, Armed): true after arm {on: true}; missing means false.", "type": "boolean"},
     "tamper": {"$comment": "Optional (section 6, Tamper): the nodes silent while armed; missing means [].", "type": "array",
                "items": {"$ref": "common.json#/$defs/any_node"}, "uniqueItems": true},
