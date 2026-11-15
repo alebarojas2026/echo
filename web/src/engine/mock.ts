@@ -149,9 +149,18 @@ export function sceneAt(scene: EngineScene, tMs: number, layout: Layout = MOCK_L
     scene === 'answer' && summaries.length >= 2
       ? {
           question: 'What happened in the last minute?',
-          answer: 'Nobody was on the spot. Both witnesses signed throughout.',
-          steps: [{ tool: 'chain_verify', ms: 3, rows: 60 }, { tool: 'presence', ms: 12, rows: 60 }, { tool: 'witnesses', ms: 4, rows: 24 }],
-          cites: [summaries[0].seq, summaries.at(-1)!.seq],
+          // The shape the board's detective gives: a story of several sentences, its five steps, and every
+          // record the story rests on (more than fit in a line, and more than the panel shows of the story).
+          answer:
+            'Nobody was on the spot in the last minute. No alert went off. Both witnesses signed throughout, every 5 seconds, with no gap in either one. The board sealed one record a second, and every seal checked against the one before it.',
+          steps: [
+            { tool: 'fetch events', ms: 0.2, rows: 0 },
+            { tool: 'fetch summaries', ms: 1.1, rows: 60 },
+            { tool: 'line up the timeline', ms: 0.2, rows: 1 },
+            { tool: 'verify the chain', ms: 0.9, rows: 60 },
+            { tool: 'write the story', ms: 0.1, rows: 1 },
+          ],
+          cites: summaries.map((r) => r.seq),
           chain_ok: true,
         }
       : null
