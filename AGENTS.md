@@ -1,18 +1,24 @@
 # Team rules for every worker
 
-Radio Sight: Wi-Fi that understands the room. Radio links between 4 nodes around a 2 x 2 m floor square show where a person is, whether they're moving, and what's an object vs a person. Everything runs on an Arduino UNO Q (Qualcomm Dragonwing QRB2210). A Raspberry Pi 5 is the router and runs no model. The screen is any browser on our own network.
+Radio Sight: safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras.
+
+- **Who it's for:** places where cameras can't go or aren't wanted (patient rooms, bathrooms, study rooms, offices after hours). It knows someone is in a space, where, and whether they've been still too long, and it tells someone when a space that should be empty isn't.
+- **What's new:** a camera teaches the radio in seconds, on the board, and is then unplugged. "Taught by a camera. Runs without one." Nothing leaves the board.
+- **Why the hardware makes sense:** a building already has Wi-Fi access points every 10-15 m. Our Pi stands in for one, the UNO Q (Qualcomm Dragonwing QRB2210) stands in for the chip inside it, and the beacons stand in for the other radios a building already has. Only the webcam is extra, and only for teaching.
+- **Two scales on one screen:** one space in detail (the sensing area at our desk) and the whole building in outline (the hall model with long "movement on this path" links).
+- Everything runs on the UNO Q. The Pi is the router and runs no model. The screen is any browser on our own network.
 
 **Re-read this file every time you pull. It changes during the event, and the "Right now" section is how the team lead redirects everyone.**
 
 ## Right now
-1. CONTRACTS.md v2 is final. Switch your adapter to it before anything else.
-2. Work from GitHub issues with your tag, using the loop below. Don't wait for a person.
-3. Fix review comments on your open PRs before starting new work.
-4. **All hands-on hardware is Alexander's.** That means the board, the Pi, the webcam, the phones, tape, mounting and flashing. When a task needs it, comment `needs Alexander:` on the issue with the exact commands and what to look for, then take your next issue. Never ask Izet, Ivan or Alejandro to do hardware.
-5. **Alexander's workers: pause now.** At your next clean checkpoint, finish the commit you're on, push your branch, and post ONE comment on your open PR (or the issue you took) listing what's done, what's left, and anything half-finished. Then stop: take no new issues and open no new PRs. The radio, pi, board, bus and mcu lanes are being handed to other workers, who will build on what you pushed. Alexander keeps all the hands-on hardware (issue #95).
-6. Brain: #220 (the still timer) and #222 (SENSOR BLIND on the tray) come before every other brain issue. They decide whether the no-movement alert and the tray beat work in the demo.
-7. Lanes moved: advisor/ is now Izet's (Alexander is on hardware full time); narrator/ and teacher/ are now Alejandro's. Take those tags too.
-
+The direction above is new (Saturday evening). Priorities, in order:
+1. **Real measurements beat everything.** Nothing has run on the real hardware yet. Anything that helps tonight's hardware tests pass and puts measured numbers in PROOF.md comes first.
+2. **The hero path:** a judge steps up and is found ("Found you. 0 cameras."); the camera teaches the radio on the judge in about 30 s; the camera is unplugged and it still follows them, even standing still; armed mode raises an intrusion alert on the phone page; the judge asks the room a question and the board answers from its own records. Issues titled "Hero: ..." are this path and come before other issues in your lane.
+3. Work from GitHub issues with your tag, using the loop below. Don't wait for a person. Fix review comments on your open PRs before starting new work.
+4. **Layout:** take node positions, links and zones from radio/nodes.json, never from constants in code. The layout is moving from the 2 x 2 m square to a strip in front of a desk (draft PR #415).
+5. **Hands-on hardware is Alexander's and Ivan's laptop session's** (issue #95). When a task needs the real devices, comment `needs Alexander:` on the issue with exact commands and what to look for, then take your next issue.
+6. Not in the 3-minute demo any more (don't polish them): the crowd game, the tray and router-advice beat, the recap. They stay working for the finalist round and questions.
+7. Lanes: advisor/ is Izet's; narrator/ and teacher/ are Alejandro's; radio/, pi/, board/, bus/ and mcu/ are worked by the lead's workers (Alexander is on hardware).
 8. **CI is down (the account's Actions limit), so a red check means nothing right now.** Until it's back, the merge gate is a local run: check out the PR merged with current main in a clean folder, run that lane's tests (pytest for the folder and `python -m pytest contracts`; for web: `npm ci && npx tsc --noEmit && npx vitest run && npx vite build`), and write the result in a PR comment ("CI unavailable; local: N passed"). Don't push empty commits to re-run CI.
 
 ## Lanes (stay in yours)
@@ -77,7 +83,7 @@ Motion: calm and meaningful, opacity and transform only.
 - **Words:**
   - say "no-movement alert", never "fall detection";
   - say "works behind a curtain", never "sees through walls";
-  - say "room-aware", never "security system";
+  - say "safety and after-hours security" and "presence and intrusion detection". Never say it identifies who someone is, counts a crowd, or is "surveillance";
   - never say "NPU" (this chip has none; say "on the Dragonwing CPU").
 - **All AI runs on the UNO Q.** The Pi runs no model. Use our own network only and never the venue Wi-Fi.
 - No prewritten code. Libraries are fine. Open-source sensing projects are for reading only, never copied.

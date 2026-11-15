@@ -97,11 +97,13 @@ Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'E' | 'W'>, never by 
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
         // training is null unless a fit is running; while it runs: {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
         // train_s and ms_per_decision are null when nothing was measured (the fake brain), even when trained is true.
+ "armed":false,                                                             // true after arm {on:true}; missing means false
  "board":{"cpu_temp_c":57.0,"cpu_mhz":2016,"cpu_pct":61}}
 {"v":2,"type":"event","t":1763149512200,"seq":120,"src":"live","id":"e123","kind":"enter","info":{"zone":2}}
    // kinds: enter, exit, zone_change, checkin, object_on, object_off, advice, advice_result, router_moved, router_home,
    // recalibrating, cam_off, cam_on, cam_stalled, alert_on, alert_off, blind_on, blind_off, trained, baseline_done, drift,
-   // reset (after the reset cmd), recording (info: {on, session}) after record_start/record_stop.
+   // reset (after the reset cmd), recording (info: {on, session}) after record_start/record_stop,
+   // armed, disarmed, intrusion (info: {zone} or {link} for a hall link).
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
 ```
 Before readings, a baseline or training exists, the brain still sends state at about 10/s with these values:
@@ -115,9 +117,10 @@ Before readings, a baseline or training exists, the brain still sends state at a
 
 **Screen -> brain:**
 ```jsonc
-{"v":2,"type":"cmd","cmd":"train|baseline|reset_alert|reset|record_start|record_stop|label_mode|router_moved|router_home|relearn|truth","args":{}}
+{"v":2,"type":"cmd","cmd":"train|baseline|reset_alert|reset|record_start|record_stop|label_mode|router_moved|router_home|relearn|truth|arm","args":{}}
    // record_start {session, purpose, walker}; label_mode {mode: person|object|off}; router_moved {spot}; truth {zone} (crowd game).
    // reset = between judges: clears the alert, still timer, check-in, advice and narration.
+   // arm {on: true|false} = "this space should be empty now" (after hours). See Armed in section 6.
 ```
 
 ## 6. Shared rules (every part computes the same thing)
@@ -145,6 +148,11 @@ Alert:
   it resets only after 5 moving decisions in a row (0.5 s), or when another zone or kind holds the majority of the last 10 decisions.
 - check_on when still_s >= zones[zone].still_alert_s. null never alerts, and objects never alert.
 - It clears on a checkin or on reset_alert.
+Armed (after hours: the space should be empty):
+- arm {on:true} sets state.armed and sends the event armed; arm {on:false} or reset clears it and sends disarmed.
+- While armed, an intrusion event is sent once each time a person appears: pred.present is true with kind person for
+  the majority of the last 10 decisions, after it was not. It names the zone. Objects never raise it.
+- While health is blind or pred is null, no intrusion is raised and the screen says so (never "all clear").
 X-ray:
 - The grid covers the square plus 0.2 m on each side.
 - Weights per Wilson & Patwari: 1/sqrt(link length) inside an excess path <= 0.1 m.
