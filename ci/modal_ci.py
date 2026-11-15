@@ -36,6 +36,7 @@ def parse_args(argv=None):
     mode.add_argument("--each", action="store_true", help="each PR merged into main alone (the default)")
     mode.add_argument("--together", action="store_true", help="all PRs stacked on main in the given order")
     p.add_argument("--main", action="store_true", help="also test origin/main alone")
+    p.add_argument("--refs", default="", help="local branches to test, each merged into main, comma-separated")
     p.add_argument("--lanes", default="", help="only these lanes, comma-separated")
     p.add_argument("--repeat", type=int, default=1, help="run every lane N times (to check a flaky test)")
     p.add_argument("--max-dollars", type=float, default=2.0, help="refuse to start if the estimate is higher")
@@ -44,8 +45,9 @@ def parse_args(argv=None):
     p.add_argument("--repo", default=str(REPO), help=argparse.SUPPRESS)
     args = p.parse_args(argv)
     args.pr_list = [int(x) for x in args.prs.replace(" ", "").split(",") if x]
-    if not args.pr_list and not args.main:
-        p.error("give --prs, --main, or both")
+    args.ref_list = [x for x in args.refs.replace(" ", "").split(",") if x]
+    if not args.pr_list and not args.main and not args.ref_list:
+        p.error("give --prs, --refs or --main")
     if not args.together:
         args.each = True
     return args
@@ -57,6 +59,9 @@ def plan_trees(repo, main, args):
         out.append(trees.stack_tree(repo, main, args.pr_list))
     elif args.pr_list:
         out += trees.each_trees(repo, main, args.pr_list)
+    for ref in args.ref_list:  # a local branch, merged into main like a PR, before it is pushed
+        m = trees.merge(repo, main, ref, f"ci: {ref} into main")
+        out.append(trees.Tree(ref, m.commit, [], m.conflicts))
     return out
 
 

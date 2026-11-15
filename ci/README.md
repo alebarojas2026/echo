@@ -15,6 +15,7 @@ python ci/modal_ci.py --prs 476,478,485 [--each | --together] [--main]
 - `--together`: all the PRs stacked on main in the order given. A PR that conflicts with the
   stack so far is left out (and named), and the rest keep stacking. It also lists every pair
   of PRs that conflict with each other, which is what decides a merge order.
+- `--refs my-branch`: a local branch, merged into main the same way, so you can test it before pushing.
 - `--main`: main alone. With `--each`, a PR failure that also fails on main is marked "same as main".
 - PRs that are no longer open (merged or closed) are skipped and named; it asks `gh` for the open list, read-only.
 - `--dry-run` builds the trees and prints the plan without starting anything.
