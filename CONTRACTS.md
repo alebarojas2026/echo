@@ -39,7 +39,8 @@ Ports:
   - the App Lab camera teacher sends to msgpack-rpc-router:5600 (App Lab's host alias; gate 3 confirms it).
 - bus -> brain: UDP 127.0.0.1:5601.
 - brain: WebSocket ws://192.168.77.2:8765/ws (bound to 127.0.0.1 and 192.168.77.2 only).
-- web: http://192.168.77.2:8080. board/serve.py serves web/dist, /nodes.json and /proof.json, and answers POST /ask,
+- web: http://192.168.77.2:8080. board/serve.py serves web/dist (index.html goes out with
+  <meta name="radio-sight-board" content="live"> added), /nodes.json and /proof.json, and answers POST /ask,
   GET /history and GET /report (section 10). Those three answer from the board's own records, need no internet and
   are reached on our own network only (the cable and the sensing hotspot).
   GET /privacy is the live privacy meter (section 11). GET and POST /clock set the board's clock from the
@@ -407,7 +408,8 @@ Hall paths: "movement on this path" when moving, "path busy" when busy, "not cal
 ## 9. Entry points (board/units/ start exactly these)
 ```
 Board host: python -m bus | python -m radio.wifi_rssi | python -m radio.hci_scan --node unoq (root) |
-            python -m teacher.camwatch | python -m brain.main | python board/serve.py |
+            python -m teacher.camwatch | python -m brain.main |
+            python -m store (the unit radio-sight-store, started after the brain) | python board/serve.py |
             python -m board.privacy (CAP_NET_ADMIN only, to read its counter) |
             python -m board.clock (root: it sets the clock and restarts the stack; as proposed, section 12) |
             llama-server (narrator/llm.service) | python -m narrator.narrate
@@ -447,6 +449,8 @@ GET http://192.168.77.2:8080/history?from_t=<epoch ms>&to_t=<epoch ms>
               "health":"ok","tamper":[]},
              {"t":1763149302000,"present":null,"zone":null,"zone_set":[],"motion":null,"armed":true,"alert":false,
               "health":"blind","tamper":["east"]}]}
+   // The store is python -m store on the board (section 9). With it not running there are no records, so Ask,
+   //   the replay and the report have nothing to answer from.
    // rows = what the store saved, one row for each second it saved, oldest first. A second with no saved row is
    //   simply missing: nothing is filled in or smoothed.
    // present:null = the brain did not know (blind, no model). It is never turned into false; zone and motion are then
