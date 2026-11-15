@@ -215,6 +215,21 @@ export function hearsLines(hears: DeviceView['hears']): string[] {
   return lines.length <= HEARS_SHOWN ? lines : [...lines.slice(0, HEARS_SHOWN - 1), `and ${lines.length - HEARS_SHOWN + 1} more lines`]
 }
 
+/** How many cited records are named one by one before the line gives their count and range instead. */
+export const CITES_SHOWN = 6
+
+/**
+ * The records an answer cites, as one short line. A story over a few minutes cites dozens of records: named one
+ * by one they fill the panel and push the steps out of sight, so beyond six the line gives how many and from
+ * which record to which. The strip still marks each cited record that is on it.
+ */
+export function citesWords(cites: readonly number[]): string {
+  if (!cites.length) return 'Cites no record'
+  if (cites.length === 1) return `Cites record #${count(cites[0])}`
+  if (cites.length <= CITES_SHOWN) return `Cites records ${cites.map((c) => `#${count(c)}`).join(', ')}`
+  return `Cites ${count(cites.length)} records, #${count(Math.min(...cites))} to #${count(Math.max(...cites))}`
+}
+
 /** A tool's name as words: "still_spans" -> "still spans". */
 export const toolWord = (tool: string) => tool.replace(/_/g, ' ')
 
