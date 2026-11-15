@@ -52,6 +52,12 @@ def desk_config(nodes, cam_x_m=None, view_m=None, dead_band=DESK_DEAD_BAND, mirr
     return config
 
 
+def area_text(area_m):
+    """The area as TEACHER_AREA wants it, WIDTHxHEIGHT in metres: the App Lab container can't read
+    nodes.json, so this is how its preflight knows which area a calibration must be for."""
+    return f"{area_m[0]:g}x{area_m[1]:g}"
+
+
 def solve(matrix, rhs):
     rows = [list(map(float, row)) + [float(b)] for row, b in zip(matrix, rhs)]
     n = len(rows)
@@ -181,6 +187,8 @@ def main():
     config = calibration(points, size, args.side_m or 2.0, area_m, split)
     args.output.write_text(json.dumps(config, indent=2, allow_nan=False) + "\n")
     print(f"Saved corner coordinates and projection to {args.output}")
+    print(f"Set TEACHER_AREA={area_text(area_m or [args.side_m] * 2)} for the teacher app; its preflight "
+          "refuses a calibration made for another area")
 
 
 if __name__ == "__main__":

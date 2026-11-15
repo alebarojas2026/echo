@@ -7,7 +7,7 @@ import socket
 
 from labels import Teacher, attach_processed_results, read_mode
 from heartbeat import write_heartbeat
-from preflight import box_size, check_files
+from preflight import area_size, box_size, check_files
 
 
 def main():
@@ -15,7 +15,8 @@ def main():
     mode_file = os.environ.get("TEACHER_MODE_FILE", "label_mode")
     heartbeat_file = os.environ["TEACHER_HEARTBEAT"]
     detector_size = box_size(os.environ["TEACHER_BOX_SIZE"])
-    projection = check_files(calibration, mode_file, heartbeat_file, detector_size)
+    area = area_size(os.environ["TEACHER_AREA"]) if os.environ.get("TEACHER_AREA") else None
+    projection = check_files(calibration, mode_file, heartbeat_file, detector_size, area)
     from arduino.app_bricks.video_objectdetection import VideoObjectDetection
     from arduino.app_utils import App
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:

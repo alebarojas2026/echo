@@ -3,6 +3,10 @@
 Inside the teacher container, set `TEACHER_CALIB`, `TEACHER_MODE_FILE`,
 `TEACHER_HEARTBEAT` and `TEACHER_BOX_SIZE`. The last is `WIDTHxHEIGHT` in the
 detector's bounding-box coordinate frame, not an assumed webcam resolution.
+Also set `TEACHER_AREA`, the layout's area as `WIDTHxHEIGHT` metres, printed by
+`python -m teacher.calibrate`; a calibration for another area (an old square one
+once the layout is the strip) is refused with a message to recalibrate. The host
+command below reads the area from `radio/nodes.json` unless `--area` is given.
 Read it from the installed model's configuration and confirm on the board.
 The app runs numeric preflight before importing or constructing the brick.
 

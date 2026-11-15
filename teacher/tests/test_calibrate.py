@@ -43,7 +43,10 @@ def test_invalid_box_rejected():
 
 def test_area_from_nodes_json_square_and_strip():
     from teacher.calibrate import NODES, area_from_nodes
-    assert area_from_nodes(json.loads(NODES.read_text())) == ([2.0, 2.0], [1.0, 1.0])     # main's square
+    nodes = json.loads(NODES.read_text())
+    if not nodes["frame"].get("strip_m"):
+        assert area_from_nodes(nodes) == ([2.0, 2.0], [1.0, 1.0])                        # the old square
+    assert area_from_nodes({"frame": {"size_m": [2.0, 2.0]}}) == ([2.0, 2.0], [1.0, 1.0])
     strip = {"frame": {"size_m": [1.6, 1.1], "strip_m": [1.6, 0.6], "zone_split_x_m": 0.8}}
     assert area_from_nodes(strip) == ([1.6, 0.6], [0.8, None])                           # the desk layout
 
