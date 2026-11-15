@@ -3,8 +3,10 @@
     python -m proof.lesson lesson-01 w1            # on the laptop or the board, the brain running
 
 It sends what the screen will send (CONTRACTS.md section 5: label_mode person, record_start with
-purpose train, then train while the recording is still open), tells the person when to step left
-and right, and prints what the brain says back once a second:
+purpose train, then train while the recording is still open), tells the person what to do, and
+prints what the brain says back once a second. The lesson starts with the space empty and has one
+step out of view in the middle (teacher/lesson.py says why): train is not sent until the camera
+has seen nobody for a few seconds, so a lesson with no empty time is never finished.
 
     12 s  camera: zone 1   radio: zone 1   learning: 6 of 10   fits: 1
 
@@ -21,9 +23,11 @@ import json
 import re
 from pathlib import Path
 
-TEACH_S = 20      # stepping left and right before the first fit
+from teacher.lesson import NO_EMPTY, EmptyTime, script
+
+TEACH_S = 30      # empty, left and right, a step out, left and right again, before the first fit
 STEP_S = 4        # seconds on each side
-REPORT_S = 30     # when the agreement is read off
+REPORT_S = 40     # when the agreement is read off (10 s after train, as before)
 
 
 class Coach:
@@ -40,7 +44,9 @@ class Coach:
         self.purpose, self.train = purpose, train
         self.t0 = self.model_s = self.follows_s = self.report = None
         self.said_s = self.side = 0
-        self.trained_sent = self.cam_off_said = False
+        self.trained_sent = self.cam_off_said = self.no_empty_said = False
+        self.steps = script(teach_s, step_s) if train else []
+        self.empty = EmptyTime()
 
     def cmd(self, name, **args):
         self.send_raw({"v": 2, "type": "cmd", "cmd": name, "args": args})
@@ -64,14 +70,19 @@ class Coach:
         if self.t0 is None:
             self.t0 = msg["t"]
         s = (msg["t"] - self.t0) / 1000
-        if self.train and s < self.teach_s and int(s // self.step_s) + 1 != self.side:
-            self.side = int(s // self.step_s) + 1
-            self.say(f"\nStep to your {'LEFT' if self.side % 2 else 'RIGHT'} and stand there.")
-        if s >= self.teach_s and not self.trained_sent:
-            self.trained_sent = True
-            self.cmd("train")
-            self.say("\ntrain sent. Keep stepping left and right; unplug the camera when you like.")
         pred, teacher = msg.get("pred"), msg.get("teacher")
+        self.empty.saw(s, msg.get("cam"), teacher)
+        while self.side < len(self.steps) and s >= self.steps[self.side][0]:
+            self.say("\n" + self.steps[self.side][2])
+            self.side += 1
+        if s >= self.teach_s and not self.trained_sent:
+            if self.empty.ok():
+                self.trained_sent = True
+                self.cmd("train")
+                self.say("\ntrain sent. Keep stepping left and right; unplug the camera when you like.")
+            elif not self.no_empty_said:
+                self.no_empty_said = True
+                self.say("\n" + NO_EMPTY)
         training = (msg.get("model") or {}).get("training") or {}
         lesson = training.get("lesson")
         if self.follows_s is None and pred and teacher and teacher["present"] and pred["present"] \
@@ -102,7 +113,7 @@ class Coach:
         unknown = "never"
         return (f"\nfirst model: {self.model_s if self.model_s is not None else unknown} s after the start\n"
                 f"radio first right: {self.follows_s if self.follows_s is not None else unknown} s after the start\n"
-                f"at {self.report_s} s: {self.agreement()}")
+                f"at {self.report_s} s: {self.agreement()}\n" + self.empty.summary())
 
 
 def _zone(block, cam="on"):
