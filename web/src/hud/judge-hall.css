@@ -1,0 +1,57 @@
+@import './tokens.css';
+/* The hall-first judge's page (the one-spot layout). The hall is the whole screen and the words sit on it: the name
+   top left, one headline and one line bottom left, one control bottom right. Everything else the rail carried is
+   not drawn here. The words stand on two plain bands the room draws (room.css), never on the picture itself.
+   Every family comes from --sans, and nothing is sized to one face's widths: a headline may wrap. */
+:root[data-judge-layout="hall"] {
+  --hall-pad: clamp(40px, 3.334vw, 64px);
+  --hall-foot: 48px;
+  --hall-sim: 0px;
+  --hall-head: clamp(56px, 4.375vw, 84px);
+  --hall-line: clamp(28px, 2.084vw, 40px);
+  --hall-ease: cubic-bezier(0.23, 1, 0.32, 1);
+}
+:root[data-judge-layout="hall"]:has(.room-sim) { --hall-sim: 56px; }
+
+.judge-claim { display:none; }
+:root[data-judge-layout="hall"] .judge-claim { display:inline; }
+
+:root[data-judge-layout="hall"] .judge { position:fixed !important; inset:0 !important; width:auto !important; height:auto !important; padding:0 !important; overflow:visible !important; background:transparent; pointer-events:none; }
+:root[data-judge-layout="hall"] .judge > :not(header,.sealed-record,.judge-moment,.hud-operator) { display:none !important; }
+:root[data-judge-layout="hall"] .judge[aria-hidden="true"] > :not(.hud-operator) { visibility:hidden; }
+:root[data-judge-layout="hall"] .hud-operator { pointer-events:auto; }
+
+:root[data-judge-layout="hall"] .hud-arrival { padding:0; pointer-events:none; }
+:root[data-judge-layout="hall"] .hud-arrival::before { display:none; }
+:root[data-judge-layout="hall"] .hud-arrival > * { max-width:none; }
+:root[data-judge-layout="hall"] .hud-arrival > :not(header,.sealed-record,.arrival-message) { display:none !important; }
+
+/* Top left: the name, then what it never uses. */
+:root[data-judge-layout="hall"] :is(.judge,.hud-arrival) > header { position:fixed; top:calc(var(--hall-sim) + 34px); left:var(--hall-pad); display:flex; justify-content:flex-start; align-items:baseline; gap:24px; font:500 28px/36px var(--sans); color:var(--text); }
+:root[data-judge-layout="hall"] :is(.judge,.hud-arrival) > header > span:first-child { color:var(--text); font-weight:600; letter-spacing:-.01em; }
+:root[data-judge-layout="hall"] :is([data-testid="source-badge"],[data-testid="arrival-source"]) { display:none; }
+
+/* Top right, small and calm: the sealed record's line. */
+:root[data-judge-layout="hall"] :is(.judge,.hud-arrival) > .sealed-record { position:fixed; top:calc(var(--hall-sim) + 34px); right:var(--hall-pad); margin:0; max-width:calc(100vw - 2 * var(--hall-pad) - 600px); text-align:right; text-wrap:balance; }
+
+/* Bottom left: one headline, one line under it. */
+:root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) { position:fixed; left:var(--hall-pad); bottom:var(--hall-foot); min-height:0; margin:0; max-width:calc(100vw - 2 * var(--hall-pad) - 400px); }
+:root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) h1 { margin:0 0 0 -.04em; font:600 var(--hall-head)/1 var(--sans); letter-spacing:-.03em; text-wrap:balance; }
+:root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) p { margin:16px 0 0; font:500 var(--hall-line)/1.2 var(--sans); }
+:root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) p { color:var(--text); }
+:root[data-judge-layout="hall"] .judge-moment p:empty { display:none; }
+:root[data-judge-layout="hall"] .judge-moment[data-tone="fault"] h1 { color:var(--fault); }
+:root[data-judge-layout="hall"] .judge-moment[data-tone="action"] h1 { color:var(--action); }
+:root[data-judge-layout="hall"] .arrival-message .arrival-passed { min-height:0; margin-top:8px; font-size:28px; }
+:root[data-judge-layout="hall"] .arrival-message .arrival-passed:empty { display:none; }
+
+/* Bottom right: the one control. */
+:root[data-judge-layout="hall"] :is(.ask-trigger,.arrival-ask) { position:fixed; right:var(--hall-pad); bottom:var(--hall-foot); box-sizing:border-box; height:64px; min-height:64px; margin:0; padding:0 24px; font:600 28px/1 var(--sans); color:var(--text); background:var(--bg); border:1px solid var(--square); border-radius:var(--r-control); cursor:pointer; pointer-events:auto; transition:transform 140ms var(--hall-ease), border-color 140ms ease; }
+:root[data-judge-layout="hall"] :is(.ask-trigger,.arrival-ask):active { transform:scale(.97); }
+:root[data-judge-layout="hall"] :is(.ask-trigger,.arrival-ask):focus-visible { outline:2px solid var(--text); outline-offset:3px; }
+@media (hover:hover) and (pointer:fine) { :root[data-judge-layout="hall"] :is(.ask-trigger,.arrival-ask):hover { border-color:var(--text); } }
+@media (prefers-reduced-motion:reduce) { :root[data-judge-layout="hall"] :is(.ask-trigger,.arrival-ask) { transition:none; } :root[data-judge-layout="hall"] :is(.ask-trigger,.arrival-ask):active { transform:none; } }
+
+/* A replay's bar lies under the top band, clear of the headline. */
+:root[data-judge-layout="hall"] .replay { top:calc(var(--hall-sim) + 120px); bottom:auto; left:var(--hall-pad); right:var(--hall-pad); }
+:root[data-judge-layout="hall"] ::selection { background:var(--person); color:var(--bg); }

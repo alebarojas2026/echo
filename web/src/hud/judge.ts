@@ -22,6 +22,7 @@ import { fetchProof } from '../room/hud-host'
 import type { Proof } from './state'
 import { presenceTile } from './proof-visibility'
 import { judgeMoment } from './judge-moment'
+import { hallFirst, hallMoment } from './judge-hall'
 import { mountReplay } from './replay'
 import { recordsClient } from './records'
 import { holdAdvice } from './dead-zone'
@@ -38,7 +39,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   feed = replay?.feed ?? feed
   root.classList.add('judge')
   root.innerHTML = `
-    <header><span>Echo</span><span data-testid="source-badge"></span></header>
+    <header><span>Echo</span><span class="judge-claim">No camera. No microphone.</span><span data-testid="source-badge"></span></header>
     <div class="judge-privacy"></div>
     <section class="judge-moment" aria-live="polite"><h1 data-testid="judge-headline"></h1><p data-testid="judge-detail"></p></section>
     <div class="judge-extra"></div>
@@ -123,7 +124,12 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     if (feed?.source === 'mock') state = alignMockState(state)
     state = holdAdvice(state)
     publishHealth(root, state, stale)
-    const [headline, detail] = judgeMoment(state, stale)
+    // One spot: the hall is the whole screen, and the state is one headline and one line (judge-hall.ts).
+    const hall = hallFirst()
+    document.documentElement.dataset.judgeLayout = hall ? 'hall' : 'rail'
+    const [railHeadline, railDetail] = judgeMoment(state, stale)
+    const { headline, detail, tone } = hall ? hallMoment(state, stale) : { headline: railHeadline, detail: railDetail, tone: '' }
+    field('judge-headline').parentElement!.dataset.tone = tone
     // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
     headlineText.set(headline, !!(state as { replay?: unknown } | null)?.replay)
     set('judge-detail', detail)
@@ -162,8 +168,9 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { operatorVisibility.disconnect(); delete document.documentElement.dataset.hudOperator; offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); narratorText.dispose(); clearInterval(narrationTimer); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { delete document.documentElement.dataset.judgeLayout; operatorVisibility.disconnect(); delete document.documentElement.dataset.hudOperator; offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); narratorText.dispose(); clearInterval(narrationTimer); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
+import './judge-hall.css'
 
 

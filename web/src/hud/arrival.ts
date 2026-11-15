@@ -62,7 +62,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   const view = document.createElement('section')
   view.className = 'hud-arrival'
   view.setAttribute('aria-label', 'Arrival')
-  view.innerHTML = `<header><span>Echo</span><span data-testid="arrival-source"></span></header>
+  view.innerHTML = `<header><span>Echo</span><span class="judge-claim">No camera. No microphone.</span><span data-testid="arrival-source"></span></header>
     <div class="arrival-message" aria-live="polite"><h1 data-testid="arrival-title"></h1><p data-testid="arrival-detail"></p><p class="arrival-passed" data-testid="arrival-passed"></p></div>
     <footer><span data-testid="arrival-claim"></span><span data-testid="visitor-count">Visitor 0</span></footer>`
   const disposePrivacy = mountPrivacyLine(view)
