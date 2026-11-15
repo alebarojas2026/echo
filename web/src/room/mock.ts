@@ -231,7 +231,9 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
   })
   const offBlind = (scene.off?.forS ?? 0) >= 3
   const blind = scene.blind || (offBlind && offIds.length > 0)
-  const blindIds = scene.blind ? ['east>unoq:ble'] : offBlind ? offIds : []
+  // The blind scene fails one link of the layout that is there: the last one listed (a link to a device across the
+  // spot on the gate, a beacon's on the desk).
+  const blindIds = scene.blind ? LINK_IDS.slice(-1) : offBlind ? offIds : []
   const links: LinkState[] = LINK_IDS.map((id, i) => {
     const drop = linkDrop(id, i, person?.xy ?? null, object, router, tMs)
     const quiet = offIds.includes(id)
