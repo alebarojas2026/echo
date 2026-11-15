@@ -26,10 +26,6 @@ def sides(layout=LAYOUT):
     return tuple((layout.zone_of(*layout.centres[z]), layout.centres[z]) for z in (left, right))
 
 
-def split_x(layout=LAYOUT) -> float:
-    return layout.split_x_m if layout.strip_m else layout.size_m[0] / 2
-
-
 def stands(layout=LAYOUT):
     """[(from s, to s, zone)]: every stretch the person stands on one side, in order."""
     out, t, i = [], ARRIVE_S, 0
