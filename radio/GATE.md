@@ -21,6 +21,23 @@ and `python3 -m radio.report_hci`) checks them.
   second (beacons alone are too few frames), walks through the three runs (line clear, then
   someone standing in the middle of the line, 10 s each) and prints the rate, rows and result below,
   ready to paste. Then `python3 -m radio.report_wifi` must print `GATE 1 PASS`.
+- Desk layout (#415) only: Pi B runs the same gate for its own link, `pi5>pi5b:wifi`. On Pi B, after
+  `sudo bash pi/install.sh --node pi5b` (which writes `WIFI_LINK` into its `.env` and joins Pi A's
+  hotspot): `python3 -m radio.wifi_rssi --gate`, with the person standing between Pi A and Pi B.
+  Paste its block under the second heading. `radio.report_wifi` checks one table per Wi-Fi link in
+  radio/nodes.json, so the second table counts only once nodes.json has Pi B.
+
+### pi5>unoq:wifi (Pi A to the board)
+
+**Measured sample rate:** __ samples/s
+
+| Run | Baseline dBm | Blocked dBm | Drop dB | Result |
+|-----|-------------|------------|---------|--------|
+| 1   | __          | __         | __      | __     |
+| 2   | __          | __         | __      | __     |
+| 3   | __          | __         | __      | __     |
+
+### pi5>pi5b:wifi (Pi A to Pi B, desk layout)
 
 **Measured sample rate:** __ samples/s
 
@@ -36,8 +53,8 @@ and `python3 -m radio.report_hci`) checks them.
 
 ## Gate 2 — Bluetooth raw scan (#20)
 
-**Pass criteria:** the Pi beacon ≥ 20 adverts/s at the board; each of the E and W beacons ≥ 7
-adverts/s at the board and at the Pi.
+**Pass criteria:** a Pi's beacon (S, and B in the desk layout) ≥ 20 adverts/s at every receiver
+that hears it; each of the E and W beacons ≥ 7 adverts/s at every receiver.
 
 **Setup:**
 - Pi advertising as beacon S (manufacturer data `FFFF525353`): `radio-sight-radio-node` running on the Pi.
@@ -51,6 +68,11 @@ adverts/s at the board and at the Pi.
   `sudo python3 -m pi.radio_node --seconds 300`, which covers all three board runs. It advertises S and
   forwards as usual, and at the end its summary gives the two `>pi5` rows (use the `lowest 10s` column).
   Start the service again afterwards.
+- Desk layout (#415) only: Pi B advertises beacon B (`FFFF525342`) and listens too. Its
+  `radio-sight-radio-node` runs with `RADIO_NODE=pi5b`; for the rows, stop it and run
+  `sudo python3 -m pi.radio_node --node pi5b --seconds 300` on Pi B at the same time as the other two.
+  The board's summary then also has `pi5b>unoq:ble`, Pi A's has `pi5b>pi5:ble`, and Pi B's has the three
+  `>pi5b` rows. The five Pi B rows below are judged only once radio/nodes.json has Pi B.
 - Confirmed in btmon: `Filter duplicates: Disabled`.
 
 | Link          | Beacon | Adverts/s | Result |
@@ -60,6 +82,11 @@ adverts/s at the board and at the Pi.
 | west>unoq:ble | W      | __        | __     |
 | east>pi5:ble  | E      | __        | __     |
 | west>pi5:ble  | W      | __        | __     |
+| pi5b>unoq:ble | B      | __        | __     |
+| pi5>pi5b:ble  | S      | __        | __     |
+| east>pi5b:ble | E      | __        | __     |
+| west>pi5b:ble | W      | __        | __     |
+| pi5b>pi5:ble  | B      | __        | __     |
 
 Add a row per run, or write only the lowest of the three runs: `python3 -m radio.report_hci`
 judges each link by its lowest rate. Write the rate as a bare number (`8.4`).

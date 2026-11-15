@@ -44,7 +44,7 @@ import sys
 import time
 from pathlib import Path
 
-from .nodes import LINKS
+from .nodes import DOC, LINKS
 
 LINK_ID = "pi5>unoq:wifi"
 TX = "pi5"
@@ -71,6 +71,15 @@ def set_link(link_id: str) -> None:
         wifi = ", ".join(lid for lid, entry in LINKS.items() if entry.get("kind") == "wifi")
         raise ValueError(f"WIFI_LINK={link_id!r} isn't a wifi link in radio/nodes.json ({wifi})")
     LINK_ID, TX, RX, KIND = link_id, link["tx"], link["rx"], link["kind"]
+
+
+def line_ends() -> str:
+    """The link's two ends in plain words for the gate's prompts: "the board and the Pi" for
+    pi5>unoq:wifi, "Pi B and Pi A" for Pi B's link (the names in nodes.json)."""
+    if (TX, RX) == ("pi5", "unoq"):
+        return "the board and the Pi"
+    names = {node["id"]: node.get("name") or node["id"] for node in DOC["nodes"]}
+    return f"{names.get(RX, RX)} and {names.get(TX, TX)}"
 
 
 def log(text: str) -> None:
@@ -424,6 +433,7 @@ def gate(reader: Reader, pinger: Pinger, rate_hz: float, runs: int = 3, window_s
     """
     pairs = []
     total_n, total_s = 0, 0.0
+    between = line_ends()
 
     def measure(what: str) -> list[int]:
         nonlocal total_n, total_s
@@ -438,9 +448,9 @@ def gate(reader: Reader, pinger: Pinger, rate_hz: float, runs: int = 3, window_s
     pinger.check()
     try:
         for i in range(1, runs + 1):
-            ask(f"Run {i} of {runs}: nobody between the board and the Pi. Press Enter.")
+            ask(f"Run {i} of {runs}: nobody between {between}. Press Enter.")
             clear = measure("line clear")
-            ask(f"Run {i} of {runs}: stand in the middle of the line between the board and the Pi. Press Enter.")
+            ask(f"Run {i} of {runs}: stand in the middle of the line between {between}. Press Enter.")
             blocked = measure("person in the line")
             pairs.append((clear, blocked))
     finally:
