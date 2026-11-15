@@ -25,7 +25,8 @@ test('fresh arrival distinguishes training, recalibration and a moved router', a
   await page.goto('/tests/arrival-harness.html')
   await page.waitForFunction(() => window.arrival)
   await page.evaluate(() => window.arrival.update('empty', { pred: null, model: { trained: false } }))
-  await expect(page.getByTestId('arrival-title')).toHaveText('Not trained yet')
+  // With no decision and no model: a layout with sides waits for a lesson; one spot needs none and never asks for one.
+  await expect(page.getByTestId('arrival-title')).toHaveText(/^(Not trained yet|Getting ready|One moment)$/)
   await page.evaluate(() => window.arrival.update('empty', { pred: null, model: { trained: true } }))
   await expect(page.getByTestId('arrival-title')).toHaveText('Recalibrating')
   await page.evaluate(() => window.arrival.update('empty', { pred: null, router: 'S-W30', armed: true }))

@@ -15,6 +15,7 @@ Every message: {"v": 2, "type": <type>, "t": <producer epoch ms>, "seq": <per-pr
                 "src": "live" | "sim" | "replay"}
 bus/ adds "recv_t" (board epoch ms at arrival). Windows, label joins, scoring and proof use recv_t only.
 A gap in seq from one producer = lost messages; bus/ counts them per producer.
+  (Not for chain_head and chain_witness, section 13: their seq is a record number of the sealed record.)
 Units: absolute signal in dBm (fields end in _dbm); differences in dB (_db); distances in m (_m);
   times in ms (t, *_ms) or s (*_s).
 ```
@@ -43,6 +44,7 @@ Ports:
   <meta name="radio-sight-board" content="live"> added), /nodes.json and /proof.json, and answers POST /ask,
   GET /history and GET /report (section 10). Those three answer from the board's own records, need no internet and
   are reached on our own network only (the cable and the sensing hotspot).
+  GET /chain, GET /chain/verify and POST /chain/prove are the sealed record (section 13).
   GET /privacy is the live privacy meter (section 11). GET and POST /clock set the board's clock from the
   operator's laptop (section 12; as proposed, not built yet).
   It also has /layout for the operator's align mode: GET gives {"room": {offset_m, yaw_deg, scale, cut_m} | null,
@@ -191,6 +193,7 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
         // The desk has two zones: [empty, z1, z2]. With one zone (the gate): [empty, z1], zone is 1 when present
         // and zone_set is [1].
         // pred is null before training, while health is blind, while recalibrating, and while the router is off S-home.
+        // On a layout with a presence line pred needs no training: it is there from the first baseline (section 6).
         // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
         // Not sure where: when somebody is there but the links read unlike anything in training (a feature more than
         // 6 dB outside what the model saw), zone_set lists every zone the model knows. zone is still its best guess.
@@ -234,6 +237,7 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
         // the model carries on.
         // train_s and ms_per_decision are null when nothing was measured (the fake brain), even when trained is true.
  "armed":false,                                                             // true after arm {on:true}; missing means false
+ "chain":{"seq":4127,"hash8":"1a2b3c4d","verified":true,"witnesses_ok":2,"witnesses":2},   // optional: the sealed record in short (section 13)
  "tamper":["east"],                                                         // optional: the nodes silent while armed (Tamper,
                                                                             // section 6); missing or [] when there is none
  "board":{"cpu_temp_c":57.0,"cpu_mhz":2016,"cpu_pct":61}}
@@ -339,6 +343,11 @@ Presence line (only on a layout whose nodes.json has "presence"; every number is
   default given here, and the kit's own numbers go in the file):
 - Drop = the line's baseline minus its median over the 1 s window. Somebody is there once the drop reaches on_db
   (7 dB), and stays until it is under off_db (4 dB). The model still gives probs, but it does not decide present.
+- No model and no lesson are needed (the camera is not used in the demo): after a baseline, with no model
+  trained, pred is the line's word alone. present true is kind "person" in the layout's zone (zone_set that
+  zone), probs is [0, 1] (present) or [1, 0] (nobody), why is the line, and moving or still, a thing left in
+  the line, still_s, the alert, the check-in, armed, intrusion and passed_by all follow as below. model says
+  trained false; pred is never null for that reason. A trained model still gives probs and why, as before.
 - No other line has a say (decided from the kit's recordings: its Bluetooth lines dip 9 to 20 dB with nobody
   there, and the short Wi-Fi line on the desk climbed 9 dB over one run). "second" may stay in the file and is
   not used. While the line has no readings its last word stands for second_hold_s (5 s), and then it is nobody.
@@ -520,6 +529,8 @@ Board App Lab: the camera teacher app (teacher/applab/), set as the default app.
 Pi A: python -m pi.radio_node --node pi5 (root) | the hotspot profile from pi/ap.sh
 Pi B: python -m pi.radio_node --node pi5b (root) | WIFI_LINK=pi5>pi5b:wifi python -m radio.wifi_rssi |
       joined to the sensing hotspot, with BUS_HOST=192.168.77.2 for both programs. No hotspot, no Ethernet, no model.
+Pi A and Pi B, optional: python -m pi.witness (the unit radio-sight-witness, section 13). With no key on the Pi it says
+      "not enrolled" and ends; nothing else on the Pi waits on it.
 Screen: a laptop's browser on the sensing hotspot (section 2). Nothing is started for it, and no Pi runs a kiosk.
 Every folder that's run as a module has an __init__.py.
 ```
@@ -618,4 +629,112 @@ GET http://192.168.77.2:8080/report          // optional ?from_t=<epoch ms>&to_t
    //   the clock, and starts the ones that were running, in that order. The web server and the model server keep
    //   running. The screen's WebSocket drops for a few seconds and the page reconnects.
    // Operator only: the control is in the operator drawer, never on the judge-facing screen.
+```
+
+## 13. The sealed record, its witnesses and the detective (as worded in #866)
+Everything here is optional on the wire: a part that knows none of it keeps working, and every older fixture stays valid.
+```jsonc
+// The sealed record (store, on the board). Every record the store saves, the once-a-second summary and every
+// event, is also one link of a chain:
+{"seq": 4127, "t": 1763149515000, "kind": "second", "body": {...}, "prev": "<64 hex>", "hash": "<64 hex>"}
+   // seq: an integer from 1, no gaps. prev: the hash of the record before it (64 zeros for seq 1).
+   // hash: SHA-256, in lower-case hex, of the canonical JSON of {seq, t, kind, body, prev}: keys sorted at every
+   //   level, no spaces (separators "," and ":"), UTF-8, characters written as themselves (no \u escapes for
+   //   non-ASCII), numbers as Python's json writes them. In Python:
+   //   json.dumps({...}, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+   // kind and body:
+   //   second          the summary of one second, as the store saved it (what /history is built from)
+   //   <an event kind> {"id", "src", "info"} of that event (section 5)
+   //   witness         {"node", "seq", "hash", "t", "sig"}: a signature that checked out, and the head it signs
+   //   witness_bad     {"node", "seq", "why"}: a signature from an enrolled witness that did not check out
+   //   witness_silent  {"node"}: that witness has not signed for 15 s (stored once)
+   //   witness_back    {"node"}: it signed again (stored once)
+   // A record is never rewritten. Order is seq, never t: the board's clock can be stepped (section 12).
+   // Rows saved before the store sealed anything stay as they are, unsealed: the chain starts at the first record
+   //   saved after that, with seq 1, and GET /chain counts the old rows in "unsealed".
+   // Pruning drops the oldest records only, and keeps the seq and hash of the last one dropped as the anchor: the
+   //   oldest kept record's prev is the anchor's hash. GET /chain says so in "anchor" and "first_seq".
+
+// The board's web server. All three answer only on the board's own networks, like /history (403 otherwise).
+GET http://192.168.77.2:8080/chain
+200 {"head": {"seq": 4127, "hash": "<64 hex>", "t": 1763149515000}, "records": 4127, "since_t": 1763146000000,
+     "verified": true, "last_verify_t": 1763149500000, "first_bad_seq": null,
+     "witnesses": [{"node": "pi5", "last_seq": 4120, "last_t": 1763149510400, "sig_ok": true, "silent": false},
+                   {"node": "pi5b", "last_seq": 4098, "last_t": 1763149490000, "sig_ok": true, "silent": true}],
+     "first_seq": 1, "anchor": null, "unsealed": 0}
+   // head: the newest record (seq 0 and 64 zeros while there is none). head.t is optional: the t of the last
+   //   chain_head the board sent for this head, so a witness that reads the head here can sign it.
+   // records: how many are kept. since_t: the t of the oldest kept record, null with none.
+   // verified: true | false | "checking" (no check has finished yet). The board checks the last 10 minutes every
+   //   30 s; last_verify_t is when the last check ended (null before the first), first_bad_seq the first record
+   //   that failed (null when verified is not false).
+   // witnesses: one entry for each enrolled witness, [] with none enrolled. last_seq and last_t (the board's clock
+   //   when it checked the signature) are of its last good signature, null before the first. sig_ok: its newest
+   //   signature checked out. silent: no good signature for 15 s.
+   // first_seq, anchor ({"seq", "hash"} or null) and unsealed are optional.
+
+GET http://192.168.77.2:8080/chain/verify?from=<seq>&to=<seq>
+200 {"ok": true, "checked": 3600, "first_bad_seq": null, "ms": 41, "from": 528, "to": 4127}
+   // from and to are record numbers, both optional: without from it starts 3,600 records before to (or at the
+   //   oldest kept record), without to it ends at the head. At most 100,000 records per call (400 otherwise).
+   // A record is bad when its hash is not the hash of its own {seq, t, kind, body, prev}, when its prev is not the
+   //   hash of the record before it, or when a seq is missing (then the missing seq is named).
+   // checked: records read up to and including the bad one. ms: the time the check took on the board.
+   // from and to (optional in the answer) are the range that was checked, null when no record is kept.
+
+POST http://192.168.77.2:8080/chain/prove        // operator only; JSON; the body may be {} or {"n": 600, "seq": 3827}
+200 {"ok": false, "altered_seq": 3827, "first_bad_seq": 3827, "ms": 9, "checked": 600, "kind": "second", "t": 1763149212000}
+   // Copies the last n records (600 unless n says otherwise, at most 3,600) into memory, alters one record of
+   //   the copy (seq, or one in the middle), checks the copy and names the record. It never writes to the real log.
+   // checked, kind and t (of the altered record) are optional. 409 {"error": "..."} when there is no record yet.
+
+// State (section 5) may carry the chain in short. Missing when the brain has heard no chain head for 15 s.
+"chain": {"seq": 4127, "hash8": "1a2b3c4d", "verified": true, "witnesses_ok": 2, "witnesses": 2}
+   // hash8: the first 8 hex of the head's hash. witnesses: how many are enrolled. witnesses_ok: how many of them
+   //   are signing (not silent, last signature good).
+
+// The witnesses (bus). Both messages carry the envelope of section 1, but their seq is the chain's record number,
+// not a per-producer counter: the bus counts no gaps on them.
+{"v":2,"type":"chain_head","t":1763149515000,"seq":4127,"src":"live","hash":"<64 hex>",
+ "verified":true,"witnesses_ok":2,"witnesses":2}
+   // From the board to the bus (127.0.0.1:5600) every 5 s. t: the board's clock when it was sent. verified,
+   //   witnesses_ok and witnesses are optional: the brain copies them into state.chain.
+   // The bus sends each chain_head on, from its own port, to every socket that sent it a chain_witness or a
+   //   chain_sub in the last 60 s: a witness reads the head on the socket it sends from. A chain_sub
+   //   ({"v":2,"type":"chain_sub","node":"pi5","src":"live"}) is only a witness saying it is there; it stops at
+   //   the bus and is not a contract message. GET /chain carries the same head (head.seq, head.hash, head.t).
+   // A witness signs a head whose seq steps back too (and notes it on its own device); it never signs seq 0.
+{"v":2,"type":"chain_witness","t":1763149515000,"seq":4127,"src":"live","node":"pi5","hash":"<64 hex>","sig":"<base64>"}
+   // From a witness to the bus (192.168.77.2:5600). seq, hash and t are the head it signs, exactly as given.
+   // sig: the Ed25519 signature (64 bytes, in base64; hex is read too) over the ASCII bytes
+   //   <node>|<seq>|<hash>|<t>      e.g.  pi5|4127|1a2b...f809|1763149515000      (no newline at the end)
+   //   made with the openssl already on the device, from files (Ed25519 signs the message itself, so -rawin):
+   //     openssl genpkey -algorithm ed25519 -out witness.key          # once, at install; never leaves the device
+   //     openssl pkey -in witness.key -pubout -out witness.pub        # the public key, enrolled on the board
+   //     openssl pkeyutl -sign -inkey witness.key -rawin -in msg.bin -out sig.bin
+   //   and checked on the board with
+   //     openssl pkeyutl -verify -pubin -inkey witness.pub -rawin -in msg.bin -sigfile sig.bin
+   // Enrolment: data/witness_keys.local.json on the board (never in git), {"pi5": "<the PEM text of witness.pub>",
+   //   "pi5b": "..."}. A missing file means no witnesses are enrolled; it is never an error. The web server reads
+   //   the file again every second, so a key is enrolled without restarting anything.
+   // The board stores a signature that checks out, for a record whose hash it holds, as a witness record; one that
+   //   does not, from an enrolled node, as witness_bad (at most one every 5 s for each node). A message from a node
+   //   that is not enrolled is dropped. A witness with no good signature for 15 s is stored once as witness_silent
+   //   and, when it signs again, once as witness_back. The chain goes on either way.
+
+// The detective (POST /ask, section 10). "What happened" questions are answered from sealed records only, and the
+// answer may carry:
+"steps": [{"tool": "records", "ms": 12, "rows": 61}, {"tool": "verify", "ms": 3, "rows": 61}], "cites": [4012, 4040], "chain_ok": true
+   // tool is "story" for such an answer (one more value of tool in section 10).
+   // steps: what was run, in order; ms may be a decimal. cites: the seq of each record the answer rests on.
+   // chain_ok: the chain was verified over the cited range before answering. If it does not verify, the answer
+   //   says so first and names the record. chain_ok is left out (never false) when the store holds no sealed
+   //   record to check.
+   // rows: one row for each sentence of the story, each with its own cites; span (section 10) covers the whole
+   //   stretch, so the screen can offer a replay of it.
+
+// The engine room (/engine/, a second screen, operator's): the three devices and their readings a second, the
+// chain head ticking, signatures arriving from each witness, the last verify and its time, the models' timings and
+// the prove-it check. Plain, dark, the same style rules, nothing under 20 px.
+// Not in the demo: the camera and any microphone. Nothing about them is removed from the repo.
 ```
