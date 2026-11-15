@@ -7,7 +7,9 @@ for(const [width,height] of [[1920,1080],[1440,900]]) test(`judge language and o
  await expect(page.getByTestId('arrival-source')).toHaveText('Simulated')
  await expect(page.locator('html')).toHaveAttribute('data-hud-operator','closed')
  const title=page.locator('.hud-arrival > header > span').first()
- expect(await title.evaluate(el=>getComputedStyle(el).color)).not.toBe(await page.getByTestId('arrival-title').evaluate(el=>getComputedStyle(el).color))
+ // The name is told from the words beside it: by its quieter colour on the rail, by its weight on the hall-first page.
+ if(await page.evaluate(()=>document.documentElement.dataset.judgeLayout==='hall'))expect(await title.evaluate(el=>[getComputedStyle(el).fontWeight,getComputedStyle(el.nextElementSibling).fontWeight])).toEqual(['600','500'])
+ else expect(await title.evaluate(el=>getComputedStyle(el).color)).not.toBe(await page.getByTestId('arrival-title').evaluate(el=>getComputedStyle(el).color))
  const shot=async name=>{if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-${name}.png`)})}}
  await shot('walk-up')
  await page.keyboard.press('o');await expect(page.locator('html')).toHaveAttribute('data-hud-operator','open')

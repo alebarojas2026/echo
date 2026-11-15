@@ -690,3 +690,9 @@ html[data-judge-layout='hall'] .room--arrival .room-labels {
 html[data-judge-layout='hall'] .room:not([data-op='1']) :is(.room-label--node:not(.room-label--node-lost, .room-label--node-tamper), .room-label--zone, .room-label--alert, .room-label--ourdesk, .room-label--spot, .room-label--caption, .room-label--xray, .room-hall-caption, .room-legend) {
   display: none;
 }
+
+/* From this far back a line's "no signal" and its device's name land on each other. A device named in the tamper
+   alert keeps its name and "not heard"; its line's words step out. */
+html[data-judge-layout='hall'] .room-labels:has(.room-label--node-tamper) .room-label--beam {
+  display: none;
+}

@@ -42,8 +42,8 @@
 :root[data-judge-layout="hall"] .judge-moment p:empty { display:none; }
 :root[data-judge-layout="hall"] .judge-moment[data-tone="fault"] h1 { color:var(--fault); }
 :root[data-judge-layout="hall"] .judge-moment[data-tone="action"] h1 { color:var(--action); }
-:root[data-judge-layout="hall"] .arrival-message .arrival-passed { min-height:0; margin-top:8px; font-size:28px; }
-:root[data-judge-layout="hall"] .arrival-message .arrival-passed:empty { display:none; }
+/* "Someone passed by": one small calm line over the headline, in the band's own top edge, so nothing moves when it comes and goes. */
+:root[data-judge-layout="hall"] .arrival-message .arrival-passed { position:absolute; left:0; bottom:100%; min-height:0; margin:0; font-size:28px; line-height:32px; white-space:nowrap; }
 
 /* Bottom right: the one control. */
 :root[data-judge-layout="hall"] :is(.ask-trigger,.arrival-ask) { position:fixed; right:var(--hall-pad); bottom:var(--hall-foot); box-sizing:border-box; height:64px; min-height:64px; margin:0; padding:0 24px; font:600 28px/1 var(--sans); color:var(--text); background:var(--bg); border:1px solid var(--square); border-radius:var(--r-control); cursor:pointer; pointer-events:auto; transition:transform 140ms var(--hall-ease), border-color 140ms ease; }
