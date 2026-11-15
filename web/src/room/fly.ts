@@ -101,6 +101,8 @@ export class Fly {
   private close: ShotFor = roomShot
   /** The arrival screen is up ("Nobody is here."): rest on the hall, drifting, until it says found. */
   private holding = false
+  /** Someone was found while the hall model was still loading: the camera is at the desk and stays there. */
+  private foundEarly = false
   private driftMs = 0
   private readonly reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -124,10 +126,17 @@ export class Fly {
   }
 
   /** The hall is known (its scan has loaded): show it, then fly down unless a framing is pinned or the arrival
-   *  screen is waiting (then it rests on the hall until arrive()). */
+   *  screen is waiting (then it rests on the hall until arrive()). A model that loads after someone was found (it
+   *  is a few MB over the hotspot) never pulls the camera off them: the hall is kept for the next reset or hold,
+   *  and the camera only glides to the close framing it was given for the hall. */
   setHall(hall: Shot) {
     this.hall = hall
     if (this.pinned) return this.cut(this.pinned)
+    if (this.foundEarly) {
+      this.foundEarly = false
+      this.legs = [{ to: 'square', waitMs: 0 }]
+      return this.begin()
+    }
     this.cut('hall')
     if (this.holding) return
     this.legs = this.reduced ? [{ to: 'square', waitMs: 0 }] : [{ to: 'square', waitMs: FIRST_LOOK_MS }]
@@ -137,6 +146,7 @@ export class Fly {
   /** The arrival screen is up (#552 "waiting"): rest on the whole hall, drifting very slowly, until arrive(). */
   hold() {
     this.holding = true
+    this.foundEarly = false
     this.driftMs = 0
     if (this.hall && !this.pinned) this.cut('hall')
     this.view.requestRender()
@@ -146,6 +156,7 @@ export class Fly {
   arrive() {
     if (!this.holding) return
     this.holding = false
+    this.foundEarly = !this.hall
     if (!this.hall || this.pinned) return
     this.legs = [{ to: 'square', waitMs: 0 }]
     this.begin()
