@@ -102,11 +102,14 @@ test('waiting shows the room beside readable words, and found fades the card as 
   expect(await phase(page)).toBe('waiting')
   await expect(page.locator('#room')).toHaveAttribute('data-arrival', 'waiting')
   await expect(card).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-  // The words sit on the page colour, inside the rail, never over the room.
-  for (const part of ['h1', '[data-testid="arrival-detail"]', 'footer']) {
+  // With the rail, the words sit on the page colour inside it, never over the room. On the one spot the hall is
+  // the whole screen: the words sit on it, inside the screen, and the card's footer is not drawn.
+  const hall = await page.evaluate(() => document.documentElement.dataset.judgeLayout === 'hall')
+  for (const part of hall ? ['h1', '[data-testid="arrival-detail"]'] : ['h1', '[data-testid="arrival-detail"]', 'footer']) {
     const box = await card.locator(part).boundingBox()
-    expect(box.x + box.width).toBeLessThanOrEqual(640)
+    expect(box.x + box.width).toBeLessThanOrEqual(hall ? page.viewportSize().width - 400 : 640)
   }
+  if (hall) await expect(card.locator('footer')).toBeHidden()
   await expect(page.locator('.room-legend')).toBeHidden()
   await capture(page, '1920-over-hall-waiting')
   await page.evaluate(() => window.arrival.update('still'))
@@ -117,7 +120,7 @@ test('waiting shows the room beside readable words, and found fades the card as 
   await page.clock.runFor(200)
   expect(await phase(page)).toBe('found')
   await expect(page.locator('#room')).toHaveAttribute('data-arrival', 'found')
-  await expect(page.locator('.room-legend')).toBeVisible()
+  await expect(page.locator('.room-legend')).toBeVisible({ visible: !hall })
   for (const [ms, name] of [[400, 'fly-1'], [600, 'fly-2'], [600, 'fly-3']]) {
     await page.clock.runFor(ms)
     expect(Number(await card.locator('.arrival-message').evaluate(el => getComputedStyle(el).opacity))).toBeLessThan(1)

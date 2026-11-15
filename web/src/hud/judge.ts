@@ -54,6 +54,8 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const narrator = field('narrator-text')
   const narratorText = changingText(narrator)
   const hold = new ReadingHold()
+  // ?judge=rail keeps the panels' rail on the one spot too: the signal trace, the cards and the proof, for the operator.
+  const rail = new URLSearchParams(location.search).get('judge') === 'rail'
   let headlineShape = ''
   let nextNarration = ''
   let clearNarration = false
@@ -126,7 +128,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     state = holdAdvice(state)
     publishHealth(root, state, stale)
     // One spot: the hall is the whole screen, and the state is one headline and one line (judge-hall.ts).
-    const hall = hallFirst()
+    const hall = hallFirst() && !rail
     document.documentElement.dataset.judgeLayout = hall ? 'hall' : 'rail'
     const [railHeadline, railDetail] = judgeMoment(state, stale)
     const { headline, detail, tone } = hall ? hallMoment(state, stale) : { headline: railHeadline, detail: railDetail, tone: '' }

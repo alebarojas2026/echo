@@ -48,7 +48,7 @@ test('the card follows the board clock while no frame is drawn and no timer runs
   await feed(2900, 4500)
   await expect(card).toBeHidden()
   expect(await page.evaluate(() => document.documentElement.dataset.hudArrival)).toBe('closed')
-  await expect(page.getByTestId('judge-headline')).toHaveText(/^(Someone is here, standing still|Still )/)
+  await expect(page.getByTestId('judge-headline')).toHaveText(/^(Someone is here\.|Still )/)
   expect(await page.locator('#hud').evaluate(el => el.inert)).toBe(false)
 
   // Between judges: the card is back, and somebody who leaves before "Found you." is not found.

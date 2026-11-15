@@ -38,7 +38,7 @@
 :root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) { position:fixed; left:var(--hall-pad); bottom:var(--hall-foot); min-height:0; margin:0; max-width:calc(100vw - 2 * var(--hall-pad) - 400px); }
 :root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) h1 { margin:0 0 0 -.04em; font:600 var(--hall-head)/1 var(--sans); letter-spacing:-.03em; text-wrap:balance; }
 :root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) p { margin:16px 0 0; font:500 var(--hall-line)/1.2 var(--sans); }
-:root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) p { color:var(--text); }
+:root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) p:not(.arrival-passed) { color:var(--text); }
 :root[data-judge-layout="hall"] .judge-moment p:empty { display:none; }
 :root[data-judge-layout="hall"] .judge-moment[data-tone="fault"] h1 { color:var(--fault); }
 :root[data-judge-layout="hall"] .judge-moment[data-tone="action"] h1 { color:var(--action); }
