@@ -72,6 +72,9 @@ INVALID = [
     "$.locked",                    # locked is true or false
     "$.state",                     # the camera watcher reports what it reads; unknown is the brain's word
     "$.cam",                       # on, off, stalled or unknown
+    "$.hall[0].xy_m",               # a placed beacon has a position, not an estimate
+    "$.hall[0].range.from[0]",      # heard by receivers only
+    "'lo_m' is a required property",   # an estimate always carries its span and what it assumes
     "bad JSON",
 ]
 

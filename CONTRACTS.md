@@ -206,6 +206,10 @@ The positions above are the last ones measured and written into nodes.json, and 
         // by receiver in nodes.json order, then by beacon. xy_m = the far beacon's position (the tx end), or null when
         // nodes.json has none; the other end is the rx node. activity is 0-1. rate_hz = readings over the last 2 s.
         // It means "movement on this path": never who, where along it, or how many. stale:true -> activity 0, moving false.
+        // range is optional: {"m": 11.2, "lo_m": 7.4, "hi_m": 20.0, "from": ["pi5", "unoq"],
+        //   "assumes": {"at_1m_dbm": -59, "exponent": [2.0, 3.0]}}. Only in the rows of a hall beacon whose xy_m is null
+        //   (not placed yet), only while there is an estimate, and the same object in every row of that beacon.
+        //   Missing means unknown. It is an estimate of distance, never a position (Hall range, section 6).
         // busy is optional and missing means false. busy:true = too much foot traffic on the path to pick out one
         // movement (Hall activity, section 6); then moving is false. A stale row is never busy.
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
@@ -381,6 +385,16 @@ Hall activity (a rule, not learned; per hall link, from that link's readings onl
 - Without an empty_quiet_db the brain still sends the row as above, with no busy, but the screen never shows that
   link as anything but "not calibrated".
 - The thresholds are first values, tuned at the hardware test (#95).
+Hall range (an estimate, never a position; only for a hall beacon with no position yet):
+- The brain estimates how far away the beacon is from signal strength alone:
+  d = 10 ^ ((at_1m_dbm - level) / (10 x exponent)). level = the median of each receiver's readings over the last
+  10 s (10 readings at least, spanning 8 s), then the median over the receivers.
+- m uses exponent 2.5; lo_m uses 3.0 and hi_m uses 2.0, capped at 100 m. at_1m_dbm (-59) and the exponents are
+  assumptions, not measurements, and are sent with the estimate.
+- No estimate (range is missing) when no receiver has 10 s of readings, when a receiver's middle half of readings
+  is wider than 8 dB (that receiver is left out), or when the receivers differ by more than 10 dB.
+- There is no bearing: the receivers sit close together. The screen shows it as a hint for placing the beacon by
+  hand ("about 11 m away, between 7 and 20"), never as a measured position, and no number from it goes in PROOF.md.
 X-ray:
 - The grid covers the whole layout rectangle (frame.size_m: the strip and the desk top, 1.6 x 1.1 m) plus 0.2 m on each
   side: x from -0.2 to 1.8, y from -0.2 to 1.3. The brain sends 16 x 12 cells of 0.125 m with origin_m [-0.2, -0.2].

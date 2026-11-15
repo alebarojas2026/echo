@@ -75,11 +75,21 @@
         "properties": {"id": {"$ref": "common.json#/$defs/hall_link"}, "tx": {"$ref": "common.json#/$defs/hall_node"}, "rx": {"$ref": "common.json#/$defs/receiver"},
                        "xy_m": {"anyOf": [{"$ref": "common.json#/$defs/xy_m"}, {"type": "null"}]}, "activity": {"type": "number", "minimum": 0, "maximum": 1},
                        "moving": {"type": "boolean"}, "rate_hz": {"type": "number", "minimum": 0}, "stale": {"type": "boolean"},
-                       "busy": {"type": "boolean"}},
+                       "busy": {"type": "boolean"},
+                       "range": {"$comment": "Optional (section 6, Hall range): an estimated distance for a beacon with no position. Never with an xy_m.",
+                                 "type": "object",
+                                 "properties": {"m": {"type": "number", "exclusiveMinimum": 0, "maximum": 100}, "lo_m": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+                                                "hi_m": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+                                                "from": {"type": "array", "items": {"$ref": "common.json#/$defs/receiver"}, "minItems": 1, "uniqueItems": true},
+                                                "assumes": {"type": "object",
+                                                            "properties": {"at_1m_dbm": {"type": "number"}, "exponent": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "minItems": 2, "maxItems": 2}},
+                                                            "required": ["at_1m_dbm", "exponent"], "additionalProperties": false}},
+                                 "required": ["m", "lo_m", "hi_m", "from", "assumes"], "additionalProperties": false}},
         "required": ["id", "tx", "rx", "xy_m", "activity", "moving", "rate_hz", "stale"], "additionalProperties": false,
         "allOf": [
           {"if": {"properties": {"stale": {"const": true}}}, "then": {"properties": {"activity": {"const": 0}, "moving": {"const": false}, "busy": {"const": false}}}},
-          {"if": {"properties": {"busy": {"const": true}}, "required": ["busy"]}, "then": {"properties": {"moving": {"const": false}}}}
+          {"if": {"properties": {"busy": {"const": true}}, "required": ["busy"]}, "then": {"properties": {"moving": {"const": false}}}},
+          {"if": {"required": ["range"]}, "then": {"properties": {"xy_m": {"type": "null"}}}}
         ]}},
     "armed": {"$comment": "Optional (section 6, Armed): true after arm {on: true}; missing means false.", "type": "boolean"},
     "locked": {"$comment": "Optional (section 6, Operator key): the board has an operator key; missing means false.", "type": "boolean"},
