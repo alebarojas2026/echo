@@ -24,7 +24,8 @@ class Layout:
         self.names = {int(z["id"]): z.get("name", f"zone {z['id']}") for z in nodes["zones"]}
         self.centres = {int(z["id"]): tuple(z["centre_m"]) if z.get("centre_m") else self._square_centre(int(z["id"]))
                         for z in nodes["zones"]}
-        self.tray = next((tuple(s["xyz_m"][:2]) for s in nodes.get("tray_spots") or [] if s["id"] == "T1"), None)
+        self.spots = {s["id"]: tuple(s["xyz_m"][:2]) for s in nodes.get("tray_spots") or []}
+        self.tray = self.spots.get("T1")
         # The square: 10 x 10 cells of 0.24 m. The desk layout: 16 x 12 cells of 0.125 m (section 6).
         cell = 0.125 if self.strip_m else 0.24
         self.grid = {"w": round((self.size_m[0] + 2 * MARGIN_M) / cell),
@@ -62,7 +63,48 @@ class Layout:
             w, h = self.strip_m
             return 1 + int(x >= self.split_x_m) if 0 <= x <= w and 0 <= y <= h else 0
         w, h = self.size_m
+        if not (0 <= x <= w and 0 <= y <= h):
+            return 0
         return 1 + int(x >= w / 2) + 2 * int(y < h / 2)
+
+    def area_width(self) -> float:
+        return (self.strip_m or self.size_m)[0]
+
+    def resolve(self, path: dict) -> dict:
+        """A path written against the layout instead of in metres, turned into metres:
+        a waypoint {"t", "zone": n, "dx", "dy"} stands at zone n's centre (plus an offset);
+        {"t", "zone": n, "edge": "west" | "east"} is at that end of the area, level with zone n;
+        {"t", "zone": n, "outside": "west" | "east"} is 0.4 m past that end (not in the area);
+        an object {"spot": "T1"} sits on that tray spot, {"near": node, "inset_m": d} next to the
+        node, d metres in from it along x. Points and objects already in metres are kept."""
+        out = dict(path)
+        if path.get("person"):
+            out["person"] = [self._waypoint(p) for p in path["person"]]
+        if path.get("objects"):
+            out["objects"] = [self._object(o) for o in path["objects"]]
+        return out
+
+    def _waypoint(self, p: dict) -> dict:
+        if "zone" not in p or "x" in p:
+            return p
+        p = dict(p)
+        x, y = self.centres[p.pop("zone")]
+        end = p.pop("edge", None) or p.get("outside")
+        if end:
+            past = 0.4 if p.pop("outside", None) else 0.0
+            x = -past if end == "west" else self.area_width() + past
+        p["x"], p["y"] = round(x + p.pop("dx", 0.0), 3), round(y + p.pop("dy", 0.0), 3)
+        return p
+
+    def _object(self, o: dict) -> dict:
+        o = dict(o)
+        if "spot" in o:
+            o["x"], o["y"] = self.spots[o.pop("spot")]
+        elif "near" in o:
+            x, y = self.nodes[o.pop("near")]
+            inset = o.pop("inset_m", 0.15)
+            o["x"], o["y"] = round(x - inset if x >= self.area_width() / 2 else x + inset, 3), y
+        return o
 
 
 def load(path=NODES_JSON) -> Layout:
