@@ -65,9 +65,14 @@
 
 /* Sizes are for reading from 3 m on the 1080p kiosk. The translate sets which point of a label sits on its
    scene point, so no label lands on a node cube or a beam end. */
+.room-label--yield {
+  visibility: hidden; /* a more important word is in its place for now (view.ts declutter) */
+}
+
 .room-label--zone {
   translate: 0 -50%;
-  font: 600 48px/1 'Hanken Grotesk', system-ui, sans-serif;
+  /* 48 px on the 1280 px canvas; smaller with the square on a laptop's narrower canvas, never under 32 px. */
+  font: 600 max(32px, calc(48px * var(--room-k, 1)))/1 'Hanken Grotesk', system-ui, sans-serif;
   transition: color 0.3s ease;
 }
 
@@ -173,7 +178,7 @@
 }
 
 .room-label--object {
-  translate: -100% -50%;
+  translate: -50% -50%;
   padding: 4px 8px;
   border: 1px solid var(--square);
   background: var(--floor);
@@ -181,10 +186,6 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-.room-label--object.room-label--object-east {
-  translate: 0 -50%;
 }
 
 .room-label--xray {

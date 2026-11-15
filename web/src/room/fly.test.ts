@@ -8,9 +8,10 @@ function fakeView() {
   const animators: ((dt: number) => boolean)[] = []
   const view = {
     shots: [] as Shot[],
+    size: [1280, 1080] as [number, number],
     host: { dataset: {} as Record<string, string> },
     addAnimator: (fn: (dt: number) => boolean) => void animators.push(fn),
-    setShot: (s: Shot) => void view.shots.push(s),
+    setShot: (s: Shot | ((w: number, h: number) => Shot)) => void view.shots.push(typeof s === 'function' ? s(...view.size) : s),
     requestRender: () => {},
     /** Runs frames of `dt` ms for `ms`. */
     run(ms: number, dt = 16) {
