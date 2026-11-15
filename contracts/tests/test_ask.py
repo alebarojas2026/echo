@@ -58,6 +58,7 @@ BAD_NODES = [
     "'empty_quiet_db' is a required property",   # a link is listed only once it is calibrated
     "$.hall.links[0].empty_quiet_db",   # a quiet level is above 0
     "$.links[0].classifier",            # classifier is true or false
+    "$.nodes[0].device",                # a short lower-case word, as in the screen's model names
 ]
 BAD_PRIVACY = [
     "does not allow 0",                 # not running, yet it says 0 images: never a zero in place of an unknown

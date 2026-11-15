@@ -66,6 +66,9 @@ Nodes, every antenna 1.0 m high (the desk plus a 25 cm box):
   pi5b  (0.5, 0.6, 1.0)   Pi B, at the desk's judge edge: beacon B + receiver
   east  (1.6, 0.25, 1.0)  ESP32 beacon E, on the tip of a cardboard arm over the aisle
   west  (0.0, 0.25, 1.0)  ESP32 beacon W, on the tip of a cardboard arm over the aisle
+  A node in nodes.json may carry "device": the kind of hardware it is (unoq, pi5, esp32, phone). The screen picks
+  the model it draws by device, never by matching the node's id. Missing, or a device the screen has no model
+  for: a plain marker.
 Link id = "<tx>><rx>:<kind>". Twelve links, always in this order (nodes.json, feature vectors):
    #  id              kind  tx    rx    where it runs
    1  pi5>unoq:wifi   wifi  pi5   unoq  over the desk
