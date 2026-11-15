@@ -36,9 +36,9 @@ MAX_WORDS = 16
 EVENT_KINDS = ("enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice",
                "advice_result", "router_moved", "router_home", "recalibrating", "cam_off", "cam_on",
                "cam_stalled", "alert_on", "alert_off", "blind_on", "blind_off", "trained",
-               "baseline_done", "drift", "armed", "disarmed", "intrusion")
+               "baseline_done", "drift", "armed", "disarmed", "intrusion", "tamper", "tamper_cleared")
 # Which waiting event to keep, most important first. Kinds not listed rank below all of these.
-PRIORITY = ("intrusion", "alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
+PRIORITY = ("intrusion", "tamper", "alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
             "recalibrating", "trained", "zone_change", "exit")
 NEVER = ("router_moved", "advice")   # the screen already says these itself
 # Zone id -> (name, still_alert_s). Always read from radio/nodes.json (CONTRACTS.md section 3), at import
@@ -47,6 +47,9 @@ NEVER = ("router_moved", "advice")   # the screen already says these itself
 ZONES: dict = {}
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 NODES = {"unoq": "receiver", "pi5": "router", "pi5b": "second Pi", "east": "east beacon", "west": "west beacon"}
+# Node id -> the device's name in radio/nodes.json ("East beacon"), and each hall beacon as "far beacon on path H".
+# Loaded with the zones. A node with no name there falls back to NODES above.
+DEVICES: dict = {}
 
 # Things the screen must never say. The camera is added once it is off.
 BANNED = re.compile(
@@ -99,8 +102,20 @@ def _link(link) -> str | None:
     return f"{NODES.get(m[1], m[1])} to {NODES.get(m[2], m[2])}" if m else None
 
 
+def _device(node) -> str | None:
+    """A device as a sentence says it: "the East beacon", "Pi B", "the far beacon on path H". None if unknown."""
+    name = DEVICES.get(node) or NODES.get(node)
+    if not name:
+        return None
+    return name if name.startswith("Pi ") else f"the {name}"
+
+
 def _dbm(v) -> int | None:
     return round(v) if isinstance(v, (int, float)) else None
+
+
+def _cap(text: str) -> str:
+    return text[:1].upper() + text[1:]
 
 
 def template(kind: str, info: dict) -> str | None:
@@ -110,6 +125,7 @@ def template(kind: str, info: dict) -> str | None:
     link = _link(info.get("link"))
     before, after = _dbm(info.get("before_dbm")), _dbm(info.get("after_dbm"))
     limit = info.get("limit_s") or ZONES.get(info.get("zone"), (None, None))[1]
+    device = _device(info.get("node"))
     if desk():   # the strip in front of the desk: "on the left", "stepped up", no rooms
         sentences = {
             "enter": f"Someone just stepped up {zone}." if zone else "Someone just stepped up to the desk.",
@@ -133,6 +149,9 @@ def template(kind: str, info: dict) -> str | None:
         "checkin": f"Check-in received from {zone}." if zone else "Check-in received on the router link.",
         "armed": "Armed: this space should be empty now.",
         "disarmed": "Disarmed: people are expected here again.",
+        # Tamper (section 6): what happened to the device, never why or who. The same words as the incident report.
+        "tamper": f"{_cap(device or 'a device')} went quiet while the space was armed.",
+        "tamper_cleared": f"{_cap(device or 'the quiet device')} is back.",
         "intrusion": f"Someone is here while armed, in {zone}." if zone else "Someone is here while armed.",
         "object_on": f"A new object{near or (' on the desk' if desk() else ' in the room')} is weakening the signal.",
         "object_off": f"The object{near} is gone.",
@@ -177,6 +196,27 @@ def set_zones(zones: dict) -> None:
     ZONES.update(zones)
 
 
+def load_devices(path=NODES_JSON) -> dict:
+    """{node id: name} from nodes.json: each node that has a name, and each hall beacon as
+    "far beacon on path <its letter>". {} if the file can't be read."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+        names = {str(n["id"]): str(n["name"]) for n in doc.get("nodes") or [] if n.get("name")}
+        for b in (doc.get("hall") or {}).get("beacons") or []:
+            names[str(b["node"])] = f"far beacon on path {b['id']}"
+        return names
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        log(f"device names from {path} not readable ({e}); using the built-in ones")
+        return {}
+
+
+def set_devices(names: dict) -> None:
+    DEVICES.clear()
+    DEVICES.update(names)
+
+
+set_devices(load_devices())
 set_zones(load_zones())   # whoever imports this (the service, the recap, the rehearsal) gets the layout's zones
 
 
@@ -513,6 +553,7 @@ def main(argv=None) -> int:
     p.add_argument("--nodes", default=str(NODES_JSON), help="radio/nodes.json, for the zones")
     args = p.parse_args(argv)
     set_zones(load_zones(args.nodes))
+    set_devices(load_devices(args.nodes))
     llm = LlamaServer(args.llm)
 
     if args.once:
