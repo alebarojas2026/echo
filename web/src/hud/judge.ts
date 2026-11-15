@@ -22,7 +22,7 @@ import { mountReplay } from './replay'
 import { recordsClient } from './records'
 import { holdAdvice } from './dead-zone'
 
-type Panel = { update(state: StateMsg | null, stale: boolean): void; dispose?(): void }
+type Panel = { update(state: StateMsg | null, stale: boolean): void; dispose?(): void; reset?(): void }
 type PanelModule = { mountPanel(root: HTMLElement): Panel }
 const extraPanels = import.meta.glob<PanelModule>('./judge-*-panel.ts', { eager: true })
 const controlModule = import.meta.glob<{ mountHudControls(root: HTMLElement, send: (message: { cmd: Parameters<Feed['send']>[0]; args: Record<string, string | boolean> }) => void): void }>('./controls.ts', { eager: true })
@@ -68,6 +68,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     root.querySelector('.judge-extra')!.append(container)
     return module.mountPanel(container)
   })
+  const offPanelEvents = live?.onEvent(event => { if (event.kind === 'reset') panels.forEach(panel => panel.reset?.()) })
   const operator = root.querySelector<HTMLElement>('.hud-operator')!
   operator.hidden = new URLSearchParams(location.search).get('op') !== '1'
   Object.values(controlModule)[0]?.mountHudControls(root.querySelector('.operator-controls')!, message => feed?.send(message.cmd, message.args))
@@ -140,7 +141,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 

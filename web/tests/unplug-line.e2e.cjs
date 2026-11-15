@@ -1,0 +1,22 @@
+const {test,expect}=require('@playwright/test')
+const fs=require('node:fs'),path=require('node:path')
+require('./layout-fixture.cjs')
+for(const [width,height] of [[1920,1080],[1440,900]]) test(`unplug is one stationary line at ${width}`,async({page})=>{
+ await page.setViewportSize({width,height}); await page.emulateMedia({reducedMotion:'reduce'}); await page.clock.install()
+ await page.goto('/tests/arrival-harness.html?scan=0&op=1')
+ await page.getByTestId('skip-arrival').click(); await page.keyboard.press('Escape')
+ await page.evaluate(()=>window.arrival.update('still',{cam:'on',t:100000,narration:{text:'The radio is following the room.',source:'template'}}))
+ const narrator=page.getByTestId('narrator-text'), line=page.getByTestId('cam-status')
+ const y=(await narrator.boundingBox()).y
+ await page.evaluate(()=>window.arrival.update('still',{cam:'off',t:101000,narration:{text:'The radio is following the room.',source:'template'}}))
+ await expect(line).toHaveText('Radio only · 0:00')
+ expect(await line.evaluate(e=>e.getAnimations().length)).toBe(0)
+ expect((await narrator.boundingBox()).y).toBe(y)
+ await expect(page.getByTestId('camera-unplug')).toHaveCount(0)
+ await page.evaluate(()=>window.arrival.update('still',{cam:'off',t:108000,narration:{text:'The radio is following the room.',source:'template'}}))
+ await expect(line).toHaveText('Radio only · 0:07')
+ expect((await narrator.boundingBox()).y).toBe(y)
+ if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-unplug.png`)})}
+ await page.evaluate(()=>{window.arrival.event('reset');window.arrival.update('still',{cam:'off',t:109000})})
+ await expect(line).toHaveText('Radio only')
+})
