@@ -1,0 +1,3 @@
+{"ok":true,"checked":3600,"first_bad_seq":12,"ms":41}
+{"ok":false,"checked":3600,"first_bad_seq":null,"ms":41}
+{"ok":true,"checked":3600,"first_bad_seq":null}
