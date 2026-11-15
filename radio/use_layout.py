@@ -3,6 +3,7 @@
     python -m radio.use_layout            # says which layout is active and lists the others
     python -m radio.use_layout gate       # one spot between Pi B and the desk: three devices, six links, one zone
     python -m radio.use_layout gate-3     # the same spot with only the three lines that cross it
+    python -m radio.use_layout gate-fan   # the gate plus up to three laptops on the far desk, each one more Wi-Fi line
     python -m radio.use_layout desk       # the desk strip: five devices, twelve links, two zones
 
 Every part reads radio/nodes.json (CONTRACTS.md section 3), so switching is one copy:
@@ -69,6 +70,10 @@ def problems(doc):
     for link in links:
         if not isinstance(link.get("crosses_spot", False), bool):
             out.append(f"link {link.get('id')}: crosses_spot is true or false")
+        if not isinstance(link.get("optional", False), bool):
+            out.append(f"link {link.get('id')}: optional is true or false")
+        elif link.get("optional") and link.get("id") == (doc.get("presence") or {}).get("line"):
+            out.append(f"link {link.get('id')}: the presence line can't be optional")
     rule = doc.get("presence")
     if rule is not None:
         known = {link.get("id") for link in links}

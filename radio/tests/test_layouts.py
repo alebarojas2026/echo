@@ -144,3 +144,48 @@ def test_on_the_gate_the_wifi_line_to_pi_b_decides_and_pi_bs_roles_keep_it_alive
         roles = {n["id"]: n["roles"] for n in d["nodes"]}
         assert "receiver" in roles["pi5b"] and "router" in roles["pi5"]        # Pi B reads the hotspot's signal: never a beacon only
     assert doc("gate")["links"][0]["crosses_spot"] is False                    # pi5>unoq:wifi crosses nothing
+
+
+def test_gate_fan_is_the_gate_plus_three_laptops_each_one_more_optional_line():
+    d, gate = doc("gate-fan"), doc("gate")
+    assert d["nodes"][:3] == gate["nodes"] and d["links"][:6] == gate["links"]      # the gate, untouched
+    for key in ("frame", "zones", "zone_rule", "router_spots", "tray_spots", "armed", "beacons", "presence"):
+        assert d[key] == gate[key]                                                   # no new zones, the same rule
+    at = {n["id"]: n["xyz_m"] for n in d["nodes"]}
+    bx, by, bz = at["pi5b"]
+    assert [(n["id"], n["device"], n["roles"]) for n in d["nodes"][3:]] == \
+        [(f"laptop{i}", "laptop", ["receiver"]) for i in (1, 2, 3)]
+    # along Pi B's desk at its height, 0.6 m either side of Pi B and one 0.6 m further east
+    assert [at[f"laptop{i}"] for i in (1, 2, 3)] == [[bx + 0.6, by, bz], [round(bx - 0.6, 3), by, bz], [bx + 1.2, by, bz]]
+    assert d["links"][6:] == [{"id": f"pi5>laptop{i}:wifi", "tx": "pi5", "rx": f"laptop{i}", "kind": "wifi",
+                               "expected_hz": None, "crosses_spot": True, "classifier": False, "optional": True}
+                              for i in (1, 2, 3)]
+    assert d["presence"]["line"] == "pi5>pi5b:wifi"                                  # Pi B's line still decides
+    assert all(check.errors({"v": 2, "type": "rssi", "t": 1, "seq": 0, "src": "live", "link": link["id"],
+                             "kind": "wifi", "tx": "pi5", "rx": link["rx"], "dbm": -49}) == [] for link in d["links"][6:])
+
+
+def test_no_other_layout_has_an_optional_line_and_the_presence_line_cannot_be_one():
+    assert not any(link.get("optional") for name in NAMES if name != "gate-fan" for link in doc(name)["links"])
+    d = doc("gate-fan")
+    d["links"][3]["optional"] = True
+    assert any("can't be optional" in p for p in use_layout.problems(d))
+    d = doc("gate-fan")
+    d["links"][6]["optional"] = "yes"
+    assert any("optional is true or false" in p for p in use_layout.problems(d))
+
+
+def test_the_readers_and_the_bus_run_on_the_fan_layout_and_the_laptops_are_no_pis():
+    import os
+    import subprocess
+    import sys
+    code = ("import json; from radio import nodes as n, wifi_rssi as w, hci_scan; from bus import core;"
+            "w.set_link('pi5>pi5b:wifi');"
+            "print(json.dumps([list(n.LINKS), n.RECEIVERS, n.PIS, [w.TX, w.RX], core.load_link_ids(str(n.PATH))]))")
+    out = subprocess.run([sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True, timeout=30,
+                         env={**os.environ, "RADIO_SIGHT_NODES": str(use_layout.LAYOUTS / "gate-fan.json")})
+    assert out.returncode == 0, out.stderr
+    links, receivers, pis, ends, bus_links = json.loads(out.stdout)
+    assert links[6:] == ["pi5>laptop1:wifi", "pi5>laptop2:wifi", "pi5>laptop3:wifi"] and bus_links == links
+    assert receivers == ["unoq", "pi5", "pi5b", "laptop1", "laptop2", "laptop3"]
+    assert pis == ["pi5", "pi5b"] and ends == ["pi5", "pi5b"]            # a laptop runs no scanner and no beacon

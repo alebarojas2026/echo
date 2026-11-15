@@ -137,7 +137,10 @@ def test_the_rssi_schema_pins_tx_rx_and_kind_for_every_link():
              for r in SCHEMAS["rssi"]["allOf"]}
     core = {link["id"]: {"tx": link["tx"], "rx": link["rx"], "kind": link["kind"]} for link in DOC["links"]}
     hall = {link: {"tx": link[0], "rx": link[2:].split(":")[0], "kind": "ble"} for link in HALL_LINKS}
-    assert rules == {**core, **hall}
+    laptops = {f"pi5>{node}:wifi": {"tx": "pi5", "rx": node, "kind": "wifi"} for node in DEFS["laptop_node"]["enum"]}
+    assert rules == {**core, **hall, **laptops}
+    assert DEFS["laptop_link"]["enum"] == list(laptops)                 # the optional laptops: never core links
+    assert not set(laptops) & set(DEFS["link"]["enum"]) and not set(DEFS["laptop_node"]["enum"]) & set(DEFS["node"]["enum"])
 
 
 def test_hall_beacons_have_their_own_letters_and_are_never_core():

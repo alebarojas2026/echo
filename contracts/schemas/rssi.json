@@ -5,10 +5,10 @@
   "$ref": "common.json#/$defs/envelope",
   "properties": {
     "type": {"const": "rssi"},
-    "link": {"anyOf": [{"$ref": "common.json#/$defs/link"}, {"$ref": "common.json#/$defs/hall_link"}]},
+    "link": {"anyOf": [{"$ref": "common.json#/$defs/link"}, {"$ref": "common.json#/$defs/hall_link"}, {"$ref": "common.json#/$defs/laptop_link"}]},
     "kind": {"enum": ["wifi", "ble"]},
     "tx": {"anyOf": [{"$ref": "common.json#/$defs/node"}, {"$ref": "common.json#/$defs/hall_node"}]},
-    "rx": {"$ref": "common.json#/$defs/node"},
+    "rx": {"anyOf": [{"$ref": "common.json#/$defs/node"}, {"$ref": "common.json#/$defs/laptop_node"}]},
     "dbm": {"type": "number"}
   },
   "required": ["link", "kind", "tx", "rx", "dbm"],
@@ -31,6 +31,9 @@
     {"if": {"properties": {"link": {"const": "h>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "h"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}},
     {"if": {"properties": {"link": {"const": "j>pi5:ble"}}}, "then": {"properties": {"tx": {"const": "j"}, "rx": {"const": "pi5"}, "kind": {"const": "ble"}}}},
     {"if": {"properties": {"link": {"const": "h>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "h"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}},
-    {"if": {"properties": {"link": {"const": "j>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "j"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}}
+    {"if": {"properties": {"link": {"const": "j>pi5b:ble"}}}, "then": {"properties": {"tx": {"const": "j"}, "rx": {"const": "pi5b"}, "kind": {"const": "ble"}}}},
+    {"if": {"properties": {"link": {"const": "pi5>laptop1:wifi"}}}, "then": {"properties": {"tx": {"const": "pi5"}, "rx": {"const": "laptop1"}, "kind": {"const": "wifi"}}}},
+    {"if": {"properties": {"link": {"const": "pi5>laptop2:wifi"}}}, "then": {"properties": {"tx": {"const": "pi5"}, "rx": {"const": "laptop2"}, "kind": {"const": "wifi"}}}},
+    {"if": {"properties": {"link": {"const": "pi5>laptop3:wifi"}}}, "then": {"properties": {"tx": {"const": "pi5"}, "rx": {"const": "laptop3"}, "kind": {"const": "wifi"}}}}
   ]
 }

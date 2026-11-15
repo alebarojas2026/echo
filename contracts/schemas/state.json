@@ -10,7 +10,7 @@
     "links": {"type": "array", "items": {
       "$comment": "Listed once it has a reading. Before the baseline base_dbm, drop_db and expected_hz are null and status is ok or stale.",
       "type": "object",
-      "properties": {"id": {"$ref": "common.json#/$defs/link"}, "dbm": {"type": "number"}, "base_dbm": {"type": ["number", "null"]}, "drop_db": {"type": ["number", "null"]},
+      "properties": {"id": {"anyOf": [{"$ref": "common.json#/$defs/link"}, {"$ref": "common.json#/$defs/laptop_link"}]}, "dbm": {"type": "number"}, "base_dbm": {"type": ["number", "null"]}, "drop_db": {"type": ["number", "null"]},
                      "rate_hz": {"type": "number", "minimum": 0}, "expected_hz": {"type": ["number", "null"], "minimum": 0},
                      "status": {"enum": ["ok", "stale", "blind"]}, "why": {"type": "number"}},
       "required": ["id", "dbm", "base_dbm", "drop_db", "rate_hz", "expected_hz", "status", "why"], "additionalProperties": false,

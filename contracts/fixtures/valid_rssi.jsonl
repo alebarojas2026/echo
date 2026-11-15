@@ -7,3 +7,4 @@
 {"v":2,"type":"rssi","t":1763149512120,"seq":43,"src":"live","link":"pi5>pi5b:ble","kind":"ble","tx":"pi5","rx":"pi5b","dbm":-61}
 {"v":2,"type":"rssi","t":1763149512120,"seq":884,"src":"live","link":"h>unoq:ble","kind":"ble","tx":"h","rx":"unoq","dbm":-88}
 {"v":2,"type":"rssi","t":1763149512120,"seq":44,"src":"live","link":"j>pi5b:ble","kind":"ble","tx":"j","rx":"pi5b","dbm":-88}
+{"v":2,"type":"rssi","t":1763149512120,"seq":12,"src":"live","link":"pi5>laptop2:wifi","kind":"wifi","tx":"pi5","rx":"laptop2","dbm":-49}

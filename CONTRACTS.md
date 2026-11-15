@@ -118,6 +118,20 @@ Hall links (optional): up to two more beacons far outside the layout, as tripwir
   there and never appear in state.links, health, pred.why, xray, objects, checkin or advice.
   A hall link that has been calibrated is listed under "hall" too: "links": [{"id": "h>unoq:ble", "empty_quiet_db": n}]
   (optional). empty_quiet_db is that link's quiet level measured once with the hall empty (Hall activity, section 6).
+Laptops as extra Wi-Fi lines (optional; radio/layouts/gate-fan.json): a laptop joined to Pi A's hotspot is a Wi-Fi
+  client like Pi B, so its own reading of that signal is one more line across the spot. Up to three: nodes laptop1,
+  laptop2, laptop3 (receiver only, device "laptop"), links pi5>laptop1:wifi, pi5>laptop2:wifi, pi5>laptop3:wifi. Each
+  laptop runs python3 -m radio.laptop_line --node <id> and sends ordinary section 4 rssi messages to
+  192.168.77.2:5600, about 10 a second. It reads only the laptop's own signal strength: never a network name, an
+  address or another device. The schemas name them laptop_node and laptop_link: they are not among the twelve
+  links, and the only messages that carry them are rssi and a row of state.links.
+  Such a link carries "optional": true (missing means false) and "classifier": false. An optional link is a thin
+  link (above) whose receiver may also be missing or go silent at any time (a lid closes): its row is ok or stale,
+  never blind; it never makes health degraded; it is left out of Tamper, for its own node and for the node at its
+  other end; and no baseline waits for it. While it has readings and "crosses_spot" is true it is drawn, and on a
+  layout with a presence line it is one more second opinion: it can hold presence while the presence line is
+  silent, on the second line's terms (off_db, second_hold_s), and never raises it. The presence line itself is
+  never optional. Where a person stands along the row is not worked out from these lines here.
 Armed (optional): "armed": {"hold_s": n} = how long a person must stay before an intrusion is raised (Armed, section 6).
   Missing means 3. Use 4 for a very busy aisle.
 Layout files: radio/layouts/<name>.json are whole layout files. python -m radio.use_layout <name> copies one over

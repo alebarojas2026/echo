@@ -6,8 +6,8 @@
   "properties": {
     "nodes": {"$comment": "Section 3: device is the kind of hardware, for the screen's model. Optional.", "type": "array", "items": {
       "type": "object", "properties": {"device": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,23}$"}}}},
-    "links": {"$comment": "Section 3: classifier false keeps a thin link out of the model and out of health blind. Missing means true.", "type": "array", "items": {
-      "type": "object", "properties": {"classifier": {"type": "boolean"},
+    "links": {"$comment": "Section 3: classifier false keeps a thin link out of the model and out of health blind. Missing means true. optional true is a line whose receiver may be switched off (a laptop): silent is not a fault. Missing means false.", "type": "array", "items": {
+      "type": "object", "properties": {"classifier": {"type": "boolean"}, "optional": {"type": "boolean"},
                                        "crosses_spot": {"$comment": "true = a person on the spot stands in this line. Missing: the layout does not say.", "type": "boolean"}}}},
     "presence": {"$comment": "Section 6, Presence line: the one line that decides whether somebody is on the spot, and the numbers of its rules. Every number is optional and has the default in section 6.", "type": "object",
                  "properties": {"line": {"$ref": "common.json#/$defs/link"}, "second": {"$ref": "common.json#/$defs/link"},
