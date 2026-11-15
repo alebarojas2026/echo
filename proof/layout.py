@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-# Today's square has no centre_m in its zones; these are its centres.
+# Historical square fixtures have no centre_m in their zones.
 SQUARE_CENTRES = {1: (0.5, 1.5), 2: (1.5, 1.5), 3: (0.5, 0.5), 4: (1.5, 0.5)}
 
 
@@ -42,8 +42,11 @@ def zones(doc):
 def zone_at(doc, x, y):
     """The zone a floor point lies in, or 0 when it lies in none.
 
-    A point on the strip's back edge (the desk edge) counts as outside: nobody stands on it.
+    Split strips exclude the back edge. A single area includes its declared boundary.
     """
+    if len(doc["zones"]) == 1:
+        width, depth = doc["frame"].get("strip_m") or doc["frame"]["size_m"]
+        return int(doc["zones"][0]["id"]) if 0<=x<=width and 0<=y<=depth else 0
     if is_strip(doc):
         width, depth = doc["frame"]["strip_m"]
         if not (0 <= x <= width and 0 <= y < depth):
@@ -78,7 +81,9 @@ def link_zones(doc):
     if is_spot(doc) and any("crosses_spot" in link for link in doc["links"]):
         return {link["id"]: int(doc["zones"][0]["id"]) for link in doc["links"] if link.get("crosses_spot")}
     out = {}
+    enabled = {link["id"] for link in doc["links"] if link.get("classifier",True) is not False}
     for link, (x, y) in link_midpoints(doc).items():
+        if link not in enabled: continue
         zone = zone_at(doc, x, y)
         if zone:
             out[link] = zone
