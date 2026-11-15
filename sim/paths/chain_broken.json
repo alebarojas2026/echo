@@ -1,0 +1,7 @@
+{
+  "name": "chain_broken",
+  "about": "The check fails at a named record: at 12 s record 9 of the stored chain is altered (as if someone had edited it). From then on state.chain says verified false, and the chain check names record 9. The witnesses keep signing. Simulated.",
+  "duration_s": 30,
+  "person": [{"t": 0, "x": null}, {"t": 6, "zone": "tour1", "edge": "west"}, {"t": 6.5, "zone": "tour1"}, {"t": 20, "zone": "tour1"}, {"t": 20.5, "zone": "tour1", "edge": "west"}, {"t": 20.6, "x": null}],
+  "chain": {"witnesses": ["pi5", "pi5b"], "bad": {"t": 12, "seq": 9}}
+}

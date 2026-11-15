@@ -1,0 +1,7 @@
+{
+  "name": "witness_silent",
+  "about": "One witness goes silent and comes back: both sign until 8 s, then Pi B signs nothing until 34 s. 15 s after its last signature (at 20 s) the record holds witness_silent for it and state.chain says 1 of 2; at 35 s it signs again, the record holds witness_back and state.chain says 2 of 2. The chain goes on throughout. Simulated.",
+  "duration_s": 45,
+  "person": [{"t": 0, "x": null}, {"t": 6, "zone": "tour1", "edge": "west"}, {"t": 6.5, "zone": "tour1"}, {"t": 20, "zone": "tour1"}, {"t": 20.5, "zone": "tour1", "edge": "west"}, {"t": 20.6, "x": null}],
+  "chain": {"witnesses": ["pi5", "pi5b"], "silent": [{"node": "pi5b", "t_on": 8, "t_off": 34}]}
+}
