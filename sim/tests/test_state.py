@@ -416,3 +416,10 @@ def test_a_link_pi_b_hears_degrades_health_but_never_blinds_it(square, monkeypat
     assert late["health"]["status"] == "degraded" and late["health"]["blind"] == []
     assert next(l for l in late["links"] if l["id"] == "west>pi5b:ble")["status"] == "stale"
     assert late["pred"] is not None                                   # predictions carry on
+
+
+def test_the_demo_alerts_once_and_only_in_the_alert_zone(each_layout):
+    # Both of the strip's zones alert after 10 s, so the steps about in the calm zone must reset the
+    # still timer (5 moving decisions in a row): only the stand in the alert zone raises it.
+    _, events = run("demo")
+    assert [e["info"]["zone"] for e in events if e["kind"] == "alert_on"] == [each_layout.still_zone()]

@@ -54,14 +54,22 @@ def test_each_tool_answers_from_its_rows(store, tool):
     assert numbers_in(reply["answer"]) <= numbers_in(reply["rows"]) | {str(reply["args"]["minutes"])}
 
 
+def quiet_zone(store) -> int:
+    """A zone the demo path never visits, from what the store saved: the layout in radio/nodes.json
+    decides which zones the sim walks (the square: 3 and 4; the desk strip: 1 and 2)."""
+    visited = {r["zone"] for r in store.seconds() if r["present"]}
+    return min(set(ZONES) - visited)
+
+
 def test_a_zone_and_a_link_narrow_the_answer(store):
-    assert "Nobody was seen in Bed" in run(store, "presence", zone=1)["answer"]
+    quiet = quiet_zone(store)
+    assert f"Nobody was seen in {ZONES[quiet]}" in run(store, "presence", zone=quiet)["answer"]
     assert {r.get("zone", 4) for r in run(store, "presence", zone=4)["rows"]} == {4}
     assert [r["link"] for r in run(store, "link_history", link="pi5>unoq:wifi")["rows"]] == ["pi5>unoq:wifi"]
 
 
 def test_no_prediction_is_never_reported_as_nobody(store):
-    assert "there was no prediction, so I can't say" in run(store, "presence", zone=1)["answer"]
+    assert "there was no prediction, so I can't say" in run(store, "presence", zone=quiet_zone(store))["answer"]
 
 
 def test_an_empty_store_says_it_has_no_records():
