@@ -86,7 +86,7 @@ test('camera wording, cancelled handoff and disposal', async ({ page }) => {
 
 // The card over the live hall (#552): it says what it shows, so the room rests on the hall and flies down on time.
 async function overHall(page, options = {}) {
-  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.setViewportSize({ width: options.width ?? 1920, height: options.height ?? 1080 })
   if (options.reduced) await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') })
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'))
@@ -107,6 +107,7 @@ test('waiting shows the room beside readable words, and found fades the card as 
     const box = await card.locator(part).boundingBox()
     expect(box.x + box.width).toBeLessThanOrEqual(640)
   }
+  await expect(page.locator('.room-legend')).toBeHidden()
   await capture(page, '1920-over-hall-waiting')
   await page.evaluate(() => window.arrival.update('still'))
   await page.clock.runFor(1500 + 1100)
@@ -116,6 +117,7 @@ test('waiting shows the room beside readable words, and found fades the card as 
   await page.clock.runFor(200)
   expect(await phase(page)).toBe('found')
   await expect(page.locator('#room')).toHaveAttribute('data-arrival', 'found')
+  await expect(page.locator('.room-legend')).toBeVisible()
   for (const [ms, name] of [[400, 'fly-1'], [600, 'fly-2'], [600, 'fly-3']]) {
     await page.clock.runFor(ms)
     expect(Number(await card.locator('.arrival-message').evaluate(el => getComputedStyle(el).opacity))).toBeLessThan(1)
@@ -187,8 +189,7 @@ test('a 1 s presence is not greeted, a 2 s presence is', async ({ page }) => {
 })
 for (const [width, height] of [[1920, 1080], [1440, 900]]) {
   test(`armed: passed by is one calm line, an intrusion is the alarm, at ${width}`, async ({ page }) => {
-    await overHall(page)
-    await page.setViewportSize({ width, height })
+    await overHall(page, { width, height })
     const title = page.getByTestId('arrival-title')
     const line = page.getByTestId('arrival-passed')
     await page.evaluate(() => window.arrival.update('empty', { armed: true }))
