@@ -6,7 +6,7 @@ import { changingText, framesDrawn } from './changing-text'
 import './arrival.css'
 import { judgeMoment } from './judge-moment'
 import { blindSentence } from './health-words'
-import { hudLayout, zonePlace } from './layout'
+import { hudLayout, loadHudLayout, zonePlace } from './layout'
 import { boardNow } from './board-time'
 
 type ArrivalState = StateMsg & { armed?: boolean }
@@ -135,7 +135,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     clearTimeout(wake)
     wake = undefined
     // The one-spot kit has no camera at all; the camera lesson is the other layouts' story.
-    claim.textContent = hudLayout.zones.length === 1 ? 'A witness that never watches.' : 'Taught by a camera. Runs without one.'
+    claim.textContent = 'A witness that never watches.'
     arm.textContent = state?.armed ? 'Disarm space' : 'Arm space'
     arm.disabled = !feed || stale
     source.textContent = sourceWords(state)
@@ -219,5 +219,6 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   // A tab brought back to the front, or a laptop that woke up: the card is worked out again at once.
   document.addEventListener('visibilitychange', render)
   render()
+  void loadHudLayout().then(() => { if (view.isConnected) render() })
   return () => { document.removeEventListener('visibilitychange', render); disposePrivacy(); cancelHold(); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
 }

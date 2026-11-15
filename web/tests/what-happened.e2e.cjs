@@ -10,6 +10,9 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`one tap timeline, fai
  await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
  await page.evaluate(()=>window.arrival.update('empty',{model:{trained:false,ver:null},teacher:null,cam:'off',baseline:{state:'idle'}}))
  expect(await page.locator('body').innerText()).not.toMatch(/camera|lesson/i)
+ await page.evaluate(()=>window.arrival.update('empty',{cam:'on',model:{trained:false,training:{lesson:{started_t:1000,agree:3,of:10}}}}))
+ await expect(page.getByTestId('cam-status')).toBeHidden();await expect(page.getByTestId('lesson-status')).toBeHidden();await expect(page.getByTestId('handoff-strip')).toBeHidden()
+ await page.evaluate(()=>window.arrival.update('empty',{cam:'off',model:{trained:false,ver:null},teacher:null}))
  const shot=async name=>{if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-${name}.png`)})}}
  await page.getByTestId('what-happened').click()
  await expect(page.locator('.story-timeline li')).toHaveCount(2);expect(requests).toEqual([{question:'what happened in the last five minutes'}])
