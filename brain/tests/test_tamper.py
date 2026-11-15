@@ -127,3 +127,71 @@ def test_the_brain_raises_tamper_while_blind_lists_the_node_and_reset_clears_it(
     assert "tamper" not in state and seen[-1] == ("tamper_cleared", {"node": "east"})
     tick(10, silent=["east"])
     assert len(seen) == 2                                                      # not armed: nothing more
+
+
+def hall_brain():
+    """The square with the two optional hall beacons in nodes.json."""
+    doc = json.loads(json.dumps(DOC))
+    doc["hall"] = {"beacons": [{"node": "h", "id": "H", "xyz_m": None}, {"node": "j", "id": "J", "xyz_m": None}]}
+    clock = [T0]
+    brain = Brain(clock=lambda: clock[0], nodes=doc)
+    seen = []
+
+    def tick(seconds, hall=()):
+        for _ in range(int(seconds * 10)):
+            clock[0] += 100
+            for link in LINKS + list(hall):
+                brain.on_message({"v": 2, "type": "rssi", "recv_t": clock[0], "src": "sim", "link": link,
+                                  "kind": "ble", "tx": link.split(">")[0], "rx": "unoq", "dbm": -70})
+            state = brain.state()
+            seen.extend((e["kind"], e["info"]) for e in brain.pop_events() if e["kind"].startswith("tamper"))
+        return state
+
+    brain._set_baseline({link: -70.0 for link in LINKS}, {link: 10.0 for link in LINKS})
+    return brain, tick, seen
+
+
+def test_a_hall_beacon_heard_since_arming_that_goes_silent_is_a_tamper():
+    brain, tick, seen = hall_brain()
+    tick(3, hall=["h>unoq:ble", "h>pi5:ble"])
+    brain.on_cmd(cmd("arm", on=True))
+    state = tick(5, hall=["h>unoq:ble", "h>pi5:ble"])
+    assert "tamper" not in state and seen == []
+    assert [row["id"] for row in state["links"]] == LINKS                     # a hall link is never a core link
+    tick(5, hall=["h>pi5:ble"])                                               # one receiver still hears it: not silent
+    assert seen == []
+    state = tick(4)                                                           # switched off: nobody hears it
+    assert state["tamper"] == ["h"] and seen == [("tamper", {"node": "h"})]
+    assert state["health"]["status"] == "ok"                                  # the sensor itself is fine
+    state = tick(3, hall=["h>unoq:ble", "h>pi5:ble"])                         # back on
+    assert "tamper" not in state and seen[-1] == ("tamper_cleared", {"node": "h"}) and len(seen) == 2
+
+
+def test_a_hall_beacon_not_heard_since_arming_is_never_a_tamper():
+    brain, tick, seen = hall_brain()
+    tick(3, hall=["j>unoq:ble"])                                              # J was on before, and goes off
+    tick(5)
+    brain.on_cmd(cmd("arm", on=True))                                         # armed with J already off, H never on
+    tick(10)
+    assert seen == []
+    tick(2, hall=["j>unoq:ble"])                                              # J comes on while armed, then goes
+    tick(5)
+    assert seen == [("tamper", {"node": "j"})]
+    brain.on_cmd(cmd("arm", on=False))
+    tick(1)
+    assert seen[-1] == ("tamper_cleared", {"node": "j"})
+    brain.on_cmd(cmd("arm", on=True))                                         # armed again: J has not been heard since
+    tick(10)
+    assert len(seen) == 2
+
+
+def test_a_layout_with_no_hall_beacons_ignores_readings_that_look_like_one():
+    clock = [T0]
+    brain = Brain(clock=lambda: clock[0])
+    brain.on_cmd(cmd("arm", on=True))
+    for i in range(80):
+        clock[0] += 100
+        for link in LINKS + (["h>unoq:ble"] if i < 20 else []):
+            brain.on_message({"v": 2, "type": "rssi", "recv_t": clock[0], "src": "sim", "link": link, "dbm": -70})
+        assert "tamper" not in brain.state()
+    assert not [e for e in brain.pop_events() if e["kind"].startswith("tamper")]

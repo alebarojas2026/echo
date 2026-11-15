@@ -189,6 +189,10 @@ class Tamper:
     One step past the contract's wording, so two devices can come back one at a time: a node's
     links to another node that is itself still listed are left out when judging whether it is
     back (it can't be blamed for the other one's silence), as long as one of its links remains.
+
+    The optional hall beacons (nodes.json "hall") count as nodes too, each once it has been heard
+    since arming, on the links it has been heard on since then. One that was never switched on, or
+    was already off when the space was armed, is not a tamper.
     """
 
     def __init__(self, links_of: Dict[str, List[str]], silent_ms: int = TAMPER_SILENT_MS,
@@ -199,6 +203,8 @@ class Tamper:
         self.silent: List[str] = []                     # listed nodes, in the order they went silent
         self._back_since: Dict[str, int] = {}
         self._start: Optional[int] = None
+        self._core = dict(self.links_of)                # the layout's own nodes
+        self._armed_at: Optional[int] = None
 
     @classmethod
     def from_nodes(cls, doc, **settings) -> "Tamper":
@@ -208,14 +214,27 @@ class Tamper:
                 links_of.setdefault(node, []).append(link["id"])
         return cls(links_of, **settings)
 
-    def update(self, now: int, armed: bool, last_seen: Dict[str, int]) -> List[tuple]:
-        """One tick. last_seen: {link: recv_t of its last reading}. Returns (kind, {"node": id}) events."""
+    def update(self, now: int, armed: bool, last_seen: Dict[str, int],
+               hall_seen: Optional[Dict[str, Dict[str, int]]] = None) -> List[tuple]:
+        """One tick. last_seen: {link: recv_t of its last reading}. hall_seen: the same per hall
+        beacon, {node: {link: recv_t}}. Returns (kind, {"node": id}) events."""
         if self._start is None:
             self._start = now
         if not armed:
             events = [("tamper_cleared", {"node": node}) for node in self.silent]
             self.silent, self._back_since = [], {}
+            self.links_of, self._armed_at = dict(self._core), None   # hall beacons are counted afresh next time
             return events
+        if self._armed_at is None:
+            self._armed_at = now
+        for node, seen in (hall_seen or {}).items():
+            if node in self._core:
+                continue
+            known = self.links_of.get(node, [])
+            heard = [link for link, t in seen.items() if t >= self._armed_at and link not in known]   # since arming
+            if known or heard:
+                self.links_of[node] = known + heard
+                last_seen = {**last_seen, **{link: seen[link] for link in self.links_of[node]}}
 
         def quiet(link):   # a link never heard counts from when this rule first ran, not from for ever
             return now - last_seen.get(link, self._start) >= self.silent_ms
