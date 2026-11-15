@@ -45,3 +45,24 @@ describe('a layout with a presence line has no camera', () => {
     expect(new CameraSeen().absent(state('off'), { ...hudLayout, presence: null })).toBe(false)
   })
 })
+
+describe('the one spot says one thing about moving and still', () => {
+  const gateLayout = { ...hudLayout, zones: [{ id: 1, name: 'At the desk', still_alert_s: 10 }], presence: { line: 'pi5>pi5b:wifi' } }
+  const standing = (motion: string, alert: object) => ({ ...mockState('still', 0, 7000), router: 'S-home', pred: { present: true, kind: 'person', zone: 1, zone_set: [1], motion, why: [] }, alert }) as unknown as ReturnType<typeof mockState>
+  it('the headline is "standing still" while the no-movement alert is up, whatever one decision says', async () => {
+    const { spotMoment } = await import('./spot-moment')
+    expect(spotMoment(standing('moving', { state: 'check_on', zone: 1, still_s: 26, limit_s: 10 }), gateLayout)?.[0]).toBe('Someone is here, standing still')
+    expect(spotMoment(standing('moving', { state: 'counting', zone: 1, still_s: 3, limit_s: 10 }), gateLayout)?.[0]).toBe('Someone is here, moving')
+  })
+  it('the still count is not shown beside "moving", and no alert is shown on an empty spot', async () => {
+    const { stillness } = await import('./judge-stillness-panel')
+    const before = hudLayout.presence
+    hudLayout.presence = gateLayout.presence
+    try {
+      expect(stillness(standing('moving', { state: 'counting', zone: 1, still_s: 9, limit_s: 10 }), false).text).toBe('')
+      expect(stillness(standing('still', { state: 'counting', zone: 1, still_s: 9, limit_s: 10 }), false).text).toBe('Still for 9 s of 10')
+      const left = { ...standing('still', { state: 'check_on', zone: 1, still_s: 0, limit_s: 10 }), checkin: null, pred: { present: false, kind: 'none', zone: 0, zone_set: [], motion: null, why: [] } } as unknown as ReturnType<typeof mockState>
+      expect(stillness(left, false).text).toBe('')
+    } finally { hudLayout.presence = before }
+  })
+})

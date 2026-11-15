@@ -1,16 +1,20 @@
 import type { StateMsg } from '../room/contract'
 import './stillness.css'
+import { shownAlert } from '../room/shown-alert'
+import { hudLayout } from './layout'
 import { zonePlace } from './layout'
 import { zoneName } from './judge-moment'
 import { framesDrawn } from './changing-text'
 
 export function stillness(state: StateMsg | null, stale: boolean) {
   if (!state || stale || state.health.status === 'blind') return { text: '', tone: '', progress: 0, detail: '' }
-  const alert = state.alert
+  const line = hudLayout.presence?.line
+  const alert = shownAlert(state, line)
   if (alert?.state === 'check_on') return { text: `No movement ${zonePlace(alert.zone)} · ${alert.still_s == null ? '__' : Math.floor(alert.still_s)} s`, tone: 'fault', progress: 1, detail: '' }
   const age = state.checkin ? state.t - state.checkin.t : Infinity
   if (age >= 0 && age <= 6000) return { text: 'Check-in received', tone: 'action', progress: 0, detail: '' }
-  if (alert?.state !== 'counting') return { text: '', tone: '', progress: 0, detail: '' }
+  // On the one spot the headline says "moving" then: the still count is not shown beside it.
+  if (alert?.state !== 'counting' || (line && state.pred?.motion === 'moving')) return { text: '', tone: '', progress: 0, detail: '' }
   const seconds = alert.still_s == null ? '__' : Math.floor(alert.still_s)
   const limit = alert.limit_s
   return { text: `Still for ${seconds} s of ${limit ?? '__'}`, tone: 'person', progress: limit && alert.still_s != null ? Math.min(1, Math.max(0, Math.floor(alert.still_s) / limit)) : 0, detail: '' }

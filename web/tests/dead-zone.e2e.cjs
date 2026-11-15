@@ -131,6 +131,7 @@ test('the advice stays while the router is on the advised spot, and goes when it
 })
 
 test('the Wi-Fi line never shows a number it does not have', async ({ page }) => {
+  test.skip(!!layout.presence?.line, 'on a layout with a presence line its number is said once, in the signal row')
   await open(page, 1920, 1080)
   const word = page.getByTestId('wifi-word')
   const value = page.getByTestId('wifi-value')
@@ -148,6 +149,7 @@ test('the Wi-Fi line never shows a number it does not have', async ({ page }) =>
 })
 
 test('a replay hides the Wi-Fi line, because the records hold no link readings', async ({ page }) => {
+  test.skip(!!layout.presence?.line, 'on a layout with a presence line its number is said once, in the signal row')
   await open(page, 1920, 1080)
   await expect(page.getByTestId('wifi-line')).toBeVisible()
   await page.keyboard.press('o')
