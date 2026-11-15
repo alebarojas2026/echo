@@ -372,6 +372,9 @@ The values below show the format only; they are not results.
  "false_alarms_per_min":null, "train_s":8.4, "ms_per_decision":{"p50":3.1,"p95":4.0},
  "watts":{"idle":null,"teaching":null,"radio_only":null,"source":null},
  "bytes_out":0, "images_stored":0, "models_on_board":3, "measured_at":"...", "commit":"...",
+   // bytes_out = bytes sent to the internet over the measured run. The privacy claim is "nothing is sent to the
+   // internet", never "nothing leaves the board": our own laptop and phone, on our own network, receive the
+   // screen's data.
  "security":{
    "detection":{"entries":null,"detected":null,"ci95":null,"armed_entries":null,"intrusions":null,"intrusion_ci95":null,"within_s":2},
    "false_alarms":{"presence_events":null,"intrusions":null,"duration_s":null,"armed_duration_s":null,
