@@ -248,6 +248,7 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
    // armed, disarmed, intrusion (info: {zone} or {link} for a hall link), passed_by (info: {zone}),
    // tamper, tamper_cleared (info: {node}, e.g. {"node":"east"}; a hall beacon is h or j).
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
+   // alert_off on a layout with a presence line also says why: checkin | moved | left | reset.
 ```
 Before readings, a baseline or training exists, the brain still sends state at about 10/s with these values:
 - links: [] until readings arrive (never null). A link is listed once it has at least one reading (dbm is then a number);
@@ -356,13 +357,26 @@ Presence line (only on a layout whose nodes.json has "presence"; every number is
   file, are drawn, show stale in their own rows (health degraded) and count for tamper when their device goes
   quiet; their level never makes the sensor blind, never raises "object" or advice, and never decides present.
   A layout with no presence line keeps every rule it had.
-- The drift follow (Baseline) and the lean-aside check-in read the presence line alone on such a layout: where
-  those rules say "the crossing lines' median drops, averaged", it is this line's drop, only its empty level
-  follows drift (the other lines keep the captured baseline), and the checkin event names it.
+- The drift follow (Baseline) reads the presence line alone on such a layout: where that rule says "the crossing
+  lines' median drops, averaged", it is this line's drop, and only its empty level follows drift (the other lines
+  keep the captured baseline).
+- Check-in on such a layout: "step aside and back" (leaning does not take a body out of the line). While the
+  alert is check_on, pred.present ending for 0.3 s or more and starting again within checkin_return_s (8 s) is one
+  checkin event ({zone, link: the presence line}); it clears the alert and the still timer starts again. Not back
+  within checkin_return_s is the person leaving: alert_off with why "left", no checkin. On screen and in the
+  narrator: "Step aside and back to say you're okay".
+- Alert on such a layout: one decision, no smoothing. still_s counts only while pred is present, kind person and
+  motion still. motion moving (already steady, see below) puts it back to zero and clears an alert (alert_off, why
+  "moved"). With nobody there nothing counts and alert is the empty block at once, even while the brain still
+  waits checkin_return_s for a step back. So in any state message alert.state counting or check_on means pred is
+  present, a person and still, and pred.motion moving or pred.present false means alert.state none. alert_off
+  says why: checkin | moved | left | reset.
 - Spread = the std of the line's readings over the last 2 s. The line arrives 25 times a second and sits within
   1 dB when the spot is empty, so the spread tells a body (it wobbles) from a thing (it does not).
-- Moving and still: motion is "moving" when the spread is at or over the boundary, and "still" again once it is
-  under 0.8 x the boundary. The boundary is moving_spread_db (2 dB) until a lesson has given 20 or more windows of
+- Moving and still: the word is steady. motion becomes "moving" once the spread has stayed at or over the boundary
+  for motion_hold_s (1.5 s), and "still" again once it has stayed under still_spread_db (0.8 x the boundary unless
+  the file says) for as long; between the two it stands. Somebody who has just stepped on starts as still, and the
+  spread never includes readings from before they stood there. The boundary is moving_spread_db (2 dB) until a lesson has given 20 or more windows of
   each kind on this line; then it is the value that best splits that lesson's moving and still windows, kept
   with the model. The Bluetooth lines have no say in it.
 - A thing left in the line: the 2 s median drop is object_db (3 dB) or more and under object_max_db (10 dB; null

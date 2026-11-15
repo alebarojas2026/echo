@@ -229,6 +229,10 @@ class Windower:
             self._labels.append((t, msg))
         return done
 
+    def trail(self, link: str, since: int, end: int) -> List[float]:
+        """The link's readings (dBm) from `since` up to `end`, oldest first. At most the last 2 s are kept."""
+        return [dbm for t, k, dbm in self._rssi if k == link and since <= t < end]
+
     def _close(self, end: int) -> dict:
         start = end - WINDOW_MS
         for q in (self._rssi, self._labels):   # keep 2 s: the object rule looks that far back

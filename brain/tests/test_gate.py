@@ -156,9 +156,11 @@ def test_where_moving_begins_comes_from_the_file_and_then_from_the_lesson(kit):
     # too few windows of a kind, or kinds that don't come apart: the file's value stands
     assert best_split([0.4] * 30, [3.0] * 5) is None and best_split([1.0, 2.0] * 20, [1.0, 2.0] * 20) is None
     assert best_split([0.4, 0.6] * 15, [2.5, 3.5] * 15) == 1.55
-    # a brain with no lesson boundary uses the file's: 2 dB, and still again under 80% of it
-    brain = Brain(nodes=GATE)
-    brain.window = {"long": {"pi5>pi5b:wifi": {"n": 50, "median": -65.0, "std": 1.9}}}
+    # a brain with no lesson boundary uses the file's: 2 dB, and still again under 80% of it (shown here with no
+    # hold; the hold is test_steady_word.py's)
+    brain = Brain(nodes=dict(GATE, presence=dict(GATE["presence"], motion_hold_s=0)))
+    brain._here_t = -10_000
+    brain.window = {"end": 0, "long": {"pi5>pi5b:wifi": {"n": 50, "median": -65.0, "std": 1.9}}}
     assert brain._motion_says() == "still"
     for std, says in ((2.1, "moving"), (1.7, "moving"), (1.5, "still"), (1.9, "still"), (None, "still")):
         brain.window["long"]["pi5>pi5b:wifi"]["std"] = std
@@ -515,25 +517,30 @@ def alerts(events):
     return [e["kind"] for _, e in events if e["kind"] in ("alert_on", "alert_off", "checkin")]
 
 
-def test_leaning_aside_is_the_check_in_and_leaving_ends_the_alert_without_one():
+def test_stepping_aside_and_back_is_the_check_in_and_leaving_ends_the_alert_without_one():
+    """A body leaning aside stays in the line (17 dB eased to 13 on the kit), so on this layout the check-in is
+    stepping out of the line and back."""
     kit = Kit(seed=13).teach()
     kit.play([(4, "nobody")])
     done = 0
-    for lean_s in (0.8, 1.0, 1.3, 1.6, 1.0, 0.8, 1.3, 1.0, 1.6, 1.0):
+    for away_s in (0.8, 1.0, 1.3, 1.6, 3.0, 0.8, 1.3, 5.0, 1.6, 1.0):
         _, rows, events = kit.play([(14, "still")])                   # the limit is 10 s
         assert alerts(events) == ["alert_on"] and rows[-1][1]["alert"]["state"] == "check_on"
-        _, rows, events = kit.play([(lean_s, "lean"), (4, "still")])
+        _, rows, events = kit.play([(away_s, "lean"), (4, "still")])   # "lean" in the feed: nearly out of the lines
         done += alerts(events) == ["checkin", "alert_off"] and rows[-1][1]["checkin"] is not None
         kit.brain.on_cmd(cmd("reset_alert"))
         kit.play([(5, "nobody")])
         kit.brain.pop_events()
-    assert done >= 8, done
+    assert done >= 9, done
     # standing there, still or shifting, is never taken for a check-in
-    _, _, events = kit.play([(14, "still"), (60, "shift"), (60, "still")])
-    assert alerts(events) == ["alert_on"]
-    # and walking away ends the alert with no check-in said
-    _, rows, events = kit.play([(8, "nobody")])
+    # (shifting may read as moving on the lesson's own boundary, and moving ends an alert; it is never a check-in)
+    _, rows, events = kit.play([(14, "still"), (60, "shift"), (60, "still")])
+    assert alerts(events)[0] == "alert_on" and "checkin" not in alerts(events)
+    assert rows[-1][1]["alert"]["state"] == "check_on"
+    # and walking away ends the alert with no check-in said, and shows none on the empty spot meanwhile
+    _, rows, events = kit.play([(11, "nobody")])
     assert alerts(events) == ["alert_off"] and rows[-1][1]["alert"]["state"] == "none"
+    assert all(s["alert"]["state"] == "none" for _, s in rows if s["pred"] and not s["pred"]["present"])
 
 
 def things(events):

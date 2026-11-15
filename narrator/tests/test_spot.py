@@ -54,8 +54,11 @@ def test_no_sentence_names_a_side_a_zone_or_a_room():
 def test_the_spot_says_at_the_desk():
     assert n.template("enter", {"zone": 1}) == "Someone is at the desk."
     assert n.template("exit", {"zone": 1}) == "Someone just stepped away from the desk."
-    assert n.template("alert_on", {"zone": 1}) == "No movement at the desk for 10 seconds; time to check in."
+    assert n.template("alert_on", {"zone": 1}) == "No movement at the desk for 10 seconds. Step aside and back to say you're okay."
     assert n.template("alert_off", {"zone": 1}) == "The alert at the desk is cleared."
+    assert n.template("alert_off", {"zone": 1, "why": "left"}) == "They left while the alert was up."
+    assert n.template("alert_off", {"zone": 1, "why": "moved"}) == "They moved, so the alert is cleared."
+    assert n.template("alert_off", {"zone": 1, "why": "checkin"}) == "The alert at the desk is cleared."
     assert n.template("intrusion", {"zone": 1}) == "Someone is here while armed, at the desk."
     assert n.template("checkin", {"zone": 1}) == "Check-in received at the desk."
     assert n.template("object_on", {"zone": 0}) == "Something was left in the Wi-Fi line."
@@ -72,7 +75,7 @@ def test_tamper_names_the_device_that_went_quiet():
 def test_a_zone_name_that_is_not_a_place_reads_as_here():
     n.set_zones({1: ("Gate", 10)})
     assert n.template("enter", {"zone": 1}) == "Someone is here."
-    assert n.template("alert_on", {"zone": 1}) == "No movement here for 10 seconds; time to check in."
+    assert n.template("alert_on", {"zone": 1}) == "No movement here for 10 seconds. Step aside and back to say you're okay."
 
 
 def test_the_model_is_told_about_one_spot_and_no_sides():

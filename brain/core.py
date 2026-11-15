@@ -51,7 +51,7 @@ SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the 
 TRAIN_PURPOSES = ("train", "object")
 TRAIN_KEEP = 8           # a fit reads the newest this-many recordings of each kind (person, empty, object):
                          # room for 3+ walkers with two walks each, and a bound on an afternoon of lessons
-EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
+EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session", "why")   # contracts/schemas/event.json
 GONE_READINGS = 8        # a link is gone, not just slow, once silent for this many readings at its own rate
 SUSPECT_DB = 2.0         # the empty level stops following a crossing line once the lines are this far down ...
 UNSTICK_MS = 30_000      # ... unless the model has said "nobody" all through a dip this long: then that is the new empty
@@ -66,7 +66,10 @@ OBJECT_MAX_DB = 10.0     # object_max_db: ... and less than this (a person took 
 OBJECT_SPREAD_DB = 1.0   # object_spread_db: ... with the line as steady as when the spot is empty (its 2 s spread)
 OBJECT_HOLD_S = 3.0      # object_hold_s: ... for this long
 MOVING_SPREAD_DB = 2.0   # moving_spread_db: a person is moving when the line's 2 s spread is this or more
-STILL_SHARE = 0.8        # ... and still again once it is under this share of that
+STILL_SHARE = 0.8        # still_spread_db: ... and still again once it is under this; the default is this share of that
+MOTION_HOLD_S = 1.5      # motion_hold_s: the spread has to stay over the one, or under the other, this long before the word changes
+SPREAD_MS = 2_000        # the spread is taken over this long, and never over readings from before the person stood there
+CHECKIN_RETURN_S = 8.0   # checkin_return_s: stepping out of the line and back within this long, while the alert is up, is the check-in
 THING_GRACE_MS = 1_000   # a thing in the line stays one for this long after the line stops looking like it
 ADVICE_KEEP_MS = 10_000  # the advice about a thing in the line stays this long once the gain has been measured
 LABEL_MODES = ("person", "object", "off")
@@ -248,6 +251,17 @@ class Brain:
         self.object_spread_db = float(rule.get("object_spread_db", OBJECT_SPREAD_DB))
         self.object_hold_ms = int(float(rule.get("object_hold_s", OBJECT_HOLD_S)) * 1000)
         self.moving_spread_db = float(rule.get("moving_spread_db", MOVING_SPREAD_DB))
+        # Still again under still_spread_db (never over the boundary itself), and either way only once the
+        # spread has stayed there for motion_hold_s: a person standing still sways, and one sway is not moving.
+        self.still_share = min(1.0, float(rule.get("still_spread_db", self.moving_spread_db * STILL_SHARE)) / self.moving_spread_db)
+        self.motion_hold_ms = int(float(rule.get("motion_hold_s", MOTION_HOLD_S)) * 1000)
+        self._motion_since: Optional[int] = None   # since when the spread has been on the other side of the word
+        self._here_t: Optional[int] = None         # since when the line has said somebody is there
+        if self.presence_line:
+            # One spot, one line: the no-movement alert follows that line's own decision, tick for tick
+            # (brain/alert.py, Watch.line), and the check-in is stepping out of the line and back.
+            self.watch.line = {"link": self.presence_line,
+                               "return_ms": int(float(rule.get("checkin_return_s", CHECKIN_RETURN_S)) * 1000)}
         self._thing = False                        # the decision is "a thing in the line"
         self._thing_since: Optional[int] = None    # since when the line has looked like one
         self._thing_lost: Optional[int] = None     # since when it has stopped looking like one
@@ -840,7 +854,7 @@ class Brain:
         self.windower, self.window = F.Windower(self.base, self.model_links), None
         self._drift_t = self._suspect_t = None
         self._line_present, self._line_seen = False, None
-        self._thing, self._thing_since, self._thing_lost, self._moving = False, None, None, False
+        self._thing, self._thing_since, self._thing_lost, self._moving, self._motion_since = False, None, None, False, None
         self._noted = (self.now(), dict(self.base))
         self.health.set_base(self.base)
         self.health.set_expected(self.expected_hz)
@@ -1087,6 +1101,8 @@ class Brain:
                 self._raw["why"] = [self.presence_line]
             elif self.presence_line and self._raw["present"]:
                 self._raw["motion"] = self._motion_says()
+            if self.presence_line and not self._raw["present"]:
+                self._moving, self._motion_since, self._here_t = False, None, None   # whoever steps on next starts as still
             elif self.presence_line and line["present"] is False and self._raw["kind"] == "object":
                 self._raw["kind"] = "none"     # the line is clear: no other line can say "object" on this layout
             self.decision_ms.append((time.perf_counter() - t0) * 1000)
@@ -1251,16 +1267,41 @@ class Brain:
             self._thing_since = None
         return self._thing
 
+    def _spread_now(self) -> Optional[float]:
+        """The presence line's spread: the std of its readings over the last 2 s, and never over readings
+        from before the line said somebody is there, so stepping on (15 dB in a third of a second) is
+        not itself read as moving about. None under LONG_MIN readings."""
+        end = self.window["end"]
+        self._here_t = end if self._here_t is None else self._here_t
+        if self._here_t <= end - SPREAD_MS:
+            return ((self.window.get("long") or {}).get(self.presence_line) or {}).get("std")
+        dbms = self.windower.trail(self.presence_line, self._here_t, end) if self.windower else []
+        if len(dbms) < F.LONG_MIN:
+            return None
+        mean = sum(dbms) / len(dbms)
+        return math.sqrt(sum((d - mean) ** 2 for d in dbms) / len(dbms))
+
     def _motion_says(self) -> str:
         """moving | still for somebody on the spot, from the presence line's spread over the last 2 s
         (section 6). The line arrives 25 times a second and sits within 1 dB when the spot is empty, so
         its spread is the body moving; the Bluetooth lines wobble 2 to 5 dB by themselves and have no
-        say. Moving at the boundary or over it, still again under STILL_SHARE of it. The boundary is
-        the one the lesson's labels gave the model, else the layout file's (moving_spread_db)."""
-        std = ((self.window.get("long") or {}).get(self.presence_line) or {}).get("std")
+        say. The word is steady: moving only once the spread has been at the boundary or over it for
+        motion_hold_s without a break, still again only once it has been under the lower boundary
+        (still_spread_db) for as long. Between the two the word stands. So the sway of a person standing
+        still never flips it, and somebody who starts stepping about reads as moving motion_hold_s later.
+        The boundary is the one the lesson's labels gave the model, else the layout file's
+        (moving_spread_db); the lower one keeps its share of it."""
+        std = self._spread_now()
         if std is not None:
+            end = self.window["end"]
             edge = getattr(self.model, "spread_split", None) or self.moving_spread_db
-            self._moving = std >= (edge * STILL_SHARE if self._moving else edge)
+            other = std < edge * self.still_share if self._moving else std >= edge
+            if not other:
+                self._motion_since = None
+            else:
+                self._motion_since = end if self._motion_since is None else self._motion_since
+                if end - self._motion_since >= self.motion_hold_ms:
+                    self._moving, self._motion_since = not self._moving, None
         return "moving" if self._moving else "still"
 
     def _still_down(self) -> bool:

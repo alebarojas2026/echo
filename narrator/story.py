@@ -140,7 +140,8 @@ def timeline(events: list, seconds: list, zones: dict, devices: dict, from_t: in
             text = "The no-movement alert went on" + where(info.get("zone"), zones)
             if j is not None:
                 used.add(j)
-                text += f" and cleared {_seconds(events[j]['t'] - e['t'])} later"
+                ended = {"left": "they left", "moved": "they moved"}.get((events[j].get("info") or {}).get("why"))
+                text += f" and {ended + ' ' if ended else 'cleared '}{_seconds(events[j]['t'] - e['t'])} later"
             items.append(_item(e["t"], text + ".", [ref(e)] + ([ref(events[j])] if j is not None else [])))
         elif kind == "checkin":
             items.append(_item(e["t"], "A check-in was received.", [ref(e)]))
