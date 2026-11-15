@@ -21,7 +21,11 @@ Echo: **a witness that never watches.** It knows when someone is in a space, kee
 **Re-read this file every time you pull. The "Right now" section is how the team lead redirects everyone.**
 
 ## Right now
-**Status, Sunday 7:15 AM. Written by the team lead for every worker; Alejandro's worker, your list is at the end of this section.**
+**Status, Sunday 9:10 AM. Written by the team lead for every worker; Alejandro's worker, your list is at the end of this section.**
+
+**9:10 AM: the board is finished and frozen.** It runs the `kit-5.1` programs with the object rule off (the layout number in `kit-5.1.1`), its services read the Central time zone (one line in the board's local settings file, so clock times in answers are right), and it serves the `kit-5.2.1` page (0eaf8c9): the hall fills the judge's page, the engine room is one picture of the sealed record, titles are Tenor Sans and text is Poppins, the alarm page says "at the desk". All of it was looked at on the real kit. Nothing more goes on the board. Only `docs/`, `proof/` and PROOF.md may change, until 10:30 AM.
+
+**What is left is not code:** a demo video of 3 minutes or less (the organisers said sponsor tracks require one), the Devpost page (gallery pictures from the real kit, all four teammates attached), three rehearsals of the round, and setting up at the judging desk. The organisers' rule for this track: all processing is done on the UNO Q. Say it that way: every decision, every record and every answer is computed on the UNO Q; the Pis make the signal, measure it and countersign. Never write "a record of who was there": Echo does not know who. Write "a record of when someone was there".
 
 **What is on the kit**
 - **`kit-5` (c79da9b) is tagged and running on the board and both Pis.** It is the witness set on top of `kit-4.2`: the sealed record, the two Pis signing it, "What happened?" from the record, the engine room.
