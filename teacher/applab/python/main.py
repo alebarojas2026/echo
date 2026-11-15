@@ -22,7 +22,7 @@ def main():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
         def send(label):
             udp.sendto(json.dumps(label, allow_nan=False).encode(), ("msgpack-rpc-router", 5600))
-            write_heartbeat(heartbeat_file, label)
+            write_heartbeat(heartbeat_file, label, teacher.box_w)
 
         detector = VideoObjectDetection(confidence=0.4, debounce_sec=0.0, camera_preview=False)
         teacher = Teacher(projection, send, mode=lambda: read_mode(mode_file))
