@@ -126,7 +126,8 @@ test('a live intrusion or tamper ends the replay at once', async ({ page }) => {
 
 test('an Ask answer with a span offers Replay; Esc, the button and the timeline work', async ({ page }) => {
   const calls = await open(page, from => recorded(from))
-  await page.getByRole('button', { name: 'Ask the room', exact: true }).click()
+  await page.getByRole('button', { name: 'What happened?', exact: true }).click()
+    await page.getByRole('button', {name:'Ask another question',exact:true}).click()
   await page.getByRole('button', { name: 'Why did the Wi-Fi link drop?', exact: true }).click()
   await page.clock.runFor(700)
   await expect(page.getByTestId('ask-replay')).toBeHidden() // no span, no replay

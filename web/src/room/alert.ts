@@ -9,7 +9,7 @@ import { v3 } from './stage'
 import type { RoomView } from './view'
 
 // The no-movement alert on the floor, and the wave check-in window.
-//   counting  the alert zone gets a light amber fill and a 3 px outline (the person's colour: we're watching)
+//   counting  the alert zone gets a light blue fill and a 3 px outline (the person's colour: we're watching)
 //   check_on  red fill and a 6 px outline; the fill breathes between 0.3 and 0.2 over 2 s
 //             (held still under prefers-reduced-motion)
 

@@ -35,12 +35,9 @@ export function handoffShown(state: StateMsg | null, stale: boolean): boolean {
   return !!state && !stale && state.src !== 'replay'
 }
 
-/** On a layout with a presence line there is no camera in the product: nothing about one is shown until the board
- *  has reported a camera (on or stalled) since this page loaded. */
+/** The one-spot product has no teaching panels; other layouts retain their existing behavior. */
 export class CameraSeen {
-  private seen = false
-  absent(state: StateMsg | null, layout: HudLayout = hudLayout): boolean {
-    if (state?.cam === 'on' || state?.cam === 'stalled') this.seen = true
-    return !!layout.presence?.line && !this.seen
+  absent(_state: StateMsg | null, layout: HudLayout = hudLayout): boolean {
+    return !!layout.presence?.line
   }
 }

@@ -139,6 +139,14 @@ def test_rows_say_what_they_rest_on_and_render_into_the_generated_block(tmp_path
             R.table(dict(result, **{key: value}))
 
 
+def test_the_time_the_word_took_is_kept_beside_still_and_moving(tmp_path):
+    run = sitting(tmp_path, [("baseline", "tuning"), ("empty", "report"), ("still", "report")])
+    result = R.report(tmp_path, plan(run), GATE)
+    took = result["total"]["still"]["first_s"]
+    assert len(took) == 1 and 0 < took[0] < 5
+    assert f'The word "still" was first said {took[0]:.1f} s into the recording' in " ".join(R.table(result))
+
+
 def test_the_rate_ceiling_and_the_outward_ranges():
     assert round(R.rate_ceiling(0, 9.4), 2) == 0.39      # nothing in 9.4 minutes cannot show less than this
     assert R.rate_ceiling(2, 10) > R.rate_ceiling(0, 10)

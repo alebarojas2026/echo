@@ -164,7 +164,7 @@ def privacy_rows(proof, evidence):
     return rows
 
 
-def render(document, proof, line_report=None, evidence=(), replayed=None):
+def render(document, proof, line_report=None, evidence=(), replayed=None, live=None):
     primary, extras = measurements(proof)
     privacy = privacy_rows(proof,evidence)
     date, commit = proof.get("measured_at"), proof.get("commit")
@@ -211,6 +211,9 @@ def render(document, proof, line_report=None, evidence=(), replayed=None):
     if replayed:
         from proof.replayed import table as replay_table
         block.extend(replay_table(replayed))
+    if live:
+        from proof.said_live import table as live_table
+        block.extend(live_table(live))
     block.extend(["", END])
     return "\n".join(lines).rstrip() + "\n\n" + "\n".join(block) + "\n"
 
@@ -222,17 +225,19 @@ def main():
     parser.add_argument("--document", type=Path, default=root / "PROOF.md")
     parser.add_argument("--output", type=Path, help="explicit output path; omit to preview on stdout")
     parser.add_argument("--lines", type=Path, help="measured per-line companion report")
+    parser.add_argument("--live", type=Path, help="companion report of a live run counted from what the board said (proof.said_live)")
     parser.add_argument("--replay", type=Path, help="companion report of recordings replayed through the brain (proof.replayed)")
     args = parser.parse_args()
     log = args.proof.with_suffix(".manual.jsonl")
     evidence = [json.loads(line) for line in log.read_text().splitlines() if line.strip()] if log.exists() else []
     from proof.provenance import empty_proof
-    proof = empty_proof() if (args.lines or args.replay) and not args.proof.exists() else json.loads(args.proof.read_text(encoding="utf-8"))
+    proof = empty_proof() if (args.lines or args.replay or args.live) and not args.proof.exists() else json.loads(args.proof.read_text(encoding="utf-8"))
     lines = json.loads(args.lines.read_text()) if args.lines else None
     replayed = json.loads(args.replay.read_text(encoding="utf-8")) if args.replay else None
-    output = render(args.document.read_text(encoding="utf-8"), proof, lines, evidence, replayed)
+    live = json.loads(args.live.read_text(encoding="utf-8")) if args.live else None
+    output = render(args.document.read_text(encoding="utf-8"), proof, lines, evidence, replayed, live)
     if args.output:
-        args.output.write_text(output, encoding="utf-8")
+        args.output.write_text(output, encoding="utf-8", newline="\n")
     else:
         print(output, end="")
 

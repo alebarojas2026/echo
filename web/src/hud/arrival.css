@@ -19,3 +19,6 @@ html[data-hud-arrival="waiting"] .room-legend { visibility:hidden; }
 @media(max-width:768px) { .hud-arrival { padding:32px 24px; } .arrival-message h1 { font-size:56px; } .arrival-message p { font-size:32px; } .hud-arrival footer { flex-direction:column; } }
 
 .hud-arrival > header > span:first-child { color:var(--text-2); }
+
+.arrival-ask { margin-top:24px; padding:8px 16px; min-height:48px; font:inherit; color:var(--text); background:var(--floor); border:1px solid var(--square); }
+.arrival-ask:focus-visible { outline:2px solid var(--person); outline-offset:4px; }

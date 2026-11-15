@@ -12,7 +12,7 @@ test('counts, alerts, expires check-ins and respects reduced motion', async ({ p
     window.panel.update(mockState('still', 0, 7200), false)
   })
   await expect(page.getByTestId('alert-banner')).toHaveText('Still for 7 s of 10')
-  await expect(page.getByTestId('alert-banner')).toHaveCSS('color', 'rgb(255, 159, 67)')
+  await expect(page.getByTestId('alert-banner')).toHaveCSS('color', 'rgb(31, 165, 207)')
   await expect(page.locator('.stillness-track span')).toHaveCSS('transform', 'matrix(0.7, 0, 0, 1, 0, 0)')
   await page.evaluate(() => window.panel.update(window.mock('still', 0, 11000), false))
   await expect(page.getByTestId('alert-banner')).toHaveText(`No movement ${layoutFixture.place} · 11 s`)

@@ -23,4 +23,7 @@ latency and coverage measurements; this script never erases those results.
 `--replay proof/proof.replay.json` adds the rows of recordings replayed through the brain
 (proof/REPLAYED.md) to the generated block, with their stated limits.
 
+`--live proof/proof.live.json` adds the rows of a live run counted from what the board itself said at the
+time (proof/said_live.py), under their own heading.
+
 Tests use in-memory Markdown and JSON only: `python -m pytest proof/tests`.

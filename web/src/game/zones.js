@@ -7,8 +7,13 @@ export const DEVICES = {}
 const WORDS = { NW: 'north-west', NE: 'north-east', SW: 'south-west', SE: 'south-east', W: 'west', E: 'east' }
 const ORDER = ['NW', 'NE', 'SW', 'SE', 'W', 'E']
 
+// How a person checks in while the no-movement alert is up, as the layout has it: on a layout with a presence
+// line (CONTRACTS.md section 6) it is stepping out of the line and back; elsewhere a wave.
+export const CHECKIN = { stepAside: false }
+
 // Take the zones from a parsed nodes.json. Returns false (and changes nothing) if it has none.
 export function useZones(nodes) {
+  CHECKIN.stepAside = typeof nodes?.presence?.line === 'string'
   const list = (Array.isArray(nodes?.zones) ? nodes.zones : [])
     .filter((z) => Number.isInteger(z?.id) && z.id > 0 && typeof z.name === 'string' && z.name.trim())
   if (!list.length) return false
