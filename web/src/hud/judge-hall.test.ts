@@ -51,4 +51,5 @@ test('armed, blind, no data, getting ready and a replayed second keep the words 
   expect(hallMoment(null, false, layout).headline).toBe('No data')
   expect(hallMoment(base('empty', { pred: null, links: [], model: { trained: false } as StateMsg['model'] }), false, layout).headline).toBe('Getting ready')
   expect(hallMoment({ ...here('still'), replay: { kind: 'none' } } as StateMsg, false, layout).tone).toBe('')
+  expect(hallMoment({ ...here('moving', { alert: quiet }), replay: { kind: 'record' } } as StateMsg, false, layout)).toEqual({ headline: 'Someone is here.', detail: 'Moving', tone: '' })
 })

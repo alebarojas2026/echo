@@ -25,7 +25,9 @@ const seconds = (value: number | null | undefined) => value == null ? '__' : Str
 export function hallMoment(state: StateMsg | null, stale: boolean, layout: HudLayout = hudLayout): Moment {
   const [headline, detail] = judgeMoment(state, stale, layout)
   const said = (tone: Tone = ''): Moment => ({ headline, detail, tone })
-  if (!state || stale || (state as { replay?: unknown }).replay) return said()
+  // A replayed second with nothing to show keeps its own words; one with a record reads as it did live.
+  const replayed = (state as { replay?: { kind?: string } } | null)?.replay?.kind
+  if (!state || stale || (replayed && replayed !== 'record')) return said()
   if (state.armed && state.tamper?.length) return said('fault')
   if (state.health.status === 'blind' || !state.pred || state.router !== 'S-home') return said()
   const line = layout.presence?.line

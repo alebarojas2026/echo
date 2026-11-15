@@ -4,7 +4,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`three spot headlines 
  await page.route('**/nodes.json',r=>r.fulfill({json:layout}));await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'})
  await page.goto('/tests/arrival-harness.html?op=1');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000});await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
  // The spot is one headline and one line under it (the hall-first page): who is here, then what they are doing.
- for(const [scene,text,line] of [['moving','Someone is here.','Moving'],['still','Someone is here.','Standing still'],['object','Something was left in the Wi-Fi line','']]){
+ for(const [scene,text,line] of [['moving','Someone is here.','Moving'],['still','Someone is here.',/^Standing still( for \d+ s)?$/],['object','Something was left in the Wi-Fi line','']]){
   const update = () => page.evaluate(({scene,layout})=>{const s=window.arrival.peek(scene==='object'?'object':'still');window.arrival.update(scene==='object'?'object':'still',{pred:{...s.pred,motion:scene==='object'?null:scene},advice:null,links:layout.links.map(l=>({id:l.id,dbm:-61,base_dbm:-45,drop_db:16,status:'ok',rate_hz:25,why:0}))})},{scene,layout})
   await update();await page.waitForTimeout(450);await update();await page.waitForTimeout(200)
   await expect(page.getByTestId('judge-headline')).toHaveText(text)

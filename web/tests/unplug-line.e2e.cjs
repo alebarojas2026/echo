@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path')
 require('./layout-fixture.cjs')
 for(const [width,height] of [[1920,1080],[1440,900]]) test(`unplug is one stationary line at ${width}`,async({page})=>{
  await page.setViewportSize({width,height}); await page.emulateMedia({reducedMotion:'reduce'}); await page.clock.install()
- await page.goto('/tests/arrival-harness.html?scan=0&op=1')
+ await page.goto('/tests/arrival-harness.html?scan=0&op=1&judge=rail') // the camera's line and the narrator's are the rail's
  await page.getByTestId('skip-arrival').click(); await page.keyboard.press('Escape')
  await page.evaluate(()=>window.arrival.update('still',{cam:'on',t:100000,narration:{text:'The radio is following the room.',source:'template'}}))
  const narrator=page.getByTestId('narrator-text'), line=page.getByTestId('cam-status')
