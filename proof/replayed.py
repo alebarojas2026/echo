@@ -149,7 +149,7 @@ def score(run, states, events):
            "empty": {"sessions": 0, "seconds": 0.0, "false_presences": 0, "false_present_s": 0.0, "enters": 0,
                      "intrusions": 0, "passed_by": 0},
            "hidden_s": 0.0, "object_s": 0.0, "blind_events": 0,
-           "still": {"sessions": 0, "n": 0, "right": 0}, "moving": {"sessions": 0, "n": 0, "right": 0}}
+           "still": {"sessions": 0, "n": 0, "right": 0, "first_s": []}, "moving": {"sessions": 0, "n": 0, "right": 0, "first_s": []}}
     for i, part in enumerate(run["parts"]):
         if part["role"] != "report" or part["is"] == "baseline":
             continue
@@ -186,6 +186,9 @@ def score(run, states, events):
             out[kind]["sessions"] += 1
             out[kind]["n"] += len(there)
             out[kind]["right"] += sum(s["motion"] == kind for s in there)
+            # how long the word took: from the recording's first reading to the first decision that says it
+            first = next((s["t"] for s in after if s["present"] and s["motion"] == kind), None)
+            out[kind]["first_s"].append(None if first is None else round((first - a) / 1000, 1))
     for key in ("hidden_s", "object_s"):
         out[key] = round(out[key], 1)
     out["empty"]["seconds"] = round(out["empty"]["seconds"], 1)
@@ -294,8 +297,11 @@ def sentences(result):
         m = total[kind]
         if m["n"]:
             only = "one session: it shows it can work, not how often" if m["sessions"] == 1 else f"{m['sessions']} sessions"
+            took = [s for s in m.get("first_s") or [] if s is not None]
+            word = (f" The word \"{kind}\" was first said {' and '.join(f'{s:.1f}' for s in took)} s into the recording, which began "
+                    "with the person already there.") if took else ""
             rows.append((label, f"{m['right']} of {m['n']} decisions ({only})",
-                         f"{words}. Ten decisions a second from 3 s into the session; decisions inside one session are not independent trials.",
+                         f"{words}. Ten decisions a second from 3 s into the session; decisions inside one session are not independent trials.{word}",
                          f"{m['sessions']} session"))
     for r in result["runs"]:
         if r["limit"] and r["stands"]["n"]:
@@ -339,7 +345,9 @@ def table(result):
             f"Recorded on the kit the night of {result['night']} (board build `{result['recorded_commit'][:7]}`); the last report "
             f"recording ended {result['measured_at']}. Played on {datetime.fromisoformat(result['replayed_at']).date().isoformat()} "
             f"through the brain of `{result['brain_commit']}` on the `{result['layout']}` layout (SHA256 `{result['layout_sha256']}`): "
-            f"line `{p['line']}`, on {p.get('on_db')} dB, off {p.get('off_db')} dB, moving at {p.get('moving_spread_db')} dB of spread. "
+            f"line `{p['line']}`, on {p.get('on_db')} dB, off {p.get('off_db')} dB, moving at {p.get('moving_spread_db')} dB of spread"
+            + (f", still again under {p['still_spread_db']} dB" if p.get("still_spread_db") is not None else "")
+            + (f", each held for {p['motion_hold_s']} s before the word changes" if p.get("motion_hold_s") is not None else "") + ". "
             "The sessions were split into tuning and report before those settings were chosen; these rows use the report "
             f"sessions only ({sum(s['role'] == 'report' for s in result['sources'])} of {len(result['sources'])} recordings played). "
             "Ranges are exact (Clopper-Pearson for counts, Poisson for the rate), 95%, rounded outward. See proof/REPLAYED.md."]
