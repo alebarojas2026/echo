@@ -16,6 +16,12 @@ Radio Sight: safety and after-hours security for buildings, using the Wi-Fi that
 **Re-read this file every time you pull. It changes during the event, and the "Right now" section is how the team lead redirects everyone.**
 
 ## Right now
+**The kit as it really is (set Saturday midnight, from tonight's tests on the real hardware; this overrides anything below or in older issues that says otherwise):**
+- **One spot, not Left and Right.** Three devices: the board (UNO Q) and Pi A side by side on the team's desk, and Pi B about a metre away, at desk height, on a chair. A person standing between them drops the Bluetooth lines between Pi B and the board / Pi A by 10 dB or more, every time. That is the sensor. The system says someone is here, whether they are moving or still, and raises the alerts. It does not say which side.
+- **No ESP32 beacons in the demo** (their lines never reacted to a person in seven runs), no far hall beacons, and Wi-Fi is not a people sensor (it did not react to a body); the Wi-Fi link is only the dead-zone story.
+- So: never write "left", "right", "five nodes", "twelve links" or "beacons E and W" as facts in code, docs or on screen. Everything comes from `radio/nodes.json`, which is moving to a three-device, one-zone layout (`radio/layouts/gate.json`, in progress). Code must work with whatever that file holds.
+- Real rates and noise: the Bluetooth lines arrive at about 2 to 6 readings a second and wobble 2 to 5 dB with nobody there. Rules and screens must hold at those numbers.
+
 The direction above is new (Saturday evening). Priorities, in order:
 1. **Real measurements beat everything.** Nothing has run on the real hardware yet. Anything that helps tonight's hardware tests pass and puts measured numbers in PROOF.md comes first.
 2. **The hero path:** a judge steps up and is found ("Found you. 0 cameras."); the camera teaches the radio on the judge in about 30 s; the camera is unplugged and it still follows them, even standing still; armed mode raises an intrusion alert on the phone page; the judge asks the room a question and the board answers from its own records. Issues titled "Hero: ..." are this path and come before other issues in your lane.
