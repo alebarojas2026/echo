@@ -465,6 +465,33 @@ def test_with_no_model_and_no_lesson_the_presence_line_alone_gives_the_whole_dec
     assert not bad, bad[:5]
 
 
+def test_a_pause_of_the_presence_line_never_blanks_the_decision():
+    """The line's readings come over the hotspot and can pause for a second. Its last word stands meanwhile:
+    1.5 s without readings keeps somebody there, keeps nobody as nobody, and pred is never null."""
+    line = "pi5>pi5b:wifi"
+
+    def pause(kit, who, seconds=1.5):
+        kit.feed.next[line] = float("inf")
+        _, rows, events = kit.play([(seconds, who)])
+        kit.feed.next[line] = kit.feed.t
+        _, after, more = kit.play([(3, who)])
+        return rows + after, events + more
+
+    kit = cold_kit(seed=24)
+    kit.play([(5, "nobody")])
+    rows, events = pause(kit, "nobody")                                   # empty spot, the line pauses
+    assert all(s["pred"] is not None and s["pred"]["present"] is False for _, s in rows)
+    assert all(s["health"]["status"] != "blind" for _, s in rows) and comings(events) == []
+    kit.play([(6, "still")])
+    rows, events = pause(kit, "still")                                    # somebody standing there, the line pauses
+    assert all(s["pred"] is not None and s["pred"]["present"] and s["pred"]["kind"] == "person" for _, s in rows)
+    assert comings(events) == [] and not any(e["kind"].startswith("blind") for _, e in events)
+    # a line that stays silent is another matter: the sensor goes blind and the decision is hidden
+    kit.feed.next[line] = float("inf")
+    _, rows, events = kit.play([(10, "still")])
+    assert rows[-1][1]["health"]["status"] == "blind" and rows[-1][1]["pred"] is None
+
+
 def test_with_no_model_ten_empty_minutes_give_nothing():
     kit = cold_kit(seed=22)
     kit.brain.on_cmd(cmd("arm", on=True))

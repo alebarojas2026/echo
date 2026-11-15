@@ -1263,8 +1263,12 @@ class Brain:
         allows at its own rate: GONE_READINGS readings' worth, and never under the 1 s window.
         (A healthy link at 5 or 6 readings a second has a 1 s gap about once a minute, and a
         2 s stretch with too few readings about as often; neither may blink "unknown".)"""
+        # On a layout with a presence line that line's last word stands for second_hold_s while it has no
+        # readings (section 6): a pause of a second or two never blanks the decision. If the line stays silent
+        # the sensor goes blind before the hold is over, and that hides the decision.
+        floor = max(F.WINDOW_MS, self.presence_hold_ms) if self.presence_line else F.WINDOW_MS
         return any(k in self._quiet
-                   and now - self._last_seen[k] > max(F.WINDOW_MS, GONE_READINGS * 1000 / self.expected_hz[k])
+                   and now - self._last_seen[k] > max(floor, GONE_READINGS * 1000 / self.expected_hz[k])
                    for k in unheard)
 
     def _announce(self, zone: int) -> None:
