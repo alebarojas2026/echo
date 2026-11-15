@@ -409,6 +409,10 @@ Armed (after hours: the space should be empty):
   decisions, after it was not. Still there 3 s later: one intrusion event, naming the zone. Gone first (not present
   for the majority of the last 10 decisions): a passed_by event instead, naming the zone. Objects raise neither.
   The 3 s is armed.hold_s in nodes.json (default 3; 4 for a very busy aisle).
+- On a layout with a presence line, a walk straight through is also a passed_by, armed or not: the line's raw readings sit 9 dB or more
+  under the empty level for five readings in a row and are back within off_db of it inside 1.5 s, and the presence rule announces no
+  enter for that dip. One passed_by is sent, naming the zone, about 1.2 s after the dip ends. Nothing is sent while somebody is announced
+  as present, nor for 3 s after. The message is the same passed_by as above; no field is added.
 - While health is blind or pred is null, no intrusion and no passed_by is raised and the screen says so (never
   "all clear"). An appearance that is still waiting then is judged once pred is back.
 Tamper (a rule, not learned; while armed only):
