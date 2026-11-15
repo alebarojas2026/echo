@@ -3,7 +3,8 @@ import pytest
 from sim import fake
 
 NAMES = ["zone_tour", "stand_still", "empty_room", "metal_object",
-         "wave_checkin", "tray_t1", "router_move", "dropped_link", "camera_unplug", "clipped_feet", "demo", "still_flicker", "tray_removed", "arrival", "tamper", "passed_by", "step_in", "aisle", "thing_left"]
+         "wave_checkin", "tray_t1", "router_move", "dropped_link", "camera_unplug", "clipped_feet", "demo", "still_flicker", "tray_removed", "arrival", "tamper", "passed_by", "step_in", "aisle", "thing_left",
+         "witnesses", "witness_silent", "chain_broken"]
 
 
 def labels(name):
