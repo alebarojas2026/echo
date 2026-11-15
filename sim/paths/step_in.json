@@ -1,0 +1,7 @@
+{
+  "name": "step_in",
+  "about": "Armed, and someone steps in and stays: nobody is here, the path arms at 3 s, and at 10 s someone steps in and stands for 6 s. Still there after armed.hold_s (3 s): one intrusion, about 3.5 s after they stepped in. Disarmed at 21 s.",
+  "duration_s": 24,
+  "person": [{"t": 0, "x": null}, {"t": 10, "zone": "tour1", "edge": "west"}, {"t": 10.5, "zone": "tour1"}, {"t": 15.5, "zone": "tour1"}, {"t": 16, "zone": "tour1", "edge": "west"}, {"t": 16.1, "x": null}],
+  "commands": [{"t": 3, "cmd": "arm", "args": {"on": true}}, {"t": 21, "cmd": "arm", "args": {"on": false}}]
+}

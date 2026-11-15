@@ -18,6 +18,8 @@ class Layout:
         self.size_m = tuple(frame.get("size_m") or (2.0, 2.0))
         self.strip_m = tuple(frame["strip_m"]) if frame.get("strip_m") else None
         self.split_x_m = frame.get("zone_split_x_m")
+        # section 6, Armed: how long an appearance must last to be an intrusion (3 s when the file has none)
+        self.hold_s = float((nodes.get("armed") or {}).get("hold_s", 3.0))
         self.nodes = {n["id"]: tuple(n["xyz_m"][:2]) for n in nodes["nodes"]}
         self.links = [(l["tx"], l["rx"], l["kind"]) for l in nodes["links"]]
         self.router_spots = {s["id"]: tuple(s["xyz_m"][:2]) for s in nodes.get("router_spots") or []}
