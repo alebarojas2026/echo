@@ -22,9 +22,9 @@
     {"id": "pi5b>unoq:ble", "tx": "pi5b", "rx": "unoq", "kind": "ble", "expected_hz": null, "crosses_spot": true},
     {"id": "pi5>pi5b:wifi", "tx": "pi5", "rx": "pi5b", "kind": "wifi", "expected_hz": null, "crosses_spot": true},
     {"id": "pi5>pi5b:ble", "tx": "pi5", "rx": "pi5b", "kind": "ble", "expected_hz": null, "crosses_spot": true},
-    {"id": "pi5b>pi5:ble", "tx": "pi5b", "rx": "pi5", "kind": "ble", "expected_hz": null, "crosses_spot": true}
+    {"id": "pi5b>pi5:ble", "tx": "pi5b", "rx": "pi5", "kind": "ble", "expected_hz": null, "crosses_spot": true, "classifier": false}
   ],
-  "links_note": "crosses_spot marks the four lines a person on the spot stands in: the ones to or from Pi B. The other two run 8 cm over the desk and are the dead-zone lines. pi5>pi5b:wifi did not react to a person on the kit: give it \"classifier\": false if it gets in the way, as for any Bluetooth link whose baseline counts under 4 readings a second.",
+  "links_note": "crosses_spot marks the lines a person on the spot stands in: the ones to or from Pi B. Measured on the kit: pi5>pi5b:wifi falls 15 to 21 dB with a person and dips under 1 dB empty, so it decides (presence, below); pi5b>unoq:ble falls 4.5 to 11 dB but dips 4.8 dB empty, so it is a second opinion; pi5b>pi5:ble is unreliable and is no classifier link. pi5>unoq:wifi and pi5>unoq:ble run 8 cm over the desk and cross nothing.",
   "zone_rule": "zone = 1 when 0 <= x <= 0.8 and 0 <= y <= 0.6; anywhere else 0 = empty",
   "zones": [
     {"id": 1, "name": "At the desk", "centre_m": [0.4, 0.3], "still_alert_s": 10}
@@ -47,5 +47,6 @@
       {"node": "pi5b", "id": "B", "data_hex": "FFFF525342"}
     ]
   },
+  "presence": {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble", "on_db": 7, "off_db": 4, "second_hold_s": 5},
   "armed": {"hold_s": 3}
 }

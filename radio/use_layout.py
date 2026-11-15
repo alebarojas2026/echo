@@ -2,7 +2,7 @@
 
     python -m radio.use_layout            # says which layout is active and lists the others
     python -m radio.use_layout gate       # one spot between Pi B and the desk: three devices, six links, one zone
-    python -m radio.use_layout gate-3     # the same spot with Pi B as a beacon only: three links
+    python -m radio.use_layout gate-3     # the same spot with only the three lines that cross it
     python -m radio.use_layout desk       # the desk strip: five devices, twelve links, two zones
 
 Every part reads radio/nodes.json (CONTRACTS.md section 3), so switching is one copy:
@@ -69,6 +69,13 @@ def problems(doc):
     for link in links:
         if not isinstance(link.get("crosses_spot", False), bool):
             out.append(f"link {link.get('id')}: crosses_spot is true or false")
+    rule = doc.get("presence")
+    if rule is not None:
+        known = {link.get("id") for link in links}
+        if not isinstance(rule, dict) or rule.get("line") not in known or rule.get("second", rule.get("line")) not in known:
+            out.append("presence names a line (and a second) that is one of its links")
+        elif not 0 < rule.get("off_db", 4) < rule.get("on_db", 7):
+            out.append("presence: off_db is under on_db, both over 0")
     beacons = {p.get("node") for p in (doc.get("beacons") or {}).get("payloads") or []}
     missing = sorted(n for n, node in nodes.items() if "beacon" in (node.get("roles") or []) and n not in beacons)
     if missing:
