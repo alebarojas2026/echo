@@ -60,7 +60,7 @@ def _person(r, zone=None) -> bool:
     return r["present"] == 1 and r["kind"] == "person" and (zone is None or r["zone"] == zone)
 
 
-def current_spot(store, now_ms, zones):
+def current_spot(store, now_ms, zones, nodes_path=None):
     """The latest decision, without turning a missing decision into an empty desk."""
     row = store.latest()
     if not row or not 0 <= now_ms - row["t"] <= 5000 or row["present"] is None or row["health"] == "blind":
@@ -69,7 +69,7 @@ def current_spot(store, now_ms, zones):
     if _person(row):
         motion = {"still": "standing still", "moving": "moving"}.get(row["motion"])
         text = f"Someone is {where}" + (f", {motion}." if motion else ".")
-    elif row["kind"] == "object" and row["present"] == 0 and _wifi_drop(row):
+    elif row["kind"] == "object" and row["present"] == 0 and _wifi_drop(row, nodes_path=nodes_path):
         text = "Something was left in the Wi-Fi line; nobody is detected at the desk."
     elif row["present"] != 0:
         text = "I have no current decision for the desk."
@@ -78,9 +78,9 @@ def current_spot(store, now_ms, zones):
     return {"answer": text, "rows": [{k: row[k] for k in ("t", "present", "kind", "zone", "motion")} ]}
 
 
-def _wifi_drop(row, link=None):
+def _wifi_drop(row, link=None, nodes_path=None):
     try:
-        crossing = {item["id"] for item in json.loads(NODES_JSON.read_text())["links"]
+        crossing = {item["id"] for item in json.loads(Path(nodes_path or NODES_JSON).read_text())["links"]
                     if item.get("kind") == "wifi" and item.get("crosses_spot") is True}
     except (OSError, ValueError, KeyError):
         crossing = set()
@@ -89,11 +89,11 @@ def _wifi_drop(row, link=None):
                for key, reading in row["links"].items())
 
 
-def spot_advice(store, now_ms, zones, minutes=10):
+def spot_advice(store, now_ms, zones, minutes=10, nodes_path=None):
     """An object decision and a weak Wi-Fi line must agree before calling it an obstruction."""
     rows = [r for r in store.seconds(now_ms - minutes * 60_000) if r["t"] <= now_ms]
     told = [r for r in rows if r["kind"] == "object" and r["present"] == 0 and r["advice"] and r["advice"].get("link")
-            and _wifi_drop(r, r["advice"].get("link"))]
+            and _wifi_drop(r, r["advice"].get("link"), nodes_path)]
     if not told:
         return {"answer": "No object blocking the Wi-Fi line was recorded in that time.", "rows": []}
     last = told[-1]
@@ -101,7 +101,7 @@ def spot_advice(store, now_ms, zones, minutes=10):
     link = advice["link"]
     receiver = link.split(">", 1)[-1].split(":", 1)[0]
     try:
-        names = {node["id"]: node["name"] for node in json.loads(NODES_JSON.read_text())["nodes"]}
+        names = {node["id"]: node["name"] for node in json.loads(Path(nodes_path or NODES_JSON).read_text())["nodes"]}
     except (OSError, ValueError, KeyError):
         names = {}
     receiver = names.get(receiver, "the receiving device")
@@ -214,7 +214,7 @@ def link_history(store, now_ms, zones, minutes=10, link=None, **_):
 def explain_advice(store, now_ms, zones, minutes=10, **_):
     """the last router advice and what the move changed"""
     if len(zones) == 1:
-        return spot_advice(store, now_ms, zones, minutes=minutes)
+        return spot_advice(store, now_ms, zones, minutes=minutes, nodes_path=_.get("nodes_path"))
     told = [r for r in store.seconds(now_ms - minutes * 60_000, now_ms) if r["advice"]]
     if not told:
         return {"answer": "No router advice has been given.", "rows": []}

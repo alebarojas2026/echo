@@ -260,12 +260,12 @@ def checked(pick, zones: dict, links: list) -> tuple:
 USES_MINUTES = ("presence", "still_spans", "alerts", "intrusions", "link_history")
 
 
-def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic) -> dict:
+def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic, nodes_path=None) -> dict:
     """{"answer", "rows", "tool", "args", "picked_by": "llm"|"rules", "src", "ms"} for one question.
     src is the newest record's src ("live", "sim" or "replay"; None when the store is empty)."""
     start = timer()
     if zones is None or links is None:
-        zones, links = layout()
+        zones, links = layout(nodes_path or NODES_JSON)
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
     question = " ".join(str(question).split())[:MAX_QUESTION]
     read = fix_typos(question)   # the keywords and the time read this; the model gets the question as typed
@@ -291,7 +291,8 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
         current = len(zones) == 1 and tool in ("presence", "still_spans") and re.search(
             r"right now|currently|at the moment|what.*happening|^(is|are)\b", read, re.I)
         current = current and not re.search(r"\b(last|past|since|today|yesterday)\b", read, re.I)
-        out = current_spot(store, now_ms, zones) if current else TOOLS[tool](store, now_ms, zones, **args)
+        out = (current_spot(store, now_ms, zones, nodes_path) if current
+               else TOOLS[tool](store, now_ms, zones, nodes_path=nodes_path, **args))
         if tool in USES_MINUTES:   # the minutes in the answer are in a row too
             out = {**out, "rows": out["rows"] + [{"row": "asked", "minutes": args["minutes"]}]}
     latest = store.latest()

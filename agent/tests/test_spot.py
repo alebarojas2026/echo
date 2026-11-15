@@ -2,6 +2,7 @@
 
 The store is filled by hand here, so nothing depends on the fake feed."""
 import re
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ SIDES = re.compile(r"\b(left|right|east|west|zone)\b", re.I)
 @pytest.fixture(autouse=True)
 def configured_gate(monkeypatch):
     monkeypatch.setattr(tools, "NODES_JSON", GATE)
+    monkeypatch.setattr(A, "ask", partial(A.ask, nodes_path=GATE))
 
 
 def second(store, s, present=True, armed=False, health="ok", tamper=()):
