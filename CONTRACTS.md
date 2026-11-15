@@ -144,6 +144,8 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
         // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
         // Not sure where: when somebody is there but the links read unlike anything in training (a feature more than
         // 6 dB outside what the model saw), zone_set lists every zone the model knows. zone is still its best guess.
+        // That is the only way pred says "not sure". There is no separate field for it, and present:false is never
+        // qualified: nobody is there, or pred is null.
  "objects":[{"xy_m":[0.86,1.0],"near":"pi5","since_s":14.0,"drop_db":9.8}],
         // near (here and in advice) = the closest node within 0.5 m of xy_m, or null when no node is that close.
         // Node positions are where the nodes are now: the router at its current spot after router_moved.
