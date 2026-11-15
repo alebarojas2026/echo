@@ -4,6 +4,7 @@ import socket
 
 from pi.radio_node import PI_LINKS, run
 from radio import hci
+from radio.nodes import LINKS
 from radio.tests.fakes import FakeController
 from radio.tests.test_hall_beacons import report
 
@@ -26,4 +27,6 @@ def test_the_pi_forwards_hall_adverts_and_its_own_two_links_as_before():
     ]
     assert all(m["v"] == 2 and m["type"] == "rssi" and m["src"] == "live" for m in got)
     assert seen["east>pi5:ble"] == [-61] and seen["west>pi5:ble"] == [-70]
-    assert PI_LINKS == ("east>pi5:ble", "west>pi5:ble")     # the status line and the Gate 2 summary stay these two
+    # The status line and the Gate 2 summary stay the Pi's core links from nodes.json: no hall link joins them.
+    assert {"east>pi5:ble", "west>pi5:ble"} <= set(PI_LINKS) <= set(LINKS)
+    assert not any(link.startswith(("h>", "j>")) for link in PI_LINKS)
