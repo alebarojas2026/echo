@@ -173,20 +173,19 @@ export function zoneSide(zone: number): { east: boolean; north: boolean } {
   return { east: x > SIZE_M[0] / 2, north: y > SIZE_M[1] / 2 }
 }
 
-export type LabelSide = 'above' | 'above-left' | 'above-right' | 'right' | 'left' | 'below' | 'below-right' | 'below-left'
+export type LabelSide = 'above' | 'above-left' | 'above-right' | 'right' | 'left' | 'below-right' | 'below-left'
 
 /** Which side of its head a node's name goes. On the square: outward at the east and west edges, above at the
  *  north edge (the UNO Q), else to the right. On the desk the names take no room beside the strip and stay on the
- *  side away from the standing spot (see below). */
+ *  side away from the person (see below). */
 /** Devices nearer than this share the room above them: their names would overlap. */
 const CLOSE_M = 0.25
 
 export function nodeLabelSide(id: NodeId): LabelSide {
   const [x, y] = NODES[id]?.xyz ?? [0, 0, 0]
   if (STRIP_M) {
-    // Names go on the side away from the standing spot, never between a device and the person: above a device on
-    // our desk, below one across the gap. Two devices side by side (the board and the router on one hub) read
-    // outward from each other instead of landing on one another.
+    // Names never go between a device and the person: above a device on our desk. Two devices side by side (the
+    // board and the router) read outward from each other instead of landing on one another.
     const beside = Object.values(NODES).find((n) => n.id !== id && Math.abs(n.xyz[1] - y) < CLOSE_M && Math.abs(n.xyz[0] - x) < CLOSE_M)
     const west = !!beside && (x < beside.xyz[0] || (x === beside.xyz[0] && id < beside.id))
     if (deviceAcross()) {
@@ -198,7 +197,6 @@ export function nodeLabelSide(id: NodeId): LabelSide {
       if (y >= STRIP_M[1] - 0.01) return west ? 'left' : 'above-left'
     }
     if (y >= STRIP_M[1] - 0.01) return !beside ? 'above' : west ? 'above-left' : 'above-right'
-    if (y < 0) return !beside ? 'below' : west ? 'below-left' : 'below-right'
     // A beacon at the strip's end, level with the person: just below it, reading inward from its stand.
     return x < SIZE_M[0] / 2 ? 'below-right' : 'below-left'
   }

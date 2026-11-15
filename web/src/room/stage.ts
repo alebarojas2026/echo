@@ -324,7 +324,7 @@ export class Stage {
       }
       n.post.geometry.setPositions([...v3(up ? [p[0], p[1], p[2] - HEAD_M / 2] : base).toArray(), ...top.toArray()])
       // Each label hangs off the cube's face on its side, so the cube never sits on its own label.
-      const [dx, dz] = { above: [0, HEAD_M / 2], 'above-left': [0, HEAD_M / 2], 'above-right': [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0], below: [0, -HEAD_M / 2], 'below-right': [0, -HEAD_M / 2], 'below-left': [0, -HEAD_M / 2] }[nodeLabelSide(n.id)]
+      const [dx, dz] = { above: [0, HEAD_M / 2], 'above-left': [0, HEAD_M / 2], 'above-right': [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0], 'below-right': [0, -HEAD_M / 2], 'below-left': [0, -HEAD_M / 2] }[nodeLabelSide(n.id)]
       this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))
     }
     this.view.requestRender()
