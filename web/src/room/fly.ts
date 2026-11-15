@@ -26,7 +26,7 @@ const FIRST_LOOK_MS = 1200
 const RESET_HOLD_MS = 2000
 const HALL_ELEV_DEG = 40
 /** The hall's floor plan fills a little more than the view, so empty corners don't shrink it. */
-const HALL_FILL = 0.75
+const HALL_FILL = 0.8
 
 /** The whole hall, north up: looks at the middle of its floor plan (up to the cut) and fits its half-diagonal. */
 export function hallShot(bounds: Box3, cutM: number): Shot {

@@ -51,11 +51,13 @@ const ROOM_JSON = new URL('./public/models/room.json', import.meta.url)
 const model = (name: string) => (existsSync(new URL(`./public/models/${name}`, import.meta.url)) ? `models/${name}` : undefined)
 
 // The hall scan is optional: only a build that finds one in web/public/models asks for it, so the screen
-// never logs a 404 for a missing file. hall-hi.glb is the detailed model, hall-lo.glb the light one, and
-// room.glb (npm run scan:prep) stands in for the light one. Its alignment, if any, is room.json.
+// never logs a 404 for a missing file. hall-hi.glb is the detailed model and hall-lo.glb the light one. Its
+// alignment, if any, is room.json. room.glb (npm run scan:prep of a raw scan) is used only when there is no
+// hall model: it has its own box and axes, so the hall's room.json would place it wrong.
 function roomScan() {
   const hi = model('hall-hi.glb')
-  const lo = model('hall-lo.glb') ?? model('room.glb')
+  const hall = hi ?? model('hall-lo.glb')
+  const lo = hall ? model('hall-lo.glb') : model('room.glb')
   if (!hi && !lo) return null
   let fit = {}
   try {
