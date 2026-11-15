@@ -248,7 +248,9 @@ export class Presence {
     this.figure.object.scale.setScalar(0.94 + 0.06 * this.alpha) // arrives with a small settle, leaves the same way
     this.figure.object.visible = this.alpha > 0
     this.figure.setOpacity(this.alpha)
-    busy ||= this.figure.update(dt) && this.figure.object.visible
+    // Called every frame: inside `busy ||= ...` it was skipped whenever the glide was busy, freezing the walk.
+    const figureBusy = this.figure.update(dt)
+    busy ||= figureBusy && this.figure.object.visible
     // The label fades with the figure rather than popping in at full strength.
     this.label.style.opacity = this.alpha.toFixed(3)
     this.label.hidden = this.alpha === 0 || !this.labelText
