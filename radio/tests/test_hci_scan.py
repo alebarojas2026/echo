@@ -373,7 +373,7 @@ def test_main_ends_with_one_line_when_hci0_goes_away(monkeypatch, capsys):
 def test_a_new_receiver_needs_only_nodes_json(monkeypatch):
     # Pi B (#415) as a third receiver: once nodes.json lists its links, kept() forwards them.
     from radio import hci_scan
-    monkeypatch.setitem(hci_scan.HEARD, "east>pi5b:ble", {"id": "east>pi5b:ble", "tx": "east", "rx": "pi5b",
+    monkeypatch.setitem(hci_scan.LINKS, "east>pi5b:ble", {"id": "east>pi5b:ble", "tx": "east", "rx": "pi5b",
                                                           "kind": "ble"})
     assert kept(fixture("legacy_report_east"), "pi5b") == [("east>pi5b:ble", -61)]
     assert kept(fixture("legacy_report_east"), "nobody") == []
