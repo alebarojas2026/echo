@@ -103,3 +103,15 @@ def test_uses_the_latest_status_line(capsys):
 def test_missing_tool_is_a_fail_not_a_crash():
     code, out = check.run("no-such-tool-for-pi-check")
     assert code == 127 and "not installed" in out
+
+
+DESK = ("[pi.radio_node] east>pi5:ble 21.0/s, west>pi5:ble 20.0/s, pi5b>pi5:ble {b}/s; sent 600, not sent 0; "
+        "set up again 0x since start\n")
+
+
+def test_pi_a_on_the_desk_layout_also_needs_pi_bs_beacon(capsys):
+    # In the desk layout Pi A also hears beacon B; a silent one points at Pi B's own check.
+    code, out = report(capsys, fake({JOURNAL: (0, DESK.format(b="31.0"))}))
+    assert code == 0 and "pi5b>pi5:ble 31.0/s" in out
+    code, out = report(capsys, fake({JOURNAL: (0, DESK.format(b="0.0"))}))
+    assert code == 1 and "nothing heard on pi5b>pi5:ble" in out and "pi.check --node pi5b" in out

@@ -59,7 +59,11 @@ def radio_status(run=run):
             f"sudo journalctl -u {UNIT} -n 20 --no-pager (no lines at all: run this check with sudo)"
     m = lines[-1]
     east, west, failed = float(m["east"]), float(m["west"]), int(m["failed"])
-    rates = f"east>pi5:ble {east:.1f}/s, west>pi5:ble {west:.1f}/s, not sent {failed}"
+    # Links after west on the line: Pi B's beacon (pi5b>pi5:ble) in the desk layout.
+    others = [(link, float(rate)) for link, rate in LINK_RATE.findall(m.group(0))
+              if link not in ("east>pi5:ble", "west>pi5:ble")]
+    rates = ", ".join([f"east>pi5:ble {east:.1f}/s", f"west>pi5:ble {west:.1f}/s"]
+                      + [f"{link} {rate:.1f}/s" for link, rate in others]) + f", not sent {failed}"
     if failed:
         return False, f"radio node: {rates} ({m['why'] or 'send failed'})", \
             "the Ethernet link is down: see the Ethernet line below"
@@ -68,6 +72,10 @@ def radio_status(run=run):
         return False, f"radio node: {rates}", \
             f"nothing heard from beacon {' and '.join(silent)}: check it's powered and advertising " \
             "(a phone scanner must show company 0xFFFF, data 525345 for E, 525357 for W)"
+    quiet = [link for link, rate in others if rate <= 0]
+    if quiet:
+        return False, f"radio node: {rates}", \
+            f"nothing heard on {', '.join(quiet)}: is Pi B's node running? On Pi B: python3 -m pi.check --node pi5b"
     return True, f"radio node: {rates}", None
 
 
