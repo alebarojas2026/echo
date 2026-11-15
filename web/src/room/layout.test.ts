@@ -63,12 +63,29 @@ describe('layout from nodes.json', () => {
     expect(frame.nodePosition('pi5b', 'S-home')).toEqual([0.4, 0.7, 1.0])
   })
 
+  it('moves the router’s spots and the tray with the router when the file moves the router alone', () => {
+    // A placement saved in align mode changes the devices' xyz_m, not the spots.
+    const moved = structuredClone(DESK_LAYOUT)
+    moved.nodes[1].xyz_m = [0.76, 0.68, 0.8] // Pi A, the router: 4 cm west, 42 cm south, 20 cm lower
+    expect(frame.applyLayout(moved)).toBe(true)
+    expect(frame.nodePosition('pi5', 'S-home')).toEqual([0.76, 0.68, 0.8])
+    const west = frame.nodePosition('pi5', 'S-W30')
+    expect(west[0]).toBeCloseTo(0.46)
+    expect(west[1]).toBeCloseTo(0.68)
+    expect(frame.TRAY_SPOTS[0][0]).toBeCloseTo(0.82)
+    expect(frame.TRAY_SPOTS[0][2]).toBeCloseTo(0.8)
+    // and a file where they agree is left exactly as it is
+    expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)
+    expect(frame.nodePosition('pi5', 'S-W30')).toEqual([0.5, 1.1, 1])
+  })
+
   it('follows a 1.5 m square and gate-7 router spots without a rebuild', () => {
     const s = 0.75
     const small = {
       ...square,
       frame: { size_m: [1.5, 1.5] },
-      nodes: square.nodes.map((n) => ({ ...n, xyz_m: [n.xyz_m[0] * s, n.xyz_m[1] * s, 1.0] })),
+      // the router stands on its home spot, as in any real file
+      nodes: square.nodes.map((n) => ({ ...n, xyz_m: n.id === 'pi5' ? [0.75, 0, 1] : [n.xyz_m[0] * s, n.xyz_m[1] * s, 1.0] })),
       router_spots: [
         { id: 'S-home', xyz_m: [0.75, 0, 1] },
         { id: 'S-W20', xyz_m: [0.55, 0, 1] },

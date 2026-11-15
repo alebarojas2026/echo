@@ -173,6 +173,28 @@
   font-weight: 600;
 }
 
+/* Align mode's placement guide: where a device should go. Smaller and quieter than a device's own name. */
+.room-label--guide {
+  translate: -50% calc(-100% - 10px);
+  color: var(--text-2);
+  font-size: 22px;
+  font-weight: 600;
+  -webkit-text-stroke: 6px var(--bg);
+  paint-order: stroke fill;
+}
+
+.room-label--guide-west {
+  translate: calc(-100% + 8px) calc(-100% - 10px);
+}
+
+.room-label--guide-east {
+  translate: -8px calc(-100% - 10px);
+}
+
+.room-label--guide-picked {
+  color: var(--text);
+}
+
 .room-label--hall {
   translate: -50% -50%;
   padding: 4px 10px;
