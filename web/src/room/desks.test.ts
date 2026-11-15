@@ -249,8 +249,8 @@ describe('the guide on the gate layout', () => {
     { id: 'pi5', name: 'Pi A', xyz: [0.36, 0.8, 0.75] as [number, number, number], roles: ['router', 'beacon', 'receiver'] },
     { id: 'pi5b', name: 'Pi B', xyz: [0.4, by, bz] as [number, number, number], roles: ['beacon', 'receiver'] },
   ]
-  // The fixture's rows are 0.9 m apart and its aisle 0.8 m wide: neither fits a 1 m gate and its table. The outer
-  // end of a row (wedge 1's east end) has nothing beyond it.
+  // The fixture's rows are 0.9 m apart and its aisle 0.8 m wide: a 1 m gate fits in neither. The outer end of a
+  // row (wedge 1's east end) has nothing beyond it.
   const guide = (gap: Gap, nodes = gate(), wedge = 1, along = 1) => placementGuide(HALL, { ...at(0, wedge, along), gap }, nodes, [0.8, 0.8])
   const place = (list: ReturnType<typeof placementGuide>, id: string) => list.find((p) => p.id === id)!
 
