@@ -42,6 +42,7 @@ class _Link:
         self.expected_hz = expected_hz
         self.base_dbm = base_dbm
         self.steady_db = STEADY_STD_DB   # raised to a multiple of the link's own quiet level when that is set
+        self.optional = False        # section 3 "optional": true
         self.readings = deque()      # (t_s, dbm), last RATE_WINDOW_S only
         self.trail = deque()         # (t_s, dbm), last STEADY_S, for the steady-drop test
         self.blind = False
@@ -70,7 +71,9 @@ class _Link:
         ok = not stale and not jump
         self.ok_since = (self.ok_since if self.ok_since is not None else now) if ok else None
 
-        if not self.blind:
+        if self.optional:
+            pass   # a line that may go silent at any time (section 3): stale at most, never blind
+        elif not self.blind:
             if (self.stale_since is not None and now - self.stale_since >= BLIND_AFTER_S - EPS_S
                     and self.expected_hz >= BLIND_RATE_MIN_HZ):
                 self.blind, self.reason = True, "rate"
@@ -118,21 +121,26 @@ class Health:
         state["health"] = out["health"]      # pred = None while hm.blind
     """
 
-    def __init__(self, links=LINKS, expected_hz=None, base_dbm=None, classifier_links=None):
+    def __init__(self, links=LINKS, expected_hz=None, base_dbm=None, classifier_links=None, optional=()):
         expected_hz = expected_hz or {}
         base_dbm = base_dbm or {}
         self.links = {k: _Link(k, expected_hz.get(k), base_dbm.get(k)) for k in links}
-        self.classifier_links = list(classifier_links or links)
+        self.optional = set(optional)   # their rows are ok or stale, never blind, and never make health degraded
+        for k in self.optional & set(self.links):
+            self.links[k].optional = True
+        self.classifier_links = [k for k in (classifier_links or links) if k not in self.optional]
         self.blind = False
         self._blind_links = []
         self._start = None
 
     @classmethod
-    def from_nodes(cls, doc, base_dbm=None, classifier_links=None):
-        """Build from radio/nodes.json, already parsed (links with expected_hz)."""
+    def from_nodes(cls, doc, base_dbm=None, classifier_links=None, optional=None):
+        """Build from radio/nodes.json, already parsed (links with expected_hz and, maybe, optional)."""
         links = [link["id"] for link in doc["links"]]
         hz = {link["id"]: link.get("expected_hz") for link in doc["links"]}
-        return cls(links, hz, base_dbm, classifier_links)
+        if optional is None:
+            optional = [link["id"] for link in doc["links"] if link.get("optional") is True]
+        return cls(links, hz, base_dbm, classifier_links, optional)
 
     def set_base(self, base_dbm):
         """{link: base_dbm}, after a baseline."""
@@ -190,9 +198,10 @@ class Health:
         blind = bad_cls
         if bad_cls:
             status, reason = "blind", self.links[bad_cls[0]].reason
-        elif any(r["status"] != "ok" for r in rows):
+        elif any(r["status"] != "ok" for r in rows if r["id"] not in self.optional):
             status = "degraded"
-            reason = "rate" if any(r["_stale"] for r in rows) else self.links[all_blind[0]].reason
+            reason = "rate" if any(r["_stale"] for r in rows if r["id"] not in self.optional) \
+                else self.links[all_blind[0]].reason
         else:
             status, reason = "ok", None
         for r in rows:

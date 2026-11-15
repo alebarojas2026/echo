@@ -180,12 +180,19 @@ class Brain:
             logging.getLogger("brain").warning(
                 '%s is the presence line of this layout: its "classifier": false is ignored', main_line)
             thin.discard(main_line)
+        # Section 3: a link with "optional": true is a thin link whose receiver may be missing or go silent at
+        # any time (a laptop on the hotspot reading its own signal: a lid closes). Its row is ok or stale and
+        # never blind, it never makes health degraded and it is no part of tamper. While it has readings and
+        # crosses the spot it is one more second opinion for the presence line (it holds, it never raises).
+        self.optional = tuple(link["id"] for link in nodes["links"]
+                              if link.get("optional") is True and link["id"] in links and link["id"] != main_line)
+        thin |= set(self.optional)
         self.model_links = tuple(k for k in links if k not in thin)
         # The lines a person on the spot stands in, when the layout marks them ("crosses_spot": true).
         self.crossing = tuple(link["id"] for link in nodes["links"]
                               if link.get("crosses_spot") is True and link["id"] in self.model_links)
         self.health = Health.from_nodes(
-            nodes, classifier_links=[k for k in self.model_links if k not in over_hotspot])
+            nodes, classifier_links=[k for k in self.model_links if k not in over_hotspot], optional=self.optional)
         self.xray = Xray.from_nodes(dict(nodes, links=[k for k in nodes["links"] if k["id"] not in thin]))
         self.router_links = [k for k in self.router_links if k not in thin]   # the 3 s check after router_home
         self.hall = Hall.from_nodes(nodes)    # optional long links (brain/hall.py); none unless nodes.json lists them
@@ -196,7 +203,7 @@ class Brain:
                            self.settings.with_(moving_run=self.settings.spot_moving_run) if crossing else self.settings)
         # after hours: a person who appears and is still there armed.hold_s later is an intrusion
         self.armed = Armed(self.settings, S.hold_s(nodes))
-        self.tamper = Tamper.from_nodes(nodes, silent_ms=self.settings.tamper_silent_ms,
+        self.tamper = Tamper.from_nodes(nodes, skip=self.optional, silent_ms=self.settings.tamper_silent_ms,
                                         clear_ms=self.settings.tamper_clear_ms)   # ... and a device going silent is tampering
         # The optional hall beacons (nodes.json "hall"): not core links, but tamper counts them.
         self._hall_nodes = {b.get("node") for b in (nodes.get("hall") or {}).get("beacons") or []}
@@ -223,6 +230,9 @@ class Brain:
         self.presence_second = rule.get("second") if rule.get("second") in self.model_links else None
         self.presence_on_db, self.presence_off_db = float(rule.get("on_db", 7.0)), float(rule.get("off_db", 4.0))
         self.presence_hold_ms = int(float(rule.get("second_hold_s", 5.0)) * 1000)
+        # The optional lines that cross the spot hold presence on the second line's terms.
+        self.presence_also = tuple(link["id"] for link in nodes["links"]
+                                   if link["id"] in self.optional and link.get("crosses_spot") is True)
         self._line_present, self._line_seen = False, None
         # A thing left standing in that line: down object_db or more (and less than a person takes), as steady
         # as the empty line, for object_hold_s. And where moving begins: the line's 2 s spread.
@@ -1132,7 +1142,11 @@ class Brain:
             if stats.get("n") and link in self.base:
                 self.base[link] += (stats["median"] - self.base[link]) * share
                 self.windower.base[link] = self.base[link]
-        self.health.set_base({k: self.base[k] for k in self.crossing if k in self.base})
+        for link in self.presence_also:   # an optional line's empty level follows the same way, while it has readings
+            down = self._optional_drop(link, now)
+            if down is not None:
+                self.base[link] -= down * share
+        self.health.set_base({k: self.base[k] for k in self.crossing + self.presence_also if k in self.base})
         noted_t, noted = self._noted
         if now - noted_t >= DRIFT_NOTE_MS and any(abs(self.base[k] - noted.get(k, self.base[k] + 99)) >= DRIFT_NOTE_DB
                                                   for k in self.crossing if k in self.base):
@@ -1165,11 +1179,20 @@ class Brain:
         elif self._line_present:
             # The line is silent (Pi B's readings come over the hotspot). The second line may keep
             # somebody there for a few seconds; it never brings anybody in.
-            second = drop(self.presence_second) if self.presence_second else None
-            if not (second is not None and second >= self.presence_off_db
+            seconds = [drop(self.presence_second) if self.presence_second else None]
+            seconds += [self._optional_drop(link, end) for link in self.presence_also]
+            if not (any(down is not None and down >= self.presence_off_db for down in seconds)
                     and self._line_seen is not None and end - self._line_seen <= self.presence_hold_ms):
                 self._line_present = False
         return self._line_present
+
+    def _optional_drop(self, link, end) -> Optional[float]:
+        """An optional line's drop from its empty level over the 1 s up to `end`, or None when it has no
+        reading there or no empty level (silent, missing, or first heard after the baseline): then it
+        says nothing at all."""
+        base = self.base.get(link)
+        recent = [dbm for t, dbm in self._recent.get(link, ()) if end - F.WINDOW_MS < t <= end]
+        return base - statistics.median(recent) if recent and base is not None else None
 
     def _thing_says(self) -> bool:
         """True while the presence line says a thing has been left standing in it (section 6): over the

@@ -225,9 +225,13 @@ class Tamper:
         self._armed_at: Optional[int] = None
 
     @classmethod
-    def from_nodes(cls, doc, **settings) -> "Tamper":
+    def from_nodes(cls, doc, skip=(), **settings) -> "Tamper":
+        """skip: links left out altogether (section 3 "optional": a laptop whose lid closes is no tamper, and
+        the node at its other end is not kept listed by its silence). A node with no other link is not watched."""
         links_of: Dict[str, List[str]] = {}
         for link in doc["links"]:
+            if link["id"] in skip or link.get("optional") is True:
+                continue
             for node in (link["tx"], link["rx"]):
                 links_of.setdefault(node, []).append(link["id"])
         return cls(links_of, **settings)
