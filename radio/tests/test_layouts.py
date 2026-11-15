@@ -63,6 +63,7 @@ def test_the_gate_is_three_devices_six_links_and_one_spot():
     assert d["zones"] == [{"id": 1, "name": "At the desk", "centre_m": [0.4, 0.3], "still_alert_s": 10}]
     assert "zone_split_x_m" not in d["frame"] and d["frame"]["strip_m"] == [0.8, 0.6]
     assert d["armed"] == {"hold_s": 3} and "hall" not in d
+    assert [link["id"] for link in d["links"] if link.get("classifier") is False] == ["pi5b>pi5:ble"]
     at = {n["id"]: n["xyz_m"] for n in d["nodes"]}
     assert at["pi5b"][1] < 0 < at["unoq"][1]                       # Pi B and the desk are either side of the spot
     assert abs(at["unoq"][1] - at["pi5b"][1] - 1.0) < 1e-9          # 1.0 m apart
@@ -116,12 +117,21 @@ def test_the_command_says_what_it_did(tmp_path, monkeypatch, capsys):
     assert "no layout called 'nope'" in capsys.readouterr().err
 
 
-def test_gate_3_is_the_gate_with_pi_b_as_a_beacon_only_and_three_links():
+def test_gate_3_is_the_gate_with_the_three_lines_that_cross_the_spot():
     d, gate = doc("gate-3"), doc("gate")
-    assert [link["id"] for link in d["links"]] == ["pi5>unoq:wifi", "pi5b>unoq:ble", "pi5b>pi5:ble"]
-    assert [link["id"] for link in d["links"] if link["crosses_spot"]] == ["pi5b>unoq:ble", "pi5b>pi5:ble"]
-    assert {n["id"]: n["roles"] for n in d["nodes"]} == {"unoq": ["receiver"], "pi5": ["router", "receiver"], "pi5b": ["beacon"]}
-    assert [p["node"] for p in d["beacons"]["payloads"]] == ["pi5b"]
-    for key in ("frame", "zones", "zone_rule", "router_spots", "tray_spots", "armed"):
-        assert d[key] == gate[key]                       # the same place, fewer lines
-    assert [n["xyz_m"] for n in d["nodes"]] == [n["xyz_m"] for n in gate["nodes"]]
+    assert [link["id"] for link in d["links"]] == ["pi5>pi5b:wifi", "pi5b>unoq:ble", "pi5b>pi5:ble"]
+    assert all(link["crosses_spot"] for link in d["links"])
+    for key in ("frame", "nodes", "zones", "zone_rule", "router_spots", "tray_spots", "armed", "beacons", "presence"):
+        assert d[key] == gate[key]                       # the same place and the same devices, fewer lines
+
+
+def test_on_the_gate_the_wifi_line_to_pi_b_decides_and_pi_bs_roles_keep_it_alive():
+    for name in ("gate", "gate-3"):
+        d = doc(name)
+        links = {link["id"]: link for link in d["links"]}
+        assert d["presence"] == {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble", "on_db": 7, "off_db": 4, "second_hold_s": 5}
+        assert links["pi5>pi5b:wifi"]["crosses_spot"] is True and links["pi5>pi5b:wifi"].get("classifier", True) is True
+        assert links["pi5b>pi5:ble"]["classifier"] is False                    # unreliable on the kit: it never votes
+        roles = {n["id"]: n["roles"] for n in d["nodes"]}
+        assert "receiver" in roles["pi5b"] and "router" in roles["pi5"]        # Pi B reads the hotspot's signal: never a beacon only
+    assert doc("gate")["links"][0]["crosses_spot"] is False                    # pi5>unoq:wifi crosses nothing

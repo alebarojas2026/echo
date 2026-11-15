@@ -13,15 +13,15 @@
   },
   "nodes": [
     {"id": "unoq", "device": "unoq", "name": "Board", "xyz_m": [0.44, 0.8, 0.75], "roles": ["receiver"]},
-    {"id": "pi5", "device": "pi5", "name": "Pi A", "xyz_m": [0.36, 0.8, 0.75], "roles": ["router", "receiver"]},
-    {"id": "pi5b", "device": "pi5", "name": "Pi B", "xyz_m": [0.4, -0.2, 0.75], "roles": ["beacon"]}
+    {"id": "pi5", "device": "pi5", "name": "Pi A", "xyz_m": [0.36, 0.8, 0.75], "roles": ["router", "beacon", "receiver"]},
+    {"id": "pi5b", "device": "pi5", "name": "Pi B", "xyz_m": [0.4, -0.2, 0.75], "roles": ["beacon", "receiver"]}
   ],
   "links": [
-    {"id": "pi5>unoq:wifi", "tx": "pi5", "rx": "unoq", "kind": "wifi", "expected_hz": null, "crosses_spot": false},
+    {"id": "pi5>pi5b:wifi", "tx": "pi5", "rx": "pi5b", "kind": "wifi", "expected_hz": null, "crosses_spot": true},
     {"id": "pi5b>unoq:ble", "tx": "pi5b", "rx": "unoq", "kind": "ble", "expected_hz": null, "crosses_spot": true},
-    {"id": "pi5b>pi5:ble", "tx": "pi5b", "rx": "pi5", "kind": "ble", "expected_hz": null, "crosses_spot": true}
+    {"id": "pi5b>pi5:ble", "tx": "pi5b", "rx": "pi5", "kind": "ble", "expected_hz": null, "crosses_spot": true, "classifier": false}
   ],
-  "links_note": "Pi B only sends its beacon and Pi A only listens, so the readings come faster. crosses_spot marks the two lines a person on the spot stands in: Pi B's beacon heard by the board and by Pi A, 8 cm apart. pi5>unoq:wifi runs over the desk and is the dead-zone line.",
+  "links_note": "crosses_spot marks the lines a person on the spot stands in: the ones to or from Pi B. Measured on the kit: pi5>pi5b:wifi falls 15 to 21 dB with a person and dips under 1 dB empty, so it decides (presence, below); pi5b>unoq:ble falls 4.5 to 11 dB but dips 4.8 dB empty, so it is a second opinion; pi5b>pi5:ble is unreliable and is no classifier link. pi5>unoq:wifi and pi5>unoq:ble run 8 cm over the desk and cross nothing.",
   "zone_rule": "zone = 1 when 0 <= x <= 0.8 and 0 <= y <= 0.6; anywhere else 0 = empty",
   "zones": [
     {"id": 1, "name": "At the desk", "centre_m": [0.4, 0.3], "still_alert_s": 10}
@@ -40,8 +40,10 @@
     "company_id": "FFFF",
     "prefix_hex": "5253",
     "payloads": [
+      {"node": "pi5", "id": "S", "data_hex": "FFFF525353"},
       {"node": "pi5b", "id": "B", "data_hex": "FFFF525342"}
     ]
   },
+  "presence": {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble", "on_db": 7, "off_db": 4, "second_hold_s": 5},
   "armed": {"hold_s": 3}
 }
