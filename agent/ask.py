@@ -29,6 +29,7 @@ from pathlib import Path
 
 from store import DB, Store
 from .tools import TOOLS
+from . import room_facts
 
 LLM_URL = "http://127.0.0.1:8091"
 TIMEOUT_S = 8.0
@@ -167,11 +168,15 @@ def cant_answer(question: str, zones: dict) -> bool:
     if CANT.search(question):
         return True
     names = {n.lower() for n in zones.values()}
+    names.update(("wi", "wifi", "bluetooth"))  # Wi-Fi is a link, not a person's name.
     return any(m.group(1).lower() not in names for m in NAME.finditer(question))
 
 
 def keyword_tool(question: str):
     """The first tool whose keywords match, or None."""
+    specific = room_facts.intent(question)
+    if specific:
+        return specific[1]
     return next((tool for tool, pattern in RULES if pattern.search(question)), None)
 
 
@@ -260,12 +265,13 @@ def checked(pick, zones: dict, links: list) -> tuple:
 USES_MINUTES = ("presence", "still_spans", "alerts", "intrusions", "link_history")
 
 
-def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic) -> dict:
+def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic,
+        nodes_path=room_facts.NODES, privacy_reader=None) -> dict:
     """{"answer", "rows", "tool", "args", "picked_by": "llm"|"rules", "src", "ms"} for one question.
     src is the newest record's src ("live", "sim" or "replay"; None when the store is empty)."""
     start = timer()
     if zones is None or links is None:
-        zones, links = layout()
+        zones, links = layout(nodes_path)
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
     question = " ".join(str(question).split())[:MAX_QUESTION]
     read = fix_typos(question)   # the keywords and the time read this; the model gets the question as typed
@@ -288,8 +294,10 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
         # The list comes first, as section 10 says; a refusal adds why after it.
         out = {"answer": can_answer() + (" " + CANT_ANSWER if refused else ""), "rows": []}
     else:
-        out = TOOLS[tool](store, now_ms, zones, **args)
-        if tool in USES_MINUTES:   # the minutes in the answer are in a row too
+        specific = room_facts.intent(read)
+        out = (room_facts.answer(specific[0], store, now_ms, args["minutes"], nodes_path, privacy_reader, one_spot=len(zones) == 1)
+               if specific else TOOLS[tool](store, now_ms, zones, **args))
+        if tool in USES_MINUTES or specific:   # the minutes in the answer are in a row too
             out = {**out, "rows": out["rows"] + [{"row": "asked", "minutes": args["minutes"]}]}
     latest = store.latest()
     return {**out, "tool": tool, "args": args, "picked_by": picked_by, "src": latest and latest["src"],
