@@ -53,7 +53,7 @@ radio-sight-bus           board  -      board/units/radio-sight-bus.service     
 radio-sight-wifi-rssi     board  pi     board/units/radio-sight-wifi-rssi.service   radio/ contracts/
 radio-sight-hci-scan      board  pi     board/units/radio-sight-hci-scan.service    radio/ contracts/
 radio-sight-camwatch      board  -      board/units/radio-sight-camwatch.service    teacher/ contracts/
-radio-sight-brain         board  -      board/units/radio-sight-brain.service       brain/ advisor/ radio/nodes.json contracts/
+radio-sight-brain         board  -      board/units/radio-sight-brain.service       brain/ advisor/ radio/nodes.json contracts/ board/layout.py
 radio-sight-serve         board  -      board/units/radio-sight-serve.service       board/serve.py board/layout.py board/privacy.py board/clock.py agent/ store/
 radio-sight-store         board  -      board/units/radio-sight-store.service       store/ contracts/
 radio-sight-privacy       board  -      board/units/radio-sight-privacy.service     board/privacy.py board/privacy.nft board/privacy-ports.nft

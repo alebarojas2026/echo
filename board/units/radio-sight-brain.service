@@ -10,6 +10,10 @@ User=@USER@
 WorkingDirectory=@REPO@
 EnvironmentFile=-@REPO@/.env
 Environment=PYTHONUNBUFFERED=1
+# The brain reads radio/nodes.json with the positions placed in align mode applied (board/layout.py).
+# Written fresh before every start, from radio/nodes.json alone when nothing is saved.
+Environment=RADIO_SIGHT_NODES=@REPO@/data/nodes.local.json
+ExecStartPre=@PYTHON@ -m board.layout write-nodes
 ExecStart=@PYTHON@ -m brain.main
 Restart=always
 RestartSec=2

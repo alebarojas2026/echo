@@ -13,10 +13,11 @@ index.html goes out with <meta name="radio-sight-board" content="live"> added af
 a page served by the board shows live data, and plays the simulated tour only when asked for
 it in the address (#642's web half).
 
-/layout is for the operator's align mode (#510): GET gives the saved room alignment and
-the hall beacons' positions, POST saves them (board/layout.py says what may be sent). They
-are for drawing only and live in data/layout.local.json; /nodes.json carries the saved hall
-positions, and nothing else in it changes. POST is taken only from the board itself, the
+/layout is for the operator's align mode (#510, #721): GET gives the saved room alignment, the
+hall beacons' positions and the core devices' placed positions, POST saves them (board/layout.py
+says what may be sent, and how the brain gets the same positions from data/nodes.local.json).
+They are for drawing and the X-ray only and live in data/layout.local.json; /nodes.json carries
+the saved positions, and nothing else in it changes. POST is taken only from the board itself, the
 Ethernet link and the sensing hotspot (where the laptop is), and only as JSON.
 
 POST /ask with {"question": "..."} asks the room: agent/ask.py picks a tool with the on-board
@@ -205,6 +206,10 @@ class Handler(SimpleHTTPRequestHandler):
             self.log_error("can't save the layout: %s", e)
             return self._json({"error": "can't save the layout on the board"}, False,
                               HTTPStatus.INTERNAL_SERVER_ERROR)
+        try:   # the brain's copy (data/nodes.local.json), read when it next starts
+            layout.write_nodes(self.server.nodes_path, self.server.layout.path, self.server.merged_path)
+        except (OSError, ValueError) as e:
+            self.log_error("saved, but the brain's nodes file wasn't written: %s", e)
         return self._json(self.server.layout.view(nodes_doc), False)
 
     def _ours(self) -> bool:
@@ -356,7 +361,7 @@ class Handler(SimpleHTTPRequestHandler):
             body = self.server.nodes_path.read_bytes()
             doc = json.loads(body)
             stored = self.server.layout.load()
-            if stored["hall"]:  # the saved hall positions; with none, the file's own bytes
+            if stored["hall"] or stored["nodes"]:  # the saved positions; with none, the file's own bytes
                 body = json.dumps(layout.overlay(doc, stored), indent=2).encode()
         except FileNotFoundError:
             return self._json({"error": "radio/nodes.json not found"}, head, HTTPStatus.NOT_FOUND)
@@ -418,6 +423,7 @@ def make_server(host="0.0.0.0", port=8080, dist=DIST, nodes=NODES, proof=PROOF, 
     server.proof_path = Path(proof)
     server.privacy_path = Path(privacy_path)
     server.layout = layout.Store(layout_path)
+    server.merged_path = Path(layout_path).with_name("nodes.local.json")
     server.ask, server.ask_lock = ask, threading.Lock()
     server.routes = dict(routes or {})
     server.clock = clock_api or clock.ClockAPI()

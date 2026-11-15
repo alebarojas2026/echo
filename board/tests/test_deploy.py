@@ -41,7 +41,7 @@ def repo(tmp_path):
     (r / "board").mkdir(parents=True)
     shutil.copy(REPO / "board" / "deploy.sh", r / "board" / "deploy.sh")
     shutil.copytree(REPO / "board" / "units", r / "board" / "units")
-    for path in ("board/serve.py", "board/privacy-ports.nft", "board/privacy.py", "board/privacy.nft", "board/clock.py", "store/__init__.py", "agent/endpoints.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
+    for path in ("board/serve.py", "board/layout.py", "board/privacy-ports.nft", "board/privacy.py", "board/privacy.nft", "board/clock.py", "store/__init__.py", "agent/endpoints.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
                  "teacher/camwatch.py", "brain/main.py", "advisor/advice.py", "narrator/narrate.py",
                  "pi/radio_node.py", "web/src/main.ts", "docs/notes.md"):
         write(r, path, "# v1\n")
@@ -127,6 +127,16 @@ def test_the_clock_helper_acts_for_the_clone_owner(repo):
     assert "RuntimeDirectory=radio-sight-clock" in lines
 
 
+def test_the_brain_reads_the_placed_positions_written_before_it_starts(repo):
+    deploy(repo, "v1")
+    lines = (repo.parent / "units" / "radio-sight-brain.service").read_text().splitlines()
+    env = [l for l in lines if l.startswith("Environment=RADIO_SIGHT_NODES=")]
+    assert len(env) == 1 and env[0].endswith("/repo/data/nodes.local.json")
+    pre = [l for l in lines if l.startswith("ExecStartPre=")]
+    assert len(pre) == 1 and pre[0].endswith(" -m board.layout write-nodes")
+    assert lines.index(pre[0]) < next(i for i, l in enumerate(lines) if l.startswith("ExecStart="))
+
+
 def test_same_ref_restarts_nothing(repo):
     deploy(repo, "v1")
     restarted, out = deploy(repo, "v1")
@@ -139,6 +149,7 @@ def test_same_ref_restarts_nothing(repo):
     ("radio/nodes.json", {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan", "radio-sight-brain"}),
     ("advisor/advice.py", {"radio-sight-brain"}),
     ("board/serve.py", {"radio-sight-serve"}),
+    ("board/layout.py", {"radio-sight-serve", "radio-sight-brain"}),
     ("store/__init__.py", {"radio-sight-store", "radio-sight-serve"}),
     ("agent/endpoints.py", {"radio-sight-serve"}),
     ("board/privacy.py", {"radio-sight-serve", "radio-sight-privacy"}),
