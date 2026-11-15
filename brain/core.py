@@ -225,6 +225,7 @@ class Brain:
     def on_message(self, msg: dict) -> None:
         """One message forwarded by the bus (it carries recv_t)."""
         if self.hall.take(msg):
+            self._hall_heard(msg)   # tamper counts a hall beacon once it has been heard since arming
             return   # a hall link's reading: nothing below ever sees it
         t, kind = msg.get("recv_t"), msg.get("type")
         if t is None:
@@ -234,10 +235,8 @@ class Brain:
         if kind == "label" and not _is_label(msg):
             return   # a zone or a count that isn't a number: the windows would choke on it
         self.feed_t = max(self.feed_t, int(t))
-        if kind == "rssi" and self._hall_nodes and isinstance(msg.get("link"), str):
-            tx = _ends(msg["link"])[0]
-            if tx in self._hall_nodes and msg["link"] not in self.links:
-                self._hall_seen.setdefault(tx, {})[msg["link"]] = int(t)
+        if kind == "rssi":
+            self._hall_heard(msg)
         if kind == "rssi":
             # state.src mirrors the radio feed. The camera and the bus's meta say "live"
             # even over a sim feed, and must not flip the screen's badge to LIVE.
@@ -285,6 +284,16 @@ class Brain:
                 for window in self.windower.push(msg):
                     self.window = window
         self._tick()
+
+    def _hall_heard(self, msg: dict) -> None:
+        """Remember when a hall beacon's link was last heard, for tamper. Nothing else uses it."""
+        link, t = msg.get("link"), msg.get("recv_t")
+        if not (self._hall_nodes and isinstance(link, str) and isinstance(t, (int, float))
+                and _is_reading(msg.get("dbm"))):
+            return
+        tx = _ends(link)[0]
+        if tx in self._hall_nodes and link not in self.links:
+            self._hall_seen.setdefault(tx, {})[link] = int(t)
 
     def on_cmd(self, msg: dict) -> None:
         """One command from the screen. Every command also goes to the bus, which records it."""
