@@ -1,3 +1,4 @@
+import { changingText } from './changing-text'
 import type { StateMsg } from '../room/contract'
 
 export function adviceResult(state: StateMsg | null, stale: boolean) {
@@ -14,14 +15,15 @@ export function adviceResult(state: StateMsg | null, stale: boolean) {
 }
 export function mountPanel(root: HTMLElement) {
   root.innerHTML = '<p data-testid="advice-text"></p><p>Before <span data-testid="before-dbm"></span></p><p>After <span data-testid="after-dbm"></span></p>'
+  const title = root.querySelector<HTMLElement>('[data-testid="advice-text"]')!
+  const text = changingText(title)
   const number = (value: number | null) => value == null ? '__' : `${String(value).replace('-', '−')} dBm`
   return {
     update(state: StateMsg | null, stale: boolean) {
       const advice = adviceResult(state, stale)
       root.hidden = !advice
       if (!advice) return
-      const title = root.querySelector<HTMLElement>('[data-testid="advice-text"]')!
-      title.textContent = advice.text
+      text.set(advice.text)
       title.style.color = advice.positive ? 'var(--action)' : 'var(--text)'
       for (const key of ['before', 'after'] as const) {
         const field = root.querySelector<HTMLElement>(`[data-testid="${key}-dbm"]`)!
@@ -29,5 +31,6 @@ export function mountPanel(root: HTMLElement) {
         field.style.whiteSpace = 'nowrap'
       }
     },
+    dispose() { text.dispose() },
   }
 }
