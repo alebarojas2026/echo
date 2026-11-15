@@ -4,6 +4,7 @@ import type { Feed } from './feed'
 import { startFpsMeter } from './fps'
 import { AlertMarks, WaveClock } from './alert'
 import { startAlign } from './align'
+import { standAtDefaultDesk } from './desks'
 import { HallBeacons } from './devices'
 import { HallPaths } from './hall'
 import { Fly, HallMarks, hallShot, pinnedFraming } from './fly'
@@ -31,7 +32,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   host.dataset.quality = options.quality
   if (params.get('fps') === '1') startFpsMeter(view)
   const stage = new Stage(view)
-  const scan = loadScan(view, stage.drawnRoom, params, options.quality)
+  const scan = loadScan(view, stage.drawnRoom, params, options.quality).then(standAtDefaultDesk)
   const mirror = new Mirror(host)
   const beams = new Beams(view, mirror)
   const xray = new XrayLayer(view, mirror)
