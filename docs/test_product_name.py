@@ -20,6 +20,9 @@ ALLOWED = (
     # Finds an llm.service installed by an older README on the board; that file says this.
     ("board/deploy.sh", 'grep -qs "Radio Sight narrator model"'),
     ("board/tests/test_deploy.py", "Description=Radio Sight narrator model"),
+    # Other docs tests that keep the old name out of their page.
+    ("docs/test_architecture_doc.py", '"radio sight"'),
+    ("docs/test_network_doc.py", '"radio sight"'),
     # This file.
     ("docs/test_product_name.py", ""),
 )
