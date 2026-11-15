@@ -119,7 +119,7 @@ def wander(zone: int, start: float, end: float, step_s: float = 1.5) -> list:
 
 def desk_script():
     """The 3-minute desk visit in docs/desk-demo.md, at its times: the judge walks in at 0:20 and
-    around, goes to the bathroom (the zone with the shortest still limit) at 0:45 and stands still until
+    around, goes to the alert zone (the one with the shortest still limit) at 0:45 and stands still until
     the alert, waves at 1:10, moves to a zone with no alert while the camera cable is pulled, and walks
     out at 2:10. Then armed mode: armed at 2:15 with nobody there, the judge steps back in at 2:20 (an
     intrusion), and it's disarmed at the end."""
@@ -143,7 +143,7 @@ def desk_script():
     beats = [
         ("nobody before the judge", 0, 20, "state", lambda s: pred(s, present=False)),
         ("judge walks in", 20, 45, "state", lambda s: pred(s, present=True, kind="person")),
-        ("still in the bathroom", 45, wave, "state", lambda s: pred(s, present=True, zone=STILL, motion="still")),
+        ("still in the alert zone", 45, wave, "state", lambda s: pred(s, present=True, zone=STILL, motion="still")),
         ("no-movement alert", 45, wave, "event", lambda e: e["kind"] == "alert_on"),
         ("wave check-in", wave, 90, "event", lambda e: e["kind"] == "checkin"),
         ("camera pulled, radio only", cam_off, leave, "state",
@@ -227,6 +227,7 @@ class Stack:
         self.outbox = []   # commands the brain passes to the bus
         self.brain = Brain(sessions_dir=folder, to_bus=self.outbox.append)
         # The narrator's recap, as on the board: brain events in, a narration to the bus on reset.
+        narrate.set_zones(narrate.load_zones())   # the narrator's zone words come from nodes.json, as on the board
         self.narrator = narrate.Narrator(no_model, self._narration, clock=lambda: self.now, sleep=lambda s: None)
         self.recap = recaps.Recap(self.narrator, no_model)
 
