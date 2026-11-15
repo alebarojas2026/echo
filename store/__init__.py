@@ -51,6 +51,8 @@ JSON_COLUMNS = ("blind", "links", "advice", "model", "zone_set", "tamper")
 VERIFY_DEFAULT = 3600      # records checked by verify() when no start is named
 VERIFY_MAX = 100_000       # most records checked in one call
 PROVE_DEFAULT, PROVE_MAX = 600, 3600
+TAIL_MAX = 200             # most links tail() gives
+UNSEALED_EVERY_S = 60.0
 ROW = "seq, t, kind, body, prev, hash"
 
 
@@ -105,6 +107,7 @@ class Store:
                 self.db.execute("drop table seconds")
                 self.db.execute("alter table seconds_new rename to seconds")
         self.lock, self._saved = threading.Lock(), 0
+        self._unsealed = None   # (when counted, the count): the old rows are counted at most once a minute
 
     def _add_column(self, table: str, column: str, kind: str) -> None:
         """Add a column to an older file. The store and the web server open the same file as they
@@ -217,8 +220,13 @@ class Store:
             n, first = self.db.execute("select count(*), min(seq) from chain").fetchone()
             since = self.db.execute("select t from chain where seq = ?", (first,)).fetchone() if first else None
             anchor = self._meta("anchor")
-            old = sum(self.db.execute(f"select count(*) from {table} where seq is null").fetchone()[0]
-                      for table in ("events", "seconds"))
+            if self._unsealed is None or time.monotonic() - self._unsealed[0] > UNSEALED_EVERY_S:
+                # Rows from before the record was sealed. No new one is ever added, and the count only
+                # falls as they are pruned, so it is not counted again on every call (the screen polls).
+                self._unsealed = (time.monotonic(), sum(
+                    self.db.execute(f"select count(*) from {table} where seq is null").fetchone()[0]
+                    for table in ("events", "seconds")))
+            old = self._unsealed[1]
         return {"head": {"seq": seq, "hash": digest}, "records": n, "since_t": since["t"] if since else None,
                 "first_seq": first, "anchor": anchor and {"seq": anchor["seq"], "hash": anchor["hash"]},
                 "unsealed": old}
@@ -291,6 +299,25 @@ class Store:
         out = timed(lambda: verify_rows(copy, before))
         return {"ok": out["ok"], "altered_seq": copy[at][0], "first_bad_seq": out["first_bad_seq"], "ms": out["ms"],
                 "checked": len(copy), "kind": copy[at][2], "t": copy[at][1]}
+
+    def tail(self, n: int = 40) -> list:
+        """The last n links, oldest first, without their bodies: {"seq", "t", "kind", "hash", "prev"}, and
+        for a witness's records also "node", and "for_seq" (the record a signature vouches for) on a
+        witness record. Cheap enough to ask for every second (GET /chain/tail)."""
+        with self.lock:
+            rows = self.db.execute(
+                "select seq, t, kind, hash, prev, case when kind like 'witness%' then body end as body "
+                "from chain order by seq desc limit ?", (max(1, min(int(n), TAIL_MAX)),)).fetchall()
+        out = []
+        for r in reversed(rows):
+            row = {k: r[k] for k in ("seq", "t", "kind", "hash", "prev")}
+            if r["body"]:
+                body = json.loads(r["body"])
+                row["node"] = body.get("node")
+                if r["kind"] == "witness":
+                    row["for_seq"] = body.get("seq")
+            out.append(row)
+        return out
 
     def records(self, from_seq=None, to_seq=None, kinds=None, since_ms=None, until_ms=None, limit: int = 1000,
                 newest: bool = False) -> list:

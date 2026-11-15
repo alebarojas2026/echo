@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain_tail.json",
+  "$comment": "Section 13: the answer of GET /chain/tail. Not a bus message. The last records, oldest first, without their bodies. node is there on a witness's records only, for_seq (the record the signature vouches for) on a witness record only.",
+  "type": "object",
+  "properties": {
+    "records": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "t": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "prev": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "node": {
+            "$ref": "common.json#/$defs/node"
+          },
+          "for_seq": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "seq",
+          "t",
+          "kind",
+          "hash",
+          "prev"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "witness"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "required": [
+                "node",
+                "for_seq"
+              ]
+            },
+            "else": {
+              "properties": {
+                "for_seq": false
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "records"
+  ],
+  "additionalProperties": false
+}

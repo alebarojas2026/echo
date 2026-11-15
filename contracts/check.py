@@ -62,7 +62,7 @@ VALIDATORS = _load()
 # server: /layout (section 2), POST /ask, GET /history and GET /report (section 10), the three /chain answers and a
 # sealed record (section 13)
 NOT_MESSAGES = {"proof", "ask_question", "ask_reply", "history", "report", "layout", "nodes", "privacy", "clock", "clock_set",
-                "chain", "chain_verify", "chain_prove", "record"}   # section 13: the sealed record
+                "chain", "chain_verify", "chain_prove", "chain_tail", "record"}   # section 13: the sealed record
 CHAIN_TYPES = {"chain_head", "chain_witness"}   # their seq is a record number of the chain, not a counter
 HISTORY_MAX_MS = 30 * 60 * 1000
 TYPES = sorted(set(VALIDATORS) - NOT_MESSAGES)

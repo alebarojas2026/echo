@@ -2,7 +2,7 @@
 
 Runs inside the web server (board/serve.py), next to the store's file:
 
-- GET /chain, GET /chain/verify?from=&to= and POST /chain/prove, mounted like /history;
+- GET /chain, GET /chain/verify?from=&to=, GET /chain/tail?n= and POST /chain/prove, mounted like /history;
 - every 30 s, a check of the last 10 minutes of the chain (what /chain reports as verified);
 - every 5 s, the chain head on the bus (chain_head), which the bus passes on to the witnesses and
   the brain copies into state.chain;
@@ -145,6 +145,7 @@ class Keeper:
         self.log = log or (lambda text: print(f"chain: {text}", file=sys.stderr, flush=True))
         self.lock = threading.Lock()
         self.verified, self.last_verify_t, self.first_bad_seq = "checking", None, None
+        self.last_verify_checked = self.last_verify_ms = None    # how much the last check walked, and how long it took
         self.started = mono()
         self.witnesses = {}          # node -> {last_seq, last_t, sig_ok, silent, good_at, bad_at}
         self.sent = None             # the last chain_head sent: {"seq", "t"}
@@ -182,6 +183,7 @@ class Keeper:
             if not result["ok"] and self.verified is not False:
                 self.log(f"the chain does NOT verify: first bad record {result['first_bad_seq']}")
             self.verified, self.first_bad_seq, self.last_verify_t = result["ok"], result["first_bad_seq"], self.clock()
+            self.last_verify_checked, self.last_verify_ms = result["checked"], result["ms"]
         return result
 
     # ---- the head every 5 s ----
@@ -283,7 +285,8 @@ class Keeper:
                     "verified": self.verified, "last_verify_t": self.last_verify_t,
                     "first_bad_seq": self.first_bad_seq if self.verified is False else None,
                     "witnesses": witnesses, "first_seq": info["first_seq"], "anchor": info["anchor"],
-                    "unsealed": info["unsealed"]}
+                    "unsealed": info["unsealed"], "last_verify_checked": self.last_verify_checked,
+                    "last_verify_ms": self.last_verify_ms}
 
     # ---- the two loops ----
 
@@ -354,6 +357,12 @@ def routes(keeper: Keeper) -> dict:
         except ValueError as e:
             raise ApiError(HTTPStatus.BAD_REQUEST, str(e)) from None
 
+    def tail(request):
+        n = request.query.get("n", "40")
+        if not (n.isascii() and n.isdigit()) or len(n) > 6 or int(n) < 1:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "n must be a whole number from 1, like 40")
+        return {"records": keeper.store.tail(int(n))}
+
     def prove(request):
         ask = request.json() if request.body and request.body.strip() else {}
         if not isinstance(ask, dict):
@@ -367,7 +376,8 @@ def routes(keeper: Keeper) -> dict:
             none_yet = "no sealed record" in str(e)
             raise ApiError(HTTPStatus.CONFLICT if none_yet else HTTPStatus.BAD_REQUEST, str(e)) from None
 
-    return {("GET", "/chain"): chain, ("GET", "/chain/verify"): verify, ("POST", "/chain/prove"): prove}
+    return {("GET", "/chain"): chain, ("GET", "/chain/verify"): verify, ("GET", "/chain/tail"): tail,
+            ("POST", "/chain/prove"): prove}
 
 
 def start(store, keys=None, bus=BUS, listen=LISTEN):

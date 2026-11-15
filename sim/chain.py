@@ -3,6 +3,7 @@ without the kit.
 
     python -m sim.chain witness_silent --at 30      # what GET /chain would answer 30 s into that path
     python -m sim.chain chain_broken --at 20 --verify
+    python -m sim.chain witness_silent --at 36 --tail 12
 
 A path with a "chain" block gets one: the fake feed sends chain_head every 5 s and a chain_witness
 from each witness that is signing, and the fake brain's state carries `chain`. The block:
@@ -126,7 +127,21 @@ class Chain:
                 "since_t": self.rows[0][1], "verified": ok, "last_verify_t": self._ms(t), "first_bad_seq": bad,
                 "witnesses": [{"node": n, "last_seq": w["last_seq"], "last_t": w["last_t"], "sig_ok": w["sig_ok"],
                                "silent": w["silent"]} for n, w in sorted(self.witness.items())],
-                "first_seq": 1, "anchor": None, "unsealed": 0}
+                "first_seq": 1, "anchor": None, "unsealed": 0, "last_verify_checked": len(self.rows), "last_verify_ms": 0}
+
+    def tail(self, t: float, n: int = 40) -> dict:
+        """The answer of GET /chain/tail?n= at t."""
+        self.advance(t)
+        out = []
+        for seq, ms, kind, text, prev, digest in self.rows[-max(1, min(n, 200)):]:
+            row = {"seq": seq, "t": ms, "kind": kind, "hash": digest, "prev": prev}
+            if kind.startswith("witness"):
+                body = json.loads(text)
+                row["node"] = body["node"]
+                if kind == "witness":
+                    row["for_seq"] = body["seq"]
+            out.append(row)
+        return {"records": out}
 
     def verify(self, t: float) -> dict:
         """The answer of GET /chain/verify at t (ms is 0: nothing was timed)."""
@@ -150,13 +165,15 @@ def main(argv=None) -> None:
     ap.add_argument("path", help="a name in sim/paths/ with a chain block (witnesses, witness_silent, chain_broken)")
     ap.add_argument("--at", type=float, default=None, help="seconds into the path (default: its end)")
     ap.add_argument("--verify", action="store_true", help="print the /chain/verify answer instead")
+    ap.add_argument("--tail", type=int, default=None, metavar="N", help="print the /chain/tail?n=N answer instead")
     args = ap.parse_args(argv)
     path = fake.load_path(args.path)
     chain = of(path, start_ms=1_763_149_500_000)
     if chain is None:
         raise SystemExit(f"{args.path} has no chain block")
     t = path["duration_s"] if args.at is None else args.at
-    print(json.dumps(chain.verify(t) if args.verify else chain.status(t), indent=1))
+    answer = chain.tail(t, args.tail) if args.tail else chain.verify(t) if args.verify else chain.status(t)
+    print(json.dumps(answer, indent=1))
 
 
 if __name__ == "__main__":
