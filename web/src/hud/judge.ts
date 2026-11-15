@@ -12,6 +12,7 @@ import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
 import { fetchProof } from '../room/hud-host'
 import type { Proof } from './state'
+import { presenceTile } from './proof-visibility'
 import { judgeMoment } from './judge-moment'
 import { mountReplay } from './replay'
 import { recordsClient } from './records'
@@ -46,11 +47,13 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     value.dataset.testid = id
     debug.append(value)
   }
-  const proofLabels = { 'zone-score': 'Zone agreement', 'person-object-score': 'Person / object', 'train-seconds': 'Train time', 'ms-per-decision': 'Per decision', watts: 'Watts', 'bytes-out': 'Bytes out', 'images-stored': 'Images stored', 'models-count': 'Models' }
+  const proofLabels = { 'presence-score': 'Presence', 'zone-score': 'Zone agreement', 'person-object-score': 'Person / object', 'train-seconds': 'Train time', 'ms-per-decision': 'Per decision', watts: 'Watts', 'bytes-out': 'Bytes out', 'images-stored': 'Images stored', 'models-count': 'Models' }
   const metrics = root.querySelector('footer dl')!
   for (const [id, label] of Object.entries(proofLabels)) {
     const item = document.createElement('div')
     item.innerHTML = `<dt>${label}</dt><dd data-testid="${id}">__</dd>`
+    // The presence score never stands alone (#656): what always saying "nobody" would score sits under it.
+    if (id === 'presence-score') { item.className = 'proof-wide'; item.insertAdjacentHTML('beforeend', '<dd class="proof-note" data-testid="presence-baseline" hidden></dd>') }
     metrics.append(item)
   }
   updateProofVisibility(root)
@@ -119,8 +122,11 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const refresh = async () => {
     const proof = await fetchProof() as Proof | null
     if (disposed) return
-    const values = [score(proof?.zone), score(proof?.person_vs_object), number(proof?.train_s, ' s'), number(proof?.ms_per_decision?.p50, ' ms'), number(proof?.watts?.radio_only), number(proof?.bytes_out), number(proof?.images_stored), number(proof?.models_on_board)]
+    const presence = presenceTile(proof?.presence)
+    const values = [presence.score, score(proof?.zone), score(proof?.person_vs_object), number(proof?.train_s, ' s'), number(proof?.ms_per_decision?.p50, ' ms'), number(proof?.watts?.radio_only), number(proof?.bytes_out), number(proof?.images_stored), number(proof?.models_on_board)]
     Object.keys(proofLabels).forEach((id, index) => set(id, values[index]))
+    set('presence-baseline', presence.baseline)
+    field('presence-baseline').hidden = !presence.baseline
     updateProofVisibility(root)
   }
   void refresh()
