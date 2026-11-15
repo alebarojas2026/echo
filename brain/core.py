@@ -52,6 +52,7 @@ TRAIN_KEEP = 8           # a fit reads the newest this-many recordings of each k
                          # room for 3+ walkers with two walks each, and a bound on an afternoon of lessons
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 GONE_READINGS = 8        # a link is gone, not just slow, once silent for this many readings at its own rate
+STAY_DB = 3.0            # somebody who was there stays while the crossing lines are still this far down (settings.stay_x_quiet)
 SILENT_MS = 3_000        # a baseline restarts only for a link with no reading for this long
 LABEL_MODES = ("person", "object", "off")
 CAM_STATES = ("on", "off", "stalled")
@@ -159,6 +160,9 @@ class Brain:
         # objects, the check-in and the advice don't look at it.
         thin = {link["id"] for link in nodes["links"] if link.get("classifier") is False}
         self.model_links = tuple(k for k in links if k not in thin)
+        # The lines a person on the spot stands in, when the layout marks them ("crosses_spot": true).
+        self.crossing = tuple(link["id"] for link in nodes["links"]
+                              if link.get("crosses_spot") is True and link["id"] in self.model_links)
         self.health = Health.from_nodes(
             nodes, classifier_links=[k for k in self.model_links if k not in over_hotspot])
         self.xray = Xray.from_nodes(dict(nodes, links=[k for k in nodes["links"] if k["id"] not in thin]))
@@ -372,7 +376,7 @@ class Brain:
         self.training = {"started_t": self.now(), "progress": None,
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
-        history, links, zones = self._baselines(), self.model_links, self.zone_ids
+        history, links, zones, crossing = self._baselines(), self.model_links, self.zone_ids, self.crossing
         motion_links = self.settings.motion_links
 
         def fit():   # may run on another thread: touches nothing of ours
@@ -381,7 +385,8 @@ class Brain:
                     s["messages"] = read_session(s["path"], s["meta"].get("recv_t"))
                 if not s.get("base"):
                     s["base"] = base_at(history, s["meta"].get("recv_t"))
-            return Model(base, ver=ver, links=links, zones=zones, motion_links=motion_links).fit(sessions)
+            return Model(base, ver=ver, links=links, zones=zones, motion_links=motion_links,
+                         crossing=crossing).fit(sessions)
 
         def done(model):   # back on the loop; model None = the fit failed
             self.training = None
@@ -555,7 +560,7 @@ class Brain:
             with open(self.sessions_dir / "model.pkl", "rb") as f:
                 doc = pickle.load(f)
             model, ver = doc["model"], str(doc["ver"])
-            want = F.feature_names(self.model_links)
+            want = F.feature_names(self.model_links, self.crossing)
             if getattr(model, "features", None) != want or getattr(model, "classes", None) != [0] + self.zone_ids:
                 logging.getLogger("brain").warning(
                     "model.pkl was trained on other features or zones (%d features, first %s) than this layout "
@@ -686,6 +691,7 @@ class Brain:
         s = self.settings
         self.health.set_quiet(self.quiet_db, s.steady_x_quiet)
         self.watch.checkin_rule.other_db_of = {k: s.checkin_x_quiet * q for k, q in self.quiet_db.items()}
+        self.xray.object_min_db = {k: s.object_x_quiet * q for k, q in self.quiet_db.items()}
         self.windower, self.window = F.Windower(self.base, self.model_links), None
         self.health.set_base(self.base)
         self.health.set_expected(self.expected_hz)
@@ -921,7 +927,7 @@ class Brain:
             return
         if not self.window.get("decided"):   # the classifier runs on every new window
             t0 = time.perf_counter()
-            self._raw = self.model.predict(self.window)
+            self._raw = self.model.predict(self.window, hold=self._still_down())
             self.decision_ms.append((time.perf_counter() - t0) * 1000)
             self.window["decided"] = True
             self.raw_kind = self._raw["kind"]   # health wants this even while pred is hidden
@@ -955,6 +961,19 @@ class Brain:
             self.emit("intrusion", {"zone": intruder})
         for zone in self.armed.pop_passed():   # appeared while armed and gone before the hold was over
             self.emit("passed_by", {"zone": zone})
+
+    def _still_down(self) -> bool:
+        """True when the last decision sent said somebody is there and the lines that cross the
+        spot still sit under their baselines: their median drops in this window, averaged, are
+        at least STAY_DB, or settings.stay_x_quiet x their quiet level where that is more. The
+        model, taught by the camera, decides when somebody has arrived; this keeps a person who is
+        standing there from blinking out for a window. Only on a layout that marks those lines."""
+        if not (self.crossing and self.pred and self.pred["present"]):
+            return False
+        drop = F.crossing_drop(self.window, self.crossing)
+        quiet = [self.quiet_db[k] for k in self.crossing if k in self.quiet_db]
+        floor = max(STAY_DB, self.settings.stay_x_quiet * (sum(quiet) / len(quiet) if quiet else 0.0))
+        return drop is not None and drop >= floor
 
     def _unheard(self, now) -> List[str]:
         """The links that can blind the sensor and have no reading in the last window (1 s),

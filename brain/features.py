@@ -67,12 +67,13 @@ def quiet(messages: Iterable[dict]) -> Dict[str, float]:
 def link_stats(dbms: List[float], base_dbm: Optional[float]) -> dict:
     """Features of one link in one window. Empty input -> all None, n 0."""
     if not dbms:
-        return {"n": 0, "mean": None, "std": None, "min": None, "max": None, "drop_db": None}
+        return {"n": 0, "mean": None, "median": None, "std": None, "min": None, "max": None, "drop_db": None}
     mean = sum(dbms) / len(dbms)
     std = math.sqrt(sum((d - mean) ** 2 for d in dbms) / len(dbms))
     return {
         "n": len(dbms),
         "mean": mean,
+        "median": statistics.median(dbms),
         "std": std,
         "min": min(dbms),
         "max": max(dbms),
@@ -125,8 +126,21 @@ def _majority(counts: Counter):
     return counts.most_common(1)[0][0] if counts else None
 
 
-def vector(window: dict, links=LINKS) -> List[float]:
-    """Flat feature list for a model: per link, STATS in order.
+def crossing_drop(window: dict, crossing) -> Optional[float]:
+    """How far the lines that cross the spot sit under their baselines in this window: each
+    line's median drop (a median shrugs off the odd wild reading on a line with 2 to 6 readings
+    a second), averaged over the lines that have a reading. None when none has."""
+    drops = []
+    for link in crossing:
+        s, base = window["links"].get(link) or {}, window["base"].get(link)
+        if s.get("n") and base is not None:
+            drops.append(base - s["median"])
+    return sum(drops) / len(drops) if drops else None
+
+
+def vector(window: dict, links=LINKS, crossing=()) -> List[float]:
+    """Flat feature list for a model: per link, STATS in order. Then, when the layout says which
+    lines cross the spot (crossing), each of those lines' median drop and their average.
 
     A link with no readings in the window, or with no baseline, counts as sitting
     on its baseline (every feature 0). Link health (section 6) is what reports a
@@ -140,11 +154,18 @@ def vector(window: dict, links=LINKS) -> List[float]:
             out += [0.0, 0.0, 0.0, 0.0]
         else:
             out += [base - s["mean"], s["std"], base - s["max"], base - s["min"]]
+    for link in crossing:
+        s = window["links"].get(link) or {"n": 0}
+        base = window["base"].get(link)
+        out.append(0.0 if s["n"] == 0 or base is None else base - s["median"])
+    if crossing:
+        out.append(crossing_drop(window, crossing) or 0.0)
     return out
 
 
-def feature_names(links=LINKS) -> List[str]:
-    return [f"{link}.{stat}" for link in links for stat in STATS]
+def feature_names(links=LINKS, crossing=()) -> List[str]:
+    names = [f"{link}.{stat}" for link in links for stat in STATS]
+    return names + [f"{link}.drop_median_db" for link in crossing] + (["crossing.drop_median_db"] if crossing else [])
 
 
 class Windower:

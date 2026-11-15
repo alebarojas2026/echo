@@ -42,8 +42,9 @@ def kind_of(window: dict) -> Optional[str]:
     return "person" if label["present"] else "none"
 
 
-def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS) -> dict:
-    """Labeled windows from every session, as arrays. links = the layout's links, in order."""
+def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS, crossing=()) -> dict:
+    """Labeled windows from every session, as arrays. links = the layout's links, in order;
+    crossing = those the layout says cross the spot (features.vector)."""
     X, zone, motion, kind, walker, session = [], [], [], [], [], []
     for s in sessions:
         meta = s.get("meta") or {}
@@ -54,14 +55,14 @@ def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS) -> dict
             k = kind_of(w) if lb is not None else None
             if k is None:
                 continue
-            X.append(F.vector(w, links))
+            X.append(F.vector(w, links, crossing))
             zone.append(lb["zone"])
             motion.append(lb["motion"] or "")
             kind.append(k)
             walker.append(meta.get("walker"))
             session.append(meta.get("session"))
     return {
-        "X": np.asarray(X, dtype=float).reshape(-1, len(F.feature_names(links))),
+        "X": np.asarray(X, dtype=float).reshape(-1, len(F.feature_names(links, crossing))),
         "zone": np.asarray(zone), "motion": np.asarray(motion), "kind": np.asarray(kind),
         "walker": np.asarray(walker, dtype=object), "session": np.asarray(session, dtype=object),
     }
@@ -74,12 +75,18 @@ class Model:
     # same as [], a fit whose windows had no walker at all (empty room and object sessions only).
     # A class default, so an older pickle without the attribute reads as unknown.
     train_walkers: Optional[List[str]] = None
+    crossing: tuple = ()   # a class default, so a model file from before this reads as having none
 
-    def __init__(self, base: Dict[str, float], ver: str = "m1", links=F.LINKS, zones=ZONES[1:], motion_links=None):
+    def __init__(self, base: Dict[str, float], ver: str = "m1", links=F.LINKS, zones=ZONES[1:], motion_links=None,
+                 crossing=()):
         """links and zones come from radio/nodes.json (the brain passes them); the defaults are
         the 2 x 2 m square's. probs has one entry for empty, then one per zone, in that order.
         motion_links: the links whose features decide moving / still (brain/settings.py);
-        None = every link. Zone and kind always use every link."""
+        None = every link. Zone and kind always use every link.
+        crossing: the links the layout marks as crossing the spot ("crosses_spot" in nodes.json).
+        Their median drops, and the average of them, are features too: presence is the drop
+        under the empty baseline, and a median holds on a line with few, noisy readings.
+        A layout that marks none (the desk strip, the square) has the features it always had."""
         unknown = [k for k in motion_links or () if k not in links]
         if unknown:
             raise ValueError(f"motion_links names links this layout doesn't have: {', '.join(unknown)}")
@@ -87,12 +94,13 @@ class Model:
         self.base = dict(base)
         self.ver = ver
         self.links = tuple(links)
+        self.crossing = tuple(k for k in self.links if k in set(crossing))
         self.classes = [0] + [int(z) for z in zones]
         self.zone = self.motion = self.kind = None
         self.train_s: Optional[float] = None
         self.windows = 0
         self.train_sessions: List[str] = []
-        self.features: List[str] = F.feature_names(self.links)   # what the forests were fit on; checked when a file is loaded
+        self.features: List[str] = F.feature_names(self.links, self.crossing)   # what the forests were fit on; checked when a file is loaded
         self.seen_lo = self.seen_hi = None             # per feature, the range seen in training
         self._link_weight = np.zeros(len(self.links))
 
@@ -102,7 +110,7 @@ class Model:
 
     def fit(self, sessions: List[dict]) -> "Model":
         t0 = time.monotonic()
-        d = dataset(sessions, self.base, self.links)
+        d = dataset(sessions, self.base, self.links, self.crossing)
         if len(d["X"]) == 0:
             raise ValueError("no labeled windows to train on")
         self.zone = _forest(d["X"], d["zone"])
@@ -110,8 +118,11 @@ class Model:
         self.motion = _forest(d["X"][moving][:, self._motion_cols()], d["motion"][moving]) if moving.any() else None
         self.kind = _forest(d["X"], d["kind"])
         # How much each link matters to the zone forest, for the "why" list.
-        imp = self.zone.feature_importances_.reshape(len(self.links), len(F.STATS))
-        self._link_weight = imp.sum(axis=1)
+        n = len(self.links) * len(F.STATS)
+        imp = self.zone.feature_importances_
+        self._link_weight = imp[:n].reshape(len(self.links), len(F.STATS)).sum(axis=1)
+        for i, link in enumerate(self.crossing):   # a crossing line's median, and its share of their average
+            self._link_weight[self.links.index(link)] += imp[n + i] + imp[-1] / len(self.crossing)
         self.seen_lo, self.seen_hi = d["X"].min(axis=0), d["X"].max(axis=0)
         self.train_s = time.monotonic() - t0
         self.windows = len(d["X"])
@@ -125,11 +136,17 @@ class Model:
             self.train_walkers = sorted({name for name in names if name})
         return self
 
-    def predict(self, window: dict) -> dict:
-        """The contract's pred block for one window (still_s is the alert's job)."""
-        x = np.asarray([F.vector(window, self.links)], dtype=np.float32)   # the trees' own input type
+    def predict(self, window: dict, hold: bool = False) -> dict:
+        """The contract's pred block for one window (still_s is the alert's job).
+
+        hold: somebody was there a moment ago and the lines that cross the spot are still down
+        (the brain decides this, settings.stay_x_quiet). Then a "nobody" from the zone forest does
+        not stand: the answer is the likeliest zone. probs stay as the forest gave them."""
+        x = np.asarray([F.vector(window, self.links, self.crossing)], dtype=np.float32)   # the trees' own input type
         probs = _probs(self.zone, x, self.classes)
         zone = self.classes[int(np.argmax(probs))]
+        if zone == 0 and hold and len(probs) > 1:
+            zone = self.classes[1 + int(np.argmax(probs[1:]))]
         kind = str(_pick(self.kind, x))
         present = zone != 0
         if present:

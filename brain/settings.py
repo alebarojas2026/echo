@@ -20,7 +20,7 @@ in brain/ carries its own copy.
                           has had a reading for this long
     tamper_clear_ms       ... and back when they all have for this long       2000
 
-Three more make a fixed dB number give way to the link's own quiet level where that is larger.
+Five more make a fixed dB number give way to the link's own quiet level where that is larger.
 A link's quiet level is the std of its 0.5 s means over the baseline capture (quiet_db in
 baseline.json): about 0.2 dB on the Wi-Fi links and 1 to 3 dB on the Bluetooth links, measured
 on the kit. 0 switches a setting off, and the rule then uses the contract's number alone.
@@ -33,6 +33,17 @@ on the kit. 0 switches a setting off, and the rule then uses the contract's numb
     settle_x_quiet        Router: after router_home a pi5 link sits within    2 (0: 1 dB only)
                           1 dB of base, or within this x its quiet level
                           (the same for the drift event)
+    object_x_quiet        X-ray: an object needs a link whose drop has held   4 (0: 3 dB only)
+                          steady at 3 dB or more, or at this x the link's
+                          quiet level. A Bluetooth line that wobbles 2 to
+                          5 dB with nobody there sits 3 dB low for a few
+                          seconds now and then, and that is not an object.
+    stay_x_quiet          Leaving, on a layout that marks the lines crossing  1.5 (0: 3 dB only)
+                          the spot: once somebody is there, a "nobody" from
+                          the model does not stand while those lines' median
+                          drops, averaged, are still 3 dB or more, or this
+                          x their quiet level. Arriving is the model's call
+                          alone.
 
 One number of these rules is not here because the contract puts it in radio/nodes.json: how
 long an armed space waits before an appearance is an intrusion, armed.hold_s (3 s when the file
@@ -70,6 +81,8 @@ class Settings:
     steady_x_quiet: float = 1.5
     checkin_x_quiet: float = 4.0
     settle_x_quiet: float = 2.0
+    object_x_quiet: float = 4.0
+    stay_x_quiet: float = 1.5
 
     def __post_init__(self):
         for f in fields(self):
