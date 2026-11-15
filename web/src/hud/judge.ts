@@ -14,6 +14,7 @@ import { mountAskRoom } from './ask-room'
 import { updateProofVisibility } from './proof-visibility'
 import { mountArrival } from './arrival'
 import { changingText } from './changing-text'
+import { ReadingHold } from './readable-updates'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
 import { fetchProof } from '../room/hud-host'
@@ -48,6 +49,17 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   const field = (id: string) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`)!
   const set = (id: string, text: string) => { field(id).textContent = text }
   const headlineText = changingText(field('judge-headline'))
+  const narrator = field('narrator-text')
+  const narratorText = changingText(narrator)
+  const hold = new ReadingHold()
+  let nextNarration = ''
+  let clearNarration = false
+  const paintNarration = () => {
+    const text = hold.update(nextNarration, performance.now(), clearNarration)
+    narrator.hidden = !text
+    narratorText.set(text)
+  }
+  const narrationTimer = setInterval(paintNarration, 100)
   const debug = root.querySelector('.debug')!
   for (const id of ['pred-zone', 'pred-zone-set', 'pred-kind', 'pred-motion', 'why-links', 'router-spot', 'narrator-source', 'no-data', 'sensor-blind', 'health-links']) {
     const value = document.createElement('dd')
@@ -112,8 +124,9 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     set('judge-detail', detail)
     set('source-badge', state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO')
     if (!Object.keys(extraPanels).some(path => path.includes('camera'))) set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] ?? 'Camera status unknown' : '')
-    set('narrator-text', !stale ? state?.narration?.text ?? '' : '')
-    field('narrator-text').hidden = !field('narrator-text').textContent
+    nextNarration = !stale ? state?.narration?.text ?? '' : ''
+    clearNarration = stale || !state
+    paintNarration()
     set('pred-zone', state?.pred?.zone ? String(state.pred.zone) : '__')
     set('pred-zone-set', state?.pred?.zone_set.join(' or ') ?? '__')
     set('pred-kind', state?.pred?.kind ?? '__')
@@ -144,7 +157,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { offPanelEvents?.(); disposeReport(); disposePrivacy(); disposeProofLayout(); disposePresenter(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); narratorText.dispose(); clearInterval(narrationTimer); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 

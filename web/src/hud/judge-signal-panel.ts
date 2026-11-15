@@ -1,11 +1,11 @@
 import type { StateMsg } from '../room/contract'
 import { NOTES, SignalHistory, WINDOW_MS, formatDrop, traceRuns, traceStatus, type Point } from './signal-trace'
 import './signal.css'
+import { NumberCadence } from './readable-updates'
 
 // The signal trace on the main screen (a compact strip above the proof tiles) and on the arrival screen (a wide
 // band under the headline). Both draw the same history; see signal-trace.ts for what a point is.
 
-const NUMBER_EVERY_MS = 250
 const FLOOR_DB = 8 // the scale shows at least this much drop, and grows when a reading goes deeper
 
 interface Row { el: HTMLElement; canvas: HTMLCanvasElement; value: HTMLElement; w: number; h: number }
@@ -131,7 +131,7 @@ export function mountPanel(root: HTMLElement) {
     placed = !!footer && !!message
   }
   let sidesKey = ''
-  let numbersAt = -Infinity
+  const cadence = new NumberCadence()
   let frame = requestAnimationFrame(function tick(now) {
     views.forEach((view) => view.draw(history, now))
     frame = requestAnimationFrame(tick)
@@ -152,8 +152,7 @@ export function mountPanel(root: HTMLElement) {
       const status = traceStatus(state, stale, history.sides)
       const latest = history.samples.at(-1)
       const fresh = !stale && !!latest && now - latest.t < 1000
-      const numbers = now - numbersAt >= NUMBER_EVERY_MS
-      if (numbers) numbersAt = now
+      const numbers = cadence.take(now)
       for (const view of views) {
         view.el.hidden = !history.sides.length || replayed
         view.el.dataset.status = status
@@ -162,7 +161,7 @@ export function mountPanel(root: HTMLElement) {
           const drop = fresh ? latest!.drop[i] : null
           row.el.dataset.present = String(fresh && latest!.present[i] && drop !== null)
           const signal = !fresh ? 'no-data' : drop === null ? 'none' : 'ok'
-          // The number is rewritten four times a second, and at once when the reading comes or goes.
+          // The number is rewritten once a second, and at once when the reading comes or goes.
           if (!numbers && row.el.dataset.signal === signal) return
           row.el.dataset.signal = signal
           row.value.textContent = !fresh ? 'no data' : drop === null ? 'no signal' : formatDrop(drop)
