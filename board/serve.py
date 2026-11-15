@@ -203,7 +203,7 @@ class Handler(SimpleHTTPRequestHandler):
             size = int(self.headers.get("Content-Length") or 0)
             if not 0 < size <= MAX_ASK_BYTES:
                 raise ValueError("body size")
-            question = json.loads(self.rfile.read(size))["question"]
+            question = json.loads(self._read(size))["question"]
             if not isinstance(question, str) or not question.strip():
                 raise ValueError("question")
         except (ValueError, KeyError, TypeError):
