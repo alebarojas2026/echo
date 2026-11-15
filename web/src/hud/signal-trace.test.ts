@@ -16,6 +16,16 @@ test('the desk layout gives one side per zone, from the links that cross its flo
   expect(sides[1].links.sort()).toEqual(['east>pi5:ble', 'east>pi5b:ble', 'east>unoq:ble'])
 })
 
+test('only Bluetooth lines join a side, also when a Wi-Fi link crosses the floor', () => {
+  // The same desk with one more link: the west beacon's place to the board, as Wi-Fi.
+  const withWifi = { ...desk, links: [...desk.links, { id: 'west>unoq:wifi', tx: 'west', rx: 'unoq', kind: 'wifi', expected_hz: null }] }
+  expect(applyLayout(withWifi)).toBe(true)
+  const links = signalSides().flatMap((side) => side.links)
+  expect(links).toContain('west>unoq:ble')
+  expect(links.filter((id) => !id.endsWith(':ble'))).toEqual([])
+  expect(applyLayout(desk)).toBe(true)
+})
+
 test('a side reads its deepest fresh link, and nothing when none is fresh', () => {
   const [left] = signalSides()
   expect(sideDrop(left, [link('west>unoq:ble', 2.5), link('west>pi5:ble', 6.1), link('east>unoq:ble', 9)])).toBe(6.1)
