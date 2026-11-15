@@ -129,7 +129,7 @@ function fixedLine(state: StateMsg | null, stale: boolean, layout: HudLayout): D
   if (!link) return null
   if (state.pred.kind === 'object' && link.drop_db! >= WEAK_DB) return {
     fixed:true,step:'found',headline:'Something was left in the Wi-Fi line',detail:'',
-    text:`Something is in the Wi-Fi line: −${link.drop_db!.toFixed(1)} dB`,way:0,before:link.dbm,after:null,
+    text:`Wi-Fi down ${link.drop_db!.toFixed(1)} dB`,way:0,before:link.dbm,after:null,
   }
   const advice = state.advice
   if (state.pred.kind === 'none' && link.drop_db! < WEAK_DB && advice?.link === link.id && measured(advice.before_dbm) && measured(advice.after_dbm)) return restored(advice.before_dbm,advice.after_dbm)

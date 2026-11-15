@@ -11,7 +11,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`one-spot judge words 
   if(process.env.HUD_SCREENSHOTS&&['empty','still','blind'].includes(name)){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-${name}.png`)})}
  }
  await page.evaluate(()=>{const s=window.arrival.peek('object');window.arrival.update('object',{links:s.links.map(l=>({...l,drop_db:9})),alert:{...s.alert,state:'none'},advice:{id:'move',link:'pi5>pi5b:wifi',move_m:[-0.3,0],to_spot:'S-W30',before_dbm:-65,after_dbm:null,text:'Move the router',cause:'blocked',near:'pi5b',xy_m:[0,0],why:[]}})})
- await expect(page.getByTestId('advice-text')).toContainText('Something is in the Wi-Fi line: −9.0 dB')
+ await expect(page.getByTestId('advice-text')).toContainText('Wi-Fi down 9.0 dB')
  expect(await page.locator('body').innerText()).not.toMatch(/\b(on the left|on the right|beacons?|five devices|zone [12])\b/i)
  if(process.env.HUD_SCREENSHOTS)await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-advice.png`)})
 })

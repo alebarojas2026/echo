@@ -8,7 +8,7 @@ const state=(object:boolean,t:number,drop:number)=>({...mockState(object?'object
 test('only a confirmed object weakens the fixed-router story',()=>{
  const s=state(true,1000,16)
  expect(holdAdvice({...s,narration:{text:'Move the router 30 cm west',source:'template',event_id:'test',t:1000,gen_ms:null}},gate)?.narration).toBeNull()
- expect(deadZone(s,false,gate)?.text).toBe('Something is in the Wi-Fi line: −16.0 dB')
+ expect(deadZone(s,false,gate)?.text).toBe('Wi-Fi down 16.0 dB')
  expect(deadZone({...s,pred:{...s.pred!,kind:'person',present:true}},false,gate)).toBeNull()
  expect(deadZone(s,true,gate)).toBeNull()
  expect(deadZone({...s,links:[]},false,gate)).toBeNull()

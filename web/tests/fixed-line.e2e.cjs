@@ -6,7 +6,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`fixed router obstruct
  const send=async(scene,t,drop)=>page.evaluate(({scene,t,drop,layout})=>{const s=window.arrival.peek('object');window.arrival.update(scene,{t,seq:t,advice:s.advice,narration:{text:'Move the router 30 cm west',source:'template'},links:layout.links.map(l=>({id:l.id,dbm:-45-drop,base_dbm:-45,drop_db:drop,status:'ok',rate_hz:25,why:0}))})},{scene,t,drop,layout})
  const shot=async name=>{if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-${name}.png`)})}}
  await send('object',1000,16)
- await expect(page.getByTestId('advice-text')).toHaveText('Something is in the Wi-Fi line: −16.0 dB');await expect(page.locator('.dead-zone svg')).toBeHidden();await expect(page.locator('.dead-zone dl')).toBeHidden()
+ await expect(page.getByTestId('advice-text')).toHaveText('Wi-Fi down 16.0 dB');await expect(page.locator('.dead-zone svg')).toBeHidden();await expect(page.locator('.dead-zone dl')).toBeHidden()
  expect(await page.locator('body').innerText()).not.toMatch(/move the router/i);await shot('blocked')
  await send('empty',2000,1);await page.waitForTimeout(450);await send('empty',2100,1);await page.waitForTimeout(200)
  await expect(page.getByTestId('advice-text')).toHaveText('+15.0 dB back');await expect(page.getByTestId('before-dbm')).toHaveText('−61.0 dBm');await expect(page.getByTestId('after-dbm')).toHaveText('−46.0 dBm');await shot('clear')
