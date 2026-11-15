@@ -47,7 +47,8 @@ sys.path.insert(0, str(HERE))
 PY = sys.executable
 BUS, BRAIN_IN, PROXY, PROXY_CTL, WS, WEB, LLM = 5600, 5601, 5610, 5611, 8765, 8080, 8091
 FAKETIME_LIB = "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1"
-CLOCKED = ("bus", "brain", "store", "web", "narrator")   # the board's own processes
+CLOCKED = ("bus", "brain", "store", "web", "narrator")   # the board's own processes (the witnesses are Pis)
+WITNESSES = ("pi5", "pi5b")
 KILLABLE = ("brain", "bus", "store", "narrator", "web")
 
 
@@ -163,6 +164,8 @@ class Day:
                             clock_jumps=False, disk_full=False, baseline_every=1, keep_model_share=0.0)
         if a.focus == "memory":
             self.cfg.update(baseline_every=10 ** 6, passers_per_min=r.choice([0, 2, 4]))
+        if a.focus in ("spot5", "witness"):
+            self.cfg.update(passers_per_min=r.choice([2, 4, 6, 8]), baseline_every=10 ** 6)
         if a.focus == "spot":
             self.cfg.update(passers_per_min=r.choice([2, 4, 6, 8, 12]), baseline_every=r.choice([1, 2, 4]))
         if a.focus in ("clock", "disk", "armed"):
@@ -173,7 +176,11 @@ class Day:
             "lesson": has("brain/lesson.py"), "arm": has("brain/core.py", "_cmd_arm"),
             "keep_model": has("brain/core.py", "keep_model"),
             "brain_bus_arg": has("brain/main.py", '"--bus"'), "brain_sessions_arg": has("brain/main.py", '"--sessions"'),
+            "chain": has("board/chain.py") and has("pi/witness.py"),
         }
+        self.held = set()                  # processes stopped on purpose (a witness unplugged): not restarted
+        self.witness_dir = {}              # node -> the WITNESS_DIR it runs with now
+        self.presence_hist = deque(maxlen=4000)   # (wall s, pred.present) from the brain's state
         self.area = tuple(self.L.strip_m or self.L.size_m)
         self.zones = sorted(self.L.centres)
         self.still_zone = self.L.still_zone()
@@ -227,11 +234,18 @@ class Day:
             "proxy": [PY, str(HERE / "proxy.py"), "--listen", str(PROXY), "--bus", f"127.0.0.1:{BUS}",
                       "--control", str(PROXY_CTL), "--seed", str(self.a.seed)],
             "feeder": [PY, str(HERE / "day.py"), "--feeder", str(PROXY)],
+            "w_pi5": [PY, "-m", "pi.witness", "--node", "pi5"],
+            "w_pi5b": [PY, "-m", "pi.witness", "--node", "pi5b"],
         }[name]
 
     def start(self, name):
         self.starts[name] += 1
         env = dict(os.environ, PYTHONUNBUFFERED="1")
+        if name == "web" and self.feat.get("chain"):
+            env["WITNESS_KEYS"] = str(self.out / "witness_keys.local.json")
+        if name.startswith("w_"):
+            node = name[2:]
+            env.update(WITNESS_DIR=str(self.witness_dir[node]), BUS_HOST="127.0.0.1", BUS_PORT=str(BUS), RADIO_NODE=node)
         if name in CLOCKED and self.a.faketime:
             env.update(LD_PRELOAD=FAKETIME_LIB, FAKETIME_TIMESTAMP_FILE=str(self.out / "faketime"),
                        FAKETIME_CACHE_DURATION="1", FAKETIME_DONT_FAKE_MONOTONIC="1")
@@ -297,7 +311,7 @@ class Day:
         cause is a crash."""
         for name, p in list(self.procs.items()):
             code = p.poll()
-            if code is None:
+            if code is None or name in self.held:
                 continue
             ours = now() - self.killed_at.get(name, -1e9) < 30
             if not ours:
@@ -956,7 +970,10 @@ class Day:
         t_start, t_end = now(), now() + a.hours * 3600
         offsets = {}
         try:
+            if self.feat["chain"]:
+                self.make_witness_keys()
             names = ["llm", "bus", "brain", "web", "narrator", "proxy", "feeder"] + (["store"] if self.feat["store"] else [])
+            names += ["w_pi5", "w_pi5b"] if self.feat["chain"] else []
             for name in names:
                 self.start(name)
             time.sleep(2)
@@ -971,19 +988,21 @@ class Day:
                 if msg.get("type") == "state":
                     pred = msg.get("pred")
                     pres = None if pred is None else bool(pred.get("present"))
+                    day.presence_hist.append((now(), pres))
                     if pres != day._present:
                         day._present = pres
                         day.run.log("presence.jsonl", present=pres, armed=bool(msg.get("armed")), seg=day.segment)
                 if msg.get("type") == "event" and msg.get("kind") in ("intrusion", "alert_on", "armed", "disarmed", "tamper"):
                     day.run.log("events.jsonl", kind=msg["kind"], info=msg.get("info"), visit=day.visit_n, seg=day.segment)
             self.mon.handle = handle
-            for target in (self.faults, self.screens, self.checks):
+            extra = (self.chain_probe, self.story_probe, self.witness_faults) if self.feat["chain"] else ()
+            for target in (self.faults, self.screens, self.checks) + extra:
                 threading.Thread(target=target, daemon=True, name=target.__name__).start()
 
             def visits():
                 while not self.run.stop.is_set() and now() < t_end - 60:
                     try:
-                        self.visit()
+                        self.visit_judging() if self.focus in ("spot5", "witness") else self.visit()
                     except Exception as e:
                         self.problem("harness_error", key=type(e).__name__, once_per=600, err=repr(e))
                         time.sleep(5)
@@ -1004,13 +1023,350 @@ class Day:
             self.scan_logs(offsets)
             for name in list(self.procs):
                 self.kill(name, why="end")
+            if self.feat["chain"]:
+                self.chain_end()
             self.write_summary(t_start, final=True)
             if a.sync:
                 a.sync()
 
+    # ---- the sealed record and its witnesses (kit-5)
+
+    def make_witness_keys(self):
+        """Two stand-in witnesses with real Ed25519 keys (pi.witness --init, i.e. openssl), and a third key
+        for pi5 that is not enrolled (the wrong-key fault). The board's enrolment file lists pi5 and pi5b."""
+        lines = []
+        for node, folder in [(n, self.out / "witness" / n) for n in WITNESSES] + [("pi5", self.out / "witness" / "wrong-pi5")]:
+            env = dict(os.environ, WITNESS_DIR=str(folder))
+            r = subprocess.run([PY, "-m", "pi.witness", "--init", "--node", node], cwd=REPO, env=env,
+                               capture_output=True, text=True, timeout=60)
+            line = next((l for l in r.stdout.splitlines() if l.startswith(f'"{node}"')), None)
+            if line is None:
+                raise RuntimeError(f"witness key for {node}: {r.stdout[-300:]} {r.stderr[-300:]}")
+            if folder.name == node:
+                lines.append(line)
+                self.witness_dir[node] = folder
+        self.wrong_dir = self.out / "witness" / "wrong-pi5"
+        (self.out / "witness_keys.local.json").write_text("{" + ",".join(lines) + "}")
+
+    def http_json(self, path, timeout=5, data=None):
+        req = urllib.request.Request(f"http://127.0.0.1:{WEB}{path}", data=data,
+                                     headers={"Content-Type": "application/json"} if data is not None else {})
+        t0 = time.perf_counter()
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.status, json.load(resp), (time.perf_counter() - t0) * 1000
+        except urllib.error.HTTPError as e:
+            return e.code, None, (time.perf_counter() - t0) * 1000
+        except Exception as e:
+            return type(e).__name__, None, (time.perf_counter() - t0) * 1000
+
+    def db_count(self, kinds, after_seq, node=None):
+        f = self.out / "store.db"
+        try:
+            db = sqlite3.connect(f"file:{f}?mode=ro", uri=True, timeout=5)
+            try:
+                q = f"select body from chain where seq > ? and kind in ({','.join('?' * len(kinds))})"
+                rows = db.execute(q, (after_seq, *kinds)).fetchall()
+            finally:
+                db.close()
+        except sqlite3.Error:
+            return None
+        return sum(1 for (b,) in rows if node is None or json.loads(b).get("node") == node)
+
+    def chain_head_seq(self):
+        code, doc, _ = self.http_json("/chain")
+        return doc["head"]["seq"] if code == 200 and doc else None
+
+    def witness_status(self, node):
+        code, doc, _ = self.http_json("/chain")
+        if code != 200 or not doc:
+            return None
+        return next((w for w in doc.get("witnesses") or [] if w["node"] == node), None)
+
+    def witness_off(self, nodes, secs, why, wrong=False):
+        """Unplug witnesses (or, wrong=True, run pi5 with a key the board does not have) for secs."""
+        names = [f"w_{n}" for n in nodes]
+        seq0 = self.chain_head_seq() or 0
+        t0 = now()
+        self.chaos_now.add(why)
+        for name in names:
+            self.held.add(name)
+            self.kill(name, why=why)
+        if wrong:
+            self.witness_dir["pi5"] = self.wrong_dir
+            self.start("w_pi5")
+        self.run.log("chaos.jsonl", kind="witness_fault", fault=why, nodes=nodes, secs=secs, head=seq0)
+        mid = None
+        if not self.run.stop.wait(min(30, secs)):
+            mid = {n: self.witness_status(n) for n in nodes}
+        self.run.stop.wait(max(0, secs - (now() - t0)))
+        if wrong:
+            self.kill("w_pi5", why="wrong-key-end")
+            self.witness_dir["pi5"] = self.out / "witness" / "pi5"
+        seq1 = self.chain_head_seq() or 0
+        for name in names:
+            self.held.discard(name)
+            self.start(name)
+        back = None
+        for _ in range(30):
+            if self.run.stop.wait(1):
+                break
+            st = {n: self.witness_status(n) for n in nodes}
+            if all(s and s["sig_ok"] and not s["silent"] for s in st.values()):
+                back = round(now() - t0 - secs, 1)
+                break
+        self.run.stop.wait(10)
+        counts = {n: {k: self.db_count([k], seq0, n) for k in ("witness", "witness_bad", "witness_silent", "witness_back")}
+                  for n in nodes}
+        rec = {"fault": why, "nodes": nodes, "secs": round(secs), "mid": mid, "back_after_s": back, "counts": counts,
+               "records_during": seq1 - seq0}
+        self.run.log("witness_faults.jsonl", **rec)
+        self.chaos_now.discard(why)
+        for n in nodes:
+            c = counts[n]
+            if c["witness_silent"] is None:
+                continue
+            if not wrong and c["witness_silent"] != 1:
+                self.problem("witness_silent_count", key=why, once_per=1800, node=n, rec=rec)
+            if c["witness_back"] != 1:
+                self.problem("witness_back_count", key=why, once_per=1800, node=n, rec=rec)
+            if wrong and (c["witness_bad"] == 0 or c["witness_bad"] > secs / 5 + 3):
+                self.problem("witness_bad_count", key=why, once_per=1800, node=n, rec=rec)
+            if mid and mid.get(n) and (wrong and mid[n]["sig_ok"] or not wrong and not mid[n]["silent"]):
+                self.problem("witness_fault_not_shown", key=why, once_per=1800, node=n, mid=mid[n])
+        if back is None:
+            self.problem("witness_not_back", key=why, once_per=1800, rec=rec, log_tail=self.tail("web", 10))
+
+    def witness_faults(self):
+        r = self.rng
+        if self.focus == "witness":
+            plan = [(8, ["pi5b"], 600, "w_silent_10min", False), (25, ["pi5"], 300, "w_wrong_key", False),
+                    (37, ["pi5", "pi5b"], 300, "w_both_gone", False)]
+            t0 = now()
+            while not self.run.stop.is_set():
+                for at, nodes, secs, why, _ in plan:
+                    while now() - t0 < at * 60:
+                        if self.run.stop.wait(5):
+                            return
+                    self.witness_off(nodes, secs, why, wrong=why == "w_wrong_key")
+                t0 += 50 * 60
+            return
+        if self.focus != "mix":
+            return
+        while not self.run.stop.wait(r.uniform(900, 1800)):
+            why = r.choice(["w_silent", "w_wrong_key", "w_both_gone"])
+            nodes = {"w_silent": [r.choice(WITNESSES)], "w_wrong_key": ["pi5"], "w_both_gone": list(WITNESSES)}[why]
+            self.witness_off(nodes, r.uniform(60, 600), why, wrong=why == "w_wrong_key")
+
+    def chain_probe(self):
+        """The engine room on a second screen: GET /chain and /chain/tail?n=40 every second. Checks that the
+        head never steps back, the tail's links join, a record never changes, verified never goes false,
+        and that the brain's state carries the chain."""
+        seen, last_head, head_moved_t, started = {}, None, now(), now()
+        stats = {"chain": [], "tail": []}
+        err = Counter()
+        chain_missing_since = None
+        self.chain_stats = {"polls": 0, "errors": 0, "max_ms": {}, "verified_false": 0}
+        minute = now()
+        while not self.run.stop.wait(1):
+            web_up = not self.killed_recently("web", "store", within=25)
+            code, doc, ms = self.http_json("/chain")
+            code2, tail, ms2 = self.http_json("/chain/tail?n=40")
+            self.chain_stats["polls"] += 1
+            stats["chain"].append(ms)
+            stats["tail"].append(ms2)
+            for c, what in ((code, "chain"), (code2, "tail")):
+                if c != 200:
+                    err[f"{what}:{c}"] += 1
+                    self.chain_stats["errors"] += 1
+                    if web_up and not self.disk_full:
+                        self.problem("chain_http_error", key=f"{what}:{c}", once_per=300, code=c, log_tail=self.tail("web", 10))
+            if max(ms, ms2) > 1000 and web_up:
+                self.problem("chain_slow", key="slow", once_per=300, chain_ms=round(ms), tail_ms=round(ms2),
+                             chaos=sorted(self.chaos_now))
+            if code == 200 and doc:
+                h = doc["head"]["seq"]
+                if last_head is not None and h < last_head:
+                    self.problem("chain_head_back", key="back", once_per=60, before=last_head, after=h)
+                if last_head is None or h > last_head:
+                    head_moved_t = now()
+                last_head = h
+                if now() - head_moved_t > 20 and web_up and not self.killed_recently("brain", "bus", within=25) \
+                        and not self.disk_full:
+                    self.problem("chain_stalled", key="stall", once_per=300, head=h, for_s=round(now() - head_moved_t))
+                if doc.get("verified") is False:
+                    self.chain_stats["verified_false"] += 1
+                    self.problem("chain_not_verified", key="verify", once_per=300, first_bad_seq=doc.get("first_bad_seq"),
+                                 doc={k: doc.get(k) for k in ("head", "records", "first_seq", "anchor", "last_verify_checked")})
+                if doc.get("verified") == "checking" and now() - started > 90 and web_up:
+                    self.problem("chain_still_checking", key="checking", once_per=600)
+            if code2 == 200 and tail:
+                recs = tail.get("records") or []
+                for a, b in zip(recs, recs[1:]):
+                    if b["seq"] != a["seq"] + 1 or b["prev"] != a["hash"]:
+                        self.problem("chain_tail_broken", key="join", once_per=300, a=a, b=b)
+                        break
+                for rec in recs:
+                    old = seen.get(rec["seq"])
+                    if old is not None and old != rec["hash"]:
+                        self.problem("chain_record_changed", key="changed", once_per=60, seq=rec["seq"], old=old, new=rec["hash"])
+                    seen[rec["seq"]] = rec["hash"]
+                if len(seen) > 4000:
+                    for k in sorted(seen)[:2000]:
+                        del seen[k]
+            st = self.mon.state or {}
+            if st and "chain" not in st and not self.killed_recently("web", "bus", "brain", within=40) and not self.disk_full:
+                chain_missing_since = chain_missing_since or now()
+                if now() - chain_missing_since > 30:
+                    self.problem("state_chain_missing", key="missing", once_per=600, for_s=round(now() - chain_missing_since))
+            else:
+                chain_missing_since = None
+            if now() - minute >= 60:
+                minute = now()
+                def q(xs, p):
+                    xs = sorted(xs)
+                    return round(xs[min(len(xs) - 1, int(p * len(xs)))], 1) if xs else None
+                rec = {k: {"n": len(v), "p50": q(v, 0.5), "p95": q(v, 0.95), "max": q(v, 1.0)} for k, v in stats.items()}
+                for k, v in rec.items():
+                    self.chain_stats["max_ms"][k] = max(self.chain_stats["max_ms"].get(k) or 0, v["max"] or 0)
+                if code == 200 and doc:
+                    rec.update(head=doc["head"]["seq"], records=doc["records"], verified=doc["verified"],
+                               last_verify_ms=doc.get("last_verify_ms"), last_verify_checked=doc.get("last_verify_checked"),
+                               first_seq=doc.get("first_seq"), anchor=doc.get("anchor"),
+                               witnesses=[(w["node"], w["sig_ok"], w["silent"]) for w in doc["witnesses"]])
+                rec["state_chain"] = st.get("chain")
+                rec["errors"] = dict(err)
+                rec["chaos"] = sorted(self.chaos_now)
+                rec["offset_s"] = self.offset_s
+                self.run.log("chainprobe.jsonl", **rec)
+                stats = {"chain": [], "tail": []}
+                err = Counter()
+
+    def story_probe(self):
+        """ "What happened in the last five minutes?" every minute, the last 30 every ten: under 2 s, a story,
+        the chain checked, and not "nothing happened" when the brain said someone was there."""
+        n = 0
+        while not self.run.stop.wait(60):
+            n += 1
+            for minutes, q in [(5, "what happened in the last five minutes?")] + \
+                              ([(30, "what happened in the last 30 minutes?")] if n % 10 == 0 else []):
+                code, reply, ms = self.http_json("/ask", timeout=30, data=json.dumps({"question": q}).encode())
+                ans = (reply or {}).get("answer") or ""
+                t = now()
+                seen = [p for (tt, p) in self.presence_hist if t - minutes * 60 + 5 <= tt <= t - 10]
+                present = any(p for p in seen)
+                rec = {"minutes": minutes, "code": code, "ms": round(ms), "tool": (reply or {}).get("tool"),
+                       "chain_ok": (reply or {}).get("chain_ok"), "cites": len((reply or {}).get("cites") or []),
+                       "steps": [(s["tool"], s["ms"], s["rows"]) for s in (reply or {}).get("steps") or []],
+                       "brain_present": present, "answer": ans[:240], "chaos": sorted(self.chaos_now),
+                       "offset_s": self.offset_s}
+                self.run.log("story.jsonl", **rec)
+                quiet = self.killed_recently("web", "store", "brain", within=30) or self.disk_full
+                clocked = bool(self.chaos_now & {"clock"}) or self.offset_s != 0
+                if code != 200:
+                    if not quiet:
+                        self.problem("story_failed", key=str(code), once_per=600, rec=rec)
+                    continue
+                if ms > 2000:
+                    self.problem("story_slow", key=str(minutes), once_per=300, rec=rec)
+                if rec["tool"] != "story":
+                    self.problem("story_not_story", key="tool", once_per=1800, rec=rec)
+                if rec["chain_ok"] is False:
+                    self.problem("story_chain_bad", key="chain", once_per=300, rec=rec)
+                if not ans.strip():
+                    self.problem("story_empty", key="empty", once_per=300, rec=rec)
+                elif ans.startswith("I have no records") and not quiet and not clocked:
+                    self.problem("story_no_records", key="none", once_per=300, rec=rec)
+                elif present and "Nothing happened" in ans and not clocked:
+                    self.problem("story_missed_presence", key=str(minutes), once_per=300, rec=rec)
+
+    def chain_end(self):
+        """The whole kept chain checked through GET /chain/verify, and the file itself: no gap, no duplicate."""
+        rec = {}
+        try:
+            code, doc, _ = self.http_json("/chain", timeout=20)
+            if code == 200 and doc:
+                first, last = doc.get("first_seq"), doc["head"]["seq"]
+                rec.update(head=last, first_seq=first, records=doc["records"], anchor=doc.get("anchor"))
+                ok, checked, ms, at = True, 0, 0.0, first or 1
+                while first is not None and at <= last:
+                    c, v, _ = self.http_json(f"/chain/verify?from={at}&to={min(last, at + 99_999)}", timeout=120)
+                    if c != 200 or not v:
+                        ok = f"http {c}"
+                        break
+                    checked += v["checked"]
+                    ms += v["ms"]
+                    if not v["ok"]:
+                        ok = False
+                        rec["first_bad_seq"] = v["first_bad_seq"]
+                        break
+                    at += 100_000
+                rec.update(verify_ok=ok, checked=checked, verify_ms=round(ms))
+            f = self.out / "store.db"
+            db = sqlite3.connect(f"file:{f}?mode=ro", uri=True, timeout=10)
+            try:
+                n, lo, hi = db.execute("select count(*), min(seq), max(seq) from chain").fetchone()
+                rec["gapless"] = n == 0 or hi - lo + 1 == n
+                rec["kinds"] = dict(db.execute("select kind, count(*) from chain group by kind").fetchall())
+                rec["dup_seq"] = db.execute("select count(*) from (select seq from seconds where seq is not null "
+                                            "group by seq having count(*) > 1)").fetchone()[0]
+            finally:
+                db.close()
+            if rec.get("verify_ok") is not True:
+                self.problem("chain_end_not_verified", key="end", rec=rec)
+            if rec.get("gapless") is False:
+                self.problem("chain_gap", key="gap", rec=rec)
+        except Exception as e:
+            rec["error"] = repr(e)
+        self.chain_end_rec = rec
+        self.run.log("chain_end.jsonl", **rec)
+
+    def visit_judging(self):
+        """kit-5's judging: the line alone decides (no lesson, no camera). Once a baseline with the spot empty;
+        then a judge steps in every 1-4 minutes for 10-60 s, a quarter of the time armed (an intrusion),
+        and leaves; passers-by behind Pi B all along."""
+        self.visit_n += 1
+        v, m, r = self.visit_n, self.mon, self.rng
+        rec = {"visit": v, "start": round(now(), 1)}
+        if v == 1:
+            self.cmd("reset")
+            self.cmd("baseline")
+            self.capturing_until = now() + 125
+            t0 = now()
+            self.play(self.seg("empty-baseline", 24, [(0.5, None)]))
+            while m.wait_event("baseline_done", t0, 0.1) is None and now() - t0 < 90:
+                self.play(self.seg("empty-wait", 8, [(0.5, None)]))
+            rec["baseline_s"] = m.wait_event("baseline_done", t0, 0.1)
+            self.capturing_until = 0
+        self.play(self.seg("between", r.uniform(60, 240), [(0.5, None)]))
+        armed = self.feat["arm"] and r.random() < 0.25
+        if armed:
+            self.cmd("arm", on=True)
+            m.wait(lambda s: s.get("armed"), 3)
+        a = r.choice(self.zones)
+        t0 = now()
+        self.play(self.seg("arrive", 4, [(0.2, self.outside()), (2.5, self.spot(a)), (4, self.spot(a, 0.05))]))
+        stand = r.uniform(10, 60)
+        moves = [] if r.random() < 0.6 else [(r.uniform(2, stand - 2), self.spot(a, 0.1))]
+        rec["stand_s"] = round(stand, 1)
+        rec["found_s"] = m.wait_event("enter", t0, 0.1)
+        self.play(self.seg("stand", stand, moves, cam="off"))
+        rec["present_end"] = bool((m.state or {}).get("pred") and m.state["pred"].get("present"))
+        rec["alert_s"] = m.wait_event("alert_on", t0, 0.1)
+        self.play(self.seg("leave", 4, [(2.5, self.outside()), (2.7, None)], cam="off"))
+        if armed:
+            rec["intrusion_s"] = m.wait_event("intrusion", t0, 0.1)
+            self.cmd("arm", on=False)
+            if m.wait(lambda s: not s.get("armed"), 3) is None:
+                self.problem("armed_after_disarm", key="disarm")
+        rec["armed"] = armed
+        rec["end"] = round(now(), 1)
+        self.run.log("visits.jsonl", **rec)
+
     def write_summary(self, t_start, final=False):
         m = getattr(self, "mon", None)
         doc = {"cfg": self.cfg, "feat": self.feat, "hours_run": round((now() - t_start) / 3600, 3),
+               "chain": getattr(self, "chain_stats", None), "chain_end": getattr(self, "chain_end_rec", None),
                "visits": self.visit_n, "problems": dict(self.problems), "starts": dict(self.starts),
                "final": final}
         if m:
@@ -1027,7 +1383,7 @@ def main():
     ap.add_argument("--pace", choices=("real", "fast"), default="real")
     ap.add_argument("--out", default=str(HERE / "runs" / time.strftime("day-%Y%m%d-%H%M")))
     ap.add_argument("--faketime", action="store_true", help="jump the board's clock (Linux with libfaketime)")
-    ap.add_argument("--focus", default="mix", choices=("mix", "clock", "memory", "disk", "spot", "armed"),
+    ap.add_argument("--focus", default="mix", choices=("mix", "clock", "memory", "disk", "spot", "armed", "spot5", "witness"),
                     help="one question per day; mix = every fault at random")
     a = ap.parse_args()
     a.sync = None
