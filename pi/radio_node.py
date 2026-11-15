@@ -180,28 +180,40 @@ class BusSender:
             self.error = e
 
 
-def set_up(dev: hci.Hci, scanner: BeaconScanner, interval: int = ADV_INTERVAL_HCI) -> int:
+def set_up(dev: hci.Hci, scanner: BeaconScanner, interval: int = ADV_INTERVAL_HCI, scan: bool = True) -> int:
     """Advertise this node's beacon and scan, from whatever state the controller is in. Returns the interval.
 
     Both turn themselves off first, because their parameters can't change while they're on.
+    With scan False only the beacon is set up (--no-scan).
     """
     interval = start_advertising(dev, interval, scanner.rx)
-    scanner.start()
+    if scan:
+        scanner.start()
+    else:
+        scanner.stop()
     return interval
+
+
+def interval_ms(interval: int) -> float:
+    """An advertising interval in 0.625 ms units, in ms."""
+    return interval * 0.625
 
 
 PI_LINKS = heard_by("pi5")
 
 
-def status_line(counts: dict, seconds: float, bus: BusSender, redone: int, links=PI_LINKS) -> str:
-    """Rates and sends since the last status line; how often the controller was set up again since start."""
+def status_line(counts: dict, seconds: float, bus: BusSender, redone: int, links=PI_LINKS,
+                beacon: str | None = None) -> str:
+    """Rates and sends since the last status line; how often the controller was set up again since start;
+    and, if given, the beacon this node advertises and the interval the controller took (e.g. "beacon S every 20 ms")."""
     rates = ", ".join(f"{link} {counts.get(link, 0) / seconds:.1f}/s" for link in links)
     line = f"[pi.radio_node] {rates}; sent {bus.sent}, not sent {bus.failed}"
     if bus.failed and bus.error is not None:
         line += f" ({bus.error.strerror or bus.error})"
     bus.sent = bus.failed = 0
     bus.error = None
-    return line + f"; set up again {redone}x since start"
+    line += f"; set up again {redone}x since start"
+    return line + (f"; {beacon}" if beacon else "")
 
 
 def summary(seen: dict, windows: dict, seconds: float, links=PI_LINKS) -> str:
@@ -219,13 +231,17 @@ def summary(seen: dict, windows: dict, seconds: float, links=PI_LINKS) -> str:
 
 def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
         seconds: float = 0, stop=lambda: False, seen=None, windows=None, bus_sock=None,
-        clock=time.monotonic, log=lambda line: print(line, file=sys.stderr, flush=True), node: str = RX) -> dict | None:
+        clock=time.monotonic, log=lambda line: print(line, file=sys.stderr, flush=True), node: str = RX,
+        scan: bool = True) -> dict | None:
     """Advertise `node`'s beacon and scan for the beacons it hears, forwarding rssi to the board bus.
 
     If given, `seen` is filled with {link: [dbm, ...]} and returned (the service passes none, so
     nothing piles up). If given, `windows` gets each Pi link's rate for every 10 s status line.
     An OSError from the HCI socket (the controller is down or gone) is raised
     to the caller; one from the bus socket never is.
+
+    With scan False the node only advertises (--no-scan, a measurement): nothing is heard or sent,
+    and silence is not a reason to set up again.
     """
     own_sock = bus_sock is None
     bus_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if own_sock else bus_sock
@@ -239,7 +255,7 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
         # command families must not be mixed on one controller.
         scanner.ext = False
         scanner.mode = "legacy"
-        interval = set_up(dev, scanner)
+        interval = set_up(dev, scanner, scan=scan)
         now = clock()
         last_advert = last_status = now
         redo_at = None
@@ -262,14 +278,14 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
                         log(f"[pi.radio_node] something else sent HCI command 0x{completed_opcode(packet):04X}; "
                             "setting up advertising and scanning again")
                     redo_at = now + SETTLE_S
-            if redo_at is None and now - last_advert >= QUIET_S:
+            if scan and redo_at is None and now - last_advert >= QUIET_S:
                 if not quiet_told:
                     log(f"[pi.radio_node] no adverts for {QUIET_S:.0f} s; setting up advertising and scanning "
                         f"again every {QUIET_S:.0f} s until one arrives")
                     quiet_told = True
                 redo_at = now
             if redo_at is not None and now >= redo_at:
-                interval = set_up(dev, scanner, interval)
+                interval = set_up(dev, scanner, interval, scan)
                 redone += 1
                 redo_at = None
                 last_advert = clock()
@@ -277,7 +293,9 @@ def run(dev: hci.Hci, bus_host: str = BUS_HOST, bus_port: int = BUS_PORT,
                 if windows is not None:
                     for link in links:
                         windows.setdefault(link, []).append(counts.get(link, 0) / (now - last_status))
-                log(status_line(counts, now - last_status, bus, redone, links))
+                log(status_line(counts, now - last_status, bus, redone, links,
+                                f"beacon {beacon_letter(node)} every {interval_ms(interval):g} ms"
+                                + ("" if scan else ", not scanning")))
                 counts, last_status = {}, now
         return seen
     finally:
@@ -298,6 +316,8 @@ def main(argv=None) -> None:
                     help="stop after this long and print a Gate 2 summary (0 = run until stopped)")
     ap.add_argument("--node", choices=RADIO_NODES, default=RX,
                     help="which Pi this is (default: RADIO_NODE from .env, else pi5)")
+    ap.add_argument("--no-scan", action="store_true",
+                    help="advertise the beacon only, without scanning (to measure whether scanning slows it down)")
     args = ap.parse_args(argv)
     # Only a timed run keeps readings, for its summary; the service keeps nothing.
     seen, windows = ({}, {}) if args.seconds else (None, None)
@@ -306,14 +326,15 @@ def main(argv=None) -> None:
     dev = open_controller(args.dev)
 
     print(
-        f"[pi.radio_node] {args.node}: advertising beacon {beacon_letter(args.node)}, scanning on hci{args.dev}; "
+        f"[pi.radio_node] {args.node}: advertising beacon {beacon_letter(args.node)}, "
+        f"{'not scanning' if args.no_scan else 'scanning'} on hci{args.dev}; "
         f"forwarding to {BUS_HOST}:{BUS_PORT}",
         file=sys.stderr, flush=True,
     )
     started = time.monotonic()
     try:
         run(dev, bus_host=BUS_HOST, bus_port=BUS_PORT, seconds=args.seconds, seen=seen, windows=windows,
-            node=args.node)
+            node=args.node, scan=not args.no_scan)
     except KeyboardInterrupt:
         pass
     except hci.HciError as e:
