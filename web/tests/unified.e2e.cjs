@@ -13,7 +13,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`all panels together w
  await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
  await page.evaluate(()=>window.arrival.update('still'))
  await expect(page.locator('#hud').getByTestId('privacy-values')).toHaveText('0 images stored · 0 bytes sent out')
- await expect(page.getByTestId('handoff-strip')).toBeHidden();await expect(page.getByTestId('cam-status')).toHaveText('Camera unplugged · radio only');await shot('fallback')
+ await expect(page.getByTestId('handoff-title')).toHaveText('RADIO ONLY');await expect(page.getByTestId('handoff-time')).toBeEmpty();await expect(page.getByTestId('cam-status')).toBeHidden();await shot('fallback')
  const fit=async()=>{
   for(const selector of ['#hud > header','#hud .privacy-line','#hud > .signal','#hud footer'])await expect(page.locator(selector)).toBeInViewport({ratio:1})
   const signal=await page.locator('#hud > .signal').boundingBox(),footer=await page.locator('#hud footer').boundingBox();expect(signal.y+signal.height).toBeLessThanOrEqual(footer.y+1)

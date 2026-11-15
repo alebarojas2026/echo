@@ -11,3 +11,10 @@
 .handoff-strip[data-phase="radio"] .handoff-heading { color:var(--person); }
 .handoff-strip[data-phase="unknown"] .handoff-heading { color:var(--text-2); }
 .judge-extra:has(.handoff-strip:not([hidden])) > :is(.lesson-progress,section:has(> [data-testid="cam-status"])) { display:none; }
+/* A short window: the strip gives up its own padding, and while the dead-zone card is up it keeps its words and
+   gives the card its bar and detail line. */
+@media(min-width:1101px) and (max-height:1000px) {
+  .handoff-strip { padding-block:0; gap:8px; }
+  .handoff-track { height:16px; }
+  .judge-extra:has(.dead-zone:not([hidden])) > .handoff-strip > :is(.handoff-track,p) { display:none; }
+}

@@ -21,14 +21,15 @@ export function handoff(state: StateMsg | null, stale: boolean) {
   const scale = Math.max(120000, total)
   const teaching = knownStart && (cam === 'on' || knownOff) ? ((knownOff ? off : state.t) - start) / scale : 0
   const radio = knownStart && knownOff ? (state.t - off) / scale : 0
-  if (cam === 'off') return { phase: 'radio', title: 'RADIO ONLY', time: knownOff ? runTime(state.t - off) : '', detail: 'Camera unplugged', teaching, radio, edge: knownStart && knownOff }
+  // A board that does not publish when the camera came out: RADIO ONLY with no duration, and the strip drawn whole.
+  if (cam === 'off') return { phase: 'radio', title: 'RADIO ONLY', time: knownOff ? runTime(state.t - off) : '', detail: 'Camera unplugged', teaching, radio: knownStart && knownOff ? radio : 1, edge: knownStart && knownOff }
   const agreement = Number.isInteger(lesson?.agree) && Number.isInteger(lesson?.of) && lesson!.of! >= 3 && lesson!.agree! >= 0 && lesson!.agree! <= lesson!.of!
   const fits = Number.isInteger(lesson?.fits) && lesson!.fits! >= 0 ? `${lesson!.fits} fits` : ''
   const detail = [agreement ? `${lesson!.agree} of ${lesson!.of} agree` : '', fits, lesson?.fitting ? 'Fitting' : ''].filter(Boolean).join(' · ')
   return { phase: 'teaching', title: lesson ? 'CAMERA TEACHING' : 'CAMERA ON', time: knownStart ? runTime(total) : '', detail: detail || (lesson ? 'Learning from the camera' : 'Ready for a lesson'), teaching, radio: 0, edge: false }
 }
 
-export function handoffReady(state: StateMsg | null): boolean {
- const timing = (state as (StateMsg & {handoff?: Timing}) | null)?.handoff
- return !!state && stamp(timing?.started_t, state.t)
+/** The strip is on whenever there is a live reading; a replayed second has no camera of its own. */
+export function handoffShown(state: StateMsg | null, stale: boolean): boolean {
+  return !!state && !stale && state.src !== 'replay'
 }
