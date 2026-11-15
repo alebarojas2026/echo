@@ -21,7 +21,7 @@ export function judgeMoment(state: StateMsg | null, stale: boolean, layout = hud
   if (!pred) return [state.model?.trained ? 'Recalibrating' : 'Not trained yet', 'Waiting for a room prediction']
   if (pred.kind === 'object' || (pred.kind !== 'person' && state.objects.length)) return ['An object, not a person', '']
   if (pred.kind === 'none' || pred.zone === 0) return ['Nobody is here', '']
-  if (pred.zone_set.length > 1) return ['Between two zones', pred.zone_set.map(id => zoneName(id, layout)).join(' or ')]
+  if (layout.zones.length > 1 && pred.zone_set.length > 1) return ['Between two zones', pred.zone_set.map(id => zoneName(id, layout)).join(' or ')]
   const place = zonePlace(pred.zone, layout)
   return [`${pred.motion === 'moving' ? 'Moving' : 'Still'} ${place}`, '']
 }

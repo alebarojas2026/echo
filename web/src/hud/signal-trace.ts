@@ -34,11 +34,11 @@ export interface Point { age: number; drop: number; present: boolean }
  * stay off the floor (along the desk) are left out. Sides with no link are left out too.
  *
  * A layout with one zone whose links say crosses_spot is one spot: a single row, named as the zone, made of the
- * Bluetooth lines that cross it. Nothing is worked out from positions there, and there are no sides.
+ * radio lines that cross it. Nothing is worked out from positions there, and there are no sides.
  */
 export function signalSides(layout: HudLayout = hudLayout): Side[] {
   if (layout.zones.length === 1 && layout.links.some((link) => typeof link.crosses_spot === 'boolean')) {
-    const links = layout.links.filter((link) => link.crosses_spot === true && link.kind === 'ble').map((link) => link.id)
+    const links = layout.links.filter((link) => link.crosses_spot === true).map((link) => link.id)
     return links.length ? [{ zone: layout.zones[0].id, name: layout.zones[0].name, links }] : []
   }
   const [fw, fh] = floorSize()
