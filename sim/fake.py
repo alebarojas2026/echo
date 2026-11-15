@@ -24,6 +24,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import chain as sealed
 from .layout import LAYOUT
 from .wire import encoder
 
@@ -217,12 +218,16 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
     meta = {"session": "sim-" + path.get("name", "path"), "purpose": "demo", "walker": "sim"}
     yield {"type": "meta", "t": 0.0, **meta, **path.get("meta", {})}
     cam_was = None
+    record = sealed.of(path)   # a path with a "chain" block: the board's chain head and its witnesses (sim/chain.py)
     # "teacher": "desk" = the webcam on the desk (teacher/DESK.md): no foot point, and no usable
     # label within dead_band_m of the line between left and right.
     desk, split = path.get("teacher") == "desk", LAYOUT.split_x_m if LAYOUT.strip_m else SIZE / 2
     band = 0.0 if split is None else path.get("dead_band_m", 0.0)   # one spot has no line between sides
     for i in range(int(path["duration_s"] * rate)):
         t = round(i / rate, 3)
+        if record:
+            record.advance(t)
+            yield from record.pop()   # chain_head every 5 s, and a chain_witness from each witness that signs
         while h < len(hall) and hall[h]["t"] <= t:   # hall readings come at their own uneven moments
             yield hall[h]
             h += 1

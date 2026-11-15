@@ -1,6 +1,6 @@
 # Team rules for every worker
 
-Radio Sight: **a witness that never watches.** It knows when someone is in a space, keeps a record nobody can edit, and tells you what happened. No camera. No microphone. Nothing sent to the internet.
+Echo: **a witness that never watches.** It knows when someone is in a space, keeps a record nobody can edit, and tells you what happened. No camera. No microphone. Nothing sent to the internet.
 
 **This is the final direction (set Sunday 3:30 AM). Anything in an older issue, PR, doc or comment that says otherwise is out of date: follow this file.**
 
@@ -12,6 +12,7 @@ Radio Sight: **a witness that never watches.** It knows when someone is in a spa
 5. **You can watch it work.** A second screen, the engine room, shows the three devices, the record counting up, the signatures arriving and a prove-it check.
 
 - **Who it's for:** places that need a record of who was there and when but cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours; also restrooms and hotel rooms.
+- **The name is Echo** (decided Sunday 4:30 AM). Everything a judge reads says Echo: the screen's title, the engine room, the phone page, the docs, Devpost. "Radio Sight" is the old name. Internal names stay as they are (the `radio-sight-*` units, `RADIO_SIGHT_*` variables, folder names): do not rename code.
 - **The line to build around:** "It can't see you, it can't be edited, and it still tells you exactly what happened."
 - **What it does NOT claim:** it does not know who a person is, and it does not know where in a room they are. It senses one spot. Say so plainly; never write "tracks", "locates", "pinpoints" or "which side" about a person.
 - **What is cut (do not build, show or write about as part of the product):** the camera and the camera lesson ("taught by a camera" is gone; the webcam is unplugged for judging), any microphone, dead-zone advice and "move the router", two sides and zones along the desk, the ESP32 beacons and far hall beacons, Bluetooth as a sensor (its lines are drawn at most; they decide nothing), location or tracking of any kind. The code for these stays in the repo and old layouts keep working; nothing a judge sees uses them.

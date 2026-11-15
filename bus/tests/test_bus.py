@@ -442,3 +442,37 @@ def test_over_real_sockets_the_head_comes_from_the_bus_port(tmp_path):
         for s in (pi, store, rx, tx):
             s.close()
         b.close()
+
+
+def test_each_signature_is_also_passed_to_the_web_server_which_keeps_the_chain(chain_bus):
+    kept = []
+    chain_bus.to_chain = kept.append
+    chain_bus.handle(chain("chain_sub", node="pi5"), A)
+    chain_bus.handle(chain("chain_head", seq=4012, hash="b" * 64, t=5), STORE)
+    assert kept == []                                                        # only signatures go there
+    out = chain_bus.handle(chain("chain_witness", node="pi5", seq=4012, hash="b" * 64, t=5, sig=SIG), A)
+    assert [json.loads(m) for m in kept] == [out] and out["recv_t"] and out["sig"] == SIG
+
+    def unreachable(data):
+        raise OSError("Network is unreachable")
+    chain_bus.to_chain = unreachable
+    chain_bus.sent.clear()
+    assert chain_bus.handle(chain("chain_witness", node="pi5", seq=4013, hash="b" * 64, t=6, sig=SIG), A) is not None
+    assert len(chain_bus.sent) == 1                                          # the brain still gets it
+
+
+def test_over_real_sockets_a_signature_reaches_the_web_servers_port(tmp_path):
+    keeper = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    keeper.bind(("127.0.0.1", 0))
+    keeper.settimeout(5)
+    rx, tx, send = open_sockets("127.0.0.1", 0, ("127.0.0.1", 9))
+    b = Bus(sessions=tmp_path, send=send, reply=rx.sendto, to_chain=lambda data: tx.sendto(data, keeper.getsockname()))
+    pi = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        b.handle(chain("chain_witness", node="pi5", seq=7, hash="a" * 64, t=5, sig=SIG), ("192.168.77.1", 50001))
+        got = json.loads(keeper.recvfrom(4096)[0])
+        assert (got["type"], got["node"], got["seq"]) == ("chain_witness", "pi5", 7)
+    finally:
+        for s in (pi, keeper, rx, tx):
+            s.close()
+        b.close()
