@@ -73,6 +73,13 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   const passed = changingText(view.querySelector<HTMLElement>('.arrival-passed')!)
   const counter = view.querySelector('[data-testid="visitor-count"]')!
   const source = view.querySelector('[data-testid="arrival-source"]')!
+  const recent = host.querySelector<HTMLButtonElement>('[data-testid="what-happened"]')
+  if (recent) {
+    const ask = document.createElement('button')
+    ask.type = 'button'; ask.className = 'arrival-ask'; ask.dataset.testid = 'arrival-what-happened'; ask.textContent = 'What happened?'
+    ask.onclick = () => recent.click()
+    view.querySelector('.arrival-message')!.append(ask)
+  }
   const claim = view.querySelector('[data-testid="arrival-claim"]')!
   const arm = document.createElement('button')
   arm.type = 'button'
