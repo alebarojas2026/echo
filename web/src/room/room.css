@@ -631,6 +631,11 @@ html[data-room-placing] .room-canvas {
   margin: 0;
 }
 
+.room-place-help {
+  margin: 8px 0 0;
+  font-weight: 400; /* the instruction above it is the one to read first */
+}
+
 .room-place-keys {
   display: flex;
   flex-wrap: wrap;

@@ -28,6 +28,7 @@ async function setup(page) {
   })
   return { saved, errors }
 }
+const ASK = 'Click the desk the board and Pi A are on.'
 const room = (page) => page.locator('#room')
 const placing = async (page) => JSON.parse((await room(page).getAttribute('data-placing')) ?? 'null')
 const shot = async (page, name) => {
@@ -58,7 +59,9 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await expect(page.getByTestId('place-open')).toBeVisible()
     await page.getByTestId('place-open').click()
     const panel = page.getByTestId('place')
-    await expect(panel).toContainText('Click the desk your board is on.')
+    // The first instruction names the devices on the desk to click; the line under it says where Pi B is taken to be.
+    await expect(panel.locator('.room-place-say')).toHaveText(ASK)
+    await expect(panel.locator('.room-place-help')).toHaveText('Pi B is on the row behind it. Press G if Pi B is on the row in front.')
     await expect(page.locator('html')).toHaveAttribute('data-room-placing', '1')
     await expect(page.locator('#hud')).toBeHidden() // the hall has the whole screen
     await expect(panel.locator('[data-do="save"]')).toBeDisabled()
@@ -68,7 +71,7 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     for (const key of ['b', 'r', 't', 'm', 'h', 'o', '/', 'ArrowLeft', 'Enter']) await page.keyboard.press(key)
     await expect(page.locator('html')).toHaveAttribute('data-hud-operator', 'closed')
     await expect(page.locator('dialog[open]')).toHaveCount(0)
-    await expect(panel).toContainText('Click the desk your board is on.')
+    await expect(panel.locator('.room-place-say')).toHaveText(ASK)
     expect(saved.fits).toHaveLength(0)
     await page.waitForTimeout(300)
     await shot(page, `place-${width}-1-ask`)
@@ -78,11 +81,13 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     expect(at.side).toBe('behind')
     expect(await room(page).getAttribute('data-scan-at')).not.toBe(before) // the kit is drawn there at once
     await expect(page.locator('.room-place-tag:not([hidden])')).toHaveText(['Board and Pi A', 'Pi B'])
+    await expect(panel.locator('.room-place-help')).toHaveText('Press G if Pi B is on the row in front.')
     await shot(page, `place-${width}-2-desk-clicked`)
 
     // The other side, and back.
     await page.keyboard.press('g')
     await expect(panel).toContainText('Pi B on the row in front.')
+    await expect(panel.locator('.room-place-help')).toHaveText('Press G if Pi B is on the row behind.')
     expect((await placing(page)).side).toBe('front')
     await shot(page, `place-${width}-3-other-side`)
     await panel.locator('[data-do="flip"]').click()
@@ -130,7 +135,7 @@ test.describe('with a finger', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/?mock=step_in&place=1') // no keys on a phone: the address opens it
     const panel = page.getByTestId('place')
-    await expect(panel).toContainText('Click the desk your board is on.', { timeout: 30000 })
+    await expect(panel).toContainText(ASK, { timeout: 30000 })
     await page.waitForTimeout(300)
     const at = await takeFarDesk(page, (x, y) => page.touchscreen.tap(x, y))
     await expect(panel).toContainText('Press Enter to save, or click another desk.')
