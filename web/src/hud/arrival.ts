@@ -135,7 +135,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     clearTimeout(wake)
     wake = undefined
     // The one-spot kit has no camera at all; the camera lesson is the other layouts' story.
-    claim.textContent = hudLayout.zones.length === 1 ? 'No camera. No microphone.' : 'Taught by a camera. Runs without one.'
+    claim.textContent = hudLayout.zones.length === 1 ? 'A witness that never watches.' : 'Taught by a camera. Runs without one.'
     arm.textContent = state?.armed ? 'Disarm space' : 'Arm space'
     arm.disabled = !feed || stale
     source.textContent = sourceWords(state)
@@ -166,7 +166,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     }
     if (step === 'found' || step === 'fading') {
       // The words hold, then the card fades as the room flies from the hall down to the floor.
-      show('Found you.', foundLine(state.cam), false, step === 'fading' ? 'found' : 'waiting')
+      show('Found you.', hudLayout.zones.length === 1 ? 'By radio.' : foundLine(state.cam), false, step === 'fading' ? 'found' : 'waiting')
       if (step === 'found' || view.hidden) { fade?.forEach(animation => animation.cancel()); fade = undefined; return }
       // Only the words fade. The rail behind them keeps the page colour, so nothing shows through half-way.
       fade ??= [...view.children].filter(part => !part.classList.contains('privacy-line')).map(part => part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FOUND_FADE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }))
