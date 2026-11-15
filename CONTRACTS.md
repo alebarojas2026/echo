@@ -100,6 +100,10 @@ Hall links (optional): up to two more beacons far outside the layout, as tripwir
   (h>unoq:ble, j>pi5:ble, h>pi5b:ble, ...). The scanners send them as ordinary section 4 rssi messages (kind ble).
   The core links are the twelve listed in nodes.json "links". Hall links are never core links: they are not listed
   there and never appear in state.links, health, pred.why, xray, objects, checkin or advice.
+  A hall link that has been calibrated is listed under "hall" too: "links": [{"id": "h>unoq:ble", "empty_quiet_db": n}]
+  (optional). empty_quiet_db is that link's quiet level measured once with the hall empty (Hall activity, section 6).
+Armed (optional): "armed": {"hold_s": n} = how long a person must stay before an intrusion is raised (Armed, section 6).
+  Missing means 3. Use 4 for a very busy aisle.
 Code takes ids, positions, links, zones and spots from nodes.json, not from constants of its own.
 ```
 
@@ -153,11 +157,14 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
            "before_dbm":-71.2,"after_dbm":null,"why":["pi5>unoq:wifi","east>pi5:ble"]},   // or null
  "narration":{"text":"...","event_id":"e123","t":1763149513000,"source":"llm","gen_ms":6120},
  "teacher":{"present":true,"zone":1,"motion":"still"},                       // null when the camera is off
- "hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[14.0,9.5],"activity":0.62,"moving":true,"rate_hz":6.5,"stale":false}],
+ "hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[14.0,9.5],"activity":0.62,"moving":true,"rate_hz":6.5,"stale":false,
+          "busy":false}],
         // Optional: may be missing, and a screen reads a missing hall as []. One row per hall link once it has a reading,
         // by receiver in nodes.json order, then by beacon. xy_m = the far beacon's position (the tx end), or null when
         // nodes.json has none; the other end is the rx node. activity is 0-1. rate_hz = readings over the last 2 s.
         // It means "movement on this path": never who, where along it, or how many. stale:true -> activity 0, moving false.
+        // busy is optional and missing means false. busy:true = too much foot traffic on the path to pick out one
+        // movement (Hall activity, section 6); then moving is false. A stale row is never busy.
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
         // training is null unless a fit is running or a lesson is on. While a fit runs:
         //   {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
@@ -179,7 +186,7 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
    // kinds: enter, exit, zone_change, checkin, object_on, object_off, advice, advice_result, router_moved, router_home,
    // recalibrating, cam_off, cam_on, cam_stalled, alert_on, alert_off, blind_on, blind_off, trained, baseline_done, drift,
    // reset (after the reset cmd), recording (info: {on, session}) after record_start/record_stop,
-   // armed, disarmed, intrusion (info: {zone} or {link} for a hall link),
+   // armed, disarmed, intrusion (info: {zone} or {link} for a hall link), passed_by (info: {zone}),
    // tamper, tamper_cleared (info: {node}, e.g. {"node":"east"}; a hall beacon is h or j).
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
 ```
@@ -219,8 +226,11 @@ Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, 
   {"t": epoch ms of that baseline_done}. The automatic baseline after router_home ("recalibrating") keeps the place:
   the model, the recordings and place.json stay as they were. proof/ scores only sessions whose meta recv_t is at or
   after place.json's t.
-  While a baseline started by the `baseline` cmd runs, no link is stale by rate; the capture sets expected_hz again.
-  A link with no reading for 1 s restarts the capture.
+  While a plain `baseline {}` (a new place) runs, no link is stale by rate; the capture sets expected_hz again.
+  A link with no reading for 1 s restarts the capture, as it does for the automatic baseline.
+  For baseline {keep_model: true}, only a link silent for 3 s, or health blind, restarts the capture. A stale link
+  does not: the capture also runs while health is degraded, and links are still judged against the old expected_hz
+  until it ends. (The same layout set down at a new desk, in a hall full of phones, must be able to finish.)
   A baseline asked for by the `baseline` cmd (with or without keep_model) that still cannot start 120 s after the cmd
   is given up: nothing changes and pred returns. The old baseline, the model and the recordings stay. There is no
   event for it; the brain logs why it never started. A capture that is running at 120 s goes on, and is given up if
@@ -261,9 +271,12 @@ Alert:
 - It clears on a checkin or on reset_alert.
 Armed (after hours: the space should be empty):
 - arm {on:true} sets state.armed and sends the event armed; arm {on:false} or reset clears it and sends disarmed.
-- While armed, an intrusion event is sent once each time a person appears: pred.present is true with kind person for
-  the majority of the last 10 decisions, after it was not. It names the zone. Objects never raise it.
-- While health is blind or pred is null, no intrusion is raised and the screen says so (never "all clear").
+- While armed, a person appears when pred.present is true with kind person for the majority of the last 10
+  decisions, after it was not. Still there 3 s later: one intrusion event, naming the zone. Gone first (not present
+  for the majority of the last 10 decisions): a passed_by event instead, naming the zone. Objects raise neither.
+  The 3 s is armed.hold_s in nodes.json (default 3; 4 for a very busy aisle).
+- While health is blind or pred is null, no intrusion and no passed_by is raised and the screen says so (never
+  "all clear"). An appearance that is still waiting then is judged once pred is back.
 Tamper (a rule, not learned; while armed only):
 - A node is silent when every link it sends or receives on has had no reading for 3 s. This is its own test on the
   readings, not the blind rule: it does not wait for a link to be judged stale or blind, it counts Pi B's links
@@ -288,6 +301,12 @@ Hall activity (a rule, not learned; per hall link, from that link's readings onl
 - activity = (spread_db / quiet_db - 2) / 4, held to 0-1 (0 up to twice the quiet level, 1 at six times).
 - moving turns true when activity >= 0.5 (four times quiet), and false again after activity has stayed < 0.25
   (three times) for 1 s.
+- empty_quiet_db (nodes.json, per hall link) is the link's quiet level measured once with the hall empty. While
+  quiet_db, the link's current quiet level, is above twice that, the path is busy: moving is false, busy is true, and
+  the screen says "path busy" (never "movement on this path", never "clear"). Stale comes first: a stale link is
+  not busy.
+- Without an empty_quiet_db the brain still sends the row as above, with no busy, but the screen never shows that
+  link as anything but "not calibrated".
 - The thresholds are first values, tuned at the hardware test (#95).
 X-ray:
 - The grid covers the whole layout rectangle (frame.size_m: the strip and the desk top, 1.6 x 1.1 m) plus 0.2 m on each
@@ -355,6 +374,12 @@ router-spot, train-button, train-seconds, zone-score, person-object-score, ms-pe
 models-count, hide-tally
 3D mirror (web/src/room): xray (data-max-db, data-max-xy) and beam-<link id> (data-drop-db, data-status, data-why),
   inside a visually hidden <ul data-testid="beams">.
+Arrival: "Found you." is shown once pred has been present for 1.5 s, then held 3 s. Someone walking past the desk
+  does not get it.
+While armed: a passed_by is shown small and calm ("Someone passed by"), never in the fault colour. The intrusion
+  alert is the only armed message in the fault colour.
+Hall paths: "movement on this path" when moving, "path busy" when busy, "not calibrated" for a link with no
+  empty_quiet_db in nodes.json. Never "clear".
 ```
 
 ## 9. Entry points (board/units/ start exactly these)
@@ -408,12 +433,13 @@ GET http://192.168.77.2:8080/history?from_t=<epoch ms>&to_t=<epoch ms>
 GET http://192.168.77.2:8080/report          // optional ?from_t=<epoch ms>&to_t=<epoch ms>; default = the last armed stretch
 200 {"armed_from_t":1763149300000,"armed_to_t":null,
      "intrusions":[{"t":1763149312000,"zone":2},{"t":1763149340000,"link":"h>unoq:ble"}],
-     "present_s":43,"passed_by":null,"tamper":[{"t":1763149350000,"node":"east"}],"blind_s":6,
+     "present_s":43,"passed_by":3,"tamper":[{"t":1763149350000,"node":"east"}],"blind_s":6,
      "text":"Armed at 18:21:40 and still armed. Intrusion alerts: 2. Someone was here for 43 s. ...",
      "rows":61,"ms":38}
    // armed_to_t is null while the space is still armed. An intrusion names a zone, or the hall link it was seen on
    //   (the same id as in the intrusion event). tamper lists each tamper event in the stretch.
-   // passed_by is null unless the brain has a passed-by rule (it has none today).
+   // passed_by = the number of passed_by events in the stretch (Armed, section 6). null only from a server that
+   //   does not count them.
    // text = a short report in plain words. Every number in text equals a number in the other fields; the server
    //   checks this and uses a fixed template when it does not hold.
    // rows = how many stored records the report was built from. ms = the whole time for it on the board.

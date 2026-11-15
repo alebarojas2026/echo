@@ -62,6 +62,11 @@ INVALID = [
     "$.tamper[1]",                  # no such node
     "$.tamper",                     # tamper is a list of nodes
     "$.tamper",                     # a node is listed once
+    "'zone' is a required property",   # a passed_by names its zone
+    "$.info.zone",                  # nobody passes by in zone 0
+    "$.hall[0].moving",             # a busy path never says moving
+    "$.hall[0].busy",               # a stale path is not busy
+    "$.hall[0].busy",               # busy is true or false
     "bad JSON",
 ]
 

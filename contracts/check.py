@@ -3,7 +3,7 @@
     python -m contracts.check session.jsonl            # one message per line
     python -m sim.fake zone_tour --fast | python -m contracts.check -
     python -m contracts.check proof.json               # a .json file is checked as proof.json
-    python -m contracts.check --as ask_reply replies.jsonl   # a web server body: ask_question, ask_reply, history, report, layout
+    python -m contracts.check --as ask_reply replies.jsonl   # a web server body (ask_question, ask_reply, history, report, layout) or nodes
 
 Prints file:line and the error for every bad line and exits 1 if any line fails.
 A jump in a producer's seq (lost messages) is a warning, not a failure.
@@ -32,9 +32,9 @@ def _load():
 
 
 VALIDATORS = _load()
-# proof.json (section 7) and the bodies of the board's web server: /layout (section 2), POST /ask, GET /history
-# and GET /report (section 10)
-NOT_MESSAGES = {"proof", "ask_question", "ask_reply", "history", "report", "layout"}
+# proof.json (section 7), the optional parts of radio/nodes.json (section 3) and the bodies of the board's web
+# server: /layout (section 2), POST /ask, GET /history and GET /report (section 10)
+NOT_MESSAGES = {"proof", "ask_question", "ask_reply", "history", "report", "layout", "nodes"}
 HISTORY_MAX_MS = 30 * 60 * 1000
 TYPES = sorted(set(VALIDATORS) - NOT_MESSAGES)
 
@@ -146,7 +146,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m contracts.check", description=__doc__.splitlines()[0])
     ap.add_argument("files", nargs="+", help="JSON-lines files, - for stdin; a .json file is checked as proof.json")
     ap.add_argument("--as", dest="schema", choices=sorted(NOT_MESSAGES - {"proof"}), default=None,
-                    help="check every line as one of the web server's bodies instead of by its type")
+                    help="check every line as this shape instead of by its type")
     args = ap.parse_args(argv)
     return 0 if all([check_file(f, args.schema) for f in args.files]) else 1
 
