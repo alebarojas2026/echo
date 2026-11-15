@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { beamLook, nodePair } from './beams'
+import { beamLook, nodePair, overFloor } from './beams'
 import type { LinkState } from './contract'
 
 const link = (drop: number | null, status = 'ok'): LinkState => ({
@@ -24,6 +24,12 @@ describe('beam look', () => {
     expect(look.why).toBe(true)
     expect(look.width).toBeGreaterThan(beamLook(link(12), false, none).width)
     expect(look.opacity).toBeGreaterThanOrEqual(0.8)
+  })
+
+  it('draws a link that never crosses the floor faint at rest, and in full once it explains the prediction', () => {
+    expect(beamLook(link(0), false, none, false).opacity).toBeCloseTo(0.3)
+    expect(beamLook(link(0), true, none, false).opacity).toBeGreaterThanOrEqual(0.8)
+    expect(beamLook(link(2, 'blind'), false, none, false).opacity).toBe(0.6) // broken reads the same everywhere
   })
 
   it('draws blind and missing links broken, never empty', () => {

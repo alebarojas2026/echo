@@ -12,6 +12,8 @@ import type { RoomView } from './view'
 
 // One thin neutral line per radio link (contract section 3), drawn between the node heads.
 // It dims as drop_db rises, turns amber (the person's colour) when the link is in pred.why, and breaks into dashes when blind.
+// A link whose straight path never passes over the floor a person stands on (on the desk layout, one between two
+// devices on the desk) is drawn faint while nothing is happening on it: the links a person can cut read first.
 
 export interface BeamLook {
   status: string // ok | stale | blind | missing
@@ -22,8 +24,23 @@ export interface BeamLook {
 }
 
 const FULL_DROP_DB = 12 // at this drop a link is as dim as it gets
+/** How strong a link that never passes over the floor is drawn, next to one that does, while it explains nothing. */
+const OFF_FLOOR = 0.3
 
-export function beamLook(link: LinkState | undefined, why: boolean, blind: ReadonlySet<string>): BeamLook {
+/** Whether the straight line from a to b passes over the floor a person can be in (floorSize, from nodes.json),
+ *  not just along its edge. On the square every link does; on the desk, a link between two desk devices doesn't. */
+export function overFloor(a: Vec3, b: Vec3): boolean {
+  const [fw, fh] = floorSize()
+  const inset = 0.01
+  for (let i = 0; i <= 64; i++) {
+    const x = a[0] + ((b[0] - a[0]) * i) / 64
+    const y = a[1] + ((b[1] - a[1]) * i) / 64
+    if (x > inset && x < fw - inset && y > inset && y < fh - inset) return true
+  }
+  return false
+}
+
+export function beamLook(link: LinkState | undefined, why: boolean, blind: ReadonlySet<string>, onFloor = true): BeamLook {
   const status = !link ? 'missing' : blind.has(link.id) ? 'blind' : link.status
   const broken = status === 'blind' || status === 'missing'
   const drop = Math.max(0, link?.drop_db ?? 0)
@@ -33,7 +50,7 @@ export function beamLook(link: LinkState | undefined, why: boolean, blind: Reado
     broken,
     why: why && !broken,
     // A link that explains the prediction stays readable however far it has dropped.
-    opacity: broken ? 0.6 : status === 'stale' ? lit * 0.6 : why ? Math.max(lit, 0.8) : lit,
+    opacity: broken ? 0.6 : why ? Math.max(lit, 0.8) : (status === 'stale' ? lit * 0.6 : lit) * (onFloor ? 1 : OFF_FLOOR),
     width: why && !broken ? 5 : 3, // 1.5 px is half an arcminute from 3 m; 3 px is the least that reads
   }
 }
@@ -53,6 +70,8 @@ interface Beam {
   green: number // 0..1, eased toward the check-in colour
   /** In pred.why, as shown: lights after 300 ms in the list, lets go after 800 ms out of it. */
   why: Held<boolean>
+  /** Its straight path passes over the floor a person stands on (overFloor). */
+  onFloor: boolean
 }
 
 /** The two nodes a link joins, in a fixed order, so twin links (wifi and ble) share one key. */
@@ -106,7 +125,7 @@ export class Beams {
         this.pairLabels.set(pair, label)
       }
       this.beams.push({ id, pair, line, mat, look: beamLook(undefined, false, new Set()), amber: 0, green: 0,
-        why: new Held<boolean>(false, (on) => (on ? 300 : 800)) })
+        why: new Held<boolean>(false, (on) => (on ? 300 : 800)), onFloor: true })
     }
     const [fw, fh] = floorSize()
     this.waiting = view.addLabel('Waiting for radio readings', v3([fw / 2, fh / 2, 0]), 'room-label--caption')
@@ -137,7 +156,7 @@ export class Beams {
     const brokenPairs = new Set<string>()
     for (const b of this.beams) {
       const link = state.links.find((l) => l.id === b.id)
-      b.look = beamLook(link, b.why.update(why.has(b.id), nowMs), blind)
+      b.look = beamLook(link, b.why.update(why.has(b.id), nowMs), blind, b.onFloor)
       if (b.mat.dashed !== b.look.broken) b.mat.dashed = b.look.broken
       if (b.look.broken) brokenPairs.add(b.pair)
       const drop = link?.drop_db
@@ -163,6 +182,7 @@ export class Beams {
       const parts = parseLinkId(b.id)!
       const a = at(parts.tx)
       const z = at(parts.rx)
+      b.onFloor = overFloor(a, z)
       const shift = shifts.get(b.id) ?? 0
       const [ax, ay, az] = offset(a, z, shift)
       const [zx, zy, zz] = offset(z, a, -shift)
