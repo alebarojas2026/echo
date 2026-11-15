@@ -77,6 +77,7 @@ obstruction camera model trained training learn cloud internet private privacy d
 KEEP = set("""
 mode modes wearing hearing stand stands sits time times with were what when here there come came went move moved moves wave waved
 rain raining light lights sign signs like lift many arms army alter mail sale stall stalls rights sight sites
+could would should clear cleared clears night ours lines
 """.split())
 
 WORDS = {w: i for i, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve".split())}
