@@ -203,3 +203,19 @@ def test_a_restart_keeps_floor_m(site):
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.parametrize("content_type, status", [("application/json", 403), ("text/plain", 403)])
+def test_a_refused_post_is_answered_not_reset(monkeypatch, url, content_type, status):
+    # A reply sent before the body is read, then a close, makes Linux reset the connection,
+    # and the page sees "connection reset" instead of the reason. Seen on Debian, not on Windows.
+    monkeypatch.setattr(serve, "SAVE_FROM", [serve.ipaddress.ip_network("10.42.0.0/24")])
+    body = json.dumps({"room": ROOM, "pad": "x" * (layout.MAX_BODY - 200)}).encode()
+    for _ in range(20):
+        assert call(url, raw=body, content_type=content_type)[0] == status
+
+
+def test_a_post_with_the_wrong_type_is_answered_not_reset(url):
+    body = json.dumps({"room": ROOM, "pad": "x" * (layout.MAX_BODY - 200)}).encode()
+    for _ in range(20):
+        assert call(url, raw=body, content_type="text/plain")[0] == 415
