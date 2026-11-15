@@ -1,7 +1,7 @@
 import type { Advice, Alert, Checkin, CmdMsg, EventMsg, LinkState, Narration, ObjectMark, Pred, StateMsg, Teacher, Xray } from './contract'
 import type { Transport } from './feed'
 import { DEMO_MS, demoScene } from './demo'
-import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
+import { HOME_SPOT, LINK_IDS, SIZE_M, STRIP_M, TRAY_SPOTS, ZONES, floorSize, nodePosition, parseLinkId, routerId, zoneAt, zoneCenter } from './frame'
 
 // Mock state messages (CONTRACTS.md v2 section 5) for building the screen without the board.
 // src is "sim" so nothing here can pass for live, and measured numbers (train time, ms per decision,
@@ -24,19 +24,54 @@ import { HOME_SPOT, LINK_IDS, nodePosition, parseLinkId, zoneAt } from './frame'
 export type MockScenario =
   | 'tour' | 'still' | 'checkin' | 'camera' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall' | 'demo'
 
+// Everything below is built from the layout in use (nodes.json): its zones, links, tray spot and size.
 const SEG_MS = 5000 // tour: 3 s walking, 2 s still, per zone
-const XRAY = { w: 10, h: 10, cell_m: 0.24, origin_m: [-0.2, -0.2] as [number, number] }
-const OBJECT_XY: [number, number] = [1.0, 0.2]
 
-/** The person's floor point at time t in the tour, and whether they're walking. */
+/** The X-ray grid the brain sends for this layout: 0.24 m cells on the square, 0.125 m on the desk, 0.2 m past
+ *  every side (10 x 10 on the square, 16 x 12 on the desk). */
+function xrayGrid() {
+  const cell = STRIP_M ? 0.125 : 0.24
+  return { w: Math.round((SIZE_M[0] + 0.4) / cell), h: Math.round((SIZE_M[1] + 0.4) / cell), cell_m: cell, origin_m: [-0.2, -0.2] as [number, number] }
+}
+
+/** The tray's floor point: nodes.json's first tray spot. */
+function trayXy(): [number, number] {
+  return [TRAY_SPOTS[0][0], TRAY_SPOTS[0][1]]
+}
+
+/** The zone the still and check-in scenes use: the last one (the square's Bathroom, the desk's Right). */
+export function alertZone(): number {
+  return ZONES[ZONES.length - 1].id
+}
+
+/** The router's Wi-Fi link to the receiver: the check-in link and the one advice watches. */
+function wifiLink(): string {
+  return LINK_IDS.find((id) => id.startsWith(`${routerId()}>`) && id.endsWith(':wifi')) ?? LINK_IDS[0]
+}
+
+/** The tour's stops: each zone's centre, anticlockwise around the floor from the north-east. */
+function tourStops(): { xy: [number, number]; angle: number }[] {
+  const [fw, fh] = floorSize()
+  const at = (xy: [number, number]) => (Math.atan2(xy[1] - fh / 2, xy[0] - fw / 2) - Math.PI / 4 + 4 * Math.PI) % (2 * Math.PI)
+  return ZONES.map((z) => zoneCenter(z.id)!).map((xy) => ({ xy, angle: at(xy) })).sort((a, b) => a.angle - b.angle)
+}
+
+/** The person's floor point at time t in the tour, and whether they're walking. With three or more zones they
+ *  walk the circle through the zone centres; with two, straight back and forth. */
 export function tourAt(tMs: number): { xy: [number, number]; moving: boolean } {
   const k = Math.floor(tMs / SEG_MS)
   const f = (tMs % SEG_MS) / SEG_MS
   const walking = f < 0.6
   const u = walking ? smooth(f / 0.6) : 1
-  const a = Math.PI / 4 + (k + u) * (Math.PI / 2)
-  const r = Math.SQRT1_2 // the circle through the four zone centres
-  return { xy: [1 + r * Math.cos(a), 1 + r * Math.sin(a)], moving: walking }
+  const stops = tourStops()
+  const from = stops[k % stops.length]
+  const to = stops[(k + 1) % stops.length]
+  if (stops.length < 3) return { xy: [from.xy[0] + (to.xy[0] - from.xy[0]) * u, from.xy[1] + (to.xy[1] - from.xy[1]) * u], moving: walking }
+  const [fw, fh] = floorSize()
+  const r = Math.hypot(from.xy[0] - fw / 2, from.xy[1] - fh / 2)
+  const turn = (to.angle - from.angle + 2 * Math.PI) % (2 * Math.PI)
+  const a = from.angle + Math.PI / 4 + u * turn
+  return { xy: [fw / 2 + r * Math.cos(a), fh / 2 + r * Math.sin(a)], moving: walking }
 }
 
 function smooth(x: number) {
@@ -56,11 +91,12 @@ function distToLink(xy: [number, number], id: string, router: string): number {
 }
 
 function blob(xy: [number, number] | null, peak: number): number[] {
+  const grid = xrayGrid()
   const out: number[] = []
-  for (let iy = 0; iy < XRAY.h; iy++) {
-    for (let ix = 0; ix < XRAY.w; ix++) {
-      const cx = XRAY.origin_m[0] + (ix + 0.5) * XRAY.cell_m
-      const cy = XRAY.origin_m[1] + (iy + 0.5) * XRAY.cell_m
+  for (let iy = 0; iy < grid.h; iy++) {
+    for (let ix = 0; ix < grid.w; ix++) {
+      const cx = grid.origin_m[0] + (ix + 0.5) * grid.cell_m
+      const cy = grid.origin_m[1] + (iy + 0.5) * grid.cell_m
       const d2 = xy ? (cx - xy[0]) ** 2 + (cy - xy[1]) ** 2 : Infinity
       out.push(Number((peak * Math.exp(-d2 / (2 * 0.18 ** 2))).toFixed(2)))
     }
@@ -68,25 +104,27 @@ function blob(xy: [number, number] | null, peak: number): number[] {
   return out
 }
 
+/** The zone a point is in, plus the neighbouring zone when it is within 15 cm of their shared line. */
 function zoneSet(xy: [number, number]): number[] {
   const zone = zoneAt(xy[0], xy[1])
-  const set = [zone]
-  if (Math.abs(xy[0] - 1) < 0.15) set.push(zoneAt(2 - xy[0], xy[1]))
-  else if (Math.abs(xy[1] - 1) < 0.15) set.push(zoneAt(xy[0], 2 - xy[1]))
-  return set
+  if (!zone) return []
+  for (const [dx, dy] of [[0.15, 0], [-0.15, 0], [0, 0.15], [0, -0.15]]) {
+    const near = zoneAt(xy[0] + dx, xy[1] + dy)
+    if (near && near !== zone) return [zone, near]
+  }
+  return [zone]
 }
-
-const CHECKIN_LINK = 'pi5>unoq:wifi'
 
 /** The no-movement count and the last check-in at tMs. Check-in times come from `start` (epoch ms when
  *  the mock began), so each one appears once and then stays the same, like the board's last check-in. */
 export function stillTimeline(scenario: MockScenario, tMs: number, start: number): { alert: Alert; checkin: Checkin | null; stillS: number } {
   const none: Alert = { state: 'none', zone: null, still_s: 0, limit_s: null }
-  const wave = (t: number): Checkin => ({ t: Math.round(t), link: CHECKIN_LINK })
+  const wave = (t: number): Checkin => ({ t: Math.round(t), link: wifiLink() })
+  const zone = alertZone()
   if (scenario === 'still') {
     const k = Math.floor(tMs / 14000)
     const stillS = (tMs % 14000) / 1000
-    const alert: Alert = { state: stillS >= 10 ? 'check_on' : 'counting', zone: 4, still_s: Number(stillS.toFixed(1)), limit_s: 10 }
+    const alert: Alert = { state: stillS >= 10 ? 'check_on' : 'counting', zone, still_s: Number(stillS.toFixed(1)), limit_s: 10 }
     return { alert, checkin: k > 0 ? wave(start + k * 14000) : null, stillS }
   }
   if (scenario === 'checkin') {
@@ -94,7 +132,7 @@ export function stillTimeline(scenario: MockScenario, tMs: number, start: number
     const phase = tMs % 15000
     if (phase < 5000) {
       const stillS = phase / 1000
-      const alert: Alert = { state: 'counting', zone: 4, still_s: Number(stillS.toFixed(1)), limit_s: 10 }
+      const alert: Alert = { state: 'counting', zone, still_s: Number(stillS.toFixed(1)), limit_s: 10 }
       return { alert, checkin: k > 0 ? wave(start + (k - 1) * 15000 + 5000) : null, stillS }
     }
     return { alert: none, checkin: wave(start + k * 15000 + 5000), stillS: 0 }
@@ -120,11 +158,16 @@ export interface Scene {
 export function mockState(scenario: MockScenario, seq: number, tMs: number, router = HOME_SPOT, start = Date.now() - tMs): StateMsg {
   if (scenario === 'waiting') return { ...emptyState(seq, router), links: [] }
   if (scenario === 'demo') return buildState(seq, tMs, demoScene(tMs, start))
-  const standing: Partial<Record<MockScenario, [number, number]>> = { still: [1.5, 0.5], checkin: [1.5, 0.5], between: [1.06, 0.55] }
+  // Still and check-in stand in the alert zone's middle; "between" stands just past the line between the last two
+  // zones (the square's 3 and 4, the desk's Left and Right).
+  const middle = zoneCenter(alertZone())!
+  const prev = zoneCenter(ZONES[ZONES.length - 2].id)!
+  const between: [number, number] = [(middle[0] + prev[0]) / 2 + 0.06, (middle[1] + prev[1]) / 2 + 0.05]
+  const standing: Partial<Record<MockScenario, [number, number]>> = { still: middle, checkin: middle, between }
   const walking = scenario === 'tour' || scenario === 'camera'
   const person = walking ? tourAt(tMs) : standing[scenario] ? { xy: standing[scenario]!, moving: false } : null
   const { alert, checkin, stillS } = stillTimeline(scenario, tMs, start)
-  const object = scenario === 'object' ? OBJECT_XY : null
+  const object = scenario === 'object' ? trayXy() : null
   return buildState(seq, tMs, {
     person, object, router, alert, checkin, stillS,
     blind: scenario === 'blind',
@@ -163,44 +206,46 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
   if (!blind && router === HOME_SPOT) {
     const set = person ? zoneSet(person.xy) : []
     const zone = set[0] ?? 0
-    const probs = [0, 0, 0, 0, 0]
+    const probs = [0, ...ZONES.map(() => 0)] // [empty, one per zone]
     if (zone) {
       probs[zone] = set.length > 1 ? 0.55 : 0.85
       if (set[1]) probs[set[1]] = 0.35
     }
     probs[0] = Number((1 - probs.reduce((a, b) => a + b, 0)).toFixed(2))
     pred = {
-      present: !!person,
+      present: zone > 0,
       // With only the tray in the square the board says "an object", not "nobody".
-      kind: person ? 'person' : object ? 'object' : 'none',
+      kind: zone ? 'person' : object ? 'object' : 'none',
       zone,
       zone_set: set,
       probs,
-      motion: person ? (person.moving ? 'moving' : 'still') : null, // present:false -> motion null
+      motion: zone ? (person!.moving ? 'moving' : 'still') : null, // present:false -> motion null
       still_s: Number(scene.stillS.toFixed(1)),
-      why: person ? top.slice(0, 2).map((l) => l.id) : [],
+      why: zone ? top.slice(0, 2).map((l) => l.id) : [],
     }
   }
 
   const xray: Xray = {
-    ...XRAY,
+    ...xrayGrid(),
     // People (walking or still) are in moving_db; only objects are in static_db (contract section 6).
     moving_db: blob(person?.xy ?? null, person?.moving ? 6 : 4),
     static_db: blob(object, 8),
-    n_links: 6,
+    n_links: LINK_IDS.length,
   }
-  const objects: ObjectMark[] = object ? [{ xy_m: object, near: 'pi5', since_s: Number((tMs / 1000).toFixed(1)), drop_db: 9 }] : []
-  const wifiNow = links.find((l) => l.id === 'pi5>unoq:wifi')!.dbm!
+  const router0 = routerId()
+  const wifi = wifiLink()
+  const objects: ObjectMark[] = object ? [{ xy_m: object, near: router0, since_s: Number((tMs / 1000).toFixed(1)), drop_db: 9 }] : []
+  const wifiNow = links.find((l) => l.id === wifi)!.dbm!
   // before_dbm is frozen when the router moves: the reading at S-home with the object there.
-  const wifiHome = Number((-58 - linkDrop('pi5>unoq:wifi', 0, null, object, HOME_SPOT, 0)).toFixed(1))
-  // Contract section 6: advice only while pi5>unoq:wifi is dropping by 3 dB or more.
-  const wifiDrop = links.find((l) => l.id === 'pi5>unoq:wifi')!.drop_db ?? 0
+  const wifiHome = Number((-58 - linkDrop(wifi, 0, null, object, HOME_SPOT, 0)).toFixed(1))
+  // Contract section 6: advice only while the router's Wi-Fi link is dropping by 3 dB or more.
+  const wifiDrop = links.find((l) => l.id === wifi)!.drop_db ?? 0
   const advice: Advice | null =
     object && scene.advice && wifiDrop >= 3
       ? {
-          id: 'a1', cause: 'obstruction', near: 'pi5', xy_m: object, link: 'pi5>unoq:wifi', to_spot: 'S-W30',
+          id: 'a1', cause: 'obstruction', near: router0, xy_m: object, link: wifi, to_spot: 'S-W30',
           // before_dbm is this mock's own wifi reading; dist_change_m comes from the spot geometry.
-          move_m: [-0.3, 0], dist_change_m: spotDistanceChange('S-W30'), why: ['pi5>unoq:wifi'],
+          move_m: [-0.3, 0], dist_change_m: spotDistanceChange('S-W30'), why: [wifi],
           before_dbm: router === HOME_SPOT ? wifiNow : wifiHome,
           after_dbm: null,
           text: 'An object next to the router is blocking its link to the receiver. Move the router 30 cm west.',
@@ -278,7 +323,7 @@ const NO_BOARD = { cpu_temp_c: null, cpu_mhz: null, cpu_pct: null }
 /** How much longer the router-to-receiver link gets when the router moves from S-home to `spot`, in metres. */
 function spotDistanceChange(spot: string): number {
   const [rx, ry] = nodePosition('unoq', HOME_SPOT)
-  const [hx, hy] = nodePosition('pi5', HOME_SPOT)
-  const [sx, sy] = nodePosition('pi5', spot)
+  const [hx, hy] = nodePosition(routerId(), HOME_SPOT)
+  const [sx, sy] = nodePosition(routerId(), spot)
   return Number((Math.hypot(sx - rx, sy - ry) - Math.hypot(hx - rx, hy - ry)).toFixed(3))
 }

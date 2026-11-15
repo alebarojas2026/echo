@@ -1,6 +1,8 @@
 import { PerspectiveCamera, Vector3 } from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { laneShifts } from './beams'
+import { demoScene } from './demo'
+import { buildState, mockState } from './mock'
 import { FIGURE_HEIGHT_M } from './figure'
 import { LINK_IDS, NODES, alertWordAt, applyLayout, toScene, type Vec3 } from './frame'
 import { DESK_LAYOUT } from './layouts.fixture'
@@ -11,6 +13,39 @@ import { FOV_DEG, fitCamera, roomShot } from './view'
 // keeps the built-in square.
 beforeAll(() => {
   expect(applyLayout(DESK_LAYOUT)).toBe(true)
+})
+
+describe('mocks on the desk layout', () => {
+  it('send one prob per zone plus empty, all twelve links and the 16 x 12 X-ray', () => {
+    const s = mockState('tour', 1, 1000)
+    expect(s.pred!.probs).toHaveLength(3)
+    expect(s.links.map((l) => l.id)).toEqual(LINK_IDS)
+    expect(s.xray).toMatchObject({ w: 16, h: 12, cell_m: 0.125, n_links: 12 })
+    expect(s.xray!.moving_db).toHaveLength(16 * 12)
+  })
+
+  it('walk Left and Right, stand still in Right, and stand between them', () => {
+    const zones = new Set<number>()
+    for (let t = 0; t < 20000; t += 500) zones.add(mockState('tour', 1, t).pred!.zone)
+    expect([...zones].sort()).toEqual([1, 2])
+    expect(mockState('still', 1, 12000).alert).toMatchObject({ state: 'check_on', zone: 2 })
+    expect(mockState('between', 1, 0).pred!.zone_set).toEqual([2, 1])
+  })
+
+  it('put the tray on the desk as an object, never a person', () => {
+    const s = mockState('object', 1, 0)
+    expect(s.objects[0].xy_m).toEqual([0.86, 1.0])
+    expect(s.pred).toMatchObject({ present: false, kind: 'object', zone: 0, zone_set: [] })
+  })
+
+  it('play the demo in the strip: into Right, still, over to Left, out', () => {
+    const at = (s: number) => buildState(1, s * 1000, demoScene(s * 1000, 0))
+    expect(at(6).pred).toMatchObject({ present: true, zone: 2, motion: 'moving' })
+    expect(at(20).alert).toMatchObject({ state: 'check_on', zone: 2 })
+    expect(at(43).pred).toMatchObject({ present: true, zone: 1 })
+    expect(at(46.9).pred!.present).toBe(false) // stepped out of the strip
+    expect(at(50).objects).toHaveLength(1)
+  })
 })
 
 describe('the room drawn on the desk layout', () => {
