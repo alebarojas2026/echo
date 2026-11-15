@@ -206,8 +206,8 @@ export interface PlacementPreset {
 }
 export const PLACEMENT: PlacementPreset = { nearApartM: 0.08, farApartM: 0.7, inFromEdgeM: 0.08, aboveTopM: 0.05, facingWithinM: 1.2, standAcrossM: 1.0, standHighM: 1.0 }
 
-/** A table needs this much of the gap beyond the device on its near edge, or it stands in the next desk. */
-const TABLE_ROOM_M = 0.3
+/** A device on a table of its own must clear the next desk by this much; nearer than that it goes on that desk. */
+const TABLE_ROOM_M = 0.1
 
 /** "70 cm left of the middle", as you stand in the spot facing our desk (the layout's west is your left). */
 function sideWords(dx: number): string {
@@ -253,8 +253,9 @@ export function placementGuide(h: HallDesks, spot: DeskSpot, nodes: readonly Gui
   const acrossNow = nodes.filter((n) => n.xyz[1] < -0.01)
   const gate = acrossNow.length > 0
   const depth = gate ? cm(sh - Math.min(...acrossNow.map((n) => n.xyz[1]))) : STAND_ACROSS_M
-  // On the gate the far end stands on its own table in the gap when a table fits there, and on the desk across when
-  // it doesn't (between two rows): nothing is ever placed inside the next desk.
+  // On the gate the far end stands on its own table in the gap when it clears the next desk there (a stair aisle,
+  // about 1.2 m), and on the desk across when it doesn't (between two rows, about 1 m): nothing is ever placed
+  // inside the next desk.
   const onDesk = facing !== null && facing.gap > 0 && (gate ? facing.gap < depth + TABLE_ROOM_M : facing.gap <= FACING_WITHIN_M)
   // The desk's edge is read from where the desk's devices stand, so on the gate they are placed on it, not in from it.
   const inFromEdge = gate ? 0 : IN_FROM_EDGE_M
