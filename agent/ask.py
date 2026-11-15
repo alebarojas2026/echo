@@ -28,7 +28,7 @@ import urllib.request
 from pathlib import Path
 
 from store import DB, Store
-from .tools import TOOLS
+from .tools import TOOLS, current_spot
 from . import room_facts
 
 LLM_URL = "http://127.0.0.1:8091"
@@ -54,14 +54,14 @@ CANT_ANSWER = "I only answer from this room's records, and they never say who so
 RULES = [  # (tool, keywords): first match wins, so the order matters
     ("intrusions", r"intru|\barmed\b|\barm(ed)? mode|break.?ins?\b|broke in|trespass|after.?hours|sneak|security (alarm|mode|system)"),
     ("alerts", r"no.?movement (alert|alarm|warning)|not.?moving (alert|alarm)|\balerts?\b|\balarms?\b|check.?ins?\b|\bcheck in\b|still (alert|alarm)|\bwarn"),
-    ("explain_advice", r"router|advice|advis|suggest|dead (zone|spot)|blocking|obstruct|in the way|the move\b|move the pi\b|arrow"),
+    ("explain_advice", r"router|advice|advis|suggest|dead (zone|spot)|\bblock(?:ed|ing)?\b|obstruct|in the way|the move\b|move the pi\b|arrow"),
     ("still_spans", r"\b(stand|stood|standing|stay|stayed|staying|sit|sat|sitting|hold|held|keep|kept|been|be) still\b"
                     r"|\bstill\b(?! (here|there|working|blind|on\b))|not mov|without mov|motionless|stationary|stay(ed)? put"
                     r"|freez|frozen|hold still|keep still|in one (spot|place)|didn.?t move|stop(ped)? moving"),
     ("link_history", r"wi.?fi|signal|\blinks?\b|bluetooth|\bble\b|dbm|rssi|blind|radio|interference|dropouts?|stale"),
     ("model_card", r"\bmodel\b|train|learn|camera|cloud|internet|online|private|privacy|data (leave|get|sent)|upload"
                    r"|neural|\bai\b|decision|decide|accura|\brun(s|ning)? on\b"),
-    ("presence", r"\b(any|some|no|every)\s?(one|body)\b|\bppl\b|\bperson\b|\bpeople\b|visit|occupied|empty|presen"
+    ("presence", r"what.*happening|\bmoving\b|\b(any|some|no|every)\s?(one|body)\b|\bppl\b|\bperson\b|\bpeople\b|visit|occupied|empty|presen"
                  r"|walk(ed)? (past|by|up|behind)|pass(ed)? (by|through)|c[oa]me by|stop(ped)? by|show(ed)? up|detected|activity|movement"),
 ]
 RULES = [(t, re.compile(p, re.I)) for t, p in RULES]
@@ -266,12 +266,12 @@ USES_MINUTES = ("presence", "still_spans", "alerts", "intrusions", "link_history
 
 
 def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic,
-        nodes_path=room_facts.NODES, privacy_reader=None) -> dict:
+        nodes_path=None, privacy_reader=None) -> dict:
     """{"answer", "rows", "tool", "args", "picked_by": "llm"|"rules", "src", "ms"} for one question.
     src is the newest record's src ("live", "sim" or "replay"; None when the store is empty)."""
     start = timer()
     if zones is None or links is None:
-        zones, links = layout(nodes_path)
+        zones, links = layout(nodes_path or NODES_JSON)
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
     question = " ".join(str(question).split())[:MAX_QUESTION]
     read = fix_typos(question)   # the keywords and the time read this; the model gets the question as typed
@@ -295,8 +295,16 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
         out = {"answer": can_answer() + (" " + CANT_ANSWER if refused else ""), "rows": []}
     else:
         specific = room_facts.intent(read)
-        out = (room_facts.answer(specific[0], store, now_ms, args["minutes"], nodes_path, privacy_reader, one_spot=len(zones) == 1)
-               if specific else TOOLS[tool](store, now_ms, zones, **args))
+        current = not specific and len(zones) == 1 and tool in ("presence", "still_spans") and re.search(
+            r"right now|currently|at the moment|what.*happening|^(is|are)\b", read, re.I)
+        current = current and not re.search(r"\b(last|past|since|today|yesterday)\b", read, re.I)
+        if specific:
+            out = room_facts.answer(specific[0], store, now_ms, args["minutes"], nodes_path or room_facts.NODES,
+                                    privacy_reader, one_spot=len(zones) == 1)
+        elif current:
+            out = current_spot(store, now_ms, zones, nodes_path)
+        else:
+            out = TOOLS[tool](store, now_ms, zones, nodes_path=nodes_path, **args)
         if tool in USES_MINUTES or specific:   # the minutes in the answer are in a row too
             out = {**out, "rows": out["rows"] + [{"row": "asked", "minutes": args["minutes"]}]}
     latest = store.latest()
