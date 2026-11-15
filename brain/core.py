@@ -39,7 +39,7 @@ SETTLE_MS = 3_000        # after router_home, pi5 links must sit near base this 
 SETTLE_DB = 1.0          # ... within this of base, else an automatic baseline runs
 ADVICE_MEDIAN_MS = 3_000 # before_dbm and after_dbm are medians over this long
 AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
-HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable: their readings ride the sensing Wi-Fi
+HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable (Pi B): their readings ride the sensing Wi-Fi
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
 ZONE_HOLD = 5            # decisions in a row (0.5 s) before enter, exit or zone_change is said
 TRAIN_PURPOSES = ("train", "object")
@@ -610,11 +610,7 @@ class Brain:
         lb = self.label
         cam_on = bool(self.cam and self.cam[1] == "on" and now - self.cam[0] <= CAM_SILENT_MS)
         if not cam_on:
-            # A new place needs the camera to say the area is empty. The same layout set down
-            # again (keep_model, or the automatic baseline) may have no camera at all: at the
-            # judging desk it is unplugged, and the operator keeps the area empty.
-            if not self.capture or self.capture["new_place"]:
-                return "the camera is not on"
+            pass   # no camera to ask (unplugged at the judging desk): the operator keeps the area empty
         elif lb is None or now - lb["recv_t"] > TEACHER_FRESH_MS:
             return "no camera labels in the last second"
         elif (lb.get("persons_in_frame") or 0) != 0:

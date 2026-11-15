@@ -24,14 +24,15 @@ from collections import deque
 
 import numpy as np
 
+from brain import layout
+
 SQUARE_M = 2.0
 DESK_CELL_M = 0.125    # cell size on a layout that isn't square
 MARGIN_M = 0.2
-NODES = {"unoq": (1.0, 2.0), "pi5": (1.0, 0.0), "east": (2.0, 1.0), "west": (0.0, 1.0)}
-LINKS = ("pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble",
-         "east>pi5:ble", "west>pi5:ble")
-ROUTER_SPOTS = {"S-home": (1.0, 0.0), "S-W30": (0.7, 0.0), "S-E30": (1.3, 0.0)}
-TRAY_SPOTS = {"T1": (1.0, 0.2)}
+NODES = layout.positions()                       # all four from radio/nodes.json
+LINKS = layout.LINKS
+ROUTER_SPOTS = layout.positions(key="router_spots")
+TRAY_SPOTS = layout.positions(key="tray_spots")
 
 EXCESS_PATH_M = 0.1
 ALPHA_REL = 0.1        # default alpha = this x the mean squared row length of W
@@ -77,12 +78,13 @@ def zone_rule(doc):
     return lambda x, y: zone_of(x, y, side)
 
 
-def grid_shape(size_m, margin_m=MARGIN_M):
-    """(w, h) of the grid for a layout: 10 x 10 for a square (section 5), else cells of
-    DESK_CELL_M over the rectangle plus the margin (16 x 12 for the 1.6 x 1.1 m desk)."""
-    sx, sy = float(size_m[0]), float(size_m[-1])
-    if sx == sy:
+def grid_shape(frame, margin_m=MARGIN_M):
+    """(w, h) of the grid for a layout's frame. With strip_m (the desk layout): cells of
+    DESK_CELL_M over size_m plus the margin, 16 x 12 for 1.6 x 1.1 m. Without: 10 x 10.
+    sim/layout.py does the same, so the fake and the real brain agree."""
+    if not frame.get("strip_m"):
         return 10, 10
+    sx, sy = (float(v) for v in frame["size_m"])
     return round((sx + 2 * margin_m) / DESK_CELL_M), round((sy + 2 * margin_m) / DESK_CELL_M)
 
 
@@ -138,7 +140,7 @@ def projection(W, alpha=None):
     """P = (W^T W + alpha I)^-1 W^T, shape (cells, links).
 
     Computed as W^T (W W^T + alpha I)^-1. It is the same matrix, but the solve
-    is links x links (6 x 6) instead of cells x cells.
+    is links x links instead of cells x cells.
     """
     if alpha is None:
         alpha = default_alpha(W)
@@ -249,7 +251,7 @@ class Xray:
         Nodes, links, router spots, the size of the layout, its zone rule and which node is the
         router all come from the file."""
         size = doc.get("frame", {}).get("size_m", [SQUARE_M, SQUARE_M])
-        w, h = grid_shape(size)
+        w, h = grid_shape(doc.get("frame", {}))
         kw = {"w": w, "h": h, **kw}
         router = next((n["id"] for n in doc["nodes"] if "router" in n.get("roles", [])), "pi5")
         return cls({n["id"]: n["xyz_m"] for n in doc["nodes"]},

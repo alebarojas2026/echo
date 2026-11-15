@@ -95,7 +95,7 @@ def test_the_square_layout_reads_the_same_from_the_file_as_from_the_old_constant
 def test_the_desk_layout_gets_its_grid_zone_rule_and_router_links_from_the_file():
     doc, ids = desk()
     xray = Xray.from_nodes(doc)
-    assert grid_shape(doc["frame"]["size_m"]) == (16, 12)
+    assert grid_shape(doc["frame"]) == (16, 12) and grid_shape(SQUARE["frame"]) == (10, 10)
     assert (xray.grid.w, xray.grid.h, round(xray.grid.cell_m, 4)) == (16, 12, 0.125)
     assert [round(v, 4) for v in xray.grid.origin_m] == [-0.2, -0.2] and xray.W.shape == (12, 192)
     zone = zone_rule(doc)

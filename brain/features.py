@@ -34,15 +34,8 @@ STEADY_STD_DB = 0.8
 STEADY_BIN_MS = 500    # the std is taken over 0.5 s means, the same way the x-ray does it
 STEADY_COVER = 0.9     # readings must span this much of the 2 s
 
-# Classifier links, in the fixed order used for feature vectors (section 3).
-LINKS = (
-    "pi5>unoq:wifi",
-    "pi5>unoq:ble",
-    "east>unoq:ble",
-    "west>unoq:ble",
-    "east>pi5:ble",
-    "west>pi5:ble",
-)
+# Classifier links, in the fixed order used for feature vectors (section 3): radio/nodes.json's.
+from brain.layout import LINKS  # noqa: E402
 STATS = ("drop_db", "std", "drop_min_db", "drop_max_db")   # all relative to the link's baseline, in dB
 
 

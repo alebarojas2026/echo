@@ -24,8 +24,9 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 
 from brain import features as F
+from brain import layout
 
-ZONES = [0, 1, 2, 3, 4]   # the default layout: empty, then the four zones of the 2 x 2 m square
+ZONES = [0] + layout.zone_ids()   # empty, then one per zone in radio/nodes.json
 FOREST = dict(n_estimators=60, max_depth=12, min_samples_leaf=2, n_jobs=4, random_state=0)
 ZONE_SET_MIN_P = 0.25  # a zone joins zone_set when its probability is at least this
 UNSEEN_DB = 6.0        # a feature this far outside everything seen in training = "not sure"
