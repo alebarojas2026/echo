@@ -39,7 +39,7 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
             except (OSError, ValueError, AttributeError) as error:
                 missing.append(f"readable trial annotations: {annotations} ({error})")
                 continue
-            if not post_lesson:
+            if not post_lesson and not path.with_suffix(".presence.csv").exists():
                 groups[purpose].append(str(path))
             sessions.append((path, session))
     if not groups["train"]:
@@ -103,6 +103,17 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
                        "--baseline",str(baseline),"--proof",str(output)]
             for pair in timing_pairs: command.extend(["--pair",*pair])
             commands.append(command)
+    cycles = []
+    for path, session in sessions:
+        log, states = path.with_suffix(".presence.csv"), path.with_suffix(".states.jsonl")
+        if session["meta"].get("purpose") == "heldout" and log.exists():
+            if not states.exists(): missing.append(f"presence state capture: {states}")
+            elif groups["train"] or groups["object"]: cycles.append((str(path),str(states),str(log)))
+    if cycles:
+        command = [sys.executable,"-m","proof.presence",*cycles[0],"--train",*groups["train"],*groups["object"],"--proof",str(output)]
+        for record in cycles[1:]: command.extend(["--more-record",*record])
+        commands.append(command)
+    if commands:
         commands.append([sys.executable, "-m", "proof.render_table", "--proof", str(output),
                          "--document", str(document), "--output", str(document)])
     return commands, missing
@@ -111,7 +122,8 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
 def missing_metrics(proof):
     security = proof.get("security") or {}
     detection, alarms = security.get("detection") or {}, security.get("false_alarms") or {}
-    fields = [("zone agreement", (proof.get("zone") or {}).get("total")),
+    fields = [("presence agreement", (proof.get("presence") or {}).get("total")),
+              ("zone agreement", (proof.get("zone") or {}).get("total")),
               ("person/object agreement", (proof.get("person_vs_object") or {}).get("total")),
               ("training time on board", proof.get("train_s")),
               ("decision p95 on board", (proof.get("ms_per_decision") or {}).get("p95")),
