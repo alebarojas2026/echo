@@ -228,6 +228,10 @@ class Brain:
             # themselves), and a line going quiet still shows in its own row and counts for tamper.
             self.health.classifier_links = [self.presence_line]
             self.health.judge_level = False
+        # The lines the lean-aside check-in and the drift follow read: the presence line alone where the layout
+        # names one (the Bluetooth lines dip 12 to 20 dB by themselves and would fake a lean or stall the follow),
+        # else every line marked as crossing the spot.
+        self.sense = (self.presence_line,) if self.presence_line else self.crossing
         self.presence_on_db, self.presence_off_db = float(rule.get("on_db", 7.0)), float(rule.get("off_db", 4.0))
         self.presence_hold_ms = int(float(rule.get("second_hold_s", 5.0)) * 1000)
         self._line_present, self._line_seen = False, None
@@ -1084,10 +1088,10 @@ class Brain:
         self._fresh = False
         pred = dict(self._raw)
         self.watch.on_pred(self.window["end"], pred)
-        if self.crossing:                        # the check-in on this layout: leaning out of the lines
-            quiet = [self.quiet_db[k] for k in self.crossing if k in self.quiet_db]
-            self.watch.on_crossing(self.window["end"], F.crossing_drop(self.window, self.crossing),
-                                   sum(quiet) / len(quiet) if quiet else 0.0, self.crossing[0])
+        if self.sense:                           # the check-in on this layout: leaning out of the lines
+            quiet = [self.quiet_db[k] for k in self.sense if k in self.quiet_db]
+            self.watch.on_crossing(self.window["end"], F.crossing_drop(self.window, self.sense),
+                                   sum(quiet) / len(quiet) if quiet else 0.0, self.sense[0])
         pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
         self._follow_drift(self.window["end"], pred)
@@ -1114,9 +1118,10 @@ class Brain:
         UNSTICK_MS, so the dip is the room (a chair moved), not a person.
         Only the crossing lines: the desk's own lines keep the captured baseline, since a tray
         left on them is what the dead-zone advice measures. A layout that marks no crossing
-        lines keeps the fixed baseline it always had."""
+        lines keeps the fixed baseline it always had. On a layout with a presence line only that
+        line is read and only its level follows: the other lines keep the captured baseline."""
         tau_ms = self.settings.drift_follow_s * 1000
-        if not (self.crossing and tau_ms and self.windower):
+        if not (self.sense and tau_ms and self.windower):
             return
         last, self._drift_t = self._drift_t, now
         if pred["present"] or last is None:
@@ -1124,8 +1129,8 @@ class Brain:
             return
         if self._thing:
             return   # a thing in the presence line: its empty level stays, so the gain shows when the thing goes
-        drop = F.crossing_drop(self.window, self.crossing)
-        quiet = [self.quiet_db[k] for k in self.crossing if k in self.quiet_db]
+        drop = F.crossing_drop(self.window, self.sense)
+        quiet = [self.quiet_db[k] for k in self.sense if k in self.quiet_db]
         floor = max(SUSPECT_DB, self.settings.suspect_x_quiet * (sum(quiet) / len(quiet) if quiet else 0.0))
         if drop is None:
             return
@@ -1139,15 +1144,15 @@ class Brain:
         else:
             self._suspect_t = None
         share = 1.0 - math.exp(-min(now - last, 1000) / tau_ms)
-        for link in self.crossing:
+        for link in self.sense:
             stats = self.window["links"].get(link) or {}
             if stats.get("n") and link in self.base:
                 self.base[link] += (stats["median"] - self.base[link]) * share
                 self.windower.base[link] = self.base[link]
-        self.health.set_base({k: self.base[k] for k in self.crossing if k in self.base})
+        self.health.set_base({k: self.base[k] for k in self.sense if k in self.base})
         noted_t, noted = self._noted
         if now - noted_t >= DRIFT_NOTE_MS and any(abs(self.base[k] - noted.get(k, self.base[k] + 99)) >= DRIFT_NOTE_DB
-                                                  for k in self.crossing if k in self.base):
+                                                  for k in self.sense if k in self.base):
             # A recording is read against the level in force when it was made (train), so the
             # followed level is kept with the baselines: in memory, and in baselines.jsonl.
             self._noted = (now, dict(self.base))

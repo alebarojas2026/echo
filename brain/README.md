@@ -228,6 +228,6 @@ A thing left in the line is `pred.kind: "object"` with `present: false`: no ente
 
 `"classifier": false` on the presence line is ignored (and logged): that line is never switched off.
 
-Health on such a layout comes from the presence line alone: the sensor is blind only when that line is stale or silent. The level of a Bluetooth line, or of a line that does not cross the spot, never makes it blind, never raises an object or advice and never decides presence (in the kit's recordings the Bluetooth lines dipped 9 to 20 dB with nobody there). Those lines are still drawn, show stale in their own rows, and count for tamper.
+Health on such a layout comes from the presence line alone: the sensor is blind only when that line is stale or silent. The level of a Bluetooth line, or of a line that does not cross the spot, never makes it blind, never raises an object or advice and never decides presence (in the kit's recordings the Bluetooth lines dipped 9 to 20 dB with nobody there). Those lines are still drawn, show stale in their own rows, and count for tamper. The lean-aside check-in and the drift follow read the presence line alone too, and only its empty level follows drift.
 
 To set the two spreads from the kit, record the line empty, with somebody standing still and with somebody stepping about, and look at the 2 s std of `pi5>pi5b:wifi` in each: `object_spread_db` goes just above the empty value, `moving_spread_db` between still and stepping about.

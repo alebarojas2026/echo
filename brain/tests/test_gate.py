@@ -324,18 +324,45 @@ def drifting_kit(seed=7, **feed):
 
 
 def test_the_empty_level_follows_a_drift_of_five_db_in_five_minutes():
-    kit = drifting_kit()
+    line = "pi5>pi5b:wifi"
+    kit = bent(Kit(7).teach(), lambda link, s, dbm: dbm - min(s, 300) / 60 if link == line else dbm)   # 1 dB a minute
     start = dict(kit.brain.base)
     _, rows, events = kit.play([(300, "nobody")])
     assert comings(events) == [] and not any(s["pred"]["present"] for _, s in rows)     # the drift is never "somebody"
-    moved = {k: start[k] - kit.brain.base[k] for k in kit.brain.crossing if k.endswith(":ble")}
-    assert all(3.5 <= v <= 6.5 for v in moved.values()), moved                          # 5 dB down, followed
-    assert kit.brain.base["pi5>unoq:ble"] == start["pi5>unoq:ble"]                      # the desk's lines keep theirs
+    assert not any(e["kind"].startswith("object") or e["kind"] == "advice" for _, e in events)
+    assert 3.5 <= start[line] - kit.brain.base[line] <= 6.5                             # 5 dB down, followed
+    assert all(kit.brain.base[k] == start[k] for k in start if k != line)               # only the presence line follows
     # after the drift a person is still found, and still released
     start_ms, _, events = kit.play([(6, "still")])
     assert comings(events) == ["enter"] and (when(events, "enter") - start_ms) / 1000 <= 1.5
     start_ms, _, events = kit.play([(5, "nobody")])
     assert comings(events) == ["exit"] and (when(events, "exit") - start_ms) / 1000 <= 2.0
+
+
+def test_a_bluetooth_line_dipping_is_never_a_check_in_and_never_moves_the_empty_level():
+    """The kit's Bluetooth lines dip 12 to 20 dB with nobody near them. On a layout with a presence line the
+    lean-aside check-in and the drift follow read that line alone, so the dips do nothing."""
+    def dips(link, s, dbm):
+        if link.endswith(":ble") and s % 20 < 4:
+            return dbm - (12.0 if int(s // 20) % 2 else 20.0)     # 4 s down, every 20 s, 12 or 20 dB
+        return dbm
+
+    kit = bent(Kit(seed=14).teach(), dips)
+    assert kit.brain.sense == ("pi5>pi5b:wifi",)
+    start = dict(kit.brain.base)
+    _, rows, events = kit.play([(180, "nobody")])
+    kinds = {e["kind"] for _, e in events}
+    assert not kinds & {"checkin", "enter", "blind_on", "object_on", "advice"}, kinds
+    assert all(s["checkin"] is None and s["pred"]["present"] is False for _, s in rows)
+    ble = [k for k in start if k.endswith(":ble")]
+    assert all(kit.brain.base[k] == start[k] for k in ble)                       # no Bluetooth level moved
+    assert abs(kit.brain.base["pi5>pi5b:wifi"] - start["pi5>pi5b:wifi"]) < 0.5   # and the line's own stayed put
+    # somebody standing still while the Bluetooth lines come back up from a dip: the alert stays, no check-in
+    _, rows, events = kit.play([(40, "still")])
+    assert alerts(events) == ["alert_on"] and rows[-1][1]["alert"]["state"] == "check_on"
+    # and a real lean still clears it
+    _, rows, events = kit.play([(1.0, "lean"), (4, "still")])
+    assert alerts(events) == ["checkin", "alert_off"]
 
 
 def test_with_a_fixed_baseline_a_drift_of_the_bluetooth_lines_is_not_followed_and_still_blinds_nothing():

@@ -347,6 +347,9 @@ Presence line (only on a layout whose nodes.json has "presence"; every number is
   file, are drawn, show stale in their own rows (health degraded) and count for tamper when their device goes
   quiet; their level never makes the sensor blind, never raises "object" or advice, and never decides present.
   A layout with no presence line keeps every rule it had.
+- The drift follow (Baseline) and the lean-aside check-in read the presence line alone on such a layout: where
+  those rules say "the crossing lines' median drops, averaged", it is this line's drop, only its empty level
+  follows drift (the other lines keep the captured baseline), and the checkin event names it.
 - Spread = the std of the line's readings over the last 2 s. The line arrives 25 times a second and sits within
   1 dB when the spot is empty, so the spread tells a body (it wobbles) from a thing (it does not).
 - Moving and still: motion is "moving" when the spread is at or over the boundary, and "still" again once it is
