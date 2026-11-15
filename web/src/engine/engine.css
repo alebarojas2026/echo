@@ -1,0 +1,434 @@
+/*
+  The engine room (a second screen, for the operator's laptop beside the judge's screen). Same style rules as
+  every screen (AGENTS.md, Style): dark, Hanken Grotesk, colours from the shared tokens, the person amber as the
+  one accent, the fault colour always with a word, opacity and transform only for motion. Nothing under 20 px;
+  the three numbers at the top are sized to read from two metres.
+*/
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 500 20px/1.3 'Hanken Grotesk', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.eng {
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  gap: var(--s5);
+  min-height: 100vh;
+  padding: var(--s5) var(--s6);
+}
+
+.eng h1,
+.eng h2,
+.eng p,
+.eng ol,
+.eng ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.eng h2 {
+  color: var(--text);
+  font: 600 24px/1.2 'Hanken Grotesk', system-ui, sans-serif;
+}
+
+.eng-note {
+  color: var(--text-2);
+}
+
+.eng-fault,
+.eng-fault .eng-head-value,
+.eng-fault .eng-head-note {
+  color: var(--fault);
+}
+
+/* ---- top */
+.eng-top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s5);
+}
+
+.eng-top h1 {
+  color: var(--text-2);
+  font: 500 24px/1 'Hanken Grotesk', system-ui, sans-serif;
+}
+
+.eng-top h1 span {
+  margin-left: var(--s3);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.eng-source {
+  padding: 2px var(--s3);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-control);
+  color: var(--text);
+}
+
+.eng-watch {
+  margin-left: auto;
+  color: var(--text-2);
+  text-align: right;
+}
+
+/* ---- the three numbers */
+.eng-heads {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s5);
+}
+
+.eng-head {
+  padding: var(--s4) var(--s5);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-card);
+  background: var(--floor);
+}
+
+.eng-head-label {
+  color: var(--text-2);
+}
+
+.eng-head-value {
+  color: var(--text);
+  font: 600 clamp(64px, 5vw, 96px) / 1.05 'Hanken Grotesk', system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+.eng-head-note {
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- the devices */
+.eng-devices {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--s5);
+}
+
+.eng-device {
+  display: grid;
+  gap: var(--s2);
+  align-content: start;
+  padding: var(--s4) var(--s5);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-card);
+  background: var(--floor);
+  transition: opacity 0.14s ease;
+}
+
+.eng-device-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+
+.eng-does {
+  color: var(--text-2);
+}
+
+.eng-rate {
+  color: var(--text);
+  font: 600 28px/1.2 'Hanken Grotesk', system-ui, sans-serif;
+}
+
+.eng-hears {
+  color: var(--text-2);
+}
+
+.eng-heard,
+.eng-signed {
+  color: var(--text);
+}
+
+/* A device that is not heard, or a witness that has stopped signing: quiet, with the fault colour on its words. */
+.eng-device[data-state='quiet'] {
+  border-color: var(--fault);
+}
+
+.eng-device[data-state='quiet'] .eng-heard,
+.eng-device[data-state='quiet'] .eng-signed {
+  color: var(--fault);
+}
+
+.eng-device[data-state='quiet'] .eng-rate,
+.eng-device[data-state='quiet'] h2 {
+  opacity: 0.55;
+}
+
+/* The tick beside "Signed record": at rest it is faint; it lights once when a signature arrives. */
+.eng-tick {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: var(--s3);
+  border-radius: 50%;
+  background: var(--person);
+  opacity: 0.25;
+  transition: opacity 0.6s ease;
+}
+
+.eng [hidden] {
+  display: none;
+}
+
+.eng-tick--on {
+  opacity: 1;
+  transition: opacity 0.1s ease;
+}
+
+.eng-device[data-state='quiet'] .eng-tick {
+  background: var(--fault);
+}
+
+/* ---- the sealed record */
+.eng-chain {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The newest record is always at the right edge; older ones run off the left. */
+.eng-strip {
+  display: flex;
+  flex-direction: row-reverse;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--s2) 0;
+}
+
+.eng-strip-row {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  transition: transform 0.45s ease;
+}
+
+.eng-block {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  gap: 2px;
+  width: 132px;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-control);
+  background: var(--floor);
+  color: var(--text-2);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+/* The link to the record before: each block carries the hash of the one on its left. */
+.eng-block + .eng-block::before {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: 50%;
+  width: 8px;
+  height: 2px;
+  background: var(--square);
+}
+
+.eng-block b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.eng-block-kind,
+.eng-block-hash {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.eng-block-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* A witness signature on the record it vouches for: one dot each. */
+.eng-block-signed {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.eng-block-signed i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--person);
+}
+
+/* A record the detective's answer cites: the one accent. */
+.eng-block--cited {
+  border-color: var(--person);
+  box-shadow: inset 0 0 0 1px var(--person);
+}
+
+/* From the record that breaks the chain onward nothing holds: the fault colour, and the link is cut. */
+.eng-block--bad {
+  border-color: var(--fault);
+  color: var(--fault);
+}
+
+.eng-block--bad b {
+  color: var(--fault);
+}
+
+.eng-block--bad::before {
+  background: transparent !important;
+}
+
+.eng-block--altered {
+  background: var(--fault);
+  color: var(--bg);
+}
+
+.eng-block--altered b {
+  color: var(--bg);
+}
+
+.eng-strip--copy {
+  flex-direction: row;
+  gap: 8px;
+}
+
+.eng-prove-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+}
+
+/* ---- prove it, and the last answer */
+.eng-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s5);
+  min-height: 0;
+}
+
+.eng-prove,
+.eng-ask {
+  display: grid;
+  gap: var(--s2);
+  align-content: start;
+  min-width: 0;
+  padding: var(--s4) var(--s5);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-card);
+  background: var(--floor);
+  overflow: hidden;
+}
+
+.eng-button {
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: var(--s2) var(--s5);
+  border: 1px solid var(--square);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text);
+  font: 600 22px/1 'Hanken Grotesk', system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.eng-button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 4px;
+}
+
+.eng-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.eng-prove-say {
+  min-height: 1.3em;
+  color: var(--text);
+}
+
+.eng-prove-say.eng-fault,
+.eng-note.eng-fault {
+  color: var(--fault);
+}
+
+.eng-ask-answer {
+  color: var(--text);
+  font: 600 24px/1.25 'Hanken Grotesk', system-ui, sans-serif;
+}
+
+.eng-ask[data-state='none'] .eng-ask-answer {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.eng-steps {
+  display: grid;
+  gap: 2px;
+  color: var(--text-2);
+}
+
+/* With no board behind the page nothing is live: the parts stay, dimmed, and the words say so. */
+.eng[data-board='none'] .eng-devices,
+.eng[data-board='none'] .eng-chain {
+  opacity: 0.5;
+}
+
+/* A laptop screen (1440 x 900): tighter spacing and smaller headline numbers, so everything is on one page. */
+@media (max-height: 960px) {
+  .eng {
+    gap: var(--s3);
+    padding: var(--s3) var(--s5);
+  }
+
+  .eng-heads,
+  .eng-devices,
+  .eng-bottom {
+    gap: var(--s4);
+  }
+
+  .eng-head,
+  .eng-device,
+  .eng-prove,
+  .eng-ask {
+    padding: var(--s3) var(--s4);
+  }
+
+  .eng-head-value {
+    font-size: 60px;
+  }
+
+  .eng-device {
+    gap: var(--s1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eng-strip-row,
+  .eng-tick,
+  .eng-tick--on {
+    transition: none;
+  }
+}
