@@ -181,6 +181,10 @@ const HALL_CUT_M = 12
 export async function standAtDefaultDesk(scan: Scan | null): Promise<Scan | null> {
   if (!scan || !STRIP_M || scan.fit.offset_m) return scan
   const hall = await loadDesks()
-  if (hall) scan.apply(deskFit(hall, defaultSpot(hall), scan.box, scan.fit.cut_m ?? HALL_CUT_M))
+  if (hall) {
+    const spot = defaultSpot(hall)
+    scan.apply(deskFit(hall, spot, scan.box, scan.fit.cut_m ?? HALL_CUT_M))
+    scan.defaultDesk = deskName(spot.desk)
+  }
   return scan
 }

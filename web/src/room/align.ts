@@ -144,6 +144,8 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
 
   keys.innerHTML = 'Arrows move · Q E turn · + − scale<br>[ ] cut height · PgUp PgDn floor<br>Shift for big steps<br>Tab picks a beacon · Esc lets go<br>V view from above · S save'
   fitLine.textContent = describeFit(scan.fit)
+  // Nothing saved yet: say that this desk is only where the page starts, and how to make the real one stick.
+  if (scan.defaultDesk) status.textContent = `Not saved: ${scan.defaultDesk} is only the default. Step to your desk (D, I K, J L, U O), then S saves it.`
   beacons?.startEditing(() => (beaconLine.textContent = beacons.describe()))
   // Desk snapping: only on the desk layout, and only when the build knows the hall's desks.
   let hall: HallDesks | null = null

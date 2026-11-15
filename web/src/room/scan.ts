@@ -19,6 +19,8 @@ export interface Scan {
   bounds(): Box3
   /** The model's own box, in its own metres, before any alignment. */
   box: { min: number[]; max: number[] }
+  /** The desk it stands at only because nothing was saved yet (desks.ts), named for the operator; else unset. */
+  defaultDesk?: string
 }
 
 export type ScanSource = {
