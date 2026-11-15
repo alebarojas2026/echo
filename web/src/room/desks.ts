@@ -179,6 +179,17 @@ export function deskFit(h: HallDesks, spot: DeskSpot, box: { min: number[]; max:
   return { offset_m: [r3(-fw / 2 - sx), r3(-(fh / 2 - sz))], yaw_deg: yaw, scale: 1, cut_m, floor_m }
 }
 
+/**
+ * The desk straight across the gap from a spot (the next row's, behind or in front), or null when no desk of that
+ * row reaches this point: the row ends before it, or there is no such row. The same test the guide places by.
+ */
+export function rowAcross(h: HallDesks, spot: DeskSpot): HallDesk | null {
+  if (spot.gap === 'end') return null
+  const { thDeg } = spotAngle(spot)
+  const d = deskIn(h, spot.desk.row + (spot.gap === 'front' ? -1 : 1), thDeg)
+  return d && rad(outside(d, thDeg)) * d.r_m < 0.3 ? d : null
+}
+
 /** Where one device should go, in the layout's frame, and how to say it. */
 export interface Placement {
   id: string
@@ -333,7 +344,7 @@ export function stepDesk(h: HallDesks, from: DeskSpot, dir: DeskStep): DeskSpot 
 }
 
 /** How far along a desk the strip's middle may sit: half a strip in from either end. */
-function clampAlong(desk: HallDesk, along: number, stripM = (STRIP_M ?? SIZE_M)[0]): number {
+export function clampAlong(desk: HallDesk, along: number, stripM = (STRIP_M ?? SIZE_M)[0]): number {
   const length = (((desk.th1_deg - desk.th0_deg) * Math.PI) / 180) * desk.r_m
   if (length <= stripM) return 0.5
   const lo = stripM / 2 / length
