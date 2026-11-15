@@ -53,8 +53,14 @@ and `python3 -m radio.report_hci`) checks them.
 
 ## Gate 2 — Bluetooth raw scan (#20)
 
-**Pass criteria:** a Pi's beacon (S, and B in the desk layout) ≥ 20 adverts/s at every receiver
-that hears it; each of the E and W beacons ≥ 7 adverts/s at every receiver.
+**Pass criteria:** at every receiver, each beacon is heard on at least 30% of its advertising
+events, and never under 7 adverts/s. A beacon sends one event every interval + 5 ms on average
+(the controller's random 0-10 ms delay), and a scanner that listens all the time hears at most one
+copy per event, on the channel it is on. So E and W (35 ms) give at most 25/s and pass at 7.5/s;
+a Pi's beacon (S, and B in the desk layout; 20 ms) gives at most 40/s and passes at 12/s. If the
+Pi's journal says its beacon runs `every 100 ms` (the controller refused 20 ms), S and B can give
+only 9.5/s and need 7/s, which a hall rarely allows: say so on #95.
+`python3 -m radio.report_hci` prints, for a failing link, the share of its beacon's events heard.
 
 **Setup:**
 - Pi advertising as beacon S (manufacturer data `FFFF525353`): `radio-sight-radio-node` running on the Pi.
