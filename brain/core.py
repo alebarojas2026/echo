@@ -404,7 +404,13 @@ class Brain:
                 logging.getLogger("brain").warning("could not write label mode %r to %s: %s", mode, self.mode_file, e)
 
     def _cmd_router_moved(self, args):
-        self.router = args.get("spot") or "moved"
+        spot = args.get("spot")
+        if not isinstance(spot, str) or spot == HOME or spot not in self.xray.router_spots:
+            # state.router can only name a spot from nodes.json, and the x-ray needs its position.
+            # Back on S-home is router_home's job (it runs the 3 s check).
+            logging.getLogger("brain").warning("router_moved ignored: %r is not a spot to move to", spot)
+            return
+        self.router = spot
         self._move_router(self.router)
         self._moved_t, self.settle = self.now(), None
         before = self.advice["before_dbm"] if self.advice else self._median(WIFI, self.now() - ADVICE_MEDIAN_MS)
