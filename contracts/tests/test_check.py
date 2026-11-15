@@ -52,6 +52,10 @@ INVALID = [
     "'on' is a required property",   # arm says on or off
     "$.info",                       # an intrusion names a zone or a hall link
     "$.info",                       # an intrusion is never in zone 0
+    "$.model.training.lesson.of",   # the learning signal counts 10 decisions at most
+    "7 of 5",                       # more agreeing decisions than decisions
+    "'fitting' is a required property",   # a lesson says whether a fit is running
+    "$.model.training",             # a lesson without the fit block around it
     "bad JSON",
 ]
 
