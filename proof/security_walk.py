@@ -1,17 +1,21 @@
 """Record independent entry/empty trials and the board's state/event capture."""
 import argparse
 import json
+import math
 import re
 from pathlib import Path
 import threading
 import time
 
 from proof.provenance import require_board
+from proof.security import hold_seconds
 
 
 def run(session, walker, mode, layout, send, prompt=print, sleep=time.sleep, clock=time.time, repeats=3):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}",session): raise ValueError("use a new simple session id")
-    if mode not in {"entries","empty"} or not walker.strip(): raise ValueError("choose entries/empty and a walker pseudonym")
+    if mode not in {"entries","empty","passes"} or not walker.strip(): raise ValueError("choose entries/empty/passes and a walker pseudonym")
+    entry_s = max(6,math.ceil(hold_seconds(layout)+2))
+    if mode == "passes" and hold_seconds(layout) <= 0: raise ValueError("passes need a positive armed hold")
     seq = 0
     def command(cmd,args):
         nonlocal seq
@@ -31,7 +35,9 @@ def run(session, walker, mode, layout, send, prompt=print, sleep=time.sleep, clo
         else:
             for _ in range(repeats):
                 for zone in layout["zones"]:
-                    wait(f"Enter the sensing area and stand at the marked centre of {zone['name']} (zone {zone['id']}).",6)
+                    text = (f"Walk straight through {zone['name']} and leave without stopping; stay inside less than {hold_seconds(layout):g} s."
+                            if mode == "passes" else f"Enter the sensing area and stand at the marked centre of {zone['name']} (zone {zone['id']}).")
+                    wait(text,entry_s)
                     wait("Leave the sensing area completely; stay outside.",10)
     finally:
         try: command("arm",{"on":False})
@@ -53,7 +59,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     root = Path(__file__).resolve().parents[1]
     parser.add_argument("session")
-    parser.add_argument("mode",choices=["entries","empty"])
+    parser.add_argument("mode",choices=["entries","empty","passes"])
     parser.add_argument("walker")
     parser.add_argument("--nodes",type=Path,default=root/"radio/nodes.json")
     args = parser.parse_args()

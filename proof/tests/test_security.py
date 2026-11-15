@@ -23,8 +23,8 @@ def event(kind,t,identity): return dict(v=2,type="event",recv_t=t,src="sim",kind
 
 
 def test_entry_presence_and_armed_intrusion_with_intervals():
-    session, states = recorded()
-    result = analyze([(session,states+[event("intrusion",1700,"i")])])["detection"]
+    session, states = recorded(seconds=8)
+    result = analyze([(session,states+[event("intrusion",4600,"i")])])["detection"]
     assert result["entries"]==result["detected"]==result["armed_entries"]==result["intrusions"]==1
     assert result["ci95"][0]<1 and result["ci95"][1]==1
 
@@ -120,14 +120,14 @@ def test_each_subset_retrains_without_heldout_or_excluded_links(monkeypatch):
     with pytest.raises(ValueError): compare([test],[test],baseline,layout(),allow_sim=True)
 
 
-@pytest.mark.parametrize("mode",["entries","empty"])
+@pytest.mark.parametrize("mode",["entries","empty","passes"])
 def test_recording_scripts_use_layout_and_capture_only_messages(mode):
     now, commands, prompts = [0], [], []
     def sleep(seconds): now[0]+=seconds
     run("trial","w1",mode,layout(),commands.append,prompts.append,sleep,lambda:now[0],repeats=1)
     assert commands[0]["args"]["purpose"]=="heldout"
     assert commands[-1]["cmd"]=="record_stop" and commands[-3]["args"]=={"on":False}
-    assert ("Desk Left" in " ".join(prompts)) == (mode=="entries")
+    assert ("Desk Left" in " ".join(prompts)) == (mode!="empty")
     if mode=="empty": assert now[0]>=600
     out = io.StringIO()
     capture(['{"v":2,"type":"state","src":"sim"}','{"type":"camera-preview","image":"discard"}'],out,lambda:1)
