@@ -17,6 +17,7 @@ board's clock can be stepped.
 """
 import json
 import logging
+import os
 import sqlite3
 import threading
 import time
@@ -25,8 +26,11 @@ from pathlib import Path
 from .chain import ZERO, alter, canon, record_hash, timed, verify_rows
 
 DB = Path(__file__).resolve().parent.parent / "data" / "sessions" / "store.db"
-KEEP_H = 24.0          # older rows are dropped
+KEEP_H = 24.0          # about this much is kept, counted in records and never by the clock (prune)
+RECORDS_PER_S = 1.5    # what the board seals: a summary each second, each witness's signature every 5 s, the events
 PRUNE_EVERY = 600      # saved seconds between prunes
+PRUNE_SHARE = 0.05     # of what is kept: the most one prune drops
+OPEN_WAIT_S = 10.0     # how long an open waits for another program that is opening the same file
 
 SCHEMA = """
 create table if not exists events(
@@ -80,11 +84,34 @@ def summary(state: dict) -> dict:
 
 
 class Store:
-    def __init__(self, path=DB, keep_h: float = KEEP_H):
-        self.keep_ms = int(keep_h * 3_600_000)
+    def __init__(self, path=DB, keep_h: float = KEEP_H, keep_records=None):
+        # How much is kept is a number of records, the newest ones: keep_h hours at the board's rate, or
+        # keep_records / STORE_KEEP_RECORDS. The board has no clock battery and its clock is set by
+        # hand, so nothing is ever dropped because of what the clock says.
+        self.keep_records = max(1, int(keep_records or os.environ.get("STORE_KEEP_RECORDS") or keep_h * 3600 * RECORDS_PER_S))
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(path), check_same_thread=False)
+        # The store and the web server open the same file in the same moment after a deploy. Turning
+        # on WAL and making the tables need the file to themselves for an instant: the one that finds
+        # it taken waits and tries again instead of ending.
+        give_up = time.monotonic() + OPEN_WAIT_S
+        while True:
+            try:
+                self._open(path)
+                break
+            except sqlite3.OperationalError as e:
+                if "locked" not in str(e) and "busy" not in str(e) or time.monotonic() > give_up:
+                    raise
+                try:
+                    self.db.close()
+                except (AttributeError, sqlite3.Error):
+                    pass
+                time.sleep(0.05)
+        self.lock, self._saved = threading.Lock(), 0
+        self._unsealed = None   # (when counted, the count): the old rows are counted at most once a minute
+
+    def _open(self, path) -> None:
+        self.db = sqlite3.connect(str(path), check_same_thread=False, timeout=OPEN_WAIT_S)
         self.db.row_factory = sqlite3.Row
         if str(path) != ":memory:":
             self.db.execute("pragma journal_mode=wal")   # the agent reads while this writes
@@ -106,8 +133,6 @@ class Store:
                 self.db.execute(f"insert into seconds_new({names}) select {names} from seconds order by t")
                 self.db.execute("drop table seconds")
                 self.db.execute("alter table seconds_new rename to seconds")
-        self.lock, self._saved = threading.Lock(), 0
-        self._unsealed = None   # (when counted, the count): the old rows are counted at most once a minute
 
     def _add_column(self, table: str, column: str, kind: str) -> None:
         """Add a column to an older file. The store and the web server open the same file as they
@@ -157,18 +182,34 @@ class Store:
                 self.prune(row["t"])
             return True
 
-    def prune(self, now_ms: int) -> None:
-        for table in ("events", "seconds"):
-            self.db.execute(f"delete from {table} where t < ?", (now_ms - self.keep_ms,))
-        # The chain loses its oldest links only, never one from the middle, and never its head. The
-        # last link dropped stays as the anchor: the oldest kept link's prev is its hash.
-        keep = self.db.execute("select min(seq) from chain where t >= ?", (now_ms - self.keep_ms,)).fetchone()[0]
-        if keep is None:
-            keep = self.db.execute("select max(seq) from chain").fetchone()[0]
-        last = keep and self.db.execute("select seq, hash, t from chain where seq = ?", (keep - 1,)).fetchone()
-        if last:
-            self._meta("anchor", {"seq": last["seq"], "hash": last["hash"], "t": last["t"], "pruned_t": now_ms})
-            self.db.execute("delete from chain where seq < ?", (keep,))
+    def prune(self, now_ms=None) -> None:
+        """Drop the oldest records once more than keep_records are kept. Counted in records, in the
+        order they were saved, and never by the clock (now_ms is not used): a board clock stepped
+        forward two days, or back, loses nothing. One prune drops at most PRUNE_SHARE of what is kept
+        (never less than a few prunes' worth of new records, so the size stays bounded). The chain
+        loses its oldest links only, never one from the middle and never its head; the last link
+        dropped stays as the anchor: the oldest kept link's prev is its hash. The events and seconds
+        rows go with the links that sealed them, and with them any unsealed row saved before them."""
+        first, last = self.db.execute("select min(seq), max(seq) from chain").fetchone()
+        if first is None:
+            return
+        over = (last - first + 1) - self.keep_records
+        if over <= 0:
+            return
+        keep = first + min(over, max(int(self.keep_records * PRUNE_SHARE), 3 * PRUNE_EVERY))
+        anchor = self.db.execute("select seq, hash, t from chain where seq = ?", (keep - 1,)).fetchone()
+        self._meta("anchor", {"seq": anchor["seq"], "hash": anchor["hash"], "t": anchor["t"]})
+        self.db.execute("delete from chain where seq < ?", (keep,))
+        for table, key in (("events", "n"), ("seconds", "rowid")):
+            # Rows from before the record was sealed carry no seq: they go once a sealed row saved after
+            # them has gone, or is the oldest kept.
+            passed = self.db.execute(f"select max({key}) from {table} where seq < ?", (keep,)).fetchone()[0]
+            edge = self.db.execute(f"select min({key}) from {table} where seq >= ?", (keep,)).fetchone()[0]
+            self.db.execute(f"delete from {table} where seq < ?", (keep,))
+            for below in (passed, edge):
+                if below is not None:
+                    self.db.execute(f"delete from {table} where seq is null and {key} < ?", (below,))
+        self._unsealed = None
 
     # ---- the sealed record (CONTRACTS.md section 13) ----
 
@@ -217,7 +258,8 @@ class Store:
         """What GET /chain says about the log itself: head, records, since_t, first_seq, anchor, unsealed."""
         with self.lock:
             seq, digest = self._head()
-            n, first = self.db.execute("select count(*), min(seq) from chain").fetchone()
+            first, last = self.db.execute("select min(seq), max(seq) from chain").fetchone()
+            n = 0 if first is None else last - first + 1   # seq has no gaps: no need to count the rows on every call
             since = self.db.execute("select t from chain where seq = ?", (first,)).fetchone() if first else None
             anchor = self._meta("anchor")
             if self._unsealed is None or time.monotonic() - self._unsealed[0] > UNSEALED_EVERY_S:
