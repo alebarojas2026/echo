@@ -140,3 +140,48 @@ def test_keep_model_baseline_runs_with_the_camera_unplugged_and_keeps_the_model(
     brain.on_cmd(cmd("baseline"))                      # a plain baseline also runs, and is a new place
     play(86)
     assert brain.capture is None and brain.model is None
+
+
+def lossy_capture(brain, t0, seconds, drop, seed=70):
+    """Empty-room readings with some dropped (drop(link, ms into the feed) -> True), state taken as the
+    live loop does. Returns (seconds until baseline_done or None, the time after the feed)."""
+    done, t = None, t0
+    brain.pop_events()
+    while t - t0 < seconds * 1000:
+        for m in sim_to_v2("empty_room", seed=seed, t0=t):
+            if m["type"] == "rssi" and drop(m["link"], m["recv_t"] - t0):
+                continue
+            brain.on_message(m)
+            if m["type"] == "label":
+                brain.state()
+            if done is None and any(e["kind"] == "baseline_done" for e in brain.pop_events()):
+                done = (m["recv_t"] - t0) / 1000
+            t = m["recv_t"] + 100
+    return done, t
+
+
+def bursts(link, ms):
+    """30% of the readings lost, in 1.5 s gaps: each link drops out for 1.5 s in every 5, at its own time."""
+    return (ms + 700 * sorted(SHIFT).index(link)) % 5000 < 1500
+
+
+def test_a_keep_model_baseline_finishes_with_30_percent_of_the_readings_lost_in_bursts():
+    brain, feed = taught()
+    model = brain.model
+    brain.on_cmd(cmd("baseline", keep_model=True))        # the same kit at the judging desk, in a hall full of phones
+    done, feed.t = lossy_capture(brain, feed.t, 60, bursts)
+    assert done is not None and done <= 25 and brain.model is model       # stale links don't hold it up
+    assert all(abs(brain.base[k] - model.base[k]) <= 1.5 for k in brain.base)   # and the baseline is a sound one
+
+    brain.on_cmd(cmd("baseline"))                         # a new place waits for the same things now (#634)
+    done, feed.t = lossy_capture(brain, feed.t, 60, bursts)
+    assert done is not None and done <= 25 and brain.capture is None
+    assert brain.model is None                            # and it is still a new place: the old model is dropped
+
+
+def test_a_keep_model_baseline_still_restarts_for_a_link_silent_3_s():
+    brain, feed = taught()
+    brain.on_cmd(cmd("baseline", keep_model=True))
+    unplugged = lambda link, ms: link == "east>unoq:ble" and 5000 <= ms < 9500   # noqa: E731
+    done, feed.t = lossy_capture(brain, feed.t, 60, unplugged)
+    assert done is not None and 28 <= done <= 36          # the 20 s started again once the link was back

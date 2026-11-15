@@ -322,7 +322,7 @@ def test_reset_sends_the_reset_event_and_the_template_recap(each_layout):
 
 # Section 5 and 6, Armed. The schema in contracts/ doesn't list `armed` or its events yet (its issue is
 # open), so these are the only schema errors allowed here.
-ARMED_NOT_IN_SCHEMA = ("armed", "disarmed", "intrusion", "Unevaluated properties are not allowed ('armed' was unexpected)")
+ARMED_NOT_IN_SCHEMA = ("armed", "disarmed", "intrusion", "passed_by", "Unevaluated properties are not allowed ('armed' was unexpected)")
 TAMPER_NOT_IN_SCHEMA = ("tamper", "tamper_cleared")   # the same for Tamper (#541)
 
 
@@ -340,13 +340,43 @@ def test_armed_mode_raises_one_intrusion_per_arrival(each_layout):
     assert kinds.count("armed") == 1 and kinds.count("intrusion") == 1 and kinds.count("disarmed") == 1
     t_in = next(t for t, k, _ in events if k == "enter")
     t_intrusion, _, info = next(e for e in events if e[1] == "intrusion")
-    assert info == {"zone": each_layout.zone("tour1")} and 0 <= t_intrusion - t_in <= 1.0     # once the person holds the majority
+    assert info == {"zone": each_layout.zone("tour1")} and 3.0 <= t_intrusion - t_in <= 4.0   # still there 3 s after appearing
+    assert "passed_by" not in kinds
     assert at([m for m in msgs if m["type"] == "state"], 20)["armed"] is True
     assert "armed" not in at([m for m in msgs if m["type"] == "state"], 26)   # missing means false
     encode = encoder(1763149500000)
     for m in msgs if schema_fits(each_layout) else []:
         for err in errors(json.loads(encode(m))):
             assert err in UNMEASURED or any(word in err for word in ARMED_NOT_IN_SCHEMA), err
+
+
+def armed_events(name, **more):
+    msgs = list(state.run({**fake.load_path(name), **more}))
+    return [(m["t"], m["kind"], m["info"]) for m in msgs if m["type"] == "event"
+            and m["kind"] in ("armed", "intrusion", "passed_by", "disarmed")]
+
+
+def test_walking_through_while_armed_is_passed_by_and_staying_is_an_intrusion(each_layout):
+    first = each_layout.zone("tour1")
+    through = armed_events("passed_by")                                 # crosses the area in 1.5 s
+    assert [k for _, k, _ in through] == ["armed", "passed_by", "disarmed"]
+    t, _, info = through[1]
+    assert info == {"zone": first} and 11.5 <= t <= 12.5                # said once they are gone, with where they appeared
+    stay = armed_events("step_in")                                      # steps in at 10 s and stands for 6 s
+    assert [k for _, k, _ in stay] == ["armed", "intrusion", "disarmed"]
+    t, _, info = stay[1]
+    assert info == {"zone": first} and 13.0 <= t <= 14.5                # about 3 to 4 s after stepping in
+    never = armed_events("passed_by", commands=[])                      # not armed: neither
+    assert never == []
+
+
+def test_nothing_is_said_while_blind_and_the_armed_wait_starts_when_the_sensor_sees_again():
+    east = [{"node": "east", "t_on": 5, "t_off": 20}]                   # a beacon is dead when they step in at 10 s
+    person = [{"t": 0, "x": None}, {"t": 10, "x": 0.5, "y": 0.5}, {"t": 29.5, "x": 0.5, "y": 0.5}, {"t": 29.6, "x": None}]
+    events = armed_events("step_in", outages=east, person=person, duration_s=32,
+                          commands=[{"t": 3, "cmd": "arm", "args": {"on": True}}])
+    said = [(t, k) for t, k, _ in events if k in ("intrusion", "passed_by")]
+    assert len(said) == 1 and said[0][1] == "intrusion" and 25 < said[0][0] < 29   # blind until about 23 s, then 3 s
 
 
 def test_no_intrusion_while_blind_or_disarmed():
@@ -416,3 +446,10 @@ def test_a_link_pi_b_hears_degrades_health_but_never_blinds_it(square, monkeypat
     assert late["health"]["status"] == "degraded" and late["health"]["blind"] == []
     assert next(l for l in late["links"] if l["id"] == "west>pi5b:ble")["status"] == "stale"
     assert late["pred"] is not None                                   # predictions carry on
+
+
+def test_the_demo_alerts_once_and_only_in_the_alert_zone(each_layout):
+    # Both of the strip's zones alert after 10 s, so the steps about in the calm zone must reset the
+    # still timer (5 moving decisions in a row): only the stand in the alert zone raises it.
+    _, events = run("demo")
+    assert [e["info"]["zone"] for e in events if e["kind"] == "alert_on"] == [each_layout.still_zone()]

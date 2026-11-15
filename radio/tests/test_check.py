@@ -95,7 +95,7 @@ def test_a_link_under_its_gate_rate_fails(tmp_path):
         (tmp_path / f"{session}.jsonl").write_text("\n".join(lines))
     ok, text = check.check_links(5.0, capture=capture, sessions=tmp_path)
     assert not ok
-    assert text.startswith("links: pi5>unoq:wifi under 20/s, pi5>unoq:ble under 20/s, east>unoq:ble under 7/s")
+    assert text.startswith("links: pi5>unoq:wifi under 20/s, pi5>unoq:ble under 12/s, east>unoq:ble under 7.5/s")
     assert "journalctl -u radio-sight-wifi-rssi" in text
 
 
@@ -111,10 +111,10 @@ def test_silent_links_are_named(tmp_path):
 def test_gate_rates_come_from_the_layout():
     # Wi-Fi and a Pi's beacon at 20/s, the other beacons at 7/s; whatever links nodes.json holds.
     for link_id, link in link_stats.LINKS.items():
-        expected = 20.0 if link["kind"] == "wifi" or link["tx"] in check.PIS else 7.0
+        expected = 20.0 if link["kind"] == "wifi" else 12.0 if link["tx"] in check.PIS else 7.5
         assert check.gate_hz(link_id) == expected
-    assert check.gate_hz("pi5>unoq:wifi") == 20.0 and check.gate_hz("pi5>unoq:ble") == 20.0
-    assert check.gate_hz("east>unoq:ble") == 7.0
+    assert check.gate_hz("pi5>unoq:wifi") == 20.0 and check.gate_hz("pi5>unoq:ble") == 12.0
+    assert check.gate_hz("east>unoq:ble") == 7.5
 
 
 def test_no_bus_no_file(tmp_path):

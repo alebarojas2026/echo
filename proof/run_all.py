@@ -17,7 +17,7 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
     sessions = []
     missing = []
     for path in sorted(folder.glob("*.jsonl")):
-        if path.name.endswith((".states.jsonl", ".events.jsonl")):
+        if path.name.endswith((".states.jsonl", ".events.jsonl", ".trials.jsonl")):
             continue
         try:
             session = load_session(path)
@@ -30,7 +30,17 @@ def plan(folder, output, baseline, document, on_board=False, left_out=None):
             continue
         purpose = session["meta"].get("purpose")
         if purpose in groups:
-            groups[purpose].append(str(path))
+            # Post-lesson camera-off walks have independent operator truth, but the
+            # model was taught on that walker. They belong to the lesson report.
+            annotations = path.with_suffix(".trials.jsonl")
+            try:
+                post_lesson = purpose == "heldout" and annotations.exists() and any(
+                    json.loads(line).get("kind") == "walk" for line in annotations.read_text().splitlines() if line.strip())
+            except (OSError, ValueError, AttributeError) as error:
+                missing.append(f"readable trial annotations: {annotations} ({error})")
+                continue
+            if not post_lesson:
+                groups[purpose].append(str(path))
             sessions.append((path, session))
     if not groups["train"]:
         missing.append("training session: meta.purpose=train")

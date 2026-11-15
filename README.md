@@ -5,7 +5,7 @@
 Every building has Wi-Fi. Radio Sight reads how people and objects change those radio signals, and does three things with them:
 
 - **Safety and security.** It knows someone is in a space, on which side, and whether they've been still too long. Armed, it raises an alert when a space that should be empty isn't, and it notices when one of its own devices is unplugged.
-- **Privacy.** No camera watches anyone. A camera teaches the radio for about half a minute and is then unplugged. No image is ever stored, nothing leaves the board, and it can't tell who someone is. It works where cameras can't go: patient rooms, bathrooms, study rooms, offices after hours.
+- **Privacy.** No camera watches anyone. A camera teaches the radio for about half a minute and is then unplugged. No image is ever stored, nothing is sent to the internet, and it can't tell who someone is. It works where cameras can't go: patient rooms, bathrooms, study rooms, offices after hours.
 - **Dead zones.** The same links that sense people show where the Wi-Fi itself is weak or blocked. When something blocks a link it says so, says where to move the router, and measures the gain.
 
 Everything runs on an Arduino UNO Q (Qualcomm Dragonwing): the sensing, the learning, the records and a small language model that answers questions about what happened. No cloud, no internet.
@@ -16,7 +16,7 @@ Built at MadHacks 2026 for the Qualcomm / N+1 Institute track. In this demo our 
 1. Small radio nodes around a floor zone (the UNO Q, a Raspberry Pi 5 acting as the router, and beacons) measure signal strength on every link many times a second.
 2. During setup, a camera on the UNO Q labels where a person is. A small model on the board learns to predict the same thing from radio alone. Then the camera is unplugged.
 3. The board combines all links into a radio image of the room: what stays put is an obstruction or dead zone, what moves is a person.
-4. The screen shows the room, the radio links, where people are, and plain-language explanations. No image is ever saved and nothing leaves the board.
+4. The screen shows the room, the radio links, where people are, and plain-language explanations. No image is ever saved and nothing is sent to the internet.
 
 How the parts connect: [docs/network.md](docs/network.md)
 

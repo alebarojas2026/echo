@@ -1,0 +1,7 @@
+{}
+{"room":{"offset_m":[12.5,-3.0],"yaw_deg":91.5,"scale":10,"cut_m":2.4}}
+{"room":{"offset_m":[12.5,-3.0],"yaw_deg":91.5,"scale":1.02}}
+{"hall_beacons":[{"node":"east","xyz_m":[1.6,0.25,1.0]}]}
+{"hall_beacons":[{"node":"h","xyz_m":[14.0,9.5]}]}
+{"hall_beacons":[{"node":"h","xyz_m":[14.0,9.5,40.0]}]}
+{"room":{"offset_m":[12.5,-3.0],"yaw_deg":91.5,"scale":1.02,"cut_m":2.4},"nodes":[]}

@@ -60,7 +60,7 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 
 | cmd | What the brain does |
 |---|---|
-| `baseline` | Sets label mode off and captures 20 s. With the camera off there is nobody to ask and the operator keeps the area empty; with it on, it must see nobody. The 20 s start again whenever a section 6 condition breaks: the camera is on and its labels stop or it sees anybody, label mode is turned on, health is not ok, or a link goes quiet for 1 s. If it still can't start 120 s after the command (with or without `keep_model`), it is given up (logged; the old baseline and the model stay, `pred` comes back), so a Baseline pressed by mistake during a demo doesn't hide `pred` for good. Then it writes `data/sessions/baseline.json` and sends `baseline_done`. `baseline {keep_model: true}` is the same layout set down again (another desk, a knocked beacon): only the baseline is new, the model and the recordings stay, and each recording keeps the baseline it was made on (`data/sessions/baselines.jsonl`). The model's features are all drops and spreads against the baseline, never levels in dBm, which is why it carries over. Without `keep_model`: **A baseline asked for by hand means a new place**: when it finishes, the model is dropped (`pred` is null and `model.trained` false until the next `train`) and recordings made before it are never trained on again. Their files stay in `data/sessions`. The time is kept in `data/sessions/place.json`. |
+| `baseline` | Sets label mode off and captures 20 s. With the camera off there is nobody to ask and the operator keeps the area empty; with it on, it must see nobody. The 20 s start again whenever a section 6 condition breaks: the camera is on and its labels stop or it sees anybody, label mode is turned on, health is not ok, or a link goes quiet for 1 s. If it still can't start 120 s after the command (with or without `keep_model`), it is given up (logged; the old baseline and the model stay, `pred` comes back), so a Baseline pressed by mistake during a demo doesn't hide `pred` for good. Then it writes `data/sessions/baseline.json` and sends `baseline_done`. `baseline {keep_model: true}` is the same layout set down again (another desk, a knocked beacon): only the baseline is new, the model and the recordings stay. In a hall full of phones it must be able to finish, so only a link silent for 3 s, or health blind, starts its 20 s again (a stale link or a 1 s gap does not), and each recording keeps the baseline it was made on (`data/sessions/baselines.jsonl`). The model's features are all drops and spreads against the baseline, never levels in dBm, which is why it carries over. Without `keep_model`: **A baseline asked for by hand means a new place**: when it finishes, the model is dropped (`pred` is null and `model.trained` false until the next `train`) and recordings made before it are never trained on again. Their files stay in `data/sessions`. The time is kept in `data/sessions/place.json`. |
 | `record_start`, `record_stop` | Sends a `recording` event. The bus records. The brain keeps its own copy of the session from the bus's `meta` message until `record_stop`. |
 | `train` | Trains on the kept sessions with purpose `train` or `object`, off the loop. Then `trained`. |
 | `relearn` | Drops the model and trains again, from this place's recordings only. |
@@ -70,7 +70,7 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 | (tamper, no cmd) | While armed, a node is silent when none of the links it sends or receives on (from radio/nodes.json) has had a reading for 3 s. It raises `tamper` once with `info.node` and is listed in `state.tamper` until all its links have had readings for 2 s without a 3 s gap (`tamper_cleared`), or until disarm or `reset`. Arming with a node already silent raises it at once. It is judged whatever health says, so it works while the sensor is blind; 60% packet loss with 1 s bursts never reaches 3 s of silence. Not armed: nothing. `state.tamper` is sent only while a node is listed. The optional hall beacons (`hall` in nodes.json: h, j) count as nodes too, each once it has been heard since arming, on the links it has been heard on since then. |
 | `reset_alert` | Clears the alert and restarts the still timer. |
 | `reset` | Between judges: clears the alert, still timer, check-in and narration, and disarms. Then `reset`. |
-| `arm` | `{on: true}` arms ("this space should be empty now"): `state.armed` is true and `armed` goes out. `{on: false}` (or `reset`) disarms and sends `disarmed`. While armed, one `intrusion` event with the zone each time a person appears: present with kind person in 6 of the last 10 decisions, after not being so. Arming with somebody already there raises it within 6 decisions. Objects never raise it, and nothing is raised from a decision that is hidden (blind, recalibrating, router away). `state.armed` is sent only while true until state.json has the field (#440). |
+| `arm` | `{on: true}` arms ("this space should be empty now"): `state.armed` is true and `armed` goes out. `{on: false}` (or `reset`) disarms and sends `disarmed`. While armed, a person appears when present with kind person in 6 of the last 10 decisions, after not being so. Still there `armed.hold_s` later (nodes.json, 3 s): one `intrusion` event with the zone. Gone first: a `passed_by` event with the zone instead. Arming with somebody already there raises the intrusion after the same wait. Objects raise neither, and nothing is raised from a decision that is hidden (blind, recalibrating, router away). `state.armed` is sent only while true until state.json has the field (#440). |
 | `truth` | Kept for the crowd game. |
 
 `brain/core.py` holds the rules with no sockets, so tests drive it with a fake clock.
@@ -102,6 +102,33 @@ The automatic baseline after `router_home` also runs with the camera unplugged; 
 - **LED grid:** `show_zone(n)` when the shown zone changes (`-1`, the "?", while `pred` is null or spans 2 or more zones), `alert(on)` when the alert turns on or off, `smile()` on a check-in. `led_grid()` gives the Bridge version on the board and a stand-in elsewhere.
 
 The constants at the top of the file are what gate 8 tunes.
+
+## Settings and counting on a recording (`brain/settings.py`, `brain/replay.py`)
+
+The numbers of the people rules are in one place, `brain/settings.py`, with the contract's values as defaults. A tuned value is a one-line change there.
+
+| Setting | Rule | Default |
+|---|---|---|
+| `smooth_decisions`, `smooth_majority` | Alert: zone and kind are the majority of the last decisions | 10, 6 |
+| `moving_run` | Alert: "moving" decisions in a row before the still timer resets | 5 (0.5 s) |
+| `intrusion_decisions`, `intrusion_majority` | Armed: a person appears when present for the majority of the last decisions | 10, 6 |
+| `zone_hold` | Decisions in a row before `enter`, `exit` or `zone_change` is said (the brain's own) | 5 (0.5 s) |
+| `tamper_silent_ms`, `tamper_clear_ms` | Tamper: how long without a reading on any of its links makes a node silent, and how long with them back clears it | 3000, 2000 |
+| `motion_links` | The links whose features decide moving or still; takes effect at the next `train` | null = every link |
+
+One number of these rules is in `radio/nodes.json`, where the contract puts it: `armed.hold_s`, how long somebody must stay after appearing in an armed space to be an `intrusion` (3 s when the file has none; 4 for a very busy aisle). Gone sooner, they are a `passed_by` with the zone. One event per appearance, nothing while pred is null, and blind time doesn't count as time spent there.
+
+`RADIO_SIGHT_SETTINGS` can name a JSON file with other values, for example `{"moving_run": 8}`. A name that isn't a setting stops the brain at start, so a typo never runs as the defaults. The defaults are section 6: a value outside its wording needs a `contract` issue first.
+
+To see what a value does before changing it, play a recording through the real brain:
+
+```
+python -m brain.replay data/sessions/crowd1.jsonl --sessions data/sessions --armed
+python -m brain.replay data/sessions/crowd1.jsonl --sessions data/sessions --armed --hold-s 4
+python -m brain.replay data/sessions/crowd1.jsonl --sessions data/sessions --train walk1 empty1 --set "motion_links=east>unoq:ble,west>unoq:ble"
+```
+
+It reads `baseline.json` and `model.pkl` from the `--sessions` folder (a copy; the folder is never written to), feeds the recording to `brain.core.Brain` on the recording's own clock, and prints one JSON object: `intrusions`, `alerts`, `still_timer_resets` by cause (`moving`, `zone`, `gone`), `passed_by`, `longest_still_s`, `present_s`, the other events, and the settings used. `--train` fits the model from named recordings instead of `model.pkl`. The counts say what the rules do with that recording; they are not accuracy numbers and go nowhere by themselves.
 
 ## The live lesson (`brain/lesson.py`)
 

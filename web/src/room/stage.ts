@@ -117,7 +117,8 @@ function buildShell(): { room: Group; square: Group } {
     const depth = SIZE_M[1] - STRIP_M[1]
     const [dx, , dz] = toScene([SIZE_M[0] / 2, STRIP_M[1] + depth / 2, 0])
     const top: Part = { geom: new BoxGeometry(SIZE_M[0], 0.03, depth), light: mix(FLOOR, EDGE, 0.5), dark: mix(FLOOR, WALL_SHADE, 0.6), at: at(dx, DESK_TOP_M - 0.015, dz) }
-    sq.add(new Mesh(shadedGeometry([top]), new MeshBasicMaterial({ vertexColors: true })))
+    // With the drawn floor and walls: a loaded hall has its own desk, and our devices stand on that one.
+    g.add(new Mesh(shadedGeometry([top]), new MeshBasicMaterial({ vertexColors: true })))
   }
   return { room: g, square: sq }
 }
@@ -220,7 +221,7 @@ export class Stage {
       stand.needsUpdate = true
       n.post.geometry.computeBoundingSphere()
       // Each label hangs off the cube's face on its side, so the cube never sits on its own label.
-      const [dx, dz] = { above: [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0] }[nodeLabelSide(n.id)]
+      const [dx, dz] = { above: [0, HEAD_M / 2], right: [HEAD_M / 2, 0], left: [-HEAD_M / 2, 0], 'below-right': [0, -HEAD_M / 2], 'below-left': [0, -HEAD_M / 2] }[nodeLabelSide(n.id)]
       this.view.moveLabel(n.label, v3([p[0] + dx, p[1], p[2] + dz]))
     }
     this.view.requestRender()

@@ -18,8 +18,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from narrator import narrate
 
 LIMIT_MS = 8000
-EVENTS = [("alert_on", {"zone": 4}), ("enter", {"zone": 2}), ("zone_change", {"zone": 3}),
-          ("object_on", {"node": "pi5"}), ("exit", {"zone": 1})]
+
+
+def events(zones=None):
+    """The events to time, in zones the layout has (narrate.ZONES, read from radio/nodes.json):
+    the alert in the zone with the shortest no-movement limit, the rest spread over the zones.
+    A zone the layout doesn't have would leave the zone and the limit out of the prompt."""
+    zones = narrate.ZONES if zones is None else zones
+    ids = sorted(zones)
+    limited = [z for z in ids if zones[z][1]]
+
+    def zone(i):
+        return {"zone": ids[i % len(ids)]} if ids else {}
+    alert = {"zone": min(limited, key=lambda z: zones[z][1])} if limited else zone(0)
+    return [("alert_on", alert), ("enter", zone(1)), ("zone_change", zone(2)),
+            ("object_on", {"node": "pi5"}), ("exit", zone(0))]
+
+
+EVENTS = events()
 
 
 def ask(url, kind, info, timeout_s=60.0):
@@ -50,7 +66,7 @@ def line(r):
 
 def run(url, every=0.0, seconds=0.0, out=print):
     """Warm up (not counted), then one sentence, or one every `every` s for `seconds`."""
-    ask(url, "enter", {"zone": 2}, timeout_s=120)
+    ask(url, *EVENTS[1], timeout_s=120)
     results, start = [], time.monotonic()
     while True:
         kind, info = EVENTS[len(results) % len(EVENTS)]

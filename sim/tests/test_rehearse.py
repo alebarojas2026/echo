@@ -65,7 +65,7 @@ def test_recap_reaches_the_screen_through_bus_and_brain():
     assert "no-movement alert" in text and "dBm" in text
 
 
-HERO = ["found:", "lesson:", "unplug:", "still:", "armed,", "intrusion while armed", "disarmed"]   # in order
+HERO = ["found:", "lesson:", "unplug:", "still:", "armed,", "intrusion while armed", "tamper:", "disarmed"]   # in order
 
 
 @pytest.fixture(scope="module")
@@ -93,7 +93,7 @@ def test_desk_beats_show_in_good_time(desk):
     assert shown["found: the judge steps up"] <= 2.0
     assert shown["lesson: a model within 5 s of train"] <= 5.0
     assert 10.0 <= shown["still: no-movement alert"] <= 13.0                  # the 10 s limit, then the smoothing
-    assert shown["intrusion while armed"] <= 2.0                              # armed, then the judge steps back in
+    assert 3.0 <= shown["intrusion while armed"] <= 5.0                       # steps back in, and is still there 3 s later
 
 
 def test_nobody_stands_long_enough_to_alert_before_the_still_beat():
@@ -117,3 +117,22 @@ def test_desk_flag_runs_the_desk_visit(capsys, monkeypatch):
     monkeypatch.setattr(rehearse, "rehearse", lambda script=None: seen.append(script) or [("a beat", True, 1.0)])
     assert rehearse.main(["--desk"]) == 0
     assert seen[0][0]["name"] == "desk" and "1 of 1 beats passed" in capsys.readouterr().out
+
+
+def test_the_unplugged_beacon_raises_one_tamper_and_no_intrusion():
+    import tempfile
+    path, commands, _ = rehearse.desk_script()
+    with tempfile.TemporaryDirectory() as folder:
+        stack = rehearse.Stack(folder)
+        stack.calibrate()
+        t0 = stack.play(path, commands)
+    unplug = path["outages"][0]["t_on"]
+    late = [e["kind"] for e in stack.events if (e["t"] - t0) / 1000 >= unplug]
+    assert late.count("tamper") == 1 and late.count("tamper_cleared") == 1 and "intrusion" not in late
+    assert late.index("tamper_cleared") < late.index("disarmed")
+
+
+def test_the_tamper_beats_show_in_good_time(desk):
+    shown = {name: s for name, _, s in desk}
+    assert 2.5 <= shown["tamper: a beacon unplugged while armed"] <= 4.0      # 3 s of silence from every east link
+    assert shown["tamper: cleared when the beacon is back"] <= 3.0            # 2 s after its links are back

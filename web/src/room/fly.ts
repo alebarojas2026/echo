@@ -5,7 +5,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { SIZE_M } from './frame'
 import { easeInOut } from './motion'
 import { PERSON, SQUARE } from './palette'
-import { roomShot, type RoomView, type Shot } from './view'
+import { roomShot, type RoomView, type Shot, type ShotFor } from './view'
 
 // Two framings of the same scene: "hall", the whole scanned judging hall with the square small in it, and
 // "square", the room's normal framing. The camera flies between them calmly (ease in-out, about 3 s) and stays
@@ -78,6 +78,8 @@ export class Fly {
   private legs: Leg[] = []
   private from: Shot
   private elapsed = 0
+  /** The close framing the camera lands on: the room's own, or in situ inside the hall (setClose). */
+  private close: ShotFor = roomShot
   /** The arrival screen is up ("Nobody is here."): rest on the hall, drifting, until it says found. */
   private holding = false
   private driftMs = 0
@@ -92,9 +94,14 @@ export class Fly {
     view.addAnimator((dt) => this.step(dt))
   }
 
-  /** The square's framing for the canvas as it is now (a narrow canvas backs off to keep the side words on it). */
+  /** The close framing for the canvas as it is now (a narrow canvas backs off to keep the side words on it). */
   private square(): Shot {
-    return roomShot(...this.view.size)
+    return this.close(...this.view.size)
+  }
+
+  /** The framing to land on from now on (in situ once the hall model is known). Call before setHall. */
+  setClose(close: ShotFor) {
+    this.close = close
   }
 
   /** The hall is known (its scan has loaded): show it, then fly down unless a framing is pinned or the arrival
@@ -167,8 +174,9 @@ export class Fly {
   /** Puts the camera on `shot`. Once it has arrived on the square, the view follows the canvas size from then on. */
   private show(shot: Shot, arrived?: Framing) {
     this.shot = shot
-    this.view.setShot(arrived === 'square' ? roomShot : shot)
-    this.wide = this.hall ? wideness(shot, this.square(), this.hall) : 0
+    this.view.setShot(arrived === 'square' ? this.close : shot)
+    // Arrived is exact: the last step's shot can sit a rounding error off the square's, which would read as "flying".
+    this.wide = !this.hall || arrived === 'square' ? 0 : arrived === 'hall' ? 1 : wideness(shot, this.square(), this.hall)
     this.view.host.dataset.view = this.wide >= 1 ? 'hall' : this.wide <= 0 ? 'square' : 'flying'
     this.onWide(this.wide)
   }

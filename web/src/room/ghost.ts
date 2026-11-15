@@ -11,7 +11,7 @@ import {
   Vector3,
 } from 'three'
 import type { ObjectMark, Pred, Xray } from './contract'
-import { createFigure, FIGURE_HEIGHT_M, type Figure } from './figure'
+import { createFigure, FIGURE_HEIGHT_M, FIGURE_SCALE, type Figure } from './figure'
 import { EASE_CSS, fade, GHOST_OMEGA, Held, MOTION, springStep } from './motion'
 import { SIZE_M, ZONES, floorSize, toScene, zoneAt, zoneCenter, zoneRect } from './frame'
 import { OBJECT, PERSON } from './palette'
@@ -138,7 +138,7 @@ export class Presence {
       this.view.requestRender()
     })
     this.figure.object.visible = false
-    view.scene.add(this.figure.object)
+    view.figures.add(this.figure.object)
     this.label = view.addLabel('', new Vector3(), 'room-label--ghost')
     this.label.style.opacity = '0'
     this.labelWords = document.createElement('span')
@@ -243,6 +243,16 @@ export class Presence {
     this.view.host.dataset.objects = String(objects.length)
   }
 
+  /** 1, or larger than the figure's own drawing scale so the person is drawn at true size (1.7 m). */
+  private size = 1
+
+  /** Inside the hall model (one world, one scale) the person is drawn at true size; beside the drawn desk or
+   *  square, at the figure's own scale. */
+  setTrueSize(on: boolean) {
+    this.size = on ? 1 / FIGURE_SCALE : 1
+    this.view.requestRender()
+  }
+
   private ease(dt: number): boolean {
     let busy = false
 
@@ -255,12 +265,12 @@ export class Presence {
     // its stride and cadence match how fast the floor point travels and the planted foot doesn't slide.
     const speed = Math.hypot(this.vel.x, this.vel.z)
     if (speed > TURN_SPEED_MPS) this.figure.setHeading(Math.atan2(this.vel.x, this.vel.z))
-    this.figure.setMoving(this.walking, speed)
+    this.figure.setMoving(this.walking, speed / this.size) // the stride is in the figure's own scale
 
     this.alpha = fade(this.alpha, this.alphaTo, dt)
     busy ||= this.alpha !== this.alphaTo
     this.figure.object.position.copy(this.at)
-    this.figure.object.scale.setScalar(0.94 + 0.06 * this.alpha) // arrives with a small settle, leaves the same way
+    this.figure.object.scale.setScalar(this.size * (0.94 + 0.06 * this.alpha)) // arrives with a small settle, leaves the same way
     this.figure.object.visible = this.alpha > 0
     this.figure.setOpacity(this.alpha)
     // Called every frame: inside `busy ||= ...` it was skipped whenever the glide was busy, freezing the walk.
@@ -274,7 +284,7 @@ export class Presence {
       // unless the figure is near the east edge, then on the west.
       const west = this.at.x > toScene([floorSize()[0], 0, 0])[0] - 0.35
       this.label.classList.toggle('room-label--ghost-west', west)
-      this.view.moveLabel(this.label, this.at.clone().set(this.at.x + (west ? -0.2 : 0.2), FIGURE_HEIGHT_M * 0.62, this.at.z))
+      this.view.moveLabel(this.label, this.at.clone().set(this.at.x + (west ? -0.2 : 0.2), FIGURE_HEIGHT_M * this.size * 0.62, this.at.z))
     }
 
     for (const t of this.tiles) {
