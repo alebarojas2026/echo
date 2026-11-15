@@ -1,6 +1,8 @@
 import unittest
 from pathlib import Path
 
+from beats import BEATS, CORE
+
 
 RUNBOOK = Path(__file__).with_name("demo-runbook.md")
 
@@ -31,18 +33,22 @@ class DemoRunbookTest(unittest.TestCase):
         self.assertIn("required classifier link is unhealthy", self.lower)
 
     def test_primary_beats_are_in_order(self):
-        beats = (
-            "**found you:**",
-            "**teach the room:**",
-            "**camera unplug:**",
-            "**still follows:**",
-            "**arm the space:**",
-            "**intrusion alert:**",
-            "**ask the room:**",
-            "**proof:**",
-        )
+        beats = [f"**{beat.lower()}:**" for beat in BEATS]
         positions = [self.lower.index(beat) for beat in beats]
         self.assertEqual(positions, sorted(positions))
+
+    def test_new_moments_have_a_gate_and_a_drop_order(self):
+        desk = self.text.split("## Three-minute desk round", 1)[1].split("## Camera-unplug proof", 1)[0]
+        gates = desk.split("### Feature gates", 1)[1]
+        for beat in ("Live signal", "Tamper alert", "Ask the room", "Replay", "Incident report"):
+            self.assertIn(f"- **{beat}:**", gates)
+        short = desk.split("### When the judge is short on time", 1)[1].split("###", 1)[0]
+        order = [short.index(f"**{b}**") for b in ("Replay", "Incident report", "Tamper alert", "Live signal", "Ask the room")]
+        self.assertEqual(order, sorted(order))
+        for beat in CORE:
+            self.assertIn(f"**{beat}**", short.split("Never drop", 1)[1])
+        for phrase in ("`tamper_cleared`", "`get /history`", "`get /report`", "never as an empty room"):
+            self.assertIn(phrase, self.lower)
 
     def test_demo_includes_privacy_and_proof_moments(self):
         for phrase in (

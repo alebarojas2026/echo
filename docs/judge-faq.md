@@ -52,9 +52,25 @@ We will report held-out zone, presence, and person-versus-object results from se
 
 The timer runs only while the radio model reports a person present, still, and in the same enabled zone. It is a prompt to check on someone, not a diagnosis, and a blind required link pauses the timer rather than declaring the room empty.
 
+## What if someone unplugs it or blocks it?
+
+While the space is armed, a device that goes silent raises a tamper alert that names the device, and the screen never says all clear while one is listed. A blocked or failed radio link makes the sensor say it is blind, which is not the same as empty. Neither case is hidden as a quiet room.
+
+## What does the replay show, and is anything recorded?
+
+The board keeps what the radio decided, once a second: present or not, which side, moving or still, and any alert. The replay plays those records back, and a second with no record shows as no record, never as an empty room. No image, sound or identity is recorded, and the records stay on the board.
+
+## What about people walking past?
+
+An intrusion alert needs a person pattern that holds inside the sensing area, not one flicker from the aisle. How often passers-by set it off is being measured and stays `__` until that proof row is complete. The long hall links only report movement on a path, never who or how many.
+
+## How do you know it isn't scripted?
+
+Wave your hand in the sensing area and the live signal line moves with you. Step in, step out, or stand on the other side, and the screen follows what you do, not a timeline. Unplugging the camera or a beacon in front of you changes the screen the same way.
+
 ## What can Radio Sight not do yet?
 
-It cannot identify a person, count a crowd, reconstruct camera-like detail, or make a prediction while required links are blind. Armed-mode event logic is in `main`, but the live phone display and room-question integrations are not yet complete, and transfer to other rooms and full coverage mapping still need measured tests.
+It cannot identify a person, count a crowd, reconstruct camera-like detail, or make a prediction while required links are blind. Nothing has a measured result on the real hardware yet, a beat is shown only after it passes preflight on the day, and transfer to other rooms and full coverage mapping still need measured tests.
 
 ## Honest limits
 
@@ -62,4 +78,6 @@ It cannot identify a person, count a crowd, reconstruct camera-like detail, or m
 - Person-versus-object behavior is limited to represented training patterns; an unfamiliar scene can be uncertain.
 - Armed mode raises one intrusion event for a new sustained person appearance, but it does not identify who entered.
 - Blind or stale input produces no prediction, not an “all clear.”
+- The tamper alert notices a device that goes silent while armed; it does not say why it went silent.
+- The replay and the incident report show only what the board recorded; a stretch with no record is shown as no record.
 - Every public performance, timing, power, storage, and network result stays `__` until its proof record is complete.

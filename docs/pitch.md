@@ -2,59 +2,96 @@
 
 Radio Sight brings safety and after-hours security to buildings using the Wi-Fi already there. The desk round below is the primary story. Keep the laptop interface and hardware visible, and do not say a proof value that is still `__`.
 
+The twelve beats below have the same names, in the same order, in [demo-runbook.md](demo-runbook.md), [devpost-draft.md](devpost-draft.md) and [video-shots.md](video-shots.md).
+
 ## Three-minute desk round
 
 ### Found you
 
-_Start with the setup camera disconnected. Ask the judge to step into the sensing area._
+_Start with the setup camera disconnected and the hall view behind the words. Ask the judge to step up to the desk._
 
-> This is Radio Sight: Wi-Fi that understands the room. The radio links changed when you stepped in, so it found a person without identifying you. The laptop shows the local interface. The Raspberry Pi supplies network and radio, but it runs no model.
+> This is Radio Sight: safety and after-hours security from the Wi-Fi a building already has. You stepped up and it found you, and no camera is connected. The laptop shows the local interface.
+
+### Live signal
+
+_Point at the signal trace as it dips. Ask the judge to wave a hand._
+
+> That line is one radio link, live. It dipped when you stepped in. Wave your hand and it moves. Nothing here is scripted.
 
 ### Teach the room
 
 _Connect the setup camera and start a fresh lesson on the judge._
 
-> Buildings and people differ, so we teach the radio here. This temporary camera provides zone and motion labels for __ seconds. The Arduino UNO Q learns the radio pattern locally on its Dragonwing CPU. It saves no image.
+> Now a camera teaches the radio, for __ seconds. The Arduino UNO Q learns on its Dragonwing CPU. The Raspberry Pi supplies network and radio, but it runs no model. No image is saved.
 
 ### Camera unplug
 
 _Unplug the camera in one continuous shot and keep the cable visible._
 
-> The lesson is complete, and the camera is now unplugged. Its teacher status is off. From this point on, live sensing uses only the radio links around the room.
+> The camera is unplugged, and it stays unplugged. Taught by a camera. Runs without one.
 
 ### Still follows
 
-_Ask the judge to move, then stand still._
+_Ask the judge to step left, step right, then stand still._
 
-> Radio Sight still reports your presence, zone, and movement state. It does not need a clear view, and standing still does not make you disappear. A blind radio link produces no prediction, never a false all-clear.
+> It still follows you, left and right, even standing still. If a link goes blind it says so, never a false all-clear.
 
 ### Arm the space
 
-_Ask the judge to step out. Arm the room only when the armed-mode feature gate passes._
+_Ask the judge to step out. Arm the space._
 
-> Armed means this room should now be empty. Radio Sight keeps its learned room model on the board and watches for a new sustained person pattern.
+> Step out. Armed means this space should now be empty.
 
 ### Intrusion alert
 
-_Ask the judge to re-enter. Show the phone page only after it displays the live intrusion event._
+_Ask the judge to step back in. Show the phone page once it displays the live alert._
 
-> Your return creates one local intrusion alert for this entry. It names the zone, not the person. The phone is only another screen on our private network.
+> Step back in. One intrusion alert, on the phone, naming the side and never the person.
+
+### Tamper alert
+
+_Alexander unplugs the east beacon. Wait for the screen to name it._
+
+> Now we unplug a beacon. It notices: a device went silent while armed. You cannot quietly switch it off.
 
 ### Ask the room
 
-_Use the prepared room question only when the local event-record feature gate passes._
+_Type or pick the prepared question._
 
-> Now we can ask what just happened. The answer comes from the room's own timestamped records: it was armed, a person entered, and the intrusion alert fired. No cloud history is required.
+> Ask it what happened. A small language model on the board picks the question, and the answer is filled from the board's own records.
+
+### Replay
+
+_Press Replay next to the answer. Leave the replay banner visible._
+
+> Press Replay. This is what the room recorded: no video, only what the radio decided, once a second.
+
+### Incident report
+
+_Disarm. Wait for the report card._
+
+> Disarm, and the board writes the incident report: when it was armed, each alert, and how long someone was here.
 
 ### Proof
 
 _Finish on the proof strip._
 
-> The measured results are zone accuracy __, presence accuracy __, decision latency __, images stored __, and bytes sent outside our local network __. Blank means unmeasured, not estimated. Radio Sight is taught by a camera, then runs without one.
+> Measured: zone accuracy __, presence accuracy __, decision latency __, images stored __, and bytes sent outside our local network __. Blank means unmeasured, not estimated.
+
+## When the judge is short on time
+
+Drop beats in this order, and never drop **Found you**, **Teach the room**, **Camera unplug**, **Still follows** or **Proof**:
+
+1. **Replay**
+2. **Incident report**
+3. **Tamper alert**
+4. **Live signal** (keep the trace on screen, skip the sentence)
+5. **Ask the room**
+6. **Arm the space** and **Intrusion alert**, together
 
 ## Five-minute finalist extension
 
-Open with the whole-hall view and movement paths, then run the same eight beats in the same order. After **Proof**, add one or two of these only if the measured path is ready:
+Open with the whole-hall view and movement paths, then run the same twelve beats in the same order. After **Proof**, add one or two of these only if the measured path is ready:
 
 - show a no-movement alert and clear it with a deliberate check-in;
 - place the tray, explain the person-versus-object result, and demonstrate router advice with measured before-and-after values;
@@ -65,4 +102,4 @@ The Pi and optional beacons stand in for radios and access points already spread
 
 ## Feature gates
 
-Armed-mode event logic is now in `main`, but the live phone display and room-question path are not complete. Until both integrations merge and pass local tests, stop after **Still follows**, explain the planned continuation in one sentence, and close on **Proof**. Never stage a fake alert or answer.
+A beat is said only when it passed preflight on the day, on the real hardware. **Live signal**, **Tamper alert**, **Ask the room**, **Replay** and **Incident report** each have a line in the runbook's preflight. If a gate fails, skip that beat without comment; if **Arm the space** fails, stop after **Still follows** and close on **Proof**. Never stage a fake alert, answer, replay or report.

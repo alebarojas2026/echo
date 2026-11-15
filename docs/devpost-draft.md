@@ -25,15 +25,26 @@ Radio Sight reads changes across Wi-Fi and Bluetooth links around a sensing area
 
 A temporary camera teaches the radio model on the board. It supplies zone and motion labels for a short room lesson, saves no image, and is then unplugged. Training and live inference run on the UNO Q's Dragonwing CPU, while the Raspberry Pi provides network and radio and runs no model.
 
-The primary story uses the same eight beats as our runbook:
+Four things make it more than a presence light:
 
-- **Found you:** the changed radio links report that a person entered.
+- **A live signal you can test.** One radio link is drawn as a line that dips when someone steps in. Wave a hand and it moves, so anyone can see the sensing is not scripted.
+- **You can't unplug it without it noticing.** While the space is armed, a device that goes silent raises a tamper alert that names the device.
+- **A replay with no video.** The board keeps what the radio decided, once a second: present or not, which side, moving or still. The screen can play a stretch back like footage, and a second with no record shows as no record, never as an empty room.
+- **An incident report written on the board.** After an armed stretch the board reports when it was armed, each alert, and how long someone was present. A small language model on the board may word it, but every number is checked against the board's records first.
+
+The primary story uses the same twelve beats as our runbook:
+
+- **Found you:** the changed radio links report that a person stepped up, with no camera connected.
+- **Live signal:** a radio link drawn live dips when they step in and moves when they wave.
 - **Teach the room:** the temporary camera labels a fresh local lesson.
 - **Camera unplug:** the teacher goes off and stays off.
 - **Still follows:** radio continues reporting presence when the person moves or stands still.
-- **Arm the space:** armed mode says the room should be empty.
+- **Arm the space:** armed mode says the space should be empty.
 - **Intrusion alert:** a new sustained person appearance creates one local event and phone-page alert.
+- **Tamper alert:** unplugging a device while armed is noticed and named.
 - **Ask the room:** a question is answered from timestamped local records.
+- **Replay:** the screen plays back what the board recorded, with no video.
+- **Incident report:** the board sums up the armed stretch from its own records.
 - **Proof:** every public measurement comes from the proof record; missing results stay `__`.
 
 The measured zone accuracy is __ ([method](../PROOF.md)). The measured presence accuracy is __ ([method](../PROOF.md)). The measured person-vs-object accuracy is __ ([method](../PROOF.md)). The measured update latency is __ ([method](../PROOF.md)). The measured no-movement alert latency is __ ([method](../PROOF.md)). The measured dead-zone improvement is __ ([method](../PROOF.md)). Images stored is __ and bytes sent outside the local network is __ until those proof rows are complete.
@@ -56,6 +67,8 @@ Our development boards stand in for access points and radios that are already di
 
 A laptop browser shows the local interface over the Pi's private hotspot. The Pi routes it to the UNO Q over direct Ethernet. The web interface presents the live room, changed links, predictions, armed state, alerts, event records, narration, and proof without sending the sensing loop to a cloud service.
 
+The board also keeps its own records: every event, and a once-a-second summary of what the radio decided, in a small database on the board. Asking the room a question, replaying a stretch, and writing the incident report all read from those records. No image is in them, and nothing in them says who anyone was.
+
 ## Challenges
 
 Radio data is noisy. Doors, furniture, interference, transmission bursts, and small body turns can all change a link. We had to distinguish a person from an object, keep stillness from looking like absence, and keep a failed radio link from becoming a false all-clear.
@@ -72,7 +85,7 @@ We also built the no-movement alert, deliberate check-in, caregiver phone page, 
 
 Privacy and proof are part of the architecture. The camera is temporary, images are not saved, learned work runs on the UNO Q, and every incomplete measurement stays `__` rather than becoming a demo estimate.
 
-One honest line about what does not work yet: armed-mode event logic is in `main`, while the live phone display and room-question path are still being integrated, and no unfinished beat will be staged as live.
+One honest line about what does not work yet: none of this has run on the real hardware end to end so far, and the live signal, the replay's history and the incident report were still being merged when this was written, so a beat is shown only when it passed preflight on the day, and no unfinished beat will be staged as live.
 
 ## What we learned
 
@@ -84,7 +97,7 @@ We also learned that missing-data behavior is part of the product. “Sensor bli
 
 ## What's next
 
-First, we will finish and test the live phone display and local room-question integrations, then run the complete hero path without fallbacks. We will also test the caregiver page on a real phone and record every proof result with its method, sample size, date, and commit.
+First, we will run the complete twelve-beat path on the real hardware without fallbacks and measure how often people walking past set off an alert. We will also test the caregiver page on a real phone and record every proof result with its method, sample size, date, and commit.
 
 After the hackathon, we want to test more building layouts, materials, access-point arrangements, and groups of people. We will measure how much of the local model can transfer between rooms, expand held-out proof, and develop the current blocked-link view into a full coverage map.
 

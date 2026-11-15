@@ -33,18 +33,37 @@ If a step fails, fix it and repeat the baseline or lesson. Do not carry failed c
 
 ## Three-minute desk round
 
-Use these exact beat names and keep them in this order.
+Use these exact beat names and keep them in this order. The words to say with each are in [pitch.md](pitch.md).
 
-1. **Found you:** Start with the camera disconnected. Ask the judge to step into the sensing area. Show a fresh `person` prediction and say, “Found you. Camera disconnected.” Do not substitute a numeric camera claim while proof remains pending.
-2. **Teach the room:** Connect the camera, start the fresh judge lesson, and display `Lesson time: __ s`. Show labels, not an image. Wait for successful training before continuing.
-3. **Camera unplug:** Unplug the camera in one continuous shot. Follow the camera-unplug proof below and leave the cable visible.
-4. **Still follows:** Ask the judge to move and then stand still. Show presence, zone, and motion state continuing from radio alone. If a required link goes blind, say so and stop; never call it empty.
-5. **Arm the space:** Ask the judge to step out. Use the arm control only if the current build exposes contract v2 `armed` state, emits `armed`, and the phone page is connected to the live feed.
-6. **Intrusion alert:** Ask the judge to re-enter. Continue only after one live `intrusion` event names the zone and the phone page shows it. Do not identify the judge or claim crowd counting.
-7. **Ask the room:** Ask the prepared question only if the current build can answer from its local timestamped event records. Read the returned facts; do not improvise an answer.
-8. **Proof:** Finish on `/proof.json`. Say only completed values. Close with `Images stored: __` and `Bytes sent outside local network: __` until proof records replace them.
+1. **Found you:** Start with the camera disconnected and the hall view behind the words. Ask the judge to step up to the desk. Show a fresh `person` prediction and say, “Found you. No camera is connected.” Do not substitute a numeric camera claim while proof remains pending.
+2. **Live signal:** Point at the signal trace: it dipped when the judge stepped in. Ask the judge to wave a hand and let them see the line move. This is the answer to "is it scripted?".
+3. **Teach the room:** Connect the camera, start the fresh judge lesson, and display `Lesson time: __ s`. The lesson starts with the space empty and has one step out of view; follow the words on screen. Show labels, not an image. Wait for successful training before continuing.
+4. **Camera unplug:** Unplug the camera in one continuous shot. Follow the camera-unplug proof below and leave the cable visible.
+5. **Still follows:** Ask the judge to step left, step right and then stand still. Show presence, side and motion state continuing from radio alone. If a required link goes blind, say so and stop; never call it empty.
+6. **Arm the space:** Ask the judge to step out. Arm only when the screen shows nobody. Confirm contract v2 `armed` state and the `armed` event.
+7. **Intrusion alert:** Ask the judge to step back in. Continue only after one live `intrusion` event names the side and the phone page shows it. Do not identify the judge or claim crowd counting.
+8. **Tamper alert:** While still armed, ask Alexander to unplug the east beacon. Wait for the `tamper` event and the screen's plain words naming the device. Plug it back in and wait for `tamper_cleared` before the next beat.
+9. **Ask the room:** Ask the prepared question. Read the returned facts and the rows under them; do not improvise an answer. If the reply says the tool was picked by rules, say so: the model was slow.
+10. **Replay:** Press Replay next to the answer. Keep the replay banner on screen the whole time; a second with no record shows as "no record", never as an empty room. Return to live before the next beat.
+11. **Incident report:** Disarm. Wait for the report card and read its text. Its numbers come from the board's records; do not add one.
+12. **Proof:** Finish on `/proof.json`. Say only completed values. Close with `Images stored: __` and `Bytes sent outside local network: __` until proof records replace them.
 
-If the feature gate for **Arm the space**, **Intrusion alert**, or **Ask the room** fails, stop the live sequence after **Still follows**. State that the remaining integrations are not ready, then go directly to **Proof**.
+### When the judge is short on time
+
+Drop beats in this order: **Replay**, **Incident report**, **Tamper alert**, **Live signal** (leave the trace on screen), **Ask the room**, then **Arm the space** with **Intrusion alert**. Never drop **Found you**, **Teach the room**, **Camera unplug**, **Still follows** or **Proof**.
+
+### Feature gates
+
+Check each of these in preflight, on the real hardware, before the first judge:
+
+- **Live signal:** the trace is on screen and dips when someone steps in.
+- **Arm the space** and **Intrusion alert:** arming shows `armed`, stepping in sends one `intrusion`, and the phone page shows it.
+- **Tamper alert:** unplugging the east beacon while armed sends `tamper`; plugging it back sends `tamper_cleared`.
+- **Ask the room:** the prepared question gets an answer with rows, and `python -m store` is running.
+- **Replay:** the answer has a Replay button and `GET /history` returns rows for it.
+- **Incident report:** after a disarm, `GET /report` returns a report.
+
+If a gate fails, skip that beat without comment. If the gate for **Arm the space** fails, stop the live sequence after **Still follows**. State that the remaining integrations are not ready, then go directly to **Proof**. Never stage an alert, an answer, a replay or a report.
 
 ## Camera-unplug proof
 
@@ -58,7 +77,7 @@ The camera supplies temporary setup labels. The demo must not show or save an im
 
 ## Five-minute finalist round
 
-Open with the whole-hall view and movement paths. Then run **Found you**, **Teach the room**, **Camera unplug**, **Still follows**, **Arm the space**, **Intrusion alert**, **Ask the room**, and **Proof** in that same order.
+Open with the whole-hall view and movement paths. Then run **Found you**, **Live signal**, **Teach the room**, **Camera unplug**, **Still follows**, **Arm the space**, **Intrusion alert**, **Tamper alert**, **Ask the room**, **Replay**, **Incident report**, and **Proof** in that same order.
 
 After the primary path, use only the extensions that passed preflight:
 

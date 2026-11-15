@@ -16,8 +16,8 @@ class JudgeFaqTest(unittest.TestCase):
         )
         cls.questions = question_pattern.findall(cls.text)
 
-    def test_has_fourteen_questions_with_short_answers(self):
-        self.assertEqual(len(self.questions), 14)
+    def test_has_eighteen_questions_with_short_answers(self):
+        self.assertEqual(len(self.questions), 18)
         for question, answer in self.questions:
             with self.subTest(question=question):
                 sentences = re.findall(r"[^.!?]+[.!?]", answer)
@@ -38,6 +38,12 @@ class JudgeFaqTest(unittest.TestCase):
             "how do you protect privacy",
             "how accurate is it",
             "what can radio sight not do yet",
+            "what if someone unplugs it or blocks it",
+            "what does the replay show, and is anything recorded",
+            "what about people walking past",
+            "how do you know it isn't scripted",
+            "no image, sound or identity is recorded",
+            "never as an empty room",
             "## honest limits",
         ):
             self.assertIn(phrase, self.lower)
@@ -61,8 +67,8 @@ class JudgeFaqTest(unittest.TestCase):
         )
 
     def test_unfinished_features_are_named(self):
-        self.assertIn("armed-mode event logic is in `main`", self.lower)
-        self.assertIn("room-question integrations are not yet complete", self.lower)
+        self.assertIn("nothing has a measured result on the real hardware yet", self.lower)
+        self.assertIn("shown only after it passes preflight on the day", self.lower)
         self.assertIn("full coverage mapping still need measured tests", self.lower)
 
 
