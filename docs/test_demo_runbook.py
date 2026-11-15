@@ -6,6 +6,13 @@ RUNBOOK = Path(__file__).with_name("demo-runbook.md")
 
 
 class DemoRunbookTest(unittest.TestCase):
+    def test_judge_day_preparation_and_freeze_are_explicit(self):
+        steps = ("Power up", "Set the board's clock", "--before-lesson", "commit the deploy printed", "Capture the empty baseline", "morning lesson", "outside the team", "real local model", "Copy what the board learned")
+        positions = [self.text.index(step) for step in steps]
+        self.assertEqual(positions, sorted(positions))
+        for phrase in ("**From Sunday 9:30 AM", "**Before any restart", "board/deploy.sh <last-good-tag>", "board/push-web.sh --back", "pending #678 and #679"):
+            self.assertIn(phrase, self.text)
+
     @classmethod
     def setUpClass(cls):
         cls.text = RUNBOOK.read_text(encoding="utf-8")
