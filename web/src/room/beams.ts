@@ -3,7 +3,7 @@ import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import type { LinkState, StateMsg } from './contract'
-import { HOME_SPOT, LINK_IDS, floorSize, nodePosition, parseLinkId, routerId, type NodeId, type Vec3 } from './frame'
+import { HOME_SPOT, LINK_CROSSES, LINK_IDS, floorSize, nodePosition, parseLinkId, routerId, type NodeId, type Vec3 } from './frame'
 import type { Mirror } from './mirror'
 import { follow, Glide3, Held, TAU } from './motion'
 import { ACTION, FAULT, LINK, PERSON } from './palette'
@@ -182,7 +182,8 @@ export class Beams {
       const parts = parseLinkId(b.id)!
       const a = at(parts.tx)
       const z = at(parts.rx)
-      b.onFloor = overFloor(a, z)
+      // The file says so itself when it can (crosses_spot); else it is worked out from where the two devices stand.
+      b.onFloor = LINK_CROSSES[b.id] ?? overFloor(a, z)
       const shift = shifts.get(b.id) ?? 0
       const [ax, ay, az] = offset(a, z, shift)
       const [zx, zy, zz] = offset(z, a, -shift)

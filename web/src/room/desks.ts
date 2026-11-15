@@ -1,4 +1,4 @@
-import { SIZE_M, STRIP_M } from './frame'
+import { SIZE_M, STRIP_M, deskEdge } from './frame'
 import type { Scan, ScanFit } from './scan'
 
 // The hall model's desks (models/hall-desks.json, made from the hall builder's hall.json by
@@ -133,7 +133,8 @@ function frameAt(h: HallDesks, s: DeskSpot) {
  * bounding box (x and z), as placeScan centres it.
  */
 export function deskFit(h: HallDesks, spot: DeskSpot, box: { min: number[]; max: number[] }, cut_m: number): Required<ScanFit> {
-  const [sw, sh] = STRIP_M ?? SIZE_M
+  const [sw] = STRIP_M ?? SIZE_M
+  const sh = deskEdge() ?? SIZE_M[1] // the layout's y at our desk's edge: the strip's north edge, or past it
   const [fw, fh] = SIZE_M
   const { north, east, edge, floor_m } = frameAt(h, spot)
   // The layout's origin (the strip's aisle-side west corner) in the model.

@@ -1,6 +1,6 @@
 import { BufferGeometry, Color, DataTexture, Float32BufferAttribute, LinearFilter, Mesh, RGFormat, ShaderMaterial, UnsignedByteType } from 'three'
 import type { Xray } from './contract'
-import { SIZE_M, STRIP_M, toScene, type Vec3 } from './frame'
+import { SIZE_M, STRIP_M, deskEdge, toScene, type Vec3 } from './frame'
 import type { Mirror } from './mirror'
 import { OBJECT, PERSON, PERSON_HOT } from './palette'
 import { DESK_TOP_M, v3 } from './stage'
@@ -21,7 +21,7 @@ const LIFT_M = 0.002 // just above the surface it lies on
 export function xrayGeometry(origin: [number, number], size: [number, number]): BufferGeometry {
   const [ox, oy] = origin
   const [sx, sy] = size
-  const fold = STRIP_M ? Math.min(Math.max(STRIP_M[1], oy), oy + sy) : oy + sy
+  const fold = STRIP_M ? Math.min(Math.max(deskEdge() ?? STRIP_M[1], oy), oy + sy) : oy + sy
   const top = STRIP_M ? Math.min(SIZE_M[1], oy + sy) : oy + sy
   const pos: number[] = []
   const uv: number[] = []

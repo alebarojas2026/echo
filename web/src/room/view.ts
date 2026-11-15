@@ -1,6 +1,6 @@
 import { Box3, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { FIGURE_HEIGHT_M } from './figure'
-import { NODES, SIZE_M, STRIP_M, ZONES, alertWordAt, nodeLabelSide, toScene, type Vec3 } from './frame'
+import { NODES, SIZE_M, STRIP_M, ZONES, alertWordAt, deviceAcross, nodeLabelSide, toScene, zoneWords, type Vec3 } from './frame'
 import { BG } from './palette'
 import { DESK_TOP_M } from './stage'
 
@@ -76,6 +76,9 @@ export const FOV_DEG = 20
  *  radius of the sphere around that point it must fit in view. */
 export interface Shot {
   elevDeg: number
+  /** How far round to the east of due south the camera stands, in degrees (negative: to the west). 0 or absent:
+   *  due south, north straight up the screen. */
+  azimDeg?: number
   target: Vector3
   radiusM: number
 }
@@ -167,15 +170,22 @@ export function deskAnchors(personM = FIGURE_HEIGHT_M, width = 1280): Anchor[] {
     const side = nodeLabelSide(n.id)
     if (side === 'below-right') add(n.xyz, 8, w + 10, 8, tall)
     else if (side === 'below-left') add(n.xyz, w + 10, 8, 8, tall)
+    else if (side === 'below') add(n.xyz, w / 2, w / 2, 8, tall)
+    else if (side === 'above-left') add(n.xyz, w, 8, tall, 8)
+    else if (side === 'above-right') add(n.xyz, 8, w, tall, 8)
+    else if (side === 'left') add(n.xyz, w + 16, 8, LINE_PX, LINE_PX)
+    else if (side === 'right') add(n.xyz, 8, w + 16, LINE_PX, LINE_PX)
     else add(n.xyz, w / 2, w / 2, tall, 8)
   }
   // Under each zone, in the aisle: its name (room-label--zone's size on this canvas), then the no-movement word.
   const zonePx = Math.max(32, 48 * Math.min(1, width / 1280))
   for (const z of ZONES) {
-    const half = Math.max(wordsPx('No movement'), `${z.id} ${z.name}`.length * CHAR_EM * zonePx) / 2
+    const half = Math.max(wordsPx('No movement'), zoneWords(z.id).length * CHAR_EM * zonePx) / 2
     add(alertWordAt(z.id)[0], half, half, 0, zonePx + 10 + LINE_PX)
   }
-  add([0, -0.36, 0], 0, XRAY_CAPTION_PX, LINE_PX / 2, LINE_PX / 2) // xray.ts's caption, read from the strip's west end
+  // xray.ts's caption, read from the strip's west end. Not with a device across the spot: its chair stands there,
+  // and the caption is not drawn (index.ts).
+  if (!deviceAcross()) add([0, -0.36, 0], 0, XRAY_CAPTION_PX, LINE_PX / 2, LINE_PX / 2)
   return out
 }
 
@@ -201,9 +211,9 @@ function fitAxis(items: readonly AxisItem[], span: number): number {
 
 /** The shot at `elevDeg` that shows every anchor with its words, as large as fits, centred in the canvas less
  *  its edges (and the legend's row at the bottom). */
-export function fitShot(anchors: readonly Anchor[], width: number, height: number, elevDeg: number): Shot {
+export function fitShot(anchors: readonly Anchor[], width: number, height: number, elevDeg: number, azimDeg = 0): Shot {
   const box = new Box3().setFromPoints(anchors.map((a) => a.at))
-  const shot: Shot = { elevDeg, target: box.getCenter(new Vector3()), radiusM: Math.max(0.1, box.getSize(new Vector3()).length() / 2) }
+  const shot: Shot = { elevDeg, ...(azimDeg ? { azimDeg } : {}), target: box.getCenter(new Vector3()), radiusM: Math.max(0.1, box.getSize(new Vector3()).length() / 2) }
   const cam = new PerspectiveCamera(FOV_DEG, 1, 0.1, 100)
   const p = new Vector3()
   const right = new Vector3()
@@ -235,9 +245,22 @@ export function fitShot(anchors: readonly Anchor[], width: number, height: numbe
   return shot
 }
 
+/** How far round the close view's camera stands when a device is across the spot from the desk. */
+const SIDE_ON_DEG = -50
+
+/**
+ * The close view's turn. Seen from due south, a person standing between a device across the spot and the devices
+ * on the desk is in one line with them and the camera: the figure hides the desk's devices, and the device across
+ * hides the figure's legs. So when the layout has a device across the spot (the gate), the camera stands round to
+ * one side and all three read apart. Any other layout is seen from due south, as before.
+ */
+export function sideOnDeg(): number {
+  return deviceAcross() ? SIDE_ON_DEG : 0
+}
+
 /** The desk's framing for this canvas. */
 export function deskShot(width = 1280, height = 1080): Shot {
-  return fitShot(deskAnchors(FIGURE_HEIGHT_M, width), width, height, DESK_ELEV_DEG)
+  return fitShot(deskAnchors(FIGURE_HEIGHT_M, width), width, height, DESK_ELEV_DEG, sideOnDeg())
 }
 
 // Inside the hall model, the desk's close view is in situ: the person at true size at our desk, with the real desk
@@ -253,7 +276,7 @@ const SITU_MIN_RADIUS_M = 1.7
 
 /** The close view inside the hall, for the desk layout. */
 export function inSituShot(width = 1280, height = 1080): Shot {
-  const shot = fitShot(deskAnchors(PERSON_M, width), width, height, SITU_ELEV_DEG)
+  const shot = fitShot(deskAnchors(PERSON_M, width), width, height, SITU_ELEV_DEG, sideOnDeg())
   return { ...shot, radiusM: Math.max(shot.radiusM, SITU_MIN_RADIUS_M * Math.min(1, width / 1280)) }
 }
 
@@ -270,7 +293,8 @@ export function fitCamera(camera: PerspectiveCamera, width: number, height: numb
   const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect)
   const elev = (shot.elevDeg * Math.PI) / 180
   const dist = shot.radiusM / Math.sin(Math.min(vfov, hfov) / 2)
-  camera.position.set(0, Math.sin(elev), Math.cos(elev)).multiplyScalar(dist).add(shot.target)
+  const azim = ((shot.azimDeg ?? 0) * Math.PI) / 180
+  camera.position.set(Math.sin(azim) * Math.cos(elev), Math.sin(elev), Math.cos(azim) * Math.cos(elev)).multiplyScalar(dist).add(shot.target)
   camera.lookAt(shot.target)
   // Depth range to suit the distance: about 8 m for the square, about 100 m for the whole hall.
   camera.near = Math.max(0.05, dist / 100)

@@ -16,7 +16,8 @@ describe('layout from nodes.json', () => {
     expect(frame.applyLayout({ ...real, nodes: real.nodes.filter((n) => n.id !== 'unoq') })).toBe(false) // links name a missing node
     expect(frame.applyLayout({ ...real, frame: { size_m: [0] } })).toBe(false)
     expect(frame.applyLayout({ ...DESK_LAYOUT, frame: { ...DESK_LAYOUT.frame, zone_split_x_m: 2 } })).toBe(false)
-    expect(frame.applyLayout({ ...DESK_LAYOUT, zones: DESK_LAYOUT.zones.slice(1) })).toBe(false)
+    expect(frame.applyLayout({ ...DESK_LAYOUT, zones: [] })).toBe(false)
+    expect(frame.applyLayout({ ...DESK_LAYOUT, zones: [...DESK_LAYOUT.zones, { ...DESK_LAYOUT.zones[0], id: 3 }] })).toBe(false)
     expect(frame.SIZE_M).toEqual([2, 2]) // still the built-in square
     expect(frame.spotName('S-W30')).toBe('30 cm W')
   })

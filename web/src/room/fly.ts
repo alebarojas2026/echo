@@ -45,6 +45,8 @@ export function hallShot(bounds: Box3, cutM: number): Shot {
 export function mixShot(a: Shot, b: Shot, u: number): Shot {
   return {
     elevDeg: a.elevDeg + (b.elevDeg - a.elevDeg) * u,
+    // Only a shot that is turned carries a turn: every other shot stays as it was.
+    ...(a.azimDeg || b.azimDeg ? { azimDeg: (a.azimDeg ?? 0) + ((b.azimDeg ?? 0) - (a.azimDeg ?? 0)) * u } : {}),
     target: a.target.clone().lerp(b.target, u),
     radiusM: a.radiusM * (b.radiusM / a.radiusM) ** u,
   }

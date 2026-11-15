@@ -1,5 +1,5 @@
 import { Box3, Color, Group, Mesh, ShaderMaterial, Texture, Vector3, type Object3D } from 'three'
-import { floorSize, toScene } from './frame'
+import { deskEdge, floorSize, toScene } from './frame'
 import { FLOOR, WALL_SHADE } from './palette'
 import type { Quality, RoomView } from './view'
 
@@ -109,10 +109,11 @@ export function placeScan(min: [number, number, number], max: [number, number, n
 /** The room-space box kept clear of the model: anything of it standing in the floor a person walks (the hall's
  *  chairs behind our desk) is left out, so the person never stands inside furniture. The floor area from
  *  nodes.json, a little wider east and west and toward the aisle, from just above the floor to above head
- *  height; it stops 1 cm short of the floor's north edge, where the desk begins. */
+ *  height; it stops 1 cm short of where the desk begins (the floor's north edge, or past it when the spot stops
+ *  short of the desk). */
 export function clearBox(): Box3 {
   const [fw, fh] = floorSize()
-  const a = new Vector3(...toScene([-CLEAR_SIDE_M, fh - 0.01, CLEAR_FLOOR_M]))
+  const a = new Vector3(...toScene([-CLEAR_SIDE_M, (deskEdge() ?? fh) - 0.01, CLEAR_FLOOR_M]))
   const b = new Vector3(...toScene([fw + CLEAR_SIDE_M, -CLEAR_BACK_M, CLEAR_TOP_M]))
   return new Box3().setFromPoints([a, b])
 }
