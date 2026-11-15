@@ -20,7 +20,7 @@ def doc(name):
 
 
 def test_there_is_a_desk_and_a_gate_layout_and_one_of_them_is_active():
-    assert {"desk", "gate"} <= set(NAMES)
+    assert {"desk", "gate", "gate-3"} <= set(NAMES)
     assert use_layout.active() in NAMES   # radio/nodes.json is always a copy of a layout file
 
 
@@ -114,3 +114,14 @@ def test_the_command_says_what_it_did(tmp_path, monkeypatch, capsys):
     assert "3 devices, 6 links, 1 zone." in capsys.readouterr().out
     assert use_layout.main(["nope"]) == 1
     assert "no layout called 'nope'" in capsys.readouterr().err
+
+
+def test_gate_3_is_the_gate_with_pi_b_as_a_beacon_only_and_three_links():
+    d, gate = doc("gate-3"), doc("gate")
+    assert [link["id"] for link in d["links"]] == ["pi5>unoq:wifi", "pi5b>unoq:ble", "pi5b>pi5:ble"]
+    assert [link["id"] for link in d["links"] if link["crosses_spot"]] == ["pi5b>unoq:ble", "pi5b>pi5:ble"]
+    assert {n["id"]: n["roles"] for n in d["nodes"]} == {"unoq": ["receiver"], "pi5": ["router", "receiver"], "pi5b": ["beacon"]}
+    assert [p["node"] for p in d["beacons"]["payloads"]] == ["pi5b"]
+    for key in ("frame", "zones", "zone_rule", "router_spots", "tray_spots", "armed"):
+        assert d[key] == gate[key]                       # the same place, fewer lines
+    assert [n["xyz_m"] for n in d["nodes"]] == [n["xyz_m"] for n in gate["nodes"]]

@@ -2,6 +2,7 @@
 
     python -m radio.use_layout            # says which layout is active and lists the others
     python -m radio.use_layout gate       # one spot between Pi B and the desk: three devices, six links, one zone
+    python -m radio.use_layout gate-3     # the same spot with Pi B as a beacon only: three links
     python -m radio.use_layout desk       # the desk strip: five devices, twelve links, two zones
 
 Every part reads radio/nodes.json (CONTRACTS.md section 3), so switching is one copy:
