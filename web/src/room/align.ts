@@ -25,6 +25,7 @@ import { roomShot, topShot, type RoomView } from './view'
 //   U / O   along the desk, west / east: 10 cm (Shift: 50 cm)
 //   G       which side of our desk people stand on: behind it, in front of it, or at the row's end
 //   B       which desk the board and the router are on: ours, or the one across the gap
+//   Enter   takes the guide's places for every device as they stand, to be saved with S
 // At a desk the panel also says where each device goes on the furniture that is there (desks.ts, placementGuide),
 // and the 3D view shows each place as a faint box (guide.ts):
 //   Tab     picks the next device's place (Esc lets go); arrows move it 5 cm (Shift 20 cm), PgUp / PgDn raise and
@@ -175,7 +176,7 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
       // With the hall's desks the job is placing the kit, and the keys an operator needs fit in four lines. The
       // by-hand keys still work (the list is in this file's header).
       panel.querySelector('.room-align-title')!.textContent = 'Place the kit'
-      keys.innerHTML = 'D nearest desk · I K rows · J L blocks · U O along<br>G side of the desk · B board here or across<br>Tab picks a device · arrows move it<br>V from above · S save'
+      keys.innerHTML = 'D nearest desk · I K rows · J L blocks · U O along<br>G side of the desk · B board here or across<br>Enter takes these places · Tab picks one · arrows move it<br>V from above · S save'
     })
   }
   const marks = new PlacementGuide(view)
@@ -249,6 +250,11 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
       status.textContent = 'Saving…'
       // Only the devices moved by hand: the guide's own suggestions are never saved as anyone's place.
       void saveAll(scan.fit, beacons, marks.shown ? marks.moved() : undefined).then((said) => (status.textContent = said))
+    } else if (key === 'Enter' && marks.shown) {
+      // The whole kit at this desk, as the guide has it: saved with S, like places moved by hand.
+      const n = marks.take()
+      status.textContent = `The guide\u2019s ${n} places are taken. S saves them with the alignment.`
+      sayGuide()
     } else if (key === 'Tab' && marks.shown) {
       marks.cycle()
       sayGuide()
