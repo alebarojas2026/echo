@@ -80,6 +80,8 @@ def measurements(proof):
         "Time to train on the board": (display(proof.get("train_s"), " s"), "__"),
         "Time per decision": (timing_value, "__"),
         "Board power draw": (watt_value, "__"),
+        "Images stored": (display(proof.get("images_stored")), "__"),
+        "Bytes sent outside our network": (display(proof.get("bytes_out")), "__"),
     }
     extras = [
         ("Threshold zone baseline", threshold_value, "Fixed 3 dB strongest-link baseline", threshold_n),
@@ -138,8 +140,33 @@ def measurements(proof):
     return primary, extras
 
 
-def render(document, proof, line_report=None):
+def privacy_rows(proof, evidence):
+    rows = {}
+    records = list(evidence)
+    if proof.get("image_audit"):
+        records.append({"commit":proof.get("commit"),"images_stored":proof.get("images_stored"),
+                        "measured_at":proof["image_audit"].get("measured_at"),"image_audit":proof["image_audit"]})
+    for record in records:
+        if record.get("commit") != proof.get("commit"): continue
+        date = record.get("measured_at")
+        if not isinstance(date,str): continue
+        datetime.fromisoformat(date.replace("Z","+00:00"))
+        audit = record.get("image_audit") or {}
+        if record.get("images_stored") is not None and record["images_stored"] == proof.get("images_stored") and audit.get("folders") and audit.get("containers"):
+            method = audit["method"]
+            if audit.get("meter_images_agree") is True: method += "; live meter and one-off audit agree"
+            n = f"{len(audit['folders'])} folders; {len(audit.get('files',[]))} mounted files; {len(audit['containers'])} containers"
+            rows["Images stored"] = (method,n,date)
+        if record.get("bytes_out") is not None and record["bytes_out"] == proof.get("bytes_out"):
+            method = record["egress_source"]
+            if record.get("no_default_route") is True: method += "; no IPv4 or IPv6 default route"
+            rows["Bytes sent outside our network"] = (method,display(record.get("egress_duration_s")," s"),date)
+    return rows
+
+
+def render(document, proof, line_report=None, evidence=()):
     primary, extras = measurements(proof)
+    privacy = privacy_rows(proof,evidence)
     date, commit = proof.get("measured_at"), proof.get("commit")
     measured = any(v != "__" for v, _ in primary.values()) or any(v != "__" for _, v, _, _ in extras)
     if measured:
@@ -165,6 +192,8 @@ def render(document, proof, line_report=None):
                     columns[2] = proof["zone"]["method"]
                 if key == "Presence accuracy" and value != "__": columns[2] = proof["presence"]["method"]
                 row_date, row_commit = (date, commit) if value != "__" else ("__", "__")
+                if key in {"Images stored","Bytes sent outside our network"} and value!="__":
+                    columns[2],n,row_date = privacy.get(key,(columns[2],"__","__"))
                 columns = [columns[0], value, columns[2], n, row_date, row_commit]
                 line = "| " + " | ".join(cell(c) for c in columns) + " |"
         lines.append(line)
@@ -172,6 +201,9 @@ def render(document, proof, line_report=None):
              "| Number | Value | Method | N | Date | Commit |", "|---|---|---|---|---|---|"]
     for label, value, method, n in extras:
         row_date, row_commit = (date, commit) if value != "__" else ("__", "__")
+        key = "Bytes sent outside our network" if label=="Bytes sent out" else label
+        if key in {"Images stored","Bytes sent outside our network"} and value!="__":
+            method,n,row_date = privacy.get(key,(method,"__","__"))
         block.append("| " + " | ".join(cell(c) for c in (label, value, method, n, row_date, row_commit)) + " |")
     if line_report:
         from proof.line_stats import table
@@ -188,10 +220,12 @@ def main():
     parser.add_argument("--output", type=Path, help="explicit output path; omit to preview on stdout")
     parser.add_argument("--lines", type=Path, help="measured per-line companion report")
     args = parser.parse_args()
+    log = args.proof.with_suffix(".manual.jsonl")
+    evidence = [json.loads(line) for line in log.read_text().splitlines() if line.strip()] if log.exists() else []
     from proof.provenance import empty_proof
     proof = empty_proof() if args.lines and not args.proof.exists() else json.loads(args.proof.read_text(encoding="utf-8"))
     lines = json.loads(args.lines.read_text()) if args.lines else None
-    output = render(args.document.read_text(encoding="utf-8"), proof, lines)
+    output = render(args.document.read_text(encoding="utf-8"), proof, lines, evidence)
     if args.output:
         args.output.write_text(output, encoding="utf-8")
     else:
