@@ -80,6 +80,16 @@ function buildLayout(): string {
   }
 }
 
+/** The hall's desk list as it is when the page is built, so standing the hall at our desk never waits on a fetch
+ *  (the model's alignment is worked out from it when room.json holds no offset). 'null' when there is none. */
+function hallDesks(): string {
+  try {
+    return JSON.stringify(JSON.parse(readFileSync(new URL('./public/models/hall-desks.json', import.meta.url), 'utf8')))
+  } catch {
+    return 'null'
+  }
+}
+
 function roomScan() {
   const hi = model('hall-hi.glb')
   const hall = hi ?? model('hall-lo.glb')
@@ -198,7 +208,7 @@ function pagePaths(): Plugin {
 
 export default defineConfig({
   plugins: [boardFiles(), pagePaths()],
-  define: { __ROOM_SCAN__: JSON.stringify(roomScan()), __BUILD_LAYOUT__: buildLayout() },
+  define: { __ROOM_SCAN__: JSON.stringify(roomScan()), __BUILD_LAYOUT__: buildLayout(), __HALL_DESKS__: hallDesks() },
   build: {
     chunkSizeWarningLimit: 700, // three.js is most of the bundle; the board serves it locally
     rolldownOptions: { input: { main: 'index.html', ...Object.fromEntries(pages) } },
