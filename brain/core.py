@@ -48,6 +48,7 @@ ZONE_HOLD = 5            # decisions in a row (0.5 s) before enter, exit or zone
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 LABEL_MODES = ("person", "object", "off")
+CAM_STATES = ("on", "off", "stalled")
 
 
 def read_session(path, since_t=None) -> List[dict]:
@@ -226,9 +227,13 @@ class Brain:
                 held = keep and self._session_path(msg.get("session")) is None
                 self.open_session = {"meta": msg, "keep": keep, "messages": [] if held else None}
         elif kind == "cam":
-            self.cam = (t, msg.get("state"))
+            if msg.get("state") in CAM_STATES:   # anything else would go to the screen as it came
+                self.cam = (t, msg["state"])
         elif kind == "narration":
-            self.narration = {k: msg.get(k) for k in ("text", "event_id", "t", "source", "gen_ms")}
+            # Shown as it is, so it has to be showable: a sentence, and the event it is about.
+            if isinstance(msg.get("text"), str) and isinstance(msg.get("event_id"), str) \
+                    and msg.get("source") in ("llm", "template"):
+                self.narration = {k: msg.get(k) for k in ("text", "event_id", "t", "source", "gen_ms")}
         elif kind in ("rssi", "label"):
             if self.open_session is not None and self.open_session["messages"] is not None:
                 self.open_session["messages"].append(msg)
@@ -349,6 +354,8 @@ class Brain:
         self.emit("reset", {})
 
     def _cmd_record_start(self, args):
+        if not isinstance(args.get("session"), str):
+            return   # the bus ignores it too (it has no file name); no recording event for it
         self._keep_open_session()   # back-to-back recordings: the bus closes the old one too
         self.want_session = args.get("session")
         # The bus opens the file and sends back the meta message that opens our copy.
