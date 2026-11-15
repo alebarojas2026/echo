@@ -131,10 +131,10 @@ def test_on_the_gate_the_wifi_line_to_pi_b_decides_and_pi_bs_roles_keep_it_alive
         d = doc(name)
         links = {link["id"]: link for link in d["links"]}
         assert d["presence"] == {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble", "on_db": 7, "off_db": 4, "second_hold_s": 5,
-                                 "object_db": 3, "object_max_db": 12, "object_spread_db": 1.0, "object_hold_s": 3,
+                                 "object_db": 3, "object_max_db": 10, "object_spread_db": 1.0, "object_hold_s": 3,
                                  "moving_spread_db": 2.0}
-        # a thing in the line is shallower than any person seen on the kit (15 dB), and off_db < on_db < that
-        assert d["presence"]["object_db"] < d["presence"]["off_db"] < d["presence"]["on_db"] < d["presence"]["object_max_db"] < 15
+        # a thing in the line is shallower than any person seen on the kit (13.5 dB), and off_db < on_db < that
+        assert d["presence"]["object_db"] < d["presence"]["off_db"] < d["presence"]["on_db"] < d["presence"]["object_max_db"] < 13.5
         assert d["presence"]["object_spread_db"] < d["presence"]["moving_spread_db"]
         # no older flag may switch the line that decides off: it is a classifier link, and so is its second opinion
         assert not any(link.get("classifier") is False for link in d["links"]
