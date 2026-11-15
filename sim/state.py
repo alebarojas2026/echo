@@ -21,7 +21,10 @@ from . import fake
 from .layout import LAYOUT
 from .lesson import fit_times as lesson_fit_times
 from .wire import encoder
+from narrator import narrate
 from narrator.recap import template as recap_template
+
+narrate.set_zones(narrate.load_zones())   # the zone words the board's narrator uses
 
 STILL_ALERT_S = dict(LAYOUT.zones)   # zone -> still_alert_s, from radio/nodes.json (section 3)
 GRID = LAYOUT.grid                   # section 6: the layout plus 0.2 m on each side
@@ -384,8 +387,12 @@ class Brain:
             self.demo.append({"kind": kind, "info": info, "t": self._ms(t)})
             return
         self.demo.append({"kind": kind, "info": info, "t": self._ms(t)})
-        sentence = NO_NODE[kind] if kind in NO_NODE and info.get("node") is None else SENTENCES[kind]
-        self.narration = {"text": sentence.format(**info), "event_id": f"e{self.n_events}",
+        # The narrator's own template sentence (zone names from nodes.json: "zone 2 (Chair)", or "on
+        # the left" on the desk strip), as the board sends when its model is slow; ours if it has none.
+        sentence = narrate.template(kind, info)
+        if not sentence:
+            sentence = (NO_NODE[kind] if kind in NO_NODE and info.get("node") is None else SENTENCES[kind]).format(**info)
+        self.narration = {"text": sentence, "event_id": f"e{self.n_events}",
                           "t": self._ms(t), "source": "template", "gen_ms": 0}
 
     def _diff(self, t: float, now: dict, has_pred: bool) -> None:

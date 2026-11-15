@@ -3,6 +3,7 @@ import json
 import pytest
 
 from contracts.check import errors
+from narrator import narrate
 from sim import fake, state
 from sim.wire import encoder
 
@@ -74,7 +75,7 @@ def test_zone_tour_predictions_events_and_narration():
     assert (gone["kind"], gone["present"], gone["zone"], gone["zone_set"], gone["motion"]) == ("none", False, 0, [], None)
     assert kinds(events)[2:] == ["enter", "zone_change", "zone_change", "zone_change", "exit"]
     told = at(states, 10)["narration"]
-    assert (told["text"], told["source"], told["event_id"]) == ("Someone moved to zone 4.", "template", events[3]["id"])
+    assert (told["text"], told["source"], told["event_id"]) == (narrate.template("zone_change", {"zone": 4}), "template", events[3]["id"])
     assert all(len(text.split()) <= 16 for text in state.SENTENCES.values())
 
 
@@ -165,7 +166,7 @@ def test_object_far_from_every_node_has_no_near_but_still_gets_advice():
                                    "Move the router 30 cm west.")
     assert isinstance(s["advice"]["before_dbm"], float)
     assert [(e["kind"], e["info"].get("node", "-")) for e in events[2:]] == [("object_on", "-"), ("advice", "-")]   # no node to name
-    assert at(states, 5)["narration"]["text"] == "Something new is sitting in the room."
+    assert at(states, 5)["narration"]["text"] == narrate.template("object_on", {})   # the narrator's sentence, no node
     assert state.near(fake.NODES, (1.0, 0.2)) == "pi5" and state.near(fake.NODES, (1.0, 0.6)) is None
 
 
