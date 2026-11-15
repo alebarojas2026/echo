@@ -73,13 +73,13 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   }
   // A replay plays on the main screen (#537): the card steps aside for it and comes back when it is over.
   const replaying = () => document.documentElement.dataset.hudReplay === 'on'
-  const close = () => {
+  const close = (cut = false) => {
     // The panels come in where the words went out, the way every text change on this screen does.
     if (!view.hidden && !matchMedia('(prefers-reduced-motion: reduce)').matches) host.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, delay: 40, fill: 'backwards' })
     view.hidden = true
     host.inert = false
     host.removeAttribute('aria-hidden')
-    announce('closed')
+    announce('closed', cut)
   }
   const show = (heading: string, line: string, fault = false, next: ArrivalPhase = 'waiting', cut = false) => {
     view.hidden = !operator.hidden || replaying()
@@ -100,6 +100,7 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     arm.disabled = !feed || stale
     source.textContent = state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO'
     if (!state || stale) { cancelHold(); show('No data', 'Waiting for the room signal.'); return }
+    if (state.armed && state.tamper?.length) { cancelHold(); close(true); return }
     if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', 'A radio link stopped.'); return }
     // Once the visitor has been found, a dead zone (advice, the router moved) is the main screen's moment.
     if (complete && !state.armed && (state.advice || state.router !== 'S-home')) { cancelHold(); close(); return }
