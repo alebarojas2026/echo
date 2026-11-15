@@ -18,7 +18,7 @@ import urllib.request
 from narrator.narrate import BANNED, within
 from store import DB, Store
 from .ask import LLM_URL, NODES_JSON, layout
-from .tools import clock
+from .tools import clock, place
 
 TIMEOUT_S = 8.0
 MAX_WORDS = 60
@@ -57,6 +57,9 @@ def _where(hit: dict, zones: dict) -> str:
         name = zones.get(hit["zone"])
         if not name:
             return "in the space"
+        said = place(name, False)   # a name that is a place already: "at the desk"
+        if said:
+            return said
         return f"on the {name.lower()}" if name.lower() in ("left", "right") else f"in the {name} zone"
     return f"on the path {hit['link']}"
 
