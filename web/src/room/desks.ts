@@ -316,14 +316,30 @@ export function nearestSpot(h: HallDesks, [x, z]: [number, number]): DeskSpot {
   return best
 }
 
-/** The hall's desks, when the build has them (models/hall-desks.json); else null. */
-export async function loadDesks(url = 'models/hall-desks.json'): Promise<HallDesks | null> {
-  try {
-    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(2000) })
-    return res.ok ? parseDesks(await res.json()) : null
-  } catch {
-    return null
+/** How many times the desk list is asked for over the network, and how long each try may take. */
+const DESKS_TRIES = 3
+const DESKS_TRY_MS = 4000
+
+/**
+ * The hall's desks (models/hall-desks.json), or null when the hall has none. The list the page was built with is
+ * used first, so nothing waits on the network: when room.json holds no offset the hall is stood at our desk from
+ * this list, and a fetch that timed out once left the hall centred on the layout with a desk through the spot.
+ * Only a page built without the list asks for it, three times over before giving up; a plain "not there" (404)
+ * is an answer and is not asked again.
+ */
+export async function loadDesks(url = 'models/hall-desks.json', built: unknown = typeof __HALL_DESKS__ === 'undefined' ? null : __HALL_DESKS__): Promise<HallDesks | null> {
+  const own = parseDesks(built)
+  if (own) return own
+  for (let attempt = 0; attempt < DESKS_TRIES; attempt++) {
+    try {
+      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(DESKS_TRY_MS) })
+      if (res.ok) return parseDesks(await res.json())
+      if (res.status === 404) return null
+    } catch {
+      // timed out or the network dropped: ask again
+    }
   }
+  return null
 }
 
 /** A hall's walls are kept whole when nothing says where to cut them (a room scan's default is 1.4 m). */

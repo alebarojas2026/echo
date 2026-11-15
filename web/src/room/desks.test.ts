@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest'
-import { PLACEMENT, defaultSpot, deskFit, deskName, modelPoint, nearestSpot, parseDesks, placementGuide, slideDesk, stepDesk, type Gap, type HallDesks } from './desks'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { PLACEMENT, defaultSpot, deskFit, deskName, loadDesks, modelPoint, nearestSpot, parseDesks, placementGuide, slideDesk, stepDesk, type Gap, type HallDesks } from './desks'
 import { NODES, applyLayout, toScene } from './frame'
 import { DESK_LAYOUT } from './layouts.fixture'
 import { placeScan } from './scan'
@@ -192,5 +192,42 @@ describe('where the devices go', () => {
     const g = by(placementGuide(HALL, { ...at(1, 1), gap: 'behind' }, nodes(), strip, { ...PLACEMENT, nearApartM: 0.4 }))
     expect(Math.abs(g.unoq.xyz[0] - g.pi5.xyz[0])).toBeCloseTo(0.4)
     expect(g.pi5.words).toBe('Pi A: on our desk, at the edge facing the spot, 20 cm left of the middle')
+  })
+})
+
+describe('loading the desk list', () => {
+  const list = { centre_m: [0, 0], desk_depth_m: 0.45, desk_height_m: 0.75, desks: [{ row: 0, wedge: 0, r_m: 5, th0_deg: -10, th1_deg: 10, floor_m: 0 }] }
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('uses the list the page was built with and never asks the network', async () => {
+    const fetched = vi.fn()
+    vi.stubGlobal('fetch', fetched)
+    expect((await loadDesks('models/hall-desks.json', list))?.desks).toHaveLength(1)
+    expect(fetched).not.toHaveBeenCalled()
+    // The repo's own list is built in: the default argument finds it.
+    expect((await loadDesks())?.desks.length).toBeGreaterThan(10)
+    expect(fetched).not.toHaveBeenCalled()
+  })
+
+  it('asks again after a timeout when the page was built without the list, and stops at a plain "not there"', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      if (calls < 3) throw new Error('timed out')
+      return { ok: true, status: 200, json: async () => list }
+    })
+    expect((await loadDesks('models/hall-desks.json', null))?.desks).toHaveLength(1)
+    expect(calls).toBe(3)
+    calls = 0
+    vi.stubGlobal('fetch', async () => (calls++, { ok: false, status: 404, json: async () => ({}) }))
+    expect(await loadDesks('models/hall-desks.json', null)).toBeNull()
+    expect(calls).toBe(1)
+    calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      throw new Error('down')
+    })
+    expect(await loadDesks('models/hall-desks.json', null)).toBeNull()
+    expect(calls).toBe(3) // and then gives up: the hall stays where its alignment puts it
   })
 })
