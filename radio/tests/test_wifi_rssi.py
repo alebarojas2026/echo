@@ -383,8 +383,23 @@ class TestLoops:
 class TestSettings:
     def test_defaults(self):
         cfg = settings({})
-        assert cfg == {"iface": "wlan0", "bssid": "", "bus_host": "127.0.0.1", "bus_port": 5600,
-                       "rate_hz": 25.0, "ping_host": "10.42.0.1", "ping_hz": 50.0}
+        assert cfg == {"link": "pi5>unoq:wifi", "iface": "wlan0", "bssid": "", "bus_host": "127.0.0.1",
+                       "bus_port": 5600, "rate_hz": 25.0, "ping_host": "10.42.0.1", "ping_hz": 50.0}
+
+    def test_the_link_comes_from_wifi_link_and_nodes_json(self, monkeypatch):
+        import radio.wifi_rssi as w
+        second = {"id": "pi5>pi5b:wifi", "tx": "pi5", "rx": "pi5b", "kind": "wifi"}   # Pi B (#415)
+        monkeypatch.setitem(w.LINKS, second["id"], second)
+        try:
+            w.set_link("pi5>pi5b:wifi")
+            msg = json.loads(_make_message(-60, 0))
+            assert (msg["link"], msg["tx"], msg["rx"], msg["kind"]) == ("pi5>pi5b:wifi", "pi5", "pi5b", "wifi")
+            assert w.summary([-60], 1.0).startswith("pi5>pi5b:wifi: 1 readings")
+            with pytest.raises(ValueError, match="isn't a wifi link"):
+                w.set_link("pi5>unoq:ble")
+        finally:
+            w.set_link("pi5>unoq:wifi")
+        assert json.loads(_make_message(-60, 0))["link"] == "pi5>unoq:wifi"     # the board's default
 
     def test_overrides_and_pings_off(self):
         cfg = settings({"WIFI_IFACE": "wlan1", "SENSING_BSSID": "<b>", "WIFI_PING_HZ": "0", "RATE_HZ": "30"})

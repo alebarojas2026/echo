@@ -103,8 +103,18 @@ def test_silent_links_are_named(tmp_path):
     ok, text = check.check_links(5.0, capture=fake_capture(tmp_path, ["pi5>unoq:wifi", "east>unoq:ble"]),
                                  sessions=tmp_path)
     assert not ok
-    assert text == ("links: nothing from pi5>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble "
+    silent = [link for link in link_stats.LINKS if link not in ("pi5>unoq:wifi", "east>unoq:ble")]
+    assert text == (f"links: nothing from {', '.join(silent)} "
                     "(flowing: pi5>unoq:wifi 2.0/s, east>unoq:ble 2.0/s)")
+
+
+def test_gate_rates_come_from_the_layout():
+    # Wi-Fi and a Pi's beacon at 20/s, the other beacons at 7/s; whatever links nodes.json holds.
+    for link_id, link in link_stats.LINKS.items():
+        expected = 20.0 if link["kind"] == "wifi" or link["tx"] in check.PIS else 7.0
+        assert check.gate_hz(link_id) == expected
+    assert check.gate_hz("pi5>unoq:wifi") == 20.0 and check.gate_hz("pi5>unoq:ble") == 20.0
+    assert check.gate_hz("east>unoq:ble") == 7.0
 
 
 def test_no_bus_no_file(tmp_path):

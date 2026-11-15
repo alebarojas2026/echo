@@ -16,3 +16,7 @@ LINKS = {link["id"]: link for link in DOC["links"]}
 # Manufacturer Specific Data payload (company id first, as it sits in the advert) -> beacon node.
 # Beacons are matched by this, never by MAC.
 BEACONS = {bytes.fromhex(p["data_hex"]): p["node"] for p in DOC["beacons"]["payloads"]}
+
+# The nodes that listen (a scanner runs on each), and those that also advertise (the Pis).
+RECEIVERS = [node["id"] for node in DOC["nodes"] if "receiver" in node["roles"]]
+PIS = [node["id"] for node in DOC["nodes"] if "receiver" in node["roles"] and "beacon" in node["roles"]]

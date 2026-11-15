@@ -21,7 +21,7 @@ import sys
 import time
 
 from . import hci
-from .nodes import BEACONS, LINKS
+from .nodes import BEACONS, LINKS, RECEIVERS
 
 MARK = b"\xff\xff\x52\x53"  # company id FFFF + "RS": a cheap test before parsing a packet
 
@@ -174,7 +174,7 @@ def open_controller(dev: int) -> hci.Hci:
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--node", required=True, choices=["unoq", "pi5"], help="the receiver this runs on")
+    ap.add_argument("--node", required=True, choices=RECEIVERS, help="the receiver this runs on")
     ap.add_argument("--dev", type=int, default=0, help="HCI device number (0 = hci0)")
     ap.add_argument("--seconds", type=float, default=0, help="stop after this long (0 = until Ctrl-C)")
     args = ap.parse_args(argv)

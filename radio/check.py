@@ -17,13 +17,17 @@ from pathlib import Path
 
 from . import link_stats
 from .wifi_rssi import REPO, find_tool, iw_path, joined_elsewhere, load_env_file, settings
-from .nodes import LINKS
+from .nodes import LINKS, PIS
 
 UNITS = ("radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan")
 
-# The gates' pass rates (radio/GATE.md): Gate 1 for the Wi-Fi link, Gate 2 for Bluetooth.
-GATE_HZ = {"pi5>unoq:wifi": 20.0, "pi5>unoq:ble": 20.0}
-GATE_BLE_HZ = 7.0
+
+
+def gate_hz(link_id: str) -> float:
+    """The pass rate radio/GATE.md uses for a link: 20/s for Wi-Fi (Gate 1) and for a Pi's beacon,
+    7/s for the other beacons (Gate 2). Built from radio/nodes.json, so a new layout needs no edit."""
+    link = LINKS[link_id]
+    return 20.0 if link["kind"] == "wifi" or link["tx"] in PIS else 7.0
 
 
 def sh(cmd) -> tuple[int, str]:
@@ -115,11 +119,10 @@ def check_links(seconds: float, capture=link_stats.capture, sessions=link_stats.
     silent = [link for link in LINKS if link not in by_link]
     if silent:
         return False, f"links: nothing from {', '.join(silent)}" + (f" (flowing: {rates})" if rates else "")
-    slow = [f"{link} under {GATE_HZ.get(link, GATE_BLE_HZ):g}/s" for link in LINKS
-            if len(by_link[link]) / seconds < GATE_HZ.get(link, GATE_BLE_HZ)]
+    slow = [f"{link} under {gate_hz(link):g}/s" for link in LINKS if len(by_link[link]) / seconds < gate_hz(link)]
     if slow:
         hint = (" (Wi-Fi: journalctl -u radio-sight-wifi-rssi for the ping)"
-                if any(s.startswith("pi5>unoq:wifi") for s in slow) else "")
+                if any(LINKS[s.split(" ")[0]]["kind"] == "wifi" for s in slow) else "")
         return False, f"links: {', '.join(slow)}, the gates' rates{hint}; {rates}"
     return True, f"links: {rates}"
 
