@@ -7,6 +7,16 @@ DRAFT = Path(__file__).with_name("devpost-draft.md")
 PROOF = DRAFT.parents[1] / "PROOF.md"
 PITCH = DRAFT.with_name("pitch.md")
 RUNBOOK = DRAFT.with_name("demo-runbook.md")
+BEATS = (
+    "found you",
+    "teach the room",
+    "camera unplug",
+    "still follows",
+    "arm the space",
+    "intrusion alert",
+    "ask the room",
+    "proof",
+)
 
 
 class DevpostDraftTest(unittest.TestCase):
@@ -26,6 +36,23 @@ class DevpostDraftTest(unittest.TestCase):
             "What's next",
         ):
             self.assertIn(f"## {heading}", self.text)
+
+    def test_building_safety_story_leads(self):
+        self.assertTrue(
+            self.text.startswith(
+                "# Radio Sight: Safety and After-Hours Security with Wi-Fi"
+            )
+        )
+        first_sentence = self.text.split("## Inspiration", 1)[1].strip().split("\n\n", 1)[0]
+        self.assertIn("using the Wi-Fi already there", first_sentence)
+        self.assertIn("no permanent camera", first_sentence)
+        for audience in (
+            "patient rooms",
+            "bathrooms",
+            "study rooms",
+            "offices after hours",
+        ):
+            self.assertIn(audience, self.lower)
 
     def test_contract_v2_demo_features_are_named(self):
         for phrase in (
@@ -51,8 +78,40 @@ class DevpostDraftTest(unittest.TestCase):
         proof = PROOF.read_text(encoding="utf-8")
         for token in re.findall(r"\b\d+(?:\.\d+)?\b", self.text):
             self.assertIn(token, proof)
-        self.assertGreaterEqual(self.text.count("__"), 6)
+        self.assertGreaterEqual(self.text.count("__"), 8)
         self.assertIn("../PROOF.md", self.text)
+
+    def test_verified_product_comparisons_are_narrow(self):
+        difference = self.lower.split("### how it is different", 1)[1].split(
+            "## how we built it", 1
+        )[0]
+        for phrase in (
+            "commercial wi-fi products make different architecture choices",
+            "aerial.ai/motion-intelligence",
+            "originwirelessai.com/trupresence-2",
+            "documentation.meraki.com",
+            "detecting wi-fi and bluetooth client devices",
+            "does not need to carry the device being located",
+        ):
+            self.assertIn(phrase, difference)
+        self.assertNotIn("all existing", difference)
+        self.assertNotIn("all commercial", difference)
+
+    def test_hardware_is_a_building_infrastructure_stand_in(self):
+        built = self.lower.split("## how we built it", 1)[1].split(
+            "## challenges", 1
+        )[0]
+        self.assertIn("stand in for access points and radios", built)
+        self.assertIn("already distributed through a building", built)
+        self.assertIn("a laptop browser shows the local interface", built)
+        self.assertIn("routes it to the uno q over direct ethernet", built)
+        self.assertIn("the pi supplies the private hotspot", self.lower)
+        self.assertIn("runs no model", self.lower)
+
+    def test_unfinished_integrations_are_not_claimed_live(self):
+        self.assertIn("one honest line about what does not work yet", self.lower)
+        self.assertIn("still being integrated into `main`", self.lower)
+        self.assertIn("no unfinished beat will be staged as live", self.lower)
 
     def test_built_with_and_team_roles_are_complete(self):
         for phrase in (
@@ -71,40 +130,35 @@ class DevpostDraftTest(unittest.TestCase):
         ):
             self.assertIn(phrase, self.text)
 
-    def test_shipped_recap_and_phone_page_are_accurate(self):
-        accomplishments = self.text.split("## Accomplishments", 1)[1].split(
-            "## What we learned", 1
-        )[0]
-        whats_next = self.text.split("## What's next", 1)[1]
-        self.assertIn("end-of-demo recap", accomplishments.lower())
-        self.assertIn("caregiver phone page", accomplishments.lower())
-        self.assertNotIn("end-of-demo recap", whats_next.lower())
-        self.assertIn("run the caregiver page on a real phone", whats_next.lower())
-        self.assertNotIn("finishing an end-of-demo recap", self.lower)
-        self.assertNotIn("finishing a caregiver phone page", self.lower)
-        self.assertNotIn("until it merges", self.lower)
-
-    def test_screen_path_matches_the_live_demo(self):
-        self.assertIn("a laptop browser shows that interface", self.lower)
-        self.assertIn("routes it to the board over the direct ethernet cable", self.lower)
-        self.assertNotIn("drives the screen", self.lower)
-
     def test_story_beats_match_pitch_and_runbook(self):
         pitch = PITCH.read_text(encoding="utf-8").lower()
         runbook = RUNBOOK.read_text(encoding="utf-8").lower()
-        for beat in (
-            "judge walks in",
-            "radio x-ray",
-            "wave check-in",
-            "no-movement alert",
-            "tray vs person",
-            "router advice",
-            "camera unplug",
-            "proof",
-        ):
-            self.assertIn(beat, self.lower)
-            self.assertIn(beat, pitch)
-            self.assertIn(beat, runbook)
+        primary_sections = (
+            (
+                self.lower.split("the primary story uses", 1)[1].split(
+                    "the measured zone accuracy", 1
+                )[0],
+                "- **{}:**",
+            ),
+            (
+                pitch.split("## three-minute desk round", 1)[1].split(
+                    "## five-minute finalist extension", 1
+                )[0],
+                "### {}",
+            ),
+            (
+                runbook.split("## three-minute desk round", 1)[1].split(
+                    "## camera-unplug proof", 1
+                )[0],
+                "**{}:**",
+            ),
+        )
+        for text, marker in primary_sections:
+            for beat in BEATS:
+                self.assertIn(marker.format(beat), text)
+            positions = [text.index(marker.format(beat)) for beat in BEATS]
+            self.assertEqual(positions, sorted(positions))
+
 
 if __name__ == "__main__":
     unittest.main()
