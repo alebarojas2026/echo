@@ -1,8 +1,6 @@
 import {
   BoxGeometry,
-  DirectionalLight,
   EdgesGeometry,
-  HemisphereLight,
   LineBasicMaterial,
   LineSegments,
   Mesh,
@@ -153,11 +151,7 @@ export class Presence {
     this.label.style.opacity = '0'
     this.labelWords = document.createElement('span')
     this.label.append(this.labelWords)
-    // Only the figure is lit; everything else in the room is unlit, so these lights touch nothing else.
-    const sky = new HemisphereLight(0xffffff, 0x1a1612, 0.9)
-    const key = new DirectionalLight(0xffffff, 2.4)
-    key.position.set(-1.2, 3, 2.2)
-    view.scene.add(sky, key)
+    // No lights: the figure's material carries its own (a matcap, figure.ts) and everything else is unlit.
     view.addAnimator((dt) => this.ease(dt))
   }
 
