@@ -656,9 +656,19 @@ class Brain:
         self.xray.reset()
 
     def _save_baseline(self, now) -> None:
-        """Section 6: data/sessions/baseline.json, for proof/ and for a brain restart."""
+        """Section 6: data/sessions/baseline.json, for proof/ and for a brain restart.
+
+        A write that fails (a full disk) is logged and nothing more: the baseline is in use
+        either way, and baseline_done must still be sent."""
         if not self.sessions_dir:
             return
+        try:
+            self._write_baseline(now)
+        except OSError as e:
+            logging.getLogger("brain").warning(
+                "could not save the baseline (it is in use, but a restart won't have it): %s", e)
+
+    def _write_baseline(self, now) -> None:
         session = self.open_session["meta"].get("session") if self.open_session else None
         # quiet_db goes into the file only when a setting uses it (they do by default, #734): with the
         # three factors at 0 the file is the older contract's, key for key.
@@ -670,14 +680,26 @@ class Brain:
                                    if keep_quiet and link in self.quiet_db else {})}
                          for link in self.base}}
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
-        (self.sessions_dir / "baseline.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+        # place.json: when this place began (the last baseline asked for by hand). proof/ and a
+        # restart use recordings from then on only. An automatic baseline leaves it alone.
+        # It goes first: a restart that finds the new baseline with the old place would load a
+        # model taught somewhere else; the other way round it only starts untrained.
+        self._replace("place.json", json.dumps({"t": self.place_t}) + "\n")
+        self._replace("baseline.json", json.dumps(doc, indent=1) + "\n")
         # Every baseline is also kept in baselines.jsonl, so a recording can be read against
         # the baseline it was made on, also after a restart.
         with open(self.sessions_dir / "baselines.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps({"t": now, "base": self.base}) + "\n")
-        # place.json: when this place began (the last baseline asked for by hand). proof/ and a
-        # restart use recordings from then on only. An automatic baseline leaves it alone.
-        (self.sessions_dir / "place.json").write_text(json.dumps({"t": self.place_t}) + "\n", encoding="utf-8")
+
+    def _replace(self, name: str, text: str) -> None:
+        """Write a file of ours whole or not at all: a temporary file, flushed to the disk, then
+        renamed over the old one (as model.pkl is). Power pulled mid-write leaves the old file."""
+        tmp = self.sessions_dir / f"{name}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, self.sessions_dir / name)
 
     def _baselines(self) -> List[dict]:
         """Every baseline taken so far, oldest first: [{"t", "base"}] (baselines.jsonl, or just
