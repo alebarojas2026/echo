@@ -1,41 +1,68 @@
 # Radio Sight: Spoken Pitch
 
-_Start with the room display and hardware visible._
+Radio Sight brings safety and after-hours security to buildings using the Wi-Fi already there. The desk round below is the primary story. Keep the laptop interface and hardware visible, and do not say a proof value that is still `__`.
 
-> This is Radio Sight: Wi-Fi that understands the room. It maps how people and objects change radio links across a space.
+## Three-minute desk round
 
-_Point to the UNO Q, then the Pi._
+### Found you
 
-> Learned decisions run on the UNO Q’s Dragonwing CPU. This laptop shows the local interface. The Pi supplies network and radio but runs no model.
+_Start with the setup camera disconnected. Ask the judge to step into the sensing area._
 
-_Judge walks in._
+> This is Radio Sight: Wi-Fi that understands the room. The radio links changed when you stepped in, so it found a person without identifying you. The laptop shows the local interface. The Raspberry Pi supplies network and radio, but it runs no model.
 
-> As our judge walks in, Radio Sight reports a moving person and zone from radio alone. The setup camera only supplied temporary labels.
+### Teach the room
 
-_Radio X-ray._
+_Connect the setup camera and start a fresh lesson on the judge._
 
-> The radio X-ray connects that prediction to the changed links. The dark room shows fresh human activity separately from persistent object change.
+> Buildings and people differ, so we teach the radio here. This temporary camera provides zone and motion labels for __ seconds. The Arduino UNO Q learns the radio pattern locally on its Dragonwing CPU. It saves no image.
 
-_No-movement alert._
+### Camera unplug
 
-> When the judge stays still in an enabled zone, the local timer raises a no-movement alert without sending room data away.
+_Unplug the camera in one continuous shot and keep the cable visible._
 
-_Wave check-in._
+> The lesson is complete, and the camera is now unplugged. Its teacher status is off. From this point on, live sensing uses only the radio links around the room.
 
-> This wave creates a check-in: a deliberate radio pattern recognized without a phone or button, and the alert clears.
+### Still follows
 
-_Tray vs person._
+_Ask the judge to move, then stand still._
 
-> Now we place the metal tray by the router. Radio Sight reports a stable object pattern, not a person, and explains the affected link.
+> Radio Sight still reports your presence, zone, and movement state. It does not need a clear view, and standing still does not make you disappear. A blind radio link produces no prediction, never a false all-clear.
 
-_Router advice._
+### Arm the space
 
-> The advisor recommends a tested router position. Before the move, the link measures __ dBm. After the move, it measures __ dBm. Dead-zone improvement is __.
+_Ask the judge to step out. Arm the room only when the armed-mode feature gate passes._
 
-_Camera unplug._
+> Armed means this room should now be empty. Radio Sight keeps its learned room model on the board and watches for a new sustained person pattern.
 
-> The camera is now unplugged, no image is saved, and the live room keeps updating from radio alone.
+### Intrusion alert
 
-_Proof._
+_Ask the judge to re-enter. Show the phone page only after it displays the live intrusion event._
 
-> The proof strip shows zone accuracy __, confidence __, person-versus-object accuracy __, decision latency __, and bytes sent outside our local network __. Missing evidence stays blank, never estimated.
+> Your return creates one local intrusion alert for this entry. It names the zone, not the person. The phone is only another screen on our private network.
+
+### Ask the room
+
+_Use the prepared room question only when the local event-record feature gate passes._
+
+> Now we can ask what just happened. The answer comes from the room's own timestamped records: it was armed, a person entered, and the intrusion alert fired. No cloud history is required.
+
+### Proof
+
+_Finish on the proof strip._
+
+> The measured results are zone accuracy __, presence accuracy __, decision latency __, images stored __, and bytes sent outside our local network __. Blank means unmeasured, not estimated. Radio Sight is taught by a camera, then runs without one.
+
+## Five-minute finalist extension
+
+Open with the whole-hall view and movement paths, then run the same eight beats in the same order. After **Proof**, add one or two of these only if the measured path is ready:
+
+- show a no-movement alert and clear it with a deliberate check-in;
+- place the tray, explain the person-versus-object result, and demonstrate router advice with measured before-and-after values;
+- show the end-of-demo recap from recorded local events; or
+- invite judges to try the crowd game, clearly labeled as a finalist interaction rather than a crowd-counting claim.
+
+The Pi and optional beacons stand in for radios and access points already spread through a building. The product direction is to reuse that infrastructure, not to require this exact collection of development boards in every room.
+
+## Feature gates
+
+The current `main` branch does not yet contain the complete armed phone-alert and room-question path. Until those integrations merge and pass local tests, stop after **Still follows**, explain the planned continuation in one sentence, and close on **Proof**. Never stage a fake alert or answer.
