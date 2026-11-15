@@ -17,11 +17,12 @@ from pathlib import Path
 GATE = json.loads((Path(__file__).resolve().parent / "gate_nodes.json").read_text(encoding="utf-8"))
 LINKS = [link["id"] for link in GATE["links"]]
 # readings a second, level in dBm, and the drop with a person on the spot (0: the line doesn't cross it)
-RATE = {"pi5>unoq:wifi": 10.0, "pi5>unoq:ble": 6.0, "pi5b>unoq:ble": 6.0, "pi5>pi5b:wifi": 10.0,
+RATE = {"pi5>unoq:wifi": 10.0, "pi5>unoq:ble": 6.0, "pi5b>unoq:ble": 6.0, "pi5>pi5b:wifi": 25.0,
         "pi5>pi5b:ble": 6.0, "pi5b>pi5:ble": 2.0}
 LEVEL = {"pi5>unoq:wifi": -38, "pi5>unoq:ble": -42, "pi5b>unoq:ble": -58, "pi5>pi5b:wifi": -47,
          "pi5>pi5b:ble": -61, "pi5b>pi5:ble": -63}
-DROP = {"pi5b>unoq:ble": 12.0, "pi5>pi5b:ble": 10.0, "pi5b>pi5:ble": 14.0}
+# The Wi-Fi line from Pi A to Pi B is the one that decides: 15 to 21 dB with a person, 25 readings a second.
+DROP = {"pi5>pi5b:wifi": 18.0, "pi5b>unoq:ble": 8.0, "pi5>pi5b:ble": 8.0, "pi5b>pi5:ble": 5.0}
 RAMP_S = 0.3   # stepping in or out takes about this long
 
 
@@ -70,7 +71,7 @@ class Feed:
                 drop = self.drop.get(link, 0.0) * self.depth
                 if drop:
                     drop += (self.sway[None] + self.sway[link]) * self.depth
-                if link in DROP:
+                if link in DROP and ble:
                     drop += self.drift * (t - self.t0) / 60000
                 dbm = LEVEL[link] - drop + self.slow[link] + rng.gauss(0, spread * 0.7)
                 out.append({"v": 2, "type": "rssi", "t": tick, "recv_t": tick, "seq": 0, "src": "sim", "link": link,

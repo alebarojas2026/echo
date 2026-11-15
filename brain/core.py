@@ -197,6 +197,16 @@ class Brain:
         self.settle: Optional[int] = None         # when router_home came, while its 3 s check runs
         self.recalibrating = False                # the automatic baseline after a failed check
         self._old_base: Dict[str, float] = {}
+        # "presence" in nodes.json: one line decides whether somebody is there (the gate: the Wi-Fi line from
+        # Pi A to Pi B, which fell 15 to 21 dB with a person on the kit and under 1 dB empty). Its 1 s
+        # median drop turns presence on at on_db and off under off_db. A second line can keep it on for
+        # second_hold_s while the first has no readings; it never turns it on.
+        rule = nodes.get("presence") or {}
+        self.presence_line = rule.get("line") if rule.get("line") in self.model_links else None
+        self.presence_second = rule.get("second") if rule.get("second") in self.model_links else None
+        self.presence_on_db, self.presence_off_db = float(rule.get("on_db", 7.0)), float(rule.get("off_db", 4.0))
+        self.presence_hold_ms = int(float(rule.get("second_hold_s", 5.0)) * 1000)
+        self._line_present, self._line_seen = False, None
         self._drift_t: Optional[int] = None        # when the empty level last followed the crossing lines
         self._suspect_t: Optional[int] = None      # since when those lines have been down with the model saying nobody
         self._noted = (0, {})                      # (when, the levels) last noted for the recordings
@@ -705,6 +715,7 @@ class Brain:
         self.xray.object_min_db = {k: s.object_x_quiet * q for k, q in self.quiet_db.items()}
         self.windower, self.window = F.Windower(self.base, self.model_links), None
         self._drift_t = self._suspect_t = None
+        self._line_present, self._line_seen = False, None
         self._noted = (self.now(), dict(self.base))
         self.health.set_base(self.base)
         self.health.set_expected(self.expected_hz)
@@ -940,7 +951,7 @@ class Brain:
             return
         if not self.window.get("decided"):   # the classifier runs on every new window
             t0 = time.perf_counter()
-            self._raw = self.model.predict(self.window, hold=self._still_down())
+            self._raw = self.model.predict(self.window, hold=self._still_down(), present=self._line_says())
             self.decision_ms.append((time.perf_counter() - t0) * 1000)
             self.window["decided"] = True
             self.raw_kind = self._raw["kind"]   # health wants this even while pred is hidden
@@ -1035,14 +1046,38 @@ class Brain:
                 except OSError:
                     pass   # the level is still followed; only a later fit reads it less exactly
 
+    def _line_says(self) -> Optional[bool]:
+        """What the layout's presence line says about this window: True somebody, False nobody, None when
+        the layout names no such line (then the model decides, as on every other layout)."""
+        if not self.presence_line:
+            return None
+        end = self.window["end"]
+
+        def drop(link):
+            stats, base = self.window["links"].get(link) or {}, self.window["base"].get(link)
+            return base - stats["median"] if stats.get("n") and base is not None else None
+
+        down = drop(self.presence_line)
+        if down is not None:
+            self._line_seen = end
+            self._line_present = down >= (self.presence_off_db if self._line_present else self.presence_on_db)
+        elif self._line_present:
+            # The line is silent (Pi B's readings come over the hotspot). The second line may keep
+            # somebody there for a few seconds; it never brings anybody in.
+            second = drop(self.presence_second) if self.presence_second else None
+            if not (second is not None and second >= self.presence_off_db
+                    and self._line_seen is not None and end - self._line_seen <= self.presence_hold_ms):
+                self._line_present = False
+        return self._line_present
+
     def _still_down(self) -> bool:
         """True when the last decision sent said somebody is there and the lines that cross the
         spot still sit under their baselines: their median drops in this window, averaged, are
         at least STAY_DB, or settings.stay_x_quiet x their quiet level where that is more. The
         model, taught by the camera, decides when somebody has arrived; this keeps a person who is
         standing there from blinking out for a window. Only on a layout that marks those lines."""
-        if not (self.crossing and self.pred and self.pred["present"]):
-            return False
+        if self.presence_line or not (self.crossing and self.pred and self.pred["present"]):
+            return False   # with a presence line, that line's own on and off levels are the hold
         drop = F.crossing_drop(self.window, self.crossing)
         quiet = [self.quiet_db[k] for k in self.crossing if k in self.quiet_db]
         floor = max(STAY_DB, self.settings.stay_x_quiet * (sum(quiet) / len(quiet) if quiet else 0.0))

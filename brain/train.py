@@ -136,16 +136,20 @@ class Model:
             self.train_walkers = sorted({name for name in names if name})
         return self
 
-    def predict(self, window: dict, hold: bool = False) -> dict:
+    def predict(self, window: dict, hold: bool = False, present: Optional[bool] = None) -> dict:
         """The contract's pred block for one window (still_s is the alert's job).
 
         hold: somebody was there a moment ago and the lines that cross the spot are still down
         (the brain decides this, settings.stay_x_quiet). Then a "nobody" from the zone forest does
-        not stand: the answer is the likeliest zone. probs stay as the forest gave them."""
+        not stand: the answer is the likeliest zone. probs stay as the forest gave them.
+        present: the layout's presence line has decided (the brain, "presence" in nodes.json). True is
+        the likeliest zone whatever the forest says; False is nobody. None leaves it to the forest."""
         x = np.asarray([F.vector(window, self.links, self.crossing)], dtype=np.float32)   # the trees' own input type
         probs = _probs(self.zone, x, self.classes)
         zone = self.classes[int(np.argmax(probs))]
-        if zone == 0 and hold and len(probs) > 1:
+        if present is False:
+            zone = 0
+        elif zone == 0 and (hold or present) and len(probs) > 1:
             zone = self.classes[1 + int(np.argmax(probs[1:]))]
         kind = str(_pick(self.kind, x))
         present = zone != 0

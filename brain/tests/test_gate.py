@@ -1,8 +1,9 @@
 """The whole brain on the gate layout: three devices, six links, one spot (gate_nodes.json here).
 
 The feed is made up (brain/tests/gatefeed.py), shaped like what the kit gave: about 6 readings
-a second on the lines to Pi B (one at 2), a 2 to 5 dB wobble with nobody there, a 10 to 14 dB
-drop with a person on the spot. It shows the rules hold at those numbers. It is not a
+a second on the lines to Pi B (one at 2), a 2 to 5 dB wobble with nobody there and a drop of
+about 8 dB with a person on the spot; and the Wi-Fi line from Pi A to Pi B, 25 readings a second, steady
+when empty and 18 dB down with a person: the line that decides (the layout's "presence"). It shows the rules hold at those numbers. It is not a
 measurement of the real desk.
 """
 import statistics
@@ -69,10 +70,13 @@ def kit():
 def test_the_layout_gives_six_links_one_zone_a_grid_and_a_rule():
     brain = Brain(nodes=GATE)
     assert brain.links == tuple(LINKS) and brain.zone_ids == [1] and brain.router_node == "pi5"
-    # Pi A's links: every one but pi5b>unoq:ble
-    assert brain.router_links == [k for k in LINKS if k != "pi5b>unoq:ble"]
+    # pi5b>pi5:ble was unreliable on the kit: the file says it is no classifier link, so it is no feature
+    assert brain.model_links == tuple(k for k in LINKS if k != "pi5b>pi5:ble")
+    assert brain.crossing == ("pi5b>unoq:ble", "pi5>pi5b:wifi", "pi5>pi5b:ble")
+    assert (brain.presence_line, brain.presence_second) == ("pi5>pi5b:wifi", "pi5b>unoq:ble")
+    assert (brain.presence_on_db, brain.presence_off_db, brain.presence_hold_ms) == (7.0, 4.0, 5000)
     # the two Pi B hears come over the hotspot and never blind the sensor
-    assert list(brain.health.classifier_links) == ["pi5>unoq:wifi", "pi5>unoq:ble", "pi5b>unoq:ble", "pi5b>pi5:ble"]
+    assert list(brain.health.classifier_links) == ["pi5>unoq:wifi", "pi5>unoq:ble", "pi5b>unoq:ble"]
     zone = zone_rule(GATE)
     assert [zone(0.4, 0.3), zone(0.0, 0.0), zone(0.8, 0.6)] == [1, 1, 1]
     assert [zone(0.4, -0.1), zone(0.4, 0.7), zone(-0.1, 0.3), zone(0.9, 0.3)] == [0, 0, 0, 0]   # standing back is not on the spot
@@ -80,22 +84,23 @@ def test_the_layout_gives_six_links_one_zone_a_grid_and_a_rule():
     assert grid_shape(GATE["frame"]) == (10, 14)
     assert (xray.grid.w, xray.grid.h, round(xray.grid.cell_m, 4)) == (10, 14, 0.125)
     assert [round(v, 4) for v in xray.grid.origin_m] == [-0.2, -0.2] and xray.W.shape == (6, 140)
+    assert brain.xray.W.shape == (5, 140)
     assert xray.nodes["pi5b"] == (0.4, -0.2)     # a device may sit outside frame.size_m
 
 
 def test_the_model_has_two_classes_and_probs_is_empty_then_the_spot(kit):
-    assert kit.brain.model.classes == [0, 1] and len(kit.brain.model.features) == 6 * 4 + 4 + 1   # and the four crossing lines' medians, and their average
+    assert kit.brain.model.classes == [0, 1] and len(kit.brain.model.features) == 5 * 4 + 3 + 1   # and the three crossing lines' medians, and their average
     _, rows, _ = kit.play([(5, "still")])
     pred = rows[-1][1]["pred"]
     assert pred["present"] is True and pred["zone"] == 1 and pred["zone_set"] == [1] and pred["kind"] == "person"
     assert len(pred["probs"]) == 2 and abs(sum(pred["probs"]) - 1) < 0.01 and pred["probs"][1] > 0.5
-    assert set(pred["why"]) <= {"pi5b>unoq:ble", "pi5>pi5b:ble", "pi5b>pi5:ble"}    # the lines that cross the spot
+    assert set(pred["why"]) <= set(kit.brain.crossing) and "pi5>pi5b:wifi" in pred["why"]   # the lines that cross the spot
     _, rows, _ = kit.play([(5, "nobody")])
     pred = rows[-1][1]["pred"]
     assert (pred["present"], pred["zone"], pred["zone_set"], pred["motion"], len(pred["probs"])) == (False, 0, [], None, 2)
     state = rows[-1][1]
     assert [row["id"] for row in state["links"]] == LINKS and state["health"]["status"] == "ok"
-    assert state["xray"]["w"] == 10 and state["xray"]["h"] == 14 and state["xray"]["n_links"] == 6
+    assert state["xray"]["w"] == 10 and state["xray"]["h"] == 14 and state["xray"]["n_links"] == 5
     # the state passes the schema, apart from the length of probs where the schema is still pinned to two zones
     assert [e for e in check.errors(state) if "probs" not in e] == []
 
@@ -104,13 +109,13 @@ def test_stepping_on_is_found_within_a_second_and_a_half_and_released_within_two
     found, released = [], []
     for i in range(10):
         start, rows, events = kit.play([(6, ("still", "shift", "moving")[i % 3])])
-        assert [e["kind"] for _, e in events] == ["enter"], i
-        found.append((events[0][0] - start) / 1000)
+        assert comings(events) == ["enter"], i
+        found.append((when(events, "enter") - start) / 1000)
         held = [s["pred"]["present"] for t, s in rows if t - start > 2000]
         assert sum(held) >= 0.95 * len(held)                                      # and held: no exit, hardly a flicker
         start, rows, events = kit.play([(5, "nobody")])
-        assert [e["kind"] for _, e in events] == ["exit"], i
-        released.append((events[0][0] - start) / 1000)
+        assert comings(events) == ["exit"], i
+        released.append((when(events, "exit") - start) / 1000)
         assert not any(s["pred"]["present"] for t, s in rows if t - start > 2500)
     assert max(found) <= 1.5 and max(released) <= 2.0, (found, released)
     assert statistics.median(found) <= 1.2
@@ -119,7 +124,7 @@ def test_stepping_on_is_found_within_a_second_and_a_half_and_released_within_two
 def test_ten_minutes_of_an_empty_spot_show_nobody(kit):
     _, rows, events = kit.play([(600, "nobody")])
     assert len(rows) > 5000 and all(s["pred"] is not None for _, s in rows)       # never blind, never unknown
-    assert [e["kind"] for _, e in events] == []                                   # no enter, nothing else
+    assert [e["kind"] for _, e in events if e["kind"] not in ("recording", "trained", "cam_off")] == []   # no enter, no object, nothing
     assert sum(s["pred"]["present"] for _, s in rows) <= 2                        # not even a flicker held
 
 
@@ -170,29 +175,49 @@ def test_a_three_minute_visit_is_one_enter_and_never_blinks_out(kit):
     assert comings(events) == ["exit"]
 
 
-def test_the_hold_only_keeps_somebody_who_was_there_and_never_brings_anybody_in(kit):
+def test_the_wifi_line_decides_and_the_bluetooth_line_only_holds(kit):
     brain = kit.brain
     kit.play([(5, "nobody")])
-    assert brain.pred["present"] is False and brain._still_down() is False       # nobody there: nothing to hold
+    assert brain.pred["present"] is False and brain._line_says() is False
     kit.play([(5, "still")])
-    assert brain.pred["present"] is True and brain._still_down() is True         # there, and the lines are down
-    window = dict(brain.window, links={k: dict(v, mean=brain.base[k], median=brain.base[k], min=brain.base[k],
-                                               max=brain.base[k], std=0.0) for k, v in brain.window["links"].items()})
-    assert brain.model.predict(window, hold=True)["present"] is True              # held, whatever the forest says
-    assert brain.model.predict(window, hold=False)["present"] is False            # every line on its baseline: nobody
+    assert brain.pred["present"] is True and brain._line_says() is True
+    flat = {k: dict(v, mean=brain.base[k], median=brain.base[k], min=brain.base[k], max=brain.base[k], std=0.0)
+            for k, v in brain.window["links"].items()}
+    down = lambda link, db: dict(flat[link], mean=brain.base[link] - db, median=brain.base[link] - db)   # noqa: E731
+    assert brain.model.predict(dict(brain.window, links=flat), present=True)["present"] is True      # the line's word stands
+    assert brain.model.predict(brain.window, present=False)["present"] is False
+    # on at 7 dB, off under 4 dB: 5 dB keeps somebody who is there and brings nobody in
+    wifi, ble, end = "pi5>pi5b:wifi", "pi5b>unoq:ble", brain.window["end"]
+    brain.window = dict(brain.window, links={**flat, wifi: down(wifi, 5.0)})
+    assert brain._line_says() is True
+    brain.window = dict(brain.window, links={**flat, wifi: down(wifi, 3.0)})
+    assert brain._line_says() is False
+    brain.window = dict(brain.window, links={**flat, wifi: down(wifi, 5.0)})
+    assert brain._line_says() is False
+    # the Bluetooth line alone never raises presence ...
+    silent = dict(flat[wifi], n=0, median=None, mean=None)
+    brain.window = dict(brain.window, links={**flat, wifi: silent, ble: down(ble, 9.0)})
+    assert brain._line_says() is False
+    # ... but holds it for 5 s when the Wi-Fi line goes silent with somebody there
+    brain.window = dict(brain.window, links={**flat, wifi: down(wifi, 16.0)})
+    assert brain._line_says() is True
+    brain.window = dict(brain.window, end=end + 3000, links={**flat, wifi: silent, ble: down(ble, 9.0)})
+    assert brain._line_says() is True
+    brain.window = dict(brain.window, end=end + 6000, links={**flat, wifi: silent, ble: down(ble, 9.0)})
+    assert brain._line_says() is False
     kit.play([(5, "nobody")])
 
 
 def test_three_links_are_enough():
-    """Pi B as a beacon only, heard by the board and Pi A: two lines across the spot and the desk's Wi-Fi line."""
-    keep = ["pi5>unoq:wifi", "pi5b>unoq:ble", "pi5b>pi5:ble"]
+    """gate-3: only the three lines that cross the spot."""
+    keep = ["pi5b>unoq:ble", "pi5>pi5b:wifi", "pi5b>pi5:ble"]
     kit = Kit(seed=5)
     kit.brain = Brain(nodes=dict(GATE, links=[link for link in GATE["links"] if link["id"] in keep]))
     send = kit._send
     kit._send = lambda msg: send(msg) if msg.get("link", keep[0]) in keep else None
     kit.teach()
-    assert kit.brain.links == tuple(keep) and kit.brain.crossing == ("pi5b>unoq:ble", "pi5b>pi5:ble")
-    assert len(kit.brain.model.features) == 3 * 4 + 2 + 1
+    assert kit.brain.links == tuple(keep) and kit.brain.crossing == ("pi5b>unoq:ble", "pi5>pi5b:wifi")
+    assert len(kit.brain.model.features) == 2 * 4 + 2 + 1
     for who in ("still", "moving", "shift"):
         start, rows, events = kit.play([(6, who)])
         assert comings(events) == ["enter"] and (when(events, "enter") - start) / 1000 <= 1.5
@@ -202,13 +227,13 @@ def test_three_links_are_enough():
     _, rows, events = kit.play([(120, "nobody")])
     assert comings(events) == [] and not any(s["pred"]["present"] for _, s in rows)
     assert not any(e["kind"].startswith("object") for _, e in events)
-    assert rows[-1][1]["health"]["status"] == "ok" and rows[-1][1]["xray"]["n_links"] == 3
+    assert rows[-1][1]["health"]["status"] == "ok" and rows[-1][1]["xray"]["n_links"] == 2
 
 
 # What the kit's acceptance run showed (issue #95): the one good line falls 3 to 12 dB with a person,
 # typically 7; its empty level drifted 5 dB in five minutes; a walk straight through is a 5 to 7 dB dip
 # of a second or two.
-WEAK = {"pi5b>unoq:ble": 4.0, "pi5>pi5b:ble": 3.0, "pi5b>pi5:ble": 4.0}       # the weakest person seen
+WEAK = {"pi5>pi5b:wifi": 15.0, "pi5b>unoq:ble": 4.5, "pi5>pi5b:ble": 4.0, "pi5b>pi5:ble": 2.0}   # the weakest person seen
 
 
 def drifting_kit(seed=7, **feed):
@@ -232,7 +257,7 @@ def test_the_empty_level_follows_a_drift_of_five_db_in_five_minutes():
     assert comings(events) == ["exit"] and (when(events, "exit") - start_ms) / 1000 <= 2.0
 
 
-def test_with_a_fixed_baseline_the_same_drift_ends_as_somebody_who_is_not_there():
+def test_with_a_fixed_baseline_the_same_drift_ends_blind_or_as_somebody_who_is_not_there():
     """What the setting is for: drift_follow_s 0 is the fixed 20 s baseline of the contract."""
     from brain import settings as S
     kit = Kit(7)
@@ -240,7 +265,8 @@ def test_with_a_fixed_baseline_the_same_drift_ends_as_somebody_who_is_not_there(
     kit.feed = Feed(T0_MS, 7, 1.0, drift_db_per_min=1.6)
     kit.teach()
     _, rows, events = kit.play([(300, "nobody")])
-    assert "enter" in comings(events) or any(s["pred"]["present"] for _, s in rows)
+    # the Bluetooth lines end up so far off their baseline that the sensor is blind (or says somebody)
+    assert any(s["pred"] is None or s["pred"]["present"] for _, s in rows) or "enter" in comings(events)
 
 
 def test_a_person_standing_still_for_three_minutes_is_never_taken_for_the_empty_spot():
@@ -263,7 +289,7 @@ def test_the_weakest_person_is_found_and_kept():
         _, rows, events = kit.play([(6, "still")])
         found += comings(events)[:1] == ["enter"] and comings(events).count("exit") == 0
         kit.play([(6, "nobody")])
-    assert found >= 7, found      # 3 to 4 dB is at the edge of what these lines can hold: most visits, not all
+    assert found == 10, found
 
 
 def test_a_walk_straight_through_is_passed_by_and_never_an_intrusion():
