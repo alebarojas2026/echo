@@ -41,6 +41,7 @@ class _Link:
         self.id = link_id
         self.expected_hz = expected_hz
         self.base_dbm = base_dbm
+        self.steady_db = STEADY_STD_DB   # raised to a multiple of the link's own quiet level when that is set
         self.readings = deque()      # (t_s, dbm), last RATE_WINDOW_S only
         self.trail = deque()         # (t_s, dbm), last STEADY_S, for the steady-drop test
         self.blind = False
@@ -104,7 +105,7 @@ class _Link:
         for t, d in pts:
             bins.setdefault(int((t - t0) // STEADY_BIN_S), []).append(d)
         means = [sum(v) / len(v) for v in bins.values()]
-        return len(means) >= 2 and float(np.std(means)) < STEADY_STD_DB
+        return len(means) >= 2 and float(np.std(means)) < self.steady_db
 
 
 class Health:
@@ -144,6 +145,14 @@ class Health:
         for k, v in expected_hz.items():
             if k in self.links:
                 self.links[k].expected_hz = None if v is None else float(v)
+
+    def set_quiet(self, quiet_db, factor):
+        """{link: the std of its 0.5 s means with nobody there}, after a baseline. A drop on a
+        link is then steady under 0.8 dB or under factor x its quiet level, whichever is larger
+        (settings.steady_x_quiet; 0 = 0.8 dB alone)."""
+        for k, lk in self.links.items():
+            q = quiet_db.get(k)
+            lk.steady_db = max(STEADY_STD_DB, factor * q) if q is not None and factor else STEADY_STD_DB
 
     def add(self, link, t_ms, dbm):
         lk = self.links.get(link)
