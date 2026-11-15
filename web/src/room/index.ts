@@ -5,6 +5,7 @@ import { startFpsMeter } from './fps'
 import { AlertMarks, WaveClock } from './alert'
 import { startAlign } from './align'
 import { HallBeacons } from './devices'
+import { HallPaths } from './hall'
 import { Fly, HallMarks, hallShot, pinnedFraming } from './fly'
 import { Presence } from './ghost'
 import { HeardNodes } from './heard'
@@ -35,6 +36,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   const xray = new XrayLayer(view, mirror)
   const presence = new Presence(view)
   const hallBeacons = new HallBeacons(view)
+  const hallPaths = new HallPaths(view)
 
   // The hall and the square (fly.ts). While the camera is wide the labels fade out; the hall marks take over.
   const fly = new Fly(view, pinnedFraming(params), (wide) => {
@@ -83,6 +85,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     // Devices are drawn only while the board hears them (heard.ts).
     stage.setHearing(heard.update(Object.keys(NODES), state.links, performance.now()))
     hallBeacons.update(state.hall)
+    hallPaths.update(state.hall, state.router)
     if (state.router !== router) {
       router = state.router
       stage.placeNodes(router)

@@ -151,6 +151,7 @@ export class RoomView {
   readonly scene = new Scene()
   readonly camera = new PerspectiveCamera(FOV_DEG, 1, 0.1, 60)
   readonly labelLayer: HTMLElement
+  readonly wideLayer: HTMLElement
   private readonly labels: Label[] = []
   private readonly animators = new Set<Animator>()
   private readonly resizeHooks: ((w: number, h: number) => void)[] = []
@@ -174,17 +175,23 @@ export class RoomView {
     this.labelLayer.className = 'room-labels'
     this.labelLayer.setAttribute('aria-hidden', 'true')
     host.append(this.labelLayer)
+    // Words that belong to the whole hall ("Movement on this path") stay when the camera goes wide and the room's
+    // own labels step back.
+    this.wideLayer = document.createElement('div')
+    this.wideLayer.className = 'room-labels'
+    this.wideLayer.setAttribute('aria-hidden', 'true')
+    host.append(this.wideLayer)
 
     new ResizeObserver(() => this.resize()).observe(host)
     this.resize()
   }
 
   /** Adds a text label pinned to a scene point. Returns the element so callers can restyle or move it. */
-  addLabel(text: string, at: Vector3, className = ''): HTMLElement {
+  addLabel(text: string, at: Vector3, className = '', wide = false): HTMLElement {
     const el = document.createElement('span')
     el.className = `room-label ${className}`.trim()
     el.textContent = text
-    this.labelLayer.append(el)
+    ;(wide ? this.wideLayer : this.labelLayer).append(el)
     this.labels.push({ el, at: at.clone() })
     this.labelsDirty = true
     return el
@@ -296,6 +303,7 @@ const RANKS: [string, number][] = [
   ['room-label--object', 3],
   ['room-label--alert', 3],
   ['room-label--wave', 3],
+  ['room-label--hall', 3],
   ['room-label--spot', 2],
   ['room-label--beam', 2],
   ['room-label--zone', 1],

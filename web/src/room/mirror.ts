@@ -1,15 +1,17 @@
 // The hidden test mirror (CONTRACTS.md section 8): what the 3D room shows, as plain DOM.
 // <ul data-testid="beams"> holds one <li data-testid="beam-<link id>"> per link and one <li data-testid="xray">.
+// <ul data-testid="hall-beams"> holds one <li data-testid="hall-<link id>"> per hall link (data-moving, data-stale,
+// data-activity).
 
 export class Mirror {
   readonly list: HTMLUListElement
   private readonly items = new Map<string, HTMLLIElement>()
 
-  constructor(host: HTMLElement) {
+  constructor(host: HTMLElement, testid = 'beams', name = 'Radio links') {
     this.list = document.createElement('ul')
-    this.list.dataset.testid = 'beams'
+    this.list.dataset.testid = testid
     this.list.className = 'visually-hidden'
-    this.list.setAttribute('aria-label', 'Radio links')
+    this.list.setAttribute('aria-label', name)
     host.append(this.list)
   }
 
