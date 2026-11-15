@@ -187,7 +187,7 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
   const here = (h: HallDesks): DeskSpot => {
     if (spot) return spot
     const [sw, sh] = STRIP_M ?? SIZE_M
-    const [x, , z] = toScene([sw / 2, sh, 0]) // the middle of the strip's desk edge
+    const [x, , z] = toScene([sw / 2, deskEdge() ?? sh, 0]) // the middle of our desk's edge, as the layout has it
     const base = nearestSpot(h, modelPoint([x, z], scan.fit, scan.box))
     // Which side of that desk the saved alignment has the gap on: the one whose own alignment is nearest to it.
     const now = tidyFit(scan.fit)
