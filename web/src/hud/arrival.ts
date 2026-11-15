@@ -6,6 +6,14 @@ import { judgeMoment } from './judge-moment'
 
 type ArrivalState = StateMsg & { armed?: boolean }
 
+// The card is words over the live 3D hall (#552). It tells the room what it is showing, so the room can rest on the
+// hall while the card waits and fly down to the floor as the card fades:
+//   <html data-hud-arrival> and the window event 'hud:arrival' {state: 'waiting' | 'found' | 'closed'}
+export type ArrivalPhase = 'waiting' | 'found' | 'closed'
+/** "Found you." holds this long, then the card fades while the room flies down. */
+export const FOUND_HOLD_MS = 1200
+export const FOUND_FADE_MS = 1800
+
 export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTMLElement) {
   const view = document.createElement('section')
   view.className = 'hud-arrival'
@@ -22,16 +30,37 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   arm.type = 'button'
   arm.textContent = 'Arm space'
   arm.dataset.testid = 'arm-button'
-  operator.prepend(arm)
+  const skip = document.createElement('button')
+  skip.type = 'button'
+  skip.textContent = 'Skip the arrival screen'
+  skip.dataset.testid = 'skip-arrival'
+  operator.prepend(arm, skip)
   let state: ArrivalState | null = null
   let stale = true
   let complete = false
   let intrusion = false
   let hold: ReturnType<typeof setTimeout> | undefined
+  let fade: Animation[] | undefined
+  let phase: ArrivalPhase | undefined
   const seen = new Set<string>()
-  const cancelHold = () => { clearTimeout(hold); hold = undefined }
-  const show = (heading: string, line: string, fault = false) => {
+  const cancelHold = () => { clearTimeout(hold); hold = undefined; fade?.forEach(animation => animation.cancel()); fade = undefined }
+  const announce = (next: ArrivalPhase) => {
+    if (next === phase) return
+    phase = next
+    document.documentElement.dataset.hudArrival = next
+    window.dispatchEvent(new CustomEvent('hud:arrival', { detail: { state: next } }))
+  }
+  const close = () => {
+    // The panels come in where the words went out, the way every text change on this screen does.
+    if (!view.hidden && !matchMedia('(prefers-reduced-motion: reduce)').matches) host.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, delay: 40, fill: 'backwards' })
+    view.hidden = true
+    host.inert = false
+    host.removeAttribute('aria-hidden')
+    announce('closed')
+  }
+  const show = (heading: string, line: string, fault = false, next: ArrivalPhase = 'waiting') => {
     view.hidden = !operator.hidden
+    announce(view.hidden ? 'closed' : next)
     host.inert = !view.hidden
     host.setAttribute('aria-hidden', String(!view.hidden))
     view.dataset.tone = fault ? 'fault' : ''
@@ -53,18 +82,27 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     if (state.armed) {
       cancelHold()
       intrusion ||= state.pred.present && state.pred.kind === 'person'
-      show(intrusion ? 'Someone is here.' : 'Armed.', !state.pred ? 'Waiting for a room prediction.' : 'This space should be empty.', intrusion)
+      // An intrusion goes straight to the floor: the words stay, in the fault colour, over the room as it is now.
+      show(intrusion ? 'Someone is here.' : 'Armed.', !state.pred ? 'Waiting for a room prediction.' : 'This space should be empty.', intrusion, intrusion ? 'closed' : 'waiting')
       return
     }
-    if (complete) { view.hidden = true; host.inert = false; host.removeAttribute('aria-hidden'); return }
+    if (complete) { close(); return }
     if (state.pred.present && state.pred.kind === 'person') {
-      show('Found you.', state.cam === 'off' ? '0 cameras' : state.cam === 'on' ? 'Camera teaching' : 'Camera stalled')
-      if (!hold) hold = setTimeout(() => { complete = true; hold = undefined; render() }, 3000)
+      // The words hold, then the card fades as the room flies from the hall down to the floor.
+      show('Found you.', state.cam === 'off' ? '0 cameras' : state.cam === 'on' ? 'Camera teaching' : 'Camera stalled', false, fade ? 'found' : 'waiting')
+      if (!hold) hold = setTimeout(() => {
+        if (view.hidden) return
+        announce('found')
+        // Only the words fade. The rail behind them keeps the page colour, so nothing shows through half-way.
+        fade = [...view.children].map(part => part.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FOUND_FADE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }))
+        hold = setTimeout(() => { complete = true; cancelHold(); render() }, FOUND_FADE_MS)
+      }, FOUND_HOLD_MS)
       return
     }
     cancelHold()
     show(state.pred.kind === 'object' ? 'An object, not a person.' : 'Nobody is here.', 'Step up to the desk.')
   }
+  skip.onclick = () => { complete = true; cancelHold(); render() }
   arm.onclick = () => {
     // CONTRACTS.md includes arm before the room command types do.
     feed?.send('arm' as Parameters<Feed['send']>[0], { on: !state?.armed })
@@ -92,5 +130,5 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   const visibility = new MutationObserver(render)
   visibility.observe(operator, { attributes: true, attributeFilter: ['hidden'] })
   render()
-  return () => { cancelHold(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); view.remove(); host.inert = false; host.removeAttribute('aria-hidden') }
+  return () => { cancelHold(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
 }

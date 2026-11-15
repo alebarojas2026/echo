@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test')
 const path = require('node:path')
+require('./layout-fixture.cjs')
 const shots = process.env.HUD_SCREENSHOTS
 async function capture(page, name) {
   await expect(page.getByTestId('arrival-title')).toHaveCSS('opacity', '1')
@@ -80,4 +81,85 @@ test('camera wording, cancelled handoff and disposal', async ({ page }) => {
   await expect(page.getByTestId('arrival-title')).toHaveText('Sensor blind')
   await page.evaluate(() => window.arrival.dispose())
   await expect(page.locator('.hud-arrival')).toHaveCount(0)
+})
+
+// The card over the live hall (#552): it says what it shows, so the room rests on the hall and flies down on time.
+async function overHall(page, options = {}) {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  if (options.reduced) await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') })
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'))
+  await page.goto('/tests/arrival-harness.html')
+  await expect.poll(() => page.evaluate(() => !!window.arrival)).toBe(true)
+  await page.evaluate(() => { window.phases = []; addEventListener('hud:arrival', event => window.phases.push(event.detail.state)) })
+  await page.clock.runFor(300)
+}
+const phase = page => page.evaluate(() => document.documentElement.dataset.hudArrival)
+test('waiting shows the room beside readable words, and found fades the card as the room flies', async ({ page }) => {
+  await overHall(page)
+  const card = page.locator('.hud-arrival')
+  expect(await phase(page)).toBe('waiting')
+  await expect(page.locator('#room')).toHaveAttribute('data-arrival', 'waiting')
+  await expect(card).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  // The words sit on the page colour, inside the rail, never over the room.
+  for (const part of ['h1', '.arrival-message p', 'footer']) {
+    const box = await card.locator(part).boundingBox()
+    expect(box.x + box.width).toBeLessThanOrEqual(640)
+  }
+  await capture(page, '1920-over-hall-waiting')
+  await page.evaluate(() => window.arrival.update('still'))
+  await page.clock.runFor(1100)
+  await expect(page.getByTestId('arrival-title')).toHaveText('Found you.')
+  expect(await phase(page)).toBe('waiting') // the words hold first: no fly behind a card that still covers it
+  await expect(card.locator('.arrival-message')).toHaveCSS('opacity', '1')
+  await page.clock.runFor(200)
+  expect(await phase(page)).toBe('found')
+  await expect(page.locator('#room')).toHaveAttribute('data-arrival', 'found')
+  for (const [ms, name] of [[400, 'fly-1'], [600, 'fly-2'], [600, 'fly-3']]) {
+    await page.clock.runFor(ms)
+    expect(Number(await card.locator('.arrival-message').evaluate(el => getComputedStyle(el).opacity))).toBeLessThan(1)
+    if (process.env.HUD_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.HUD_SCREENSHOTS, `1920-over-hall-${name}.png`) })
+  }
+  await page.clock.runFor(300)
+  await expect(card).toBeHidden()
+  expect(await page.evaluate(() => window.phases)).toEqual(['found', 'closed'])
+  // It does not come back by itself for the same visitor.
+  await page.evaluate(() => window.arrival.update('empty'))
+  await page.clock.runFor(300)
+  await page.evaluate(() => window.arrival.update('still'))
+  await page.clock.runFor(4000)
+  await expect(card).toBeHidden()
+  expect(await page.evaluate(() => window.phases)).toEqual(['found', 'closed'])
+})
+test('armed waits over the room, and an intrusion goes straight to the floor in the fault colour', async ({ page }) => {
+  await overHall(page)
+  await page.evaluate(() => window.arrival.update('empty', { armed: true }))
+  await page.clock.runFor(300)
+  expect(await phase(page)).toBe('waiting')
+  await page.evaluate(() => { window.arrival.update('still', { armed: true }); window.arrival.event('intrusion') })
+  await page.clock.runFor(300)
+  await expect(page.getByTestId('arrival-title')).toHaveText('Someone is here.')
+  await expect(page.getByTestId('arrival-title')).toHaveCSS('color', 'rgb(242, 85, 90)')
+  expect(await phase(page)).toBe('closed')
+  await expect(page.locator('.hud-arrival')).toBeVisible()
+  await expect(page.locator('.hud-arrival')).toHaveCSS('opacity', '1')
+  await capture(page, '1920-over-hall-intrusion')
+})
+test('reduced motion still hands over, and the operator can skip the card', async ({ page }) => {
+  await overHall(page, { reduced: true })
+  await page.evaluate(() => window.arrival.update('still'))
+  await page.clock.runFor(1300)
+  expect(await phase(page)).toBe('found')
+  await page.clock.runFor(1800)
+  await expect(page.locator('.hud-arrival')).toBeHidden()
+  await page.evaluate(() => { window.arrival.update('empty'); window.arrival.event('reset') })
+  await page.clock.runFor(300)
+  expect(await phase(page)).toBe('waiting')
+  await page.keyboard.press('o')
+  expect(await phase(page)).toBe('closed')
+  await page.getByTestId('skip-arrival').click()
+  await page.keyboard.press('Escape')
+  await page.clock.runFor(300)
+  await expect(page.locator('.hud-arrival')).toBeHidden()
+  expect(await phase(page)).toBe('closed')
 })
