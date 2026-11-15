@@ -1,3 +1,4 @@
+import { fitProof } from './proof-layout'
 import { boardNow } from './board-time'
 import { boardAskClient, makeMockAskClient } from './ask-client'
 import { loadHudLayout, linkName } from './layout'
@@ -57,6 +58,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     metrics.append(item)
   }
   updateProofVisibility(root)
+  const disposeProofLayout = fitProof(root)
   const panels = Object.values(extraPanels).map(module => {
     const container = document.createElement('section')
     root.querySelector('.judge-extra')!.append(container)
@@ -131,7 +133,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposeProofLayout(); offReplayClock?.(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
