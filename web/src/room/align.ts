@@ -1,7 +1,7 @@
 import type { Material, Object3D } from 'three'
 import { GAPS, GAP_WORDS, deskFit, deskName, loadDesks, modelPoint, nearestSpot, placementGuide, slideDesk, stepDesk, type DeskSpot, type DeskStep, type HallDesks } from './desks'
 import type { HallBeacons } from './devices'
-import { NODES, SIZE_M, STRIP_M, toScene, type Vec3 } from './frame'
+import { NODES, SIZE_M, STRIP_M, toScene, type Vec3, deskEdge } from './frame'
 import { PlacementGuide } from './guide'
 import { DEFAULT_CUT_M, type Scan, type ScanFit } from './scan'
 import type { Stage } from './stage'
@@ -200,7 +200,8 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
     scan.apply(fit)
     fitLine.textContent = `${describeFit(fit)}\n${deskName(next.desk)}, ${GAP_WORDS[next.gap ?? 'behind']}`
     // Where each device goes at this desk, in words. Left and right as you stand in the spot, facing our desk.
-    const places = placementGuide(hall, next, Object.values(NODES), STRIP_M ?? SIZE_M)
+    // Our desk's edge is where the layout says the desk begins: the strip's north edge, or past it (the gate).
+    const places = placementGuide(hall, next, Object.values(NODES), [(STRIP_M ?? SIZE_M)[0], deskEdge() ?? (STRIP_M ?? SIZE_M)[1]])
     marks.show(places)
     sayGuide()
     view.host.dataset.placement = JSON.stringify(places.map((p) => [p.id, ...p.xyz]))
