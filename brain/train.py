@@ -147,11 +147,13 @@ class Model:
         x = np.asarray([F.vector(window, self.links, self.crossing)], dtype=np.float32)   # the trees' own input type
         probs = _probs(self.zone, x, self.classes)
         zone = self.classes[int(np.argmax(probs))]
+        kind = str(_pick(self.kind, x))
         if present is False:
             zone = 0
-        elif zone == 0 and (hold or present) and len(probs) > 1:
+        elif zone == 0 and (hold or present) and len(probs) > 1 and kind != "object":
+            # A line that is down is somebody, unless the lesson taught the model that this is what a
+            # thing left in the line looks like (a steady drop, no body in it): then it stays an object.
             zone = self.classes[1 + int(np.argmax(probs[1:]))]
-        kind = str(_pick(self.kind, x))
         present = zone != 0
         if present:
             kind = "person"
