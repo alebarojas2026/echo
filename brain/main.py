@@ -96,7 +96,7 @@ def _not_up_yet(e: OSError) -> bool:
 
 async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=WS_HOSTS, ws_port=8765,
               mode_file=None, feed_clock=False, nodes_file=NODES_JSON, sessions_dir=None,
-              ready=None, stop=None, retry_s=2.0):
+              ready=None, stop=None, retry_s=2.0, operator_key=None):
     """Run until `stop` (an asyncio.Event) is set. `ready` gets the ports actually bound."""
     loop = asyncio.get_running_loop()
     out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -119,7 +119,9 @@ async def run(bus_in=("127.0.0.1", 5601), bus_out=("127.0.0.1", 5600), ws_hosts=
     nodes = json.loads(Path(nodes_file).read_text(encoding="utf-8"))
     brain = Brain(clock=None if feed_clock else now_ms, to_bus=to_bus, mode_file=mode_file,
                   spawn=spawn, board_stats=board_stats, nodes=nodes, led=led_grid(),
-                  sessions_dir=sessions_dir)
+                  sessions_dir=sessions_dir, operator_key=operator_key)
+    if operator_key:
+        log.info("operator key set: commands need it (state.locked)")   # never the key itself
     udp, _ = await loop.create_datagram_endpoint(lambda: _BusIn(brain), local_addr=bus_in)
 
     async def screen(ws):
@@ -216,7 +218,9 @@ def main(argv=None) -> None:
         asyncio.run(run(bus_in=("127.0.0.1", args.bus_port), bus_out=(host or "127.0.0.1", int(port)),
                         sessions_dir=args.sessions, ws_hosts=tuple(args.ws_host or WS_HOSTS),
                         ws_port=args.ws_port, mode_file=args.mode_file, feed_clock=args.feed_clock,
-                        nodes_file=args.nodes))
+                        nodes_file=args.nodes,
+                        # From the board's .env only: never a flag, so it isn't in the process list.
+                        operator_key=os.environ.get("OPERATOR_KEY") or None))
     except KeyboardInterrupt:
         pass
 

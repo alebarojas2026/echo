@@ -10,6 +10,7 @@ recalibration and drift, advice, and the narrator's enter/exit events.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import math
@@ -127,12 +128,13 @@ def now_ms() -> int:
 
 class Brain:
     def __init__(self, clock: Optional[Callable[[], int]] = None, to_bus=None, mode_file=None,
-                 spawn=None, board_stats=None, links=None, nodes=None, led=None, sessions_dir=None,
+                 spawn=None, board_stats=None, links=None, nodes=None, led=None, sessions_dir=None, operator_key=None,
                  settings: Optional[S.Settings] = None):
         """clock None = follow the feed (latest recv_t), for recorded files played fast.
         to_bus(msg) forwards a command to the bus.
         spawn(fit, done) runs fit() off the loop, then done(model) back on it.
         nodes is radio/nodes.json, already parsed (default: the repo's copy).
+        operator_key: the board's OPERATOR_KEY, or None for no lock (every cmd accepted, as before).
         led is the LED grid (brain/alert.py); None = no lights.
         sessions_dir is data/sessions: baseline.json is written there and read back at start.
         settings: the people rules' numbers (brain/settings.py); None = its defaults, or the
@@ -222,6 +224,8 @@ class Brain:
         self._seq = 0       # one counter for everything we send to the screens (section 4)
         self._cmd_seq = 0   # and one for the commands we pass to the bus, a separate socket
         self._event_n = 0
+        self._operator_key = operator_key.encode() if operator_key else None
+        self.refused = 0                       # cmds ignored for a missing or wrong key
         self._load_baseline()
         self._load_model()
         self._load_armed()
@@ -311,6 +315,15 @@ class Brain:
         handler = getattr(self, f"_cmd_{cmd}", None) if isinstance(cmd, str) else None
         if handler is None or not isinstance(args, dict):
             return   # not a command we know, or args that aren't an object: dropped
+        if self._operator_key is not None and cmd != "truth":
+            # Section 5, operator key: only a page opened with the key may command the board. The
+            # crowd game's phones send truth, which needs none. Constant-time, and the key is never
+            # logged, forwarded to the bus or put in a recording.
+            given = msg.get("key")
+            if not isinstance(given, str) or not hmac.compare_digest(given.encode(), self._operator_key):
+                self.refused += 1
+                logging.getLogger("brain").warning("cmd %s ignored: no operator key, or the wrong one", cmd)
+                return
         self._cmd_seq += 1
         self.to_bus({"v": 2, "type": "cmd", "t": self.now(), "seq": self._cmd_seq, "src": self.src,
                      "cmd": cmd, "args": args})
@@ -942,4 +955,6 @@ class Brain:
             # Section 5: a missing "armed" means false. Sent only while armed until state.json
             # knows the field (#440); a state that never arms is byte for byte what it was.
             state["armed"] = True
+        if self._operator_key is not None:
+            state["locked"] = True       # a missing "locked" means false: a board with no key sends what it did
         return self.hall.add_to(state, now)
