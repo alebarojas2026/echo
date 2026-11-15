@@ -6,15 +6,20 @@ stay in the brick's memory; this adapter handles boxes only.
 
 Copy the mounted-camera calibration from `teacher/calib.json` to
 `python/calib.json` (or set `TEACHER_CALIB`). The JSON contains `image_size`,
-`side_m` and a 3 by 3 pixel-to-floor `homography`. Never use a sample calibration
-on the board. Create a text `python/label_mode` containing `off`, `person` or
+`side_m` and a 3 by 3 pixel-to-floor `homography`, plus `area_m` and
+`zone_split_m` for the desk layout's strip (the layout being moved to; a file
+without them is for the old 2 x 2 m square). Set `TEACHER_AREA` to the value the
+calibration tool prints (`WIDTHxHEIGHT` in metres, the layout's area from
+`radio/nodes.json`): preflight then refuses a calibration made for another area and
+says to recalibrate. Without it the area is not checked. Never use a sample
+calibration on the board. Create a text `python/label_mode` containing `off`, `person` or
 `object`; mount the host's mode file there or set `TEACHER_MODE_FILE` so the
 controller can update it. A missing mode or calibration fails closed.
 
 Labels go to UDP `msgpack-rpc-router:5600`, with one label per explicit processed
 classification result, including an empty bounding-box list. No callback or an
 absent boxes field is never interpreted as an empty room. Sequence and frame
-counters advance together. Two people inside the square invalidate the label.
+counters advance together. Two people inside the area (the strip, or the old square) invalidate the label.
 
 The brick's `on_detect_all` suppresses empty frames. The adapter therefore wraps
 its `_process_message` boundary, before this filtering. This private interface
@@ -28,4 +33,4 @@ seq, and that stopping results never produces empty-room labels. Motion uses
 the trailing 0.5 s coordinate median followed by displacement over a full second,
 with a strict speed threshold of 0.25 m/s. Gaps over 0.5 s reset motion history.
 
-Self-tests: `python -m pytest teacher/tests/test_labels.py`.
+Self-tests: `python -m pytest teacher/tests/test_labels.py teacher/tests/test_strip.py`.

@@ -9,11 +9,22 @@ for the presentation hour. Click the corners in **SW, SE, NE, NW** order, as def
 CONTRACTS.md, not relative to the camera view. Press Enter to accept, R to reset,
 or Escape to cancel. The view remains in memory. The only output is
 `teacher/calib.json`, containing pixel coordinates, image dimensions and a
-pixel-to-floor homography. The area to click comes from `radio/nodes.json`: the
-2 x 2 m square today, and on the desk layout the strip a person stands in
-(`frame.strip_m`, split into two zones at `frame.zone_split_x_m`); the tool prints
-which before the window opens. The strip's NE and NW corners are on the desk's
-judge edge. `--side-m 1.5` overrides it with a 1.5 m square.
+pixel-to-floor homography. The area to click comes from `radio/nodes.json`. The
+layout is moving to the desk layout: the strip a person stands in, in front of the
+desk (`frame.strip_m`, split into two zones, Left and Right, at
+`frame.zone_split_x_m`). The 2 x 2 m square with four zones is the old layout, and
+is what a `nodes.json` without `strip_m` still gives. The tool prints which area
+before the window opens. The strip's NE and NW corners are on the desk's judge
+edge. `--side-m 1.5` overrides it with a 1.5 m square.
+
+After saving, the tool prints `TEACHER_AREA=<width>x<height>` (metres). Set it in
+the teacher app's environment: the App Lab container can't read `nodes.json`, so
+this is how its preflight knows the layout's area. A calibration made for another
+area, such as an old square one once the layout is the strip, is refused with a
+message to recalibrate. On the host, `python -m teacher.preflight` takes the area
+from `nodes.json` itself. `teacher/tests/test_strip.py` covers the strip, its
+labels against the contract and this refusal, using the `strip` set in
+`fixtures/boxes.json`.
 
 Use the same camera resolution and detector coordinate frame during inference.
 If the brick resizes or crops its boxes, calibrate in that coordinate frame;
