@@ -150,6 +150,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     }
     const { headline, detail, tone } = moment
     field('judge-headline').parentElement!.dataset.tone = tone
+    field('judge-headline').parentElement!.dataset.early = early ? '1' : ''
     // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
     // A count in the headline ("No movement for 13 s") ticks once a second: only its figures change, so it changes at once too.
     const shape = headline.replace(/\d+/g, '0')

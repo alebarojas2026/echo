@@ -40,6 +40,8 @@
 :root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) p { margin:16px 0 0; font:500 var(--hall-line)/1.2 var(--sans); }
 :root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) p:not(.arrival-passed) { color:var(--text); }
 :root[data-judge-layout="hall"] .judge-moment p:empty { display:none; }
+/* The first moments of a presence: the line under "Someone is here." is not said yet but keeps its place, so the headline does not move when it comes. */
+:root[data-judge-layout="hall"] .judge-moment[data-early="1"] p:empty { display:block; min-height:calc(1.2 * var(--hall-line)); }
 :root[data-judge-layout="hall"] .judge-moment[data-tone="fault"] h1 { color:var(--fault); }
 :root[data-judge-layout="hall"] .judge-moment[data-tone="action"] h1 { color:var(--action); }
 /* "Someone passed by": one small calm line over the headline, in the band's own top edge, so nothing moves when it comes and goes. */

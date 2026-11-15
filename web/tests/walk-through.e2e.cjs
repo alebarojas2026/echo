@@ -246,7 +246,10 @@ test('a stand of 10 s reads "Someone is here." from the arrival to the end, with
   await expect.poll(async () => (await words(page))[0], { timeout: 4000, intervals: [50] }).toBe('Someone is here.')
   expect(Date.now() - arrived).toBeLessThan(900) // at once: one state and the text's own fade, on a slow machine
   expect((await words(page))[1]).toBe('') // nothing under it yet
+  await page.waitForTimeout(300) // the headline's own fade is over
+  const top = (await page.getByTestId('judge-headline').boundingBox()).y
   await expect.poll(async () => (await words(page))[1], { timeout: 4000, intervals: [50] }).not.toBe('')
+  expect((await page.getByTestId('judge-headline').boundingBox()).y).toBe(top) // the headline did not move when the line came
   const lined = Date.now() - arrived
   expect(lined).toBeGreaterThan(1000) // the line waited
   expect(lined).toBeLessThan(2100) // and came by 1.5 s
