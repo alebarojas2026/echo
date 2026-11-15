@@ -9,6 +9,7 @@ import { LINK_IDS, NODES, SIZE_M, alertWordAt, applyLayout, nodeLabelSide, toSce
 import { DESK_LAYOUT } from './layouts.fixture'
 import { clearBox, ghostBox } from './scan'
 import { DESK_TOP_M, standBase, standOn } from './stage'
+import { spotWords } from './spots'
 import { FOV_DEG, deskAnchors, fitCamera, inSituShot, roomShot } from './view'
 import { xrayGeometry } from './xray'
 
@@ -155,6 +156,11 @@ describe('the room drawn on the desk layout', () => {
     }
     expect([...heights].sort()).toEqual([0.002, Number((DESK_TOP_M + 0.002).toFixed(3))])
     expect(northmost).toBeCloseTo(1.1)
+  })
+
+  it('puts "Move router here" beside the advised spot on the desk, reading away from the router, never across it', () => {
+    expect(spotWords('S-W30')).toEqual({ at: [0.5, 1.1, DESK_TOP_M], side: 'west' })
+    expect(spotWords('S-E30')).toEqual({ at: [1.1, 1.1, DESK_TOP_M], side: 'east' })
   })
 
   it('puts the tray\'s tag on the desk top with it, not on the floor under the desk', () => {

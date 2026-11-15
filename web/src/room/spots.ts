@@ -1,6 +1,6 @@
 import { Mesh, MeshBasicMaterial, RingGeometry, Shape, ShapeGeometry } from 'three'
 import type { Advice } from './contract'
-import { HOME_SPOT, ROUTER_SPOTS, SIZE_M, spotName } from './frame'
+import { HOME_SPOT, ROUTER_SPOTS, SIZE_M, spotName, type Vec3 } from './frame'
 import { ACTION, EDGE, TEXT } from './palette'
 import { standBase, v3 } from './stage'
 import { fade } from './motion'
@@ -19,6 +19,20 @@ function outward(y: number): number {
 export function adviceArrow(advice: Advice | null, router: string): { from: string; to: string; done: boolean } | null {
   if (!advice || !ROUTER_SPOTS[advice.to_spot] || advice.to_spot === HOME_SPOT) return null
   return { from: HOME_SPOT, to: advice.to_spot, done: router === advice.to_spot }
+}
+
+/**
+ * Where an advised spot's words go and which way they read. On a desk: just above the spot's ring, in two short
+ * lines that read away from the router's home, so "Move router here" never lies across the router or its name
+ * and stays on a laptop's narrower canvas. On the floor (the square): 26 cm outside the square's edge, centred,
+ * in one line, as before.
+ */
+export function spotWords(id: string): { at: Vec3; side: 'west' | 'east' | 'centre' } {
+  const [x, y] = ROUTER_SPOTS[id]
+  const top = standBase([x, y, 0])[2]
+  if (top <= 0) return { at: [x, y + 0.26 * outward(y), 0], side: 'centre' }
+  const homeX = ROUTER_SPOTS[HOME_SPOT]?.[0] ?? x
+  return { at: [x, y, top], side: x < homeX ? 'west' : 'east' }
 }
 
 /** Whether a spot's ring is drawn: the router's own spot always; the others only while advice runs between them,
@@ -66,7 +80,8 @@ export class RouterSpots {
       mesh.visible = id === HOME_SPOT
       this.rings.set(id, mat)
       this.meshes.set(id, mesh)
-      const tag = view.addLabel(spotName(id), v3([x, y + 0.26 * outward(y), standBase([x, y, 0])[2]]), 'room-label--spot')
+      const words = spotWords(id)
+      const tag = view.addLabel(spotName(id), v3(words.at), `room-label--spot${words.side === 'centre' ? '' : ` room-label--spot-${words.side}`}`)
       tag.hidden = true
       this.tags.set(id, tag)
     }
@@ -91,7 +106,9 @@ export class RouterSpots {
     this.view.host.dataset.adviceArrow = arrow ? arrow.to : ''
     for (const [id, tag] of this.tags) {
       tag.hidden = !arrow || id !== arrow.to
-      if (!tag.hidden) tag.textContent = `${arrow!.done ? 'Router moved here' : 'Move router here'}, ${spotName(id)}`
+      // On a desk the distance goes on its own line (room-label--spot-west / -east keep line breaks).
+      const lines = tag.classList.contains('room-label--spot-west') || tag.classList.contains('room-label--spot-east')
+      if (!tag.hidden) tag.textContent = `${arrow!.done ? 'Router moved here' : 'Move router here'},${lines ? '\n' : ' '}${spotName(id)}`
     }
     this.growTo = arrow ? 1 : 0
     if (arrow) {
