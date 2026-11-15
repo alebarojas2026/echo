@@ -132,6 +132,8 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     const hall = hallFirst() && !rail
     document.documentElement.dataset.judgeLayout = hall ? 'hall' : 'rail'
     const [railHeadline, railDetail] = judgeMoment(state, stale)
+    const known = !!state && !stale && !state.armed && state.health.status !== 'blind' && !!state.pred && !(state as { replay?: unknown }).replay
+    walked.seen(known ? state!.pred!.present && state!.pred!.kind === 'person' : null)
     const { headline, detail, tone } = hall ? hallMoment(state, stale, undefined, walked.active()) : { headline: railHeadline, detail: railDetail, tone: '' }
     field('judge-headline').parentElement!.dataset.tone = tone
     // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.

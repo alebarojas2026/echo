@@ -84,10 +84,10 @@ test('a walk through: the words come up for about 3 s and go, on the walk-up car
   await expect.poll(() => words(page)).toEqual(WALKED)
   await expect(page.locator('.judge-moment')).toHaveAttribute('data-tone', '')
   await shot(page, 'walk-through-page')
-  await expect.poll(() => words(page), { timeout: 6000 }).toEqual(NOBODY)
+  await expect.poll(() => words(page), { timeout: 6000, intervals: [100] }).toEqual(NOBODY)
   const shown = Date.now() - before
   expect(shown).toBeGreaterThan(2500)
-  expect(shown).toBeLessThan(4500)
+  expect(shown).toBeLessThan(5000) // about 3 s, with room for a slow machine
   expect(await moves(page)).toEqual(['through'])
   // No side and no count is ever said.
   expect(WALKED.join(' ')).not.toMatch(/left|right|\d/)
@@ -140,6 +140,7 @@ test('the figure walks on, walks off and ends where the board says', async ({ pa
   await expect(room(page)).toHaveAttribute('data-ghost-move', '', { timeout: 3000 })
   await expect(room(page)).toHaveAttribute('data-ghost', '1')
   expect(await moves(page)).toEqual(['on'])
+  await page.waitForTimeout(1800) // a stand, not a walk through (a leaving within 1.5 s would be one)
   // A step aside and back: an arrival during the walk off turns it round, and it ends standing there.
   await say(page, 'empty')
   await expect(room(page)).toHaveAttribute('data-ghost-move', 'off', { timeout: 3000 })
@@ -152,6 +153,55 @@ test('the figure walks on, walks off and ends where the board says', async ({ pa
   await event(page, 'passed_by', { zone: 1 })
   await page.waitForTimeout(500)
   expect(await moves(page)).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('a slow crossing (enter, then exit 0.8 s later) is a walk through too: the words, and the figure goes on across', async ({ page }) => {
+  const errors = await open(page)
+  await firstArrival(page)
+  await say(page, 'empty')
+  await expect.poll(() => words(page)).toEqual(NOBODY)
+  await expect(room(page)).toHaveAttribute('data-ghost', '')
+  await page.waitForTimeout(1200)
+  await moves(page)
+  await say(page, 'still')
+  await expect.poll(() => words(page)).toContain('Someone is here.')
+  await page.waitForTimeout(800)
+  await say(page, 'empty')
+  const before = Date.now()
+  await expect.poll(() => words(page)).toEqual(WALKED)
+  await expect(page.locator('.judge-moment')).toHaveAttribute('data-tone', '')
+  await expect.poll(() => words(page), { timeout: 6000, intervals: [100] }).toEqual(NOBODY)
+  expect(Date.now() - before).toBeGreaterThan(2500)
+  expect(Date.now() - before).toBeLessThan(5000) // about 3 s, with room for a slow machine
+  // It walked on, and then on across and off the far side: it did not go back the way it came.
+  expect(await moves(page)).toEqual(['on', 'through'])
+  await expect(room(page)).toHaveAttribute('data-ghost', '')
+  expect(errors).toEqual([])
+})
+
+test('a stand of 10 s reads "Someone is here." throughout, and leaving after it is a leaving', async ({ page }) => {
+  const errors = await open(page)
+  await firstArrival(page)
+  await say(page, 'empty')
+  await expect.poll(() => words(page)).toEqual(NOBODY)
+  await page.waitForTimeout(1200)
+  await moves(page)
+  await say(page, 'still')
+  await expect.poll(() => words(page)).toContain('Someone is here.')
+  const heard = new Set()
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(500)
+    heard.add((await words(page))[0])
+  }
+  expect([...heard]).toEqual(['Someone is here.'])
+  await say(page, 'empty')
+  await expect.poll(() => words(page)).toEqual(NOBODY)
+  for (let i = 0; i < 6; i++) {
+    await page.waitForTimeout(500)
+    expect(await words(page)).toEqual(NOBODY) // never "walked through" after a real stand
+  }
+  expect(await moves(page)).toEqual(['on', 'off'])
   expect(errors).toEqual([])
 })
 
@@ -189,7 +239,7 @@ test('a tab that was hidden shows the figure where the board says at once, with 
   await say(page, 'still')
   await expect(room(page)).toHaveAttribute('data-ghost', '1', { timeout: 3000 })
   await show('visible')
-  await page.waitForTimeout(600)
+  await page.waitForTimeout(1800) // long enough to be a stand
   expect(await moves(page)).toEqual([])
   // A walk off that the tab was hidden in the middle of is over when it comes back.
   await say(page, 'empty')

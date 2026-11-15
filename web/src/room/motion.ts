@@ -34,6 +34,10 @@ export function fade(value: number, target: number, dtMs: number): number {
   return Math.abs(target - next) < 0.004 ? target : next
 }
 
+/** On the one spot, an arrival whose leaving comes within this long is a walk through, not a visit: the board says
+ *  enter and then exit for a slow crossing, and passed_by for a quick one. The words and the figure both use it. */
+export const SHORT_VISIT_MS = 1500
+
 /** Ghost spring: 9 rad/s settles within 2% in about 650 ms (5.8 / omega) and never overshoots. */
 export const GHOST_OMEGA = 9
 /** How long the router takes to glide to its new spot. */

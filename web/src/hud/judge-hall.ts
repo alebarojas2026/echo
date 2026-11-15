@@ -2,6 +2,7 @@ import type { StateMsg } from '../room/contract'
 import { motionWord, shownAlert } from '../room/shown-alert'
 import { judgeMoment } from './judge-moment'
 import { hudLayout, type HudLayout } from './layout'
+import { SHORT_VISIT_MS } from '../room/motion'
 
 // The hall-first judge's page (the one-spot layout): the hall is the whole screen, and the state is said once, as
 // one headline and one line under it. What the cards in the rail said (the still count, the alert, the check-in)
@@ -21,19 +22,29 @@ export const WALKED_MS = 3000
 /** What is said for it: calm, no fault colour. It is not an alert. Never a side, never a count. */
 export const WALKED: Moment = { headline: 'Someone walked through.', detail: 'Nobody stopped.', tone: '' }
 
+/** One reading without the person inside a visit is a dropped reading, not a leaving (the walk-up card's rule). */
+const DROPPED_MS = 300
+
 /**
- * Keeps whether a walk-through is being said. `active()` is true for WALKED_MS after a passed_by event on the
- * one-spot layout; a reset ends it. `changed` is called when it starts and when it ends. A board that never
- * sends the event never makes it true.
+ * Keeps whether a walk-through is being said. `active()` is true for WALKED_MS after either of the two ways the
+ * board says it on the one-spot layout: a passed_by event (a quick crossing), or an arrival whose leaving comes
+ * within SHORT_VISIT_MS (a slow one: enter, then exit). A reset ends it. `changed` is called when an event starts
+ * it and when it ends; `seen` is called from the page's own drawing, which reads `active()` straight after.
  */
 export function walkedThrough(feed: { onEvent(fn: (event: { kind: string }) => void): () => void } | null | undefined, changed: () => void, now: () => number = () => performance.now(), oneSpot: () => boolean = hallFirst) {
   let until = -Infinity
   let timer: ReturnType<typeof setTimeout> | undefined
+  /** Since when someone has been here; and the short visit that has just ended, in case it has not. */
+  let since: number | null = null
+  let ended: { since: number; at: number } | null = null
+  const start = () => {
+    until = now() + WALKED_MS
+    clearTimeout(timer)
+    timer = setTimeout(changed, WALKED_MS + 20)
+  }
   const off = feed?.onEvent((event) => {
     if (event.kind === 'passed_by' && oneSpot()) {
-      until = now() + WALKED_MS
-      clearTimeout(timer)
-      timer = setTimeout(changed, WALKED_MS + 20)
+      start()
       changed()
     } else if (event.kind === 'reset' && until > -Infinity) {
       until = -Infinity
@@ -41,7 +52,36 @@ export function walkedThrough(feed: { onEvent(fn: (event: { kind: string }) => v
       changed()
     }
   })
-  return { active: () => now() < until, dispose: () => { clearTimeout(timer); off?.() } }
+  return {
+    active: () => now() < until,
+    /** What the board says now: someone is here (true), nobody is (false), or nothing to go by (null: no data,
+     *  a blind sensor, an armed space, a replayed second). */
+    seen(here: boolean | null) {
+      if (!oneSpot()) return
+      const t = now()
+      if (here === null) {
+        since = null
+        ended = null
+      } else if (here) {
+        if (since === null) {
+          if (ended && t - ended.at <= DROPPED_MS) {
+            // They had not left: the visit carries on, and nothing was walked through.
+            since = ended.since
+            until = -Infinity
+            clearTimeout(timer)
+          } else since = t
+        }
+        ended = null
+      } else if (since !== null) {
+        if (t - since <= SHORT_VISIT_MS) {
+          ended = { since, at: t }
+          start()
+        }
+        since = null
+      }
+    },
+    dispose: () => { clearTimeout(timer); off?.() },
+  }
 }
 
 /** The layout the hall-first page is for: one spot (the same test the spot's own headline uses). */

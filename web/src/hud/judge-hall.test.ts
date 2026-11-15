@@ -107,3 +107,50 @@ test('the walk-through lasts about 3 s from the passed_by event, on the one spot
     vi.useRealTimers()
   }
 })
+
+test('an arrival and a leaving within 1.5 s is a walk through too; a longer visit and a dropped reading are not', () => {
+  vi.useFakeTimers()
+  try {
+    const feed = { onEvent: () => () => {} }
+    let clock = 0
+    let changes = 0
+    const walked = walkedThrough(feed, () => { changes++ }, () => clock, () => true)
+    const at = (ms: number, here: boolean | null) => { clock = ms; walked.seen(here) }
+    // A slow crossing: the board says enter, then exit 0.8 s later.
+    at(0, false); at(1000, true); at(1400, true)
+    expect(walked.active()).toBe(false) // while they are in the line it is "Someone is here."
+    at(1800, false)
+    expect(walked.active()).toBe(true)
+    at(1900, false)
+    clock = 1800 + 2999
+    expect(walked.active()).toBe(true)
+    clock = 1800 + 3001
+    expect(walked.active()).toBe(false)
+    vi.advanceTimersByTime(3100)
+    expect(changes).toBe(1) // told when the words are due to go
+    // A stand of ten seconds, then leaving: never a walk through.
+    at(10_000, true); for (let t = 10_100; t <= 20_000; t += 100) at(t, true)
+    at(20_100, false)
+    expect(walked.active()).toBe(false)
+    // A visit of just over the limit is a visit.
+    at(30_000, true); at(31_600, false)
+    expect(walked.active()).toBe(false)
+    // One dropped reading at the start of a stand: they had not left, and nothing is said about a walk.
+    at(40_000, true); at(40_500, false)
+    expect(walked.active()).toBe(true)
+    at(40_700, true)
+    expect(walked.active()).toBe(false)
+    at(45_000, false) // the stand then lasted five seconds
+    expect(walked.active()).toBe(false)
+    // Nothing to go by (no data, blind, armed, a replay) starts the count again: no walk is made up from it.
+    at(50_000, true); at(50_300, null); at(50_600, false)
+    expect(walked.active()).toBe(false)
+    // Another layout: never.
+    const other = walkedThrough(feed, () => {}, () => clock, () => false)
+    clock = 60_000; other.seen(true); clock = 60_500; other.seen(false)
+    expect(other.active()).toBe(false)
+    walked.dispose()
+  } finally {
+    vi.useRealTimers()
+  }
+})

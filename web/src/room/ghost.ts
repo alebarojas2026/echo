@@ -10,7 +10,7 @@ import {
 } from 'three'
 import type { ObjectMark, Pred, Xray } from './contract'
 import { createFigure, FIGURE_HEIGHT_M, FIGURE_SCALE, type Figure } from './figure'
-import { EASE_CSS, fade, GHOST_OMEGA, Held, MOTION, springStep } from './motion'
+import { EASE_CSS, fade, GHOST_OMEGA, Held, MOTION, SHORT_VISIT_MS, springStep } from './motion'
 import { SIZE_M, ZONES, floorSize, toScene, zoneAt, zoneCenter, zoneRect } from './frame'
 import { OBJECT, PERSON } from './palette'
 import { standBase, v3 } from './stage'
@@ -164,6 +164,10 @@ export class Presence {
   private spotXy: [number, number] | null = null
   /** On its way on or off the spot: how visible it is follows how far it has come. */
   private walkOn = false
+  /** When this visit's first sighting came, on update()'s clock; and whether its walk off goes on across to the
+   *  far side (a visit of SHORT_VISIT_MS or less is a walk through). */
+  private arrivedAt: number | null = null
+  private far = false
   /** A walk straight through, while it is drawn. */
   private cross: { from: Vector3; to: Vector3; t: number } | null = null
   private inPlace = false
@@ -221,6 +225,7 @@ export class Presence {
     if (!this.walkOn && !this.cross) return
     this.cross = null
     this.walkOn = false
+    this.far = false
     if (this.placed) {
       this.at.copy(this.spot)
       this.figure.setHeading(REST_HEADING, true)
@@ -277,7 +282,10 @@ export class Presence {
       // Gone. On the one spot it walks off to the side and fades as it goes; elsewhere it fades where it stands.
       if (this.placed) {
         this.walkOn = this.glides() && !!this.spotXy && this.alpha > 0
-        if (this.walkOn) this.to.copy(this.aside(this.spotXy!))
+        // A visit this short was a walk through: the figure carries on across and off the far side instead of
+        // going back the way it came.
+        this.far = this.walkOn && this.seenAt !== null && this.arrivedAt !== null && this.seenAt - this.arrivedAt <= SHORT_VISIT_MS
+        if (this.walkOn) this.to.copy(this.aside(this.spotXy!, this.far ? -1 : 1))
       }
       this.alphaTo = 0
       this.placed = false
@@ -315,6 +323,8 @@ export class Presence {
           this.walkOn = false
         }
         this.cross = null
+        this.far = false
+        this.arrivedAt = nowMs
         this.placed = true
       }
       this.alphaTo = 1
@@ -422,6 +432,7 @@ export class Presence {
       if (arrived) this.figure.setHeading(REST_HEADING) // it stops and turns to face the way it always stood
       if (arrived || (!this.placed && this.alpha === 0)) {
         this.walkOn = false
+        this.far = false
         this.alpha = this.alphaTo
         if (!this.placed) {
           this.at.copy(this.to)
@@ -433,7 +444,7 @@ export class Presence {
       this.alpha = fade(this.alpha, this.alphaTo, dt)
       busy ||= this.alpha !== this.alphaTo
     }
-    this.view.host.dataset.ghostMove = this.cross ? 'through' : this.walkOn ? (this.placed ? 'on' : 'off') : ''
+    this.view.host.dataset.ghostMove = this.cross || (this.walkOn && this.far) ? 'through' : this.walkOn ? (this.placed ? 'on' : 'off') : ''
     this.figure.object.position.copy(this.at)
     this.figure.object.scale.setScalar(this.size * (0.94 + 0.06 * this.alpha)) // arrives with a small settle, leaves the same way
     this.figure.object.visible = this.alpha > 0
