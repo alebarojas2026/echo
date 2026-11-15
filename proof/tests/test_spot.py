@@ -111,8 +111,8 @@ def test_the_still_limit_and_the_device_subsets_come_from_the_file(gate):
     assert false_alarms.load_zones() == {1: 10}
     groups = {name: (nodes, links) for name, nodes, links in ablation.subsets(gate)}
     assert groups["all"] == (["unoq", "pi5", "pi5b"], [link["id"] for link in gate["links"]])
-    assert groups["router_receiver"] == (["pi5", "unoq"], ["pi5>unoq:wifi", "pi5>unoq:ble"])
-    assert groups["four_nodes"] == ([], [])   # there are only three
+    assert groups["2_nodes"] == (["pi5", "unoq"], ["pi5>unoq:wifi", "pi5>unoq:ble"])
+    assert set(groups) == {"all", "2_nodes"}  # the router pair is the same two-device subset
 
 
 def test_entries_onto_the_spot_are_scored_as_presence(gate):
