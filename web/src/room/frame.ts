@@ -33,6 +33,12 @@ const STRIP_ZONE_IDS: number[] = []
 export function zonesNamed(): boolean {
   return !(STRIP_M && ZONES.length > 2)
 }
+/**
+ * presence.line, when the file names one (contract section 3): the one line that decides whether somebody is on the
+ * spot. On such a layout the router is cabled and never moves, and a dead zone is a thing left standing in this
+ * line. Null on a layout without one (the desk, the square).
+ */
+export let PRESENCE_LINE: string | null = null
 /** frame.desk_edge_y_m, when the file gives it: where our desk begins (deskEdge). */
 let DESK_EDGE_Y_M: number | null = null
 /** links[].crosses_spot, for the links whose entry says: whether the link's path crosses where a person stands. */
@@ -400,6 +406,8 @@ export function applyLayout(json: unknown): boolean {
   replace(STRIP_ZONE_IDS, along?.ids ?? [])
   ZONE_SPLIT_X_M = along && along.ids.length === 2 ? along.edges[1] : null
   DESK_EDGE_Y_M = edge
+  const line = (j.presence as Json | undefined)?.line
+  PRESENCE_LINE = typeof line === 'string' && links.includes(line) ? line : null
   for (const k of Object.keys(LINK_CROSSES)) delete LINK_CROSSES[k]
   Object.assign(LINK_CROSSES, crosses)
   for (const k of Object.keys(NODES)) delete NODES[k]

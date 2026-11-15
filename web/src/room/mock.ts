@@ -1,7 +1,7 @@
 import type { Advice, Alert, Checkin, CmdMsg, EventMsg, HallLink, LinkState, Narration, ObjectMark, Pred, StateMsg, Teacher, Xray } from './contract'
 import type { Transport } from './feed'
 import { DEMO_MS, demoScene } from './demo'
-import { HALL_BEACONS, HOME_SPOT, LINK_IDS, SIZE_M, STRIP_M, TRAY_SPOTS, ZONES, floorSize, nodePosition, parseLinkId, routerId, zoneAt, zoneCenter } from './frame'
+import { HALL_BEACONS, HOME_SPOT, LINK_IDS, SIZE_M, STRIP_M, TRAY_SPOTS, ZONES, floorSize, nodePosition, parseLinkId, routerId, zoneAt, zoneCenter, NODES, PRESENCE_LINE } from './frame'
 
 // Mock state messages (CONTRACTS.md v2 section 5) for building the screen without the board.
 // src is "sim" so nothing here can pass for live, and measured numbers (train time, ms per decision,
@@ -54,8 +54,21 @@ function xrayGrid() {
 
 /** The tray's floor point: nodes.json's first tray spot. */
 function trayXy(): [number, number] {
-  return [TRAY_SPOTS[0][0], TRAY_SPOTS[0][1]]
+  return thingXy() ?? [TRAY_SPOTS[0][0], TRAY_SPOTS[0][1]]
 }
+
+/** On a layout with a presence line: where a thing left in that line stands, halfway along it. Else null. */
+export function thingXy(): [number, number] | null {
+  const p = PRESENCE_LINE ? parseLinkId(PRESENCE_LINE) : null
+  if (!p) return null
+  const [a, b] = [nodePosition(p.tx, HOME_SPOT), nodePosition(p.rx, HOME_SPOT)]
+  return [Math.round(((a[0] + b[0]) / 2) * 100) / 100, Math.round(((a[1] + b[1]) / 2) * 100) / 100]
+}
+
+/** How long after a thing is taken out of the line the board has its new level (2 s to settle, 3 s of readings),
+ *  and how long the result then stays (contract section 6). */
+const CLEARED_AFTER_S = 5
+const CLEARED_SHOWN_S = 10
 
 /** The zone the still and check-in scenes use: the last one (the square's Bathroom, the desk's Right). */
 export function alertZone(): number {
@@ -64,6 +77,7 @@ export function alertZone(): number {
 
 /** The router's Wi-Fi link to the receiver: the check-in link and the one advice watches. */
 function wifiLink(): string {
+  if (PRESENCE_LINE) return PRESENCE_LINE
   return LINK_IDS.find((id) => id.startsWith(`${routerId()}>`) && id.endsWith(':wifi')) ?? LINK_IDS[0]
 }
 
@@ -188,6 +202,9 @@ export interface Scene {
   hallOff?: string[]
   /** Advice about the object by the router. It only reaches the state while the Wi-Fi link is dropping. */
   advice: boolean
+  /** On a layout with a presence line: seconds since the thing was taken out of the line. The advice stays with
+   *  after_dbm null until the board has the new level, then shows it for 10 s, then goes. */
+  clearedS?: number
   narration: Narration | null
 }
 
@@ -214,6 +231,28 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
     off: scenario === 'power' ? powerOff(tMs) : undefined,
     hallOff: scenario === 'power' ? hallOff(tMs) : [],
   })
+}
+
+/**
+ * Advice on a layout with a presence line (contract section 6): it is about that line and names no spot. It shows
+ * while a thing stands in the line with nobody on the spot; after the thing is taken away it carries the line's
+ * new level for 10 s and goes. If somebody steps on the spot it goes at once.
+ */
+function lineAdvice(scene: Scene, object: [number, number] | null, line: string, nowDbm: number, dropDb: number): Advice | null {
+  if (scene.person) return null
+  const at = thingXy()!
+  const idx = LINK_IDS.indexOf(line)
+  // The line's level with the thing in it, as this mock reads it.
+  const blocked = Number((-58 - idx - linkDrop(line, idx, null, at, HOME_SPOT, 0)).toFixed(1))
+  const shape = { id: 'a1', cause: 'obstruction', near: null, xy_m: at, link: line, to_spot: null, move_m: [0, 0] as [number, number], dist_change_m: 0, why: [line] }
+  const { tx, rx } = parseLinkId(line)!
+  const names = `${NODES[tx]?.name ?? tx} to ${NODES[rx]?.name ?? rx}`
+  if (object && scene.advice && dropDb >= 3) {
+    return { ...shape, text: `Something is standing in the Wi-Fi line from ${names}.`, before_dbm: nowDbm, after_dbm: null }
+  }
+  const s = scene.clearedS
+  if (object || s === undefined || s < 0 || s >= CLEARED_AFTER_S + CLEARED_SHOWN_S) return null
+  return { ...shape, text: `The Wi-Fi line from ${names} is clear again.`, before_dbm: blocked, after_dbm: s >= CLEARED_AFTER_S ? nowDbm : null }
 }
 
 /** The drop this mock puts on a link from a person and an object, with a little steady wobble. */
@@ -284,14 +323,18 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
   }
   const router0 = routerId()
   const wifi = wifiLink()
-  const objects: ObjectMark[] = object ? [{ xy_m: object, near: router0, since_s: Number((tMs / 1000).toFixed(1)), drop_db: 9 }] : []
+  // near = the closest node within 0.5 m of the object, or null (contract section 5).
+  const nearNode = (xy: [number, number]) =>
+    Object.keys(NODES).map((id) => ({ id, d: Math.hypot(nodePosition(id, router)[0] - xy[0], nodePosition(id, router)[1] - xy[1]) })).filter((n) => n.d <= 0.5).sort((a, b) => a.d - b.d)[0]?.id ?? null
+  const objects: ObjectMark[] = object ? [{ xy_m: object, near: PRESENCE_LINE ? nearNode(object) : router0, since_s: Number((tMs / 1000).toFixed(1)), drop_db: 9 }] : []
   const wifiNow = links.find((l) => l.id === wifi)!.dbm!
   // before_dbm is frozen when the router moves: the reading at S-home with the object there.
   const wifiHome = Number((-58 - linkDrop(wifi, 0, null, object, HOME_SPOT, 0)).toFixed(1))
   // Contract section 6: advice only while the router's Wi-Fi link is dropping by 3 dB or more.
   const wifiDrop = links.find((l) => l.id === wifi)!.drop_db ?? 0
-  const advice: Advice | null =
-    object && scene.advice && wifiDrop >= 3
+  const advice: Advice | null = PRESENCE_LINE
+    ? lineAdvice(scene, object, wifi, wifiNow, wifiDrop)
+    : object && scene.advice && wifiDrop >= 3
       ? {
           id: 'a1', cause: 'obstruction', near: router0, xy_m: object, link: wifi, to_spot: 'S-W30',
           // before_dbm is this mock's own wifi reading; dist_change_m comes from the spot geometry.
