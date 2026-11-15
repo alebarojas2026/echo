@@ -150,6 +150,7 @@ class Handler(SimpleHTTPRequestHandler):
         self._route(head=True)
 
     def do_POST(self):
+        self._body_read = False
         path = self.path.split("?", 1)[0].split("#", 1)[0]
         if ("POST", path) in self.server.routes:
             return self._api("POST", path, head=False)
@@ -176,7 +177,7 @@ class Handler(SimpleHTTPRequestHandler):
         except (OSError, ValueError):
             return self._json({"error": "radio/nodes.json can't be read"}, False, HTTPStatus.SERVICE_UNAVAILABLE)
         try:
-            change = layout.clean(json.loads(self.rfile.read(length)), nodes_doc)
+            change = layout.clean(json.loads(self._read(length)), nodes_doc)
         except layout.Invalid as e:
             return self._json({"error": str(e)}, False, HTTPStatus.BAD_REQUEST)
         except ValueError:
@@ -248,7 +249,25 @@ class Handler(SimpleHTTPRequestHandler):
             raise ApiError(HTTPStatus.LENGTH_REQUIRED, "Content-Length needed") from None
         if not 0 <= length <= MAX_API_BODY:
             raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "too big")
+        return self._read(length)
+
+    def _read(self, length: int) -> bytes:
+        self._body_read = True
         return self.rfile.read(length)
+
+    def _drain(self):
+        """Read a POST body nothing has read yet. Answering early (403, 404, ...) and closing with
+        the body still unread resets the connection on some systems, and the caller sees that
+        instead of the answer."""
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            return
+        if 0 < length <= MAX_API_BODY:
+            try:
+                self._read(length)
+            except OSError:
+                pass
 
     def _nodes_doc(self):
         return json.loads(self.server.nodes_path.read_bytes())
@@ -302,6 +321,8 @@ class Handler(SimpleHTTPRequestHandler):
         self._send(json.dumps(obj).encode(), head, status)
 
     def _send(self, body: bytes, head: bool, status=HTTPStatus.OK):
+        if self.command == "POST" and not getattr(self, "_body_read", False):
+            self._drain()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
