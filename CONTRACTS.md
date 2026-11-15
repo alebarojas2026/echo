@@ -440,7 +440,8 @@ POST http://192.168.77.2:8080/ask      {"question":"was anyone here in the last 
    // args = what the tool was run with: minutes (1-1440, 10 when the question names none), zone (a zone id in
    //   nodes.json, or null for anywhere) and link (a core link id, or null for any).
    // rows = the stored records the answer was filled from. Every number in answer is in a row, or is args.minutes.
-   // picked_by = llm (the on-board model chose the tool) | rules (the model was down or slow; keywords chose it).
+   // picked_by = rules (keywords chose the tool: tried first, because they are right more often on plain questions) |
+   // llm (no keyword matched, so the on-board model chose the tool). Either way the answer comes from the rows.
    //   The model only picks the tool and its args. It never writes the answer.
    // src = the src of the newest stored record (live | sim | replay), or null when nothing is stored.
    // ms = the whole time for the answer on the board.
