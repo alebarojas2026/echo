@@ -47,6 +47,8 @@ AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
 HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable (Pi B): their readings ride the sensing Wi-Fi
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
 TRAIN_PURPOSES = ("train", "object")
+TRAIN_KEEP = 8           # a fit reads the newest this-many recordings of each kind (person, empty, object):
+                         # room for 3+ walkers with two walks each, and a bound on an afternoon of lessons
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 GONE_READINGS = 8        # a link is gone, not just slow, once silent for this many readings at its own rate
 SILENT_MS = 3_000        # a baseline restarts only for a link with no reading for this long
@@ -332,11 +334,33 @@ class Brain:
         self._cmd_label_mode({"mode": "off"})
         self._start_capture(new_place=new_place, by_hand=True)
 
+    def _newest_recordings(self) -> List[dict]:
+        """The recordings a fit reads: the newest TRAIN_KEEP of each kind, not all of them.
+
+        Every judge's lesson leaves one more train recording in this place, and a fit read them
+        all, so fits (and the 30 s lesson) grew all afternoon (#611). Kinds are kept apart so a
+        run of lessons can't push out the empty-room or the tray recordings: walks with a walker,
+        train recordings without one (the empty room), and object recordings. The files stay on
+        disk; a new place still starts from none.
+        """
+        kinds: Dict[str, List[dict]] = {"person": [], "empty": [], "object": []}
+        for s in self.sessions.values():
+            meta = s["meta"]
+            if meta.get("purpose") == "object":
+                kinds["object"].append(s)
+            elif meta.get("purpose") == "train":
+                kinds["person" if str(meta.get("walker") or "").strip() else "empty"].append(s)
+        keep = []
+        for group in kinds.values():
+            group.sort(key=lambda s: s["meta"].get("recv_t") or 0)
+            keep += group[-TRAIN_KEEP:]
+        return sorted(keep, key=lambda s: s["meta"].get("recv_t") or 0)
+
     def _cmd_train(self, args):
         if self.training or not self.base:
             return
         self._find_sessions()
-        sessions = [dict(s) for s in self.sessions.values() if s["meta"].get("purpose") in TRAIN_PURPOSES]
+        sessions = [dict(s) for s in self._newest_recordings()]
         teaching = self._open_train_session()   # a train recording still open: fit from it as far as it has got
         if teaching:
             sessions.append(teaching)
