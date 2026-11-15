@@ -268,7 +268,11 @@ Windows: 1.0 s long, 0.1 s hop, on recv_t. A window's label is the majority of t
   Windows with a clipped label or with no label are dropped from training.
 Moving: foot speed > 0.25 m/s over 1 s, after a 0.5 s median filter. In the desk view the speed is that of the
   box centre along the strip.
-Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, and label_mode off.
+Baseline: 20 s of capture with health ok, persons_in_frame == 0 from the camera, and label_mode off.
+  Somebody in the camera's view but not in the layout (present false) pauses the capture for up to 3 s: the readings
+  taken meanwhile are left out and the 20 s carry on afterwards. Somebody in the layout (present true), or in view
+  for more than 3 s, starts the 20 s again, as does any other condition breaking. Every reading that is used was
+  still taken with persons_in_frame == 0.
   With the camera off (unplugged at the judging desk) there is no camera to ask: the capture runs on health ok and
   label_mode off alone, and the operator keeps the strip empty. cam unknown counts as off here.
   A baseline started by the `baseline` cmd means a new place. On its baseline_done the brain drops the model (pred is
