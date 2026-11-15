@@ -375,6 +375,8 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
         holder.rotation.y = p.yaw
         holder.position.set(...p.outer)
         cut.value = p.cut
+        // Where the hall stands now, for the page's own checks (the browser tests read it).
+        view.host.dataset.scanAt = [...(fit.offset_m ?? [0, 0]), fit.yaw_deg ?? 0].join(',')
         view.requestRender()
       },
       bounds: () => new Box3().setFromObject(holder),
