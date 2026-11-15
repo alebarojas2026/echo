@@ -10,25 +10,59 @@ import time
 import threading
 
 
-CENTRES = {1: (0.5, 1.5, "Bed"), 2: (1.5, 1.5, "Chair"),
-           3: (0.5, 0.5, "Hall"), 4: (1.5, 0.5, "Bathroom")}
+from proof import layout
+
+# Today's square: one pass over four zones is enough to train on.
+SQUARE_ORDERS = {"train": (1, 3, 2, 4), "heldout": (4, 2, 3, 1), "crowd": (3, 4, 1, 2)}
+MIDDLE = "middle"   # a visit to the split line between two zones (the strip layout)
 
 
-def script(purpose):
+def orders(doc):
+    """The zone visits per purpose, from the layout's zone ids.
+
+    Two zones: one pass is too short to train on, so train and heldout go back and forth
+    and end on the middle mark; crowd is one pass.
+    """
+    ids = sorted(layout.zones(doc))
+    if set(ids) == {1, 2, 3, 4}:
+        return SQUARE_ORDERS
+    if len(ids) == 2:
+        a, b = ids
+        return {"train": (a, b, a, b, MIDDLE), "heldout": (b, a, b, a, MIDDLE), "crowd": (b, a)}
+    back = tuple(reversed(ids))
+    return {"train": tuple(ids) * 2, "heldout": back * 2, "crowd": back}
+
+
+def script(purpose, doc=None):
     if purpose not in {"train", "heldout", "object", "crowd"}:
         raise ValueError("purpose must be train, heldout, object or crowd")
-    steps = [("Nobody inside the square. Step out completely.", 20, "off", None)]
+    doc = doc or layout.load()
+    strip = layout.is_strip(doc)
+    area = "the strip" if strip else "the square"
+    steps = [(f"Nobody inside {area}. Step out completely.", 20, "off", None)]
     if purpose == "object":
-        return steps + [("Place the tray at T1, then step outside the square.", 8, "off", None),
+        place = ("Place the tray at T1 on the desk, then step back out of the strip." if strip
+                 else "Place the tray at T1, then step outside the square.")
+        return steps + [(place, 8, "off", None),
                         ("Nobody inside. Leave the tray still at T1.", 15, "object", None),
-                        ("Remove the tray and step outside the square.", 8, "off", None),
-                        ("Nobody inside. The square is clear.", 20, "off", None)]
-    order = (1, 3, 2, 4) if purpose == "train" else (4, 2, 3, 1) if purpose == "heldout" else (3, 4, 1, 2)
-    for zone in order:
-        x, y, name = CENTRES[zone]
-        steps.append((f"Walk to the centre of zone {zone} ({name}), x={x} m east, y={y} m north.", 5, "person", None))
-        steps.append((f"Stand still at the centre of zone {zone} ({name}).", 10, "person", zone if purpose == "crowd" else None))
-    steps.append(("Leave the square. Nobody inside.", 20, "off", None))
+                        (f"Remove the tray and step outside {area}.", 8, "off", None),
+                        (f"Nobody inside. {area[0].upper() + area[1:]} is clear.", 20, "off", None)]
+    centres = layout.zones(doc)
+    for zone in orders(doc)[purpose]:
+        if zone == MIDDLE:
+            split = doc["frame"]["zone_split_x_m"]
+            steps.append((f"Walk to the middle mark, on the line between the zones (x={split} m).", 5, "person", None))
+            steps.append(("Stand still on the middle mark.", 8, "person", None))
+            continue
+        x, y, name = centres[zone]
+        if strip:
+            walk = f"Walk to the centre of zone {zone} ({name}), one step from the desk: x={x} m, y={y} m."
+        else:
+            walk = f"Walk to the centre of zone {zone} ({name}), x={x} m east, y={y} m north."
+        steps.append((walk, 5, "person", None))
+        steps.append((f"Stand still at the centre of zone {zone} ({name}).", 10, "person",
+                      zone if purpose == "crowd" else None))
+    steps.append((f"Leave {area}. Nobody inside.", 20, "off", None))
     return steps
 
 
