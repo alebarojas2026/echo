@@ -72,11 +72,20 @@ describe('layout from nodes.json', () => {
     const west = frame.nodePosition('pi5', 'S-W30')
     expect(west[0]).toBeCloseTo(0.46)
     expect(west[1]).toBeCloseTo(0.68)
-    expect(frame.TRAY_SPOTS[0][0]).toBeCloseTo(0.82)
-    expect(frame.TRAY_SPOTS[0][2]).toBeCloseTo(0.8)
+    // The tray takes its own place: 12 cm from the router toward the board (at 1.1, 0.6), on the link it blocks.
+    expect(frame.TRAY_SPOTS[0]).toEqual(frame.trayBeside([0.76, 0.68, 0.8], [1.1, 0.6, 1.0]))
+    expect(frame.TRAY_SPOTS[0][0]).toBeCloseTo(0.877)
+    expect(frame.TRAY_SPOTS[0][1]).toBeCloseTo(0.653)
+    expect(frame.TRAY_SPOTS[0][2]).toBe(0.8)
     // and a file where they agree is left exactly as it is
     expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)
     expect(frame.nodePosition('pi5', 'S-W30')).toEqual([0.5, 1.1, 1])
+  })
+
+  it('puts the tray between the router and the board: 12 cm along, or halfway when they stand side by side', () => {
+    expect(frame.trayBeside([0, 0, 1], [1, 0, 1])).toEqual([0.12, 0, 1])
+    expect(frame.trayBeside([0.76, 0.68, 0.8], [0.84, 0.68, 0.8])).toEqual([0.8, 0.68, 0.8]) // 8 cm apart on one hub
+    expect(frame.trayBeside([0.5, 0.5, 1], [0.5, 0.5, 1])).toEqual([0.5, 0.5, 1])
   })
 
   it('follows a 1.5 m square and gate-7 router spots without a rebuild', () => {
@@ -140,7 +149,12 @@ describe('when /nodes.json cannot be read', () => {
   })
 
   it('carries radio/nodes.json in the build as that fallback', async () => {
-    expect(__BUILD_LAYOUT__).toEqual(nodesJson)
+    // The file's links, zones and frame; device places saved on this machine (nodes.local.json) may differ.
+    const built = __BUILD_LAYOUT__ as typeof nodesJson
+    expect(built.links).toEqual(nodesJson.links)
+    expect(built.zones).toEqual(nodesJson.zones)
+    expect(built.frame).toEqual(nodesJson.frame)
+    expect(built.nodes.map((n) => n.id)).toEqual(nodesJson.nodes.map((n) => n.id))
     vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')))
     expect(other()).toBe(true)
     expect(await loadLayout()).toBe('contract')

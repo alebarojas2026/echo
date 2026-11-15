@@ -224,6 +224,21 @@ export function nodePosition(id: NodeId, router: string | null | undefined): Vec
   return NODES[id]?.xyz ?? [0, 0, 0]
 }
 
+/** How far from the router the tray goes, toward the receiver. */
+const TRAY_FROM_ROUTER_M = 0.12
+
+/**
+ * The tray's place for a router and the receiver its Wi-Fi link runs to: on the line between them (the link it
+ * blocks), 12 cm from the router, or halfway when they are closer than 24 cm. At the router's height, like the
+ * file's own tray spot. Always between two devices, so always on the desk they stand on.
+ */
+export function trayBeside(router: Vec3, receiver: Vec3): Vec3 {
+  const d = Math.hypot(receiver[0] - router[0], receiver[1] - router[1])
+  const u = d > 0 ? Math.min(TRAY_FROM_ROUTER_M, d / 2) / d : 0
+  const r = (v: number) => Math.round(v * 1000) / 1000
+  return [r(router[0] + (receiver[0] - router[0]) * u), r(router[1] + (receiver[1] - router[1]) * u), router[2]]
+}
+
 type Json = Record<string, unknown>
 
 function isVec3(v: unknown): v is Vec3 {
@@ -322,7 +337,10 @@ export function applyLayout(json: unknown): boolean {
     if (d.some((v) => Math.abs(v) > 1e-6)) {
       const moved = (p: Vec3): Vec3 => [p[0] + d[0], p[1] + d[1], p[2] + d[2]]
       for (const k of Object.keys(ROUTER_SPOTS)) ROUTER_SPOTS[k] = moved(ROUTER_SPOTS[k])
-      replace(TRAY_SPOTS, TRAY_SPOTS.map(moved))
+      // The tray has its own place, on the line it is there to block: carried along it could hang off the desk.
+      const rx = links.map((id) => /^([a-z0-9]+)>([a-z0-9]+):wifi$/.exec(id)).find((m) => m?.[1] === router.id)?.[2]
+      const receiver = nodes.find((n) => n.id === rx)
+      replace(TRAY_SPOTS, receiver ? [trayBeside(router.xyz, receiver.xyz)] : TRAY_SPOTS.map(moved))
     }
   }
   replace(HALL_BEACONS, hall)

@@ -188,6 +188,16 @@ describe('where the devices go', () => {
     expect(g.pi5b.xyz[1]).toBeCloseTo(0.6 - 0.75 - 0.08, 1)
   })
 
+  it('swaps the two rows when the board is on the facing desk: the board and the router across, the rest on ours', () => {
+    const g = by(placementGuide(HALL, { ...at(1, 1), gap: 'behind', boardAcross: true }, nodes(), strip))
+    expect([g.unoq.on, g.pi5.on]).toEqual(['facing desk', 'facing desk'])
+    expect(Math.abs(g.unoq.xyz[0] - g.pi5.xyz[0])).toBeCloseTo(PLACEMENT.nearApartM)
+    expect([g.west.on, g.pi5b.on, g.east.on]).toEqual(['our desk', 'our desk', 'our desk'])
+    expect([g.west.xyz[0], g.pi5b.xyz[0], g.east.xyz[0]]).toEqual([0.1, 0.8, 1.5])
+    expect(g.pi5b.words).toBe('Pi B: on our desk, at the edge facing the spot, in the middle')
+    expect(g.unoq.words).toBe('Board: on the desk across the gap, at its near edge, 4 cm right of the middle')
+  })
+
   it('takes the spacing from the preset: a longer cable lets the board and the router sit apart', () => {
     const g = by(placementGuide(HALL, { ...at(1, 1), gap: 'behind' }, nodes(), strip, { ...PLACEMENT, nearApartM: 0.4 }))
     expect(Math.abs(g.unoq.xyz[0] - g.pi5.xyz[0])).toBeCloseTo(0.4)
