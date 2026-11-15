@@ -1,0 +1,7606 @@
+{
+"variant": "pr474_shots",
+"tag": "final",
+"items": [
+{
+"id": "h02114",
+"q": "Was the left side busy over the last 5 min?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Was the left side busy over the last 5 min?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "presence",
+"minutes": 5,
+"zone": 2,
+"link": "any"
+}
+},
+{
+"id": "h02118",
+"q": "Do you see me?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Do you see me?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02119",
+"q": "Can you tell I'm standing here?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Can you tell I'm standing here?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "link_history",
+"minutes": 60,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02147",
+"q": "ne1 here?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "ne1 here?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02149",
+"q": "Has the desk been unattended?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Has the desk been unattended?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02167",
+"q": "how long was the stillness",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long was the stillness"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "still_spans",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02202",
+"q": "was there an unauthorized entry",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "was there an unauthorized entry"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "intrusions",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02214",
+"q": "did the west beacon cut out",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the west beacon cut out"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 1,
+"link": "any"
+}
+},
+{
+"id": "h02220",
+"q": "Is the sensing working properly?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Is the sensing working properly?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02256",
+"q": "What's under the hood?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "What's under the hood?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "model_card",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02264",
+"q": "Was that the judge from Qualcomm?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Was that the judge from Qualcomm?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02270",
+"q": "Can you tell me the name of whoever was here?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Can you tell me the name of whoever was here?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "model_card",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02274",
+"q": "What's the time?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "What's the time?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02275",
+"q": "Tell me something funny.",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Tell me something funny."
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02282",
+"q": "Can you delete everything you recorded?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Can you delete everything you recorded?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02285",
+"q": "What is 17 times 3?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "What is 17 times 3?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 17,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02288",
+"q": "What's your name?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "What's your name?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "model_card",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02289",
+"q": "Is my friend behind the curtain?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Is my friend behind the curtain?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02295",
+"q": "What's the best restaurant in Madison?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "What's the best restaurant in Madison?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02296",
+"q": "Did the Badgers win?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Did the Badgers win?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02297",
+"q": "Can you hear me?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Can you hear me?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "link_history",
+"minutes": 60,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02298",
+"q": "lol",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "lol"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02299",
+"q": "ok",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "ok"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02304",
+"q": "Which of the judges was here?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Which of the judges was here?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02308",
+"q": "What's the CPU temperature?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "What's the CPU temperature?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02107",
+"q": "Has anybody shown up at the desk?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Has anybody shown up at the desk?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "presence",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "h02222",
+"q": "why did the wifi drop",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why did the wifi drop"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "link_history",
+"minutes": 60,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "p00048",
+"q": "Could you tell me if the left zone has had anyone in it since 1?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Could you tell me if the left zone has had anyone in it since 1?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 1,
+"zone": 1,
+"link": "any"
+}
+},
+{
+"id": "p00213",
+"q": "Has the still alert fired in lst 24 hours?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Has the still alert fired in lst 24 hours?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 2,
+"link": "any"
+}
+},
+{
+"id": "p00384",
+"q": "What changed after the ruter moved?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "What changed after the ruter moved?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "explain_advice",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "p00524",
+"q": "Could you tell me if it's on the board or online?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Could you tell me if it's on the board or online?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "model_card",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q00046",
+"q": "in the last three minutes, has someone been on the left half?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "in the last three minutes, has someone been on the left half?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 3,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q00152",
+"q": "Anyone in Right in the last 2 hours?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Anyone in Right in the last 2 hours?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "presence",
+"minutes": 2,
+"zone": 2,
+"link": "any"
+}
+},
+{
+"id": "q00258",
+"q": "Who's been here since 2:15?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Who's been here since 2:15?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q00364",
+"q": "Has there been any activity within the last 5 minutes?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Has there been any activity within the last 5 minutes?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "presence",
+"minutes": 5,
+"zone": 2,
+"link": "any"
+}
+},
+{
+"id": "q00471",
+"q": "was there movement over here in the past 5 minutes",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "was there movement over here in the past 5 minutes"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "presence",
+"minutes": 5,
+"zone": 2,
+"link": "any"
+}
+},
+{
+"id": "q00577",
+"q": "Did anyone stand still in the last 2 hours?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Did anyone stand still in the last 2 hours?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q00683",
+"q": "I'm curious, has someone stayed in one spot a few minutes ago?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "I'm curious, has someone stayed in one spot a few minutes ago?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "presence",
+"minutes": 1440,
+"zone": 2,
+"link": "any"
+}
+},
+{
+"id": "q00789",
+"q": "What's the longest stretch without movement so far today ?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "What's the longest stretch without movement so far today ?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q00895",
+"q": "Has the still alert fired in the past 30 mins?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Has the still alert fired in the past 30 mins?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q01001",
+"q": "Was there a no movement warning recently?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Was there a no movement warning recently?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q01107",
+"q": "was anyone flagged as not moving in the pst twenty minutes?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "was anyone flagged as not moving in the pst twenty minutes?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 20,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q01213",
+"q": "Did someone enter after huors in the past 30 mins?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Did someone enter after huors in the past 30 mins?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 30,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q01319",
+"q": "Im curious in the last ten minutes did the after-hours alarrm go off",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Im curious in the last ten minutes did the after-hours alarrm go off"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q01426",
+"q": "Did any link drop within the last 5 minutes",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Did any link drop within the last 5 minutes"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "link_history",
+"minutes": 10,
+"zone": 2,
+"link": "any"
+}
+},
+{
+"id": "q01532",
+"q": "um, has the signal dropped over the last five minutes?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "um, has the signal dropped over the last five minutes?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "link_history",
+"minutes": 10,
+"zone": 2,
+"link": "any"
+}
+},
+{
+"id": "q01639",
+"q": "Any dropouts on the radio just now?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Any dropouts on the radio just now?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "link_history",
+"minutes": 10,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q01745",
+"q": "yo what was the Wi-Fi signal over the last five minutes?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "yo what was the Wi-Fi signal over the last five minutes?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "link_history",
+"minutes": 10,
+"zone": 2,
+"link": "any"
+}
+},
+{
+"id": "q01851",
+"q": "Who was here in the last two hours?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "Who was here in the last two hours?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "alerts",
+"minutes": 1440,
+"zone": 0,
+"link": "any"
+}
+},
+{
+"id": "q01983",
+"q": "How old is the person in Left?",
+"body": {
+"messages": [
+{
+"role": "system",
+"content": "Pick the one tool that answers a question about a room sensor. Reply with JSON only.\nTools:\n- presence: was anyone here (or in one zone) in the last N minutes\n- still_spans: how long someone stayed without moving\n- alerts: no-movement alerts and check-ins\n- intrusions: intrusion alerts while the space was armed\n- link_history: how a radio link has been reading, and when it was blind\n- explain_advice: the last router advice and what the move changed\n- model_card: what model runs on the board\n- none: the question is about something else\nminutes: how far back to look (10 if not said; an hour is 60).\nzone: 0 for anywhere, or 1 for Left, 2 for Right.\nlink: any, or one of pi5>unoq:wifi, pi5>unoq:ble, east>unoq:ble, west>unoq:ble, east>pi5:ble, west>pi5:ble, pi5b>unoq:ble, pi5>pi5b:wifi, pi5>pi5b:ble, east>pi5b:ble, west>pi5b:ble, pi5b>pi5:ble."
+},
+{
+"role": "user",
+"content": "anyone on the right in the last 5 minutes?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"presence\", \"minutes\": 5, \"zone\": 2, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how long did they stay without moving?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"still_spans\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "who was that?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did the wifi signal drop in the last hour?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"link_history\", \"minutes\": 60, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is the room armed?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"intrusions\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "how many people walked past?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"none\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "is there a camera?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"model_card\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "why move the router?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"explain_advice\", \"minutes\": 10, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "did a no-movement alert go off today?"
+},
+{
+"role": "assistant",
+"content": "{\"tool\": \"alerts\", \"minutes\": 1440, \"zone\": 0, \"link\": \"any\"}"
+},
+{
+"role": "user",
+"content": "How old is the person in Left?"
+}
+],
+"max_tokens": 48,
+"temperature": 0,
+"response_format": {
+"type": "json_object",
+"schema": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"tool",
+"minutes",
+"zone",
+"link"
+],
+"properties": {
+"tool": {
+"enum": [
+"presence",
+"still_spans",
+"alerts",
+"intrusions",
+"link_history",
+"explain_advice",
+"model_card",
+"none"
+]
+},
+"minutes": {
+"type": "integer",
+"minimum": 1,
+"maximum": 1440
+},
+"zone": {
+"enum": [
+0,
+1,
+2
+]
+},
+"link": {
+"enum": [
+"any",
+"pi5>unoq:wifi",
+"pi5>unoq:ble",
+"east>unoq:ble",
+"west>unoq:ble",
+"east>pi5:ble",
+"west>pi5:ble",
+"pi5b>unoq:ble",
+"pi5>pi5b:wifi",
+"pi5>pi5b:ble",
+"east>pi5b:ble",
+"west>pi5b:ble",
+"pi5b>pi5:ble"
+]
+}
+}
+}
+}
+},
+"x86": {
+"tool": "none",
+"minutes": 10,
+"zone": 2,
+"link": "any"
+}
+}
+]
+}
