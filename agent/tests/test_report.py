@@ -1,6 +1,7 @@
 """The store's history, the incident report and the span on Ask answers (CONTRACTS.md section 10)."""
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -304,3 +305,38 @@ def test_the_routes_are_the_three_get_endpoints(tmp_path):
     from agent import endpoints
     assert sorted(endpoints.routes(tmp_path / "store.db", "http://127.0.0.1:9")) == [
         ("GET", "/ask/last"), ("GET", "/history"), ("GET", "/report")]
+
+
+def test_get_report_answers_from_the_template_at_once_and_never_waits_on_the_model():
+    # On the board the model took the whole 8 s and the report came back after it. The web answer is
+    # the template now; the model's wording is used only if it is back within half a second.
+    import types
+    from agent import endpoints
+    s, asked = armed_store(intrusions=[(20, {"zone": 2})]), types.SimpleNamespace(query={})
+    template = run(s)[0]["text"]
+
+    def slow(messages):
+        time.sleep(3)
+        return "Armed. One intrusion."
+    started = time.monotonic()
+    out = endpoints.report(s, slow, now_ms=T0 + 70_000, zones=ZONES)(asked)
+    assert out["text"] == template and time.monotonic() - started < 1.5
+    assert endpoints.REPORT_WAIT_S <= 0.5
+
+    # while one report is still waiting its half second for the model, another is not queued behind it
+    release, waiting = threading.Event(), threading.Event()
+
+    def held(messages):
+        waiting.set()
+        release.wait(5)
+        return ""
+    first = threading.Thread(target=endpoints.report(s, held, now_ms=T0 + 70_000, zones=ZONES, timeout_s=5), args=(asked,))
+    first.start()
+    assert waiting.wait(5)
+    started = time.monotonic()
+    out = endpoints.report(s, slow, now_ms=T0 + 70_000, zones=ZONES)(asked)
+    assert out["text"] == template and time.monotonic() - started < 0.4
+    release.set()
+    first.join(5)
+    assert endpoints.MODEL.acquire(blocking=False)   # and the model is free again afterwards
+    endpoints.MODEL.release()
