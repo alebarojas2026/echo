@@ -21,6 +21,34 @@ journalctl -u radio-sight-bus -f  # every 30 s a links: line; "<link> quiet for 
 
 Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sudo (it uses sudo itself). It checks out the ref and restarts only what changed. The Pi uses the same commands; there it installs only `radio-sight-radio-node`, and runs it with or without `--no-pi`, since beacon S doesn't need the cable.
 
+## Keep what the board learned
+After the final lesson, connect the laptop through Ethernet and run
+`board/keep.sh save`. Use BOARD_USER (the checkout owner), BOARD_REPO and
+BOARD_HOST from the laptop's environment or .env, as for push-web. The host must
+be 192.168.77.2, with no PI_HOST hop; the script checks that the laptop's route
+is not Wi-Fi. KEEP_INTERFACE may name the expected Ethernet adapter. Linux
+needs `ip`; macOS uses `route` and `networksetup`.
+An explicit environment value wins over .env, including `PI_HOST=` to disable
+a saved proxy hop for this wired command.
+
+The dated laptop folder under data/keep/ is gitignored. It contains only
+model.pkl, baseline.json, place.json, baselines.jsonl, a consistent store.db
+snapshot made by Python's SQLite backup API (the same online snapshot as
+`sqlite3 .backup`), the source COMMIT and checksums. No extra SQLite CLI package
+is required. Recordings
+are never copied. If learning changes during save, the snapshot is refused.
+
+To recover, deploy the backup's COMMIT first, then run
+`board/keep.sh restore <saved-folder>` from the wired laptop. It checks the
+files and commit before stopping the brain/store, stages on the board's data
+filesystem, replaces the five files with renames, starts both services, waits
+up to 20 s for service/port readiness, then runs the localhost read-only demo
+check. A failure while replacing files leaves
+services stopped; inspect the error and retry before using the judge screen.
+The SSH login must have noninteractive sudo for the service stop/start. Rehearse
+one real restore after the last lesson; no successful hardware restore is
+claimed by the fixture tests.
+
 ## Placeholders
 | In the file | Becomes |
 |---|---|
