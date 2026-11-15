@@ -36,10 +36,11 @@ def test_2_invalid_negative_recordings_are_missing(tmp_path, purpose, events):
     assert not any("proof.false_alarms" in c for c in commands)
 
 
-def test_3_missing_walker_is_unknown():
+def test_3_missing_walker_cannot_claim_independence():
     data = session()
     data["meta"].pop("walker")
-    assert score([data], FakeReplay())["zone"]["walkers"] is None
+    with pytest.raises(ValueError, match="walker pseudonym"):
+        score([data], FakeReplay())
 
 
 @pytest.mark.parametrize("source,duration", [("datasheet typical", 300), ("rated spec", 300),
