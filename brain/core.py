@@ -30,6 +30,7 @@ from brain.alert import Armed, Tamper, Watch
 from brain.hall import Hall
 from brain.health import Health
 from brain.lesson import Lesson
+from brain.passing import PASS_DB, PASS_MAX_S, PASS_MIN_S, PERIOD_MS, PassThrough
 from brain.train import Model
 from brain.xray import Xray
 
@@ -262,6 +263,10 @@ class Brain:
             # (brain/alert.py, Watch.line), and the check-in is stepping out of the line and back.
             self.watch.line = {"link": self.presence_line,
                                "return_ms": int(float(rule.get("checkin_return_s", CHECKIN_RETURN_S)) * 1000)}
+        # A walk straight through that line (brain/passing.py): a short, deep dip of its own readings that
+        # never becomes a presence. It only reads; the numbers have their defaults there.
+        self.passing = PassThrough(rule.get("pass_db", PASS_DB), rule.get("pass_min_s", PASS_MIN_S),
+                                   rule.get("pass_max_s", PASS_MAX_S), self.presence_off_db) if self.presence_line else None
         self._thing = False                        # the decision is "a thing in the line"
         self._thing_since: Optional[int] = None    # since when the line has looked like one
         self._thing_lost: Optional[int] = None     # since when it has stopped looking like one
@@ -406,6 +411,18 @@ class Brain:
                 for window in self.windower.push(msg):
                     self.window = window
         self._tick()
+        if self.passing and kind == "rssi" and msg.get("link") == self.presence_line:
+            self._walked_through(int(t), float(msg["dbm"]))
+
+    def _walked_through(self, t: int, dbm: float) -> None:
+        """One reading of the presence line for the walk-through rule, after every other rule has had it.
+        The rule is told to keep quiet while somebody is announced as here or no decision is shown."""
+        busy = bool(self.pred is None or self._said_zone != 0 or self._thing or self.capture or self.health.blind
+                    or self.router != HOME or self.settle is not None)
+        hz = self.expected_hz.get(self.presence_line)
+        self.passing.on_reading(t, dbm, self.base.get(self.presence_line), busy, 1000.0 / hz if hz else PERIOD_MS)
+        for _ in range(self.passing.pop()):
+            self.emit("passed_by", {"zone": self.zone_ids[0]})
 
     def _hall_heard(self, msg: dict) -> None:
         """Remember when a hall beacon's link was last heard, for tamper. Nothing else uses it."""
