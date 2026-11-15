@@ -9,15 +9,40 @@ from statistics import median
 import time
 
 
+def area_of(config):
+    """(width, height, split_x, split_y) in metres for a calibration config. The area is where a
+    person can stand: the square (side_m, split in four) or, with area_m and zone_split_m from
+    nodes.json, the desk layout's strip, split along x only (split_y None)."""
+    side = config.get("side_m", 2.0)
+    w, h = config.get("area_m", [side, side])
+    sx, sy = config.get("zone_split_m", [w / 2, h / 2])
+    return w, h, sx, sy
+
+
+def zone_in(area, x, y):
+    """CONTRACTS.md section 3: 0 outside the area; the square's 1-4 (1 + (x >= sx) + 2*(y < sy)),
+    or the strip's 1-2 (1 + (x >= sx)) when there is no split along y."""
+    w, h, sx, sy = area
+    if not (0 <= x <= w and 0 <= y <= h):
+        return 0
+    return 1 + int(x >= sx) + (2 * int(y < sy) if sy is not None else 0)
+
+
 class Projection:
     def __init__(self, config):
         self.matrix = config["homography"]
         self.width, self.height = config["image_size"]
-        self.side = config.get("side_m", 2.0)
-        if self.width <= 0 or self.height <= 0 or self.side <= 0:
+        self.area = area_of(config)
+        self.side = self.area[0]
+        if self.width <= 0 or self.height <= 0 or self.area[0] <= 0 or self.area[1] <= 0:
             raise ValueError("invalid calibration dimensions")
         if len(self.matrix) != 3 or any(len(row) != 3 for row in self.matrix):
             raise ValueError("homography must be 3 by 3")
+
+    def corners_m(self):
+        """The area's SW, SE, NE, NW corners in metres, the order they are clicked in."""
+        w, h = self.area[:2]
+        return [(0, 0), (w, 0), (w, h), (0, h)]
 
     def point(self, x, y):
         h = self.matrix
@@ -30,10 +55,7 @@ class Projection:
         return p
 
     def zone(self, point):
-        x, y = point
-        if not (0 <= x <= self.side and 0 <= y <= self.side):
-            return 0
-        return 1 + int(x >= self.side / 2) + 2 * int(y < self.side / 2)
+        return zone_in(self.area, *point)
 
 
 class Motion:

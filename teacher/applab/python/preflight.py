@@ -24,10 +24,10 @@ def box_size(text):
 
 def validate(config, detector_size):
     size = config.get("image_size", [])
-    side = config.get("side_m", 2.0)
+    dims = [config.get("side_m", 2.0), *config.get("area_m", [])]
     if len(size) != 2 or not all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in size):
         raise ValueError("calibration image_size must contain two positive integers")
-    if not isinstance(side, (int, float)) or not math.isfinite(side) or side <= 0:
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) and v > 0 for v in dims):
         raise ValueError("floor side must be positive and finite")
     projection = Projection(config)
     h = projection.matrix
@@ -43,8 +43,7 @@ def validate(config, detector_size):
     corners = config.get("corners_px")
     if not isinstance(corners, list) or len(corners) != 4 or config.get("corner_order") != ["SW", "SE", "NE", "NW"]:
         raise ValueError("calibration must include measured SW, SE, NE, NW corners")
-    side = projection.side
-    for point, expected in zip(corners, [(0, 0), (side, 0), (side, side), (0, side)]):
+    for point, expected in zip(corners, projection.corners_m()):
         if len(point) != 2 or not all(math.isfinite(v) for v in point):
             raise ValueError("invalid corner coordinates")
         if not (0 <= point[0] < projection.width and 0 <= point[1] < projection.height):
