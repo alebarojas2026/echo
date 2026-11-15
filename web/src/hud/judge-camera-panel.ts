@@ -1,33 +1,35 @@
-import { changingText } from './changing-text'
-import { zoneName } from './judge-moment'
 import type { StateMsg } from '../room/contract'
-export function cameraLine(state: StateMsg | null) {
+
+export function cameraLine(state: StateMsg | null, radioSeconds: number | null = null) {
   if (!state) return ''
-  if (state.cam === 'off') return 'Camera unplugged · radio only'
+  if (state.cam === 'off') return radioSeconds === null ? 'Radio only' : `Radio only · ${Math.floor(radioSeconds / 60)}:${String(radioSeconds % 60).padStart(2, '0')}`
   if (state.cam === 'stalled') return 'Camera stalled · radio only'
-  const teacher = state.teacher
-  return 'Camera on · teaching the radio' + (teacher?.present ? ` · the camera sees them in ${zoneName(teacher.zone)}${state.pred?.zone === teacher.zone ? ' · agrees' : ''}` : '')
+  const agrees = state.teacher && state.pred && state.teacher.present === state.pred.present && state.teacher.zone === state.pred.zone
+  return agrees ? 'Camera teaching · agrees' : 'Camera teaching'
+}
+export class RadioOnlyClock {
+  private previous: StateMsg['cam'] | undefined
+  private start: number | null = null
+  reset() { this.previous = undefined; this.start = null }
+  update(state: StateMsg) {
+    if (state.cam === 'off' && this.previous !== undefined && this.previous !== 'off') this.start = state.t
+    if (state.cam !== 'off') this.start = null
+    this.previous = state.cam
+    return this.start !== null && state.t >= this.start ? Math.floor((state.t - this.start) / 1000) : null
+  }
 }
 export function mountPanel(root: HTMLElement) {
-  root.innerHTML = '<p data-testid="cam-status"></p><p data-testid="camera-unplug" hidden>Camera unplugged · Radio alone is tracking the room</p>'
+  root.innerHTML = '<p data-testid="cam-status"></p>'
   const line = root.firstElementChild as HTMLElement
-  const text = changingText(line)
-  const unplug = root.lastElementChild as HTMLElement
-  let previous: StateMsg['cam'] | undefined
-  let timer: ReturnType<typeof setTimeout> | undefined
+  const clock = new RadioOnlyClock()
   return {
     update(state: StateMsg | null, stale: boolean) {
       root.hidden = stale || !state
-      text.set(cameraLine(state))
-      line.style.color = state?.cam === 'off' || (state?.cam === 'on' && state.teacher?.present && state.teacher.zone === state.pred?.zone) ? 'var(--text)' : 'var(--text-2)'
-      if (previous === 'on' && state?.cam === 'off' && !stale) {
-        clearTimeout(timer)
-        unplug.hidden = false
-        timer = setTimeout(() => { unplug.hidden = true }, 8000)
-      }
-      if (stale || state?.cam !== 'off') unplug.hidden = true
-      previous = state?.cam
+      if (stale || !state) return
+      const text = cameraLine(state, clock.update(state))
+      if (line.textContent !== text) line.textContent = text
+      line.style.color = state.cam === 'off' || text.endsWith('agrees') ? 'var(--text)' : 'var(--text-2)'
     },
-    dispose() { text.dispose(); clearTimeout(timer) },
+    reset() { clock.reset() },
   }
 }
