@@ -98,10 +98,38 @@ def object_evidence(messages, end, base):
     return False
 
 
+def read_baselines(baseline_path):
+    """Every baseline the brain has taken, oldest first: [{"t", "base"}], from baselines.jsonl next
+    to baseline.json. [] when the file isn't there (then baseline.json is the only one)."""
+    out = []
+    try:
+        lines = Path(baseline_path).with_name("baselines.jsonl").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        try:
+            entry = json.loads(line)
+            out.append({"t": entry["t"], "base": {k: float(v) for k, v in entry["base"].items()}})
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+    return sorted(out, key=lambda e: e["t"])
+
+
+def base_for(session, history):
+    """The baseline in force when a session was recorded (the last one at or before its meta),
+    or None when the history doesn't reach back that far."""
+    found = None
+    for entry in history:
+        if entry["t"] <= session["meta"]["recv_t"]:
+            found = entry["base"]
+    return found
+
+
 class BrainReplay:
     """Use the real brain state machine, with camera truth kept outside inference."""
-    def __init__(self, model, base, expected_hz):
+    def __init__(self, model, base, expected_hz, history=()):
         self.model, self.base, self.expected_hz = model, base, expected_hz
+        self.history = list(history)   # a held-out session is replayed on the baseline it was recorded on
         self.train_sessions = set(model.train_sessions)
         self.train_s = model.train_s
 
@@ -109,11 +137,12 @@ class BrainReplay:
         from brain.core import Brain
         from brain.features import Windower
 
+        base = base_for(session, self.history) or self.base
         brain = Brain()
-        brain.base = dict(self.base)
+        brain.base = dict(base)
         brain.expected_hz = dict(self.expected_hz)
         brain.model = self.model
-        brain.windower = Windower(self.base)
+        brain.windower = Windower(base)
         last_end = None
         for message in session["messages"]:
             if message.get("type") == "cmd":
@@ -280,8 +309,13 @@ def main():
     from brain.train import Model
 
     base, rates = read_baseline(args.baseline)
+    # A place can have more than one baseline (keep_model, the automatic one after router_home).
+    # Each recording is read against the one in force when it was made, as the brain's train does.
+    history = read_baselines(args.baseline)
+    for s in training:
+        s["base"] = base_for(s, history)
     model = Model(base).fit(training)
-    adapter = BrainReplay(model, base, rates)
+    adapter = BrainReplay(model, base, rates, history)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     report = score(heldout, adapter, args.on_board, args.allow_sim, commit)
     if args.output.exists():
