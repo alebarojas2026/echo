@@ -38,11 +38,11 @@ test('headlines say where by the zone name, and never a side', () => {
   expect(zonePlace(desk.zones[0].id, desk)).toBe('on the left')
 })
 
-test('the signal trace is one row for the spot, from the Bluetooth lines that cross it', () => {
+test('the signal trace is one row for the spot, from every radio line that crosses it', () => {
   const sides = signalSides(layout)
-  expect(sides).toEqual([{ zone: 1, name: 'At the desk', links: ['pi5b>unoq:ble', 'pi5>pi5b:ble', 'pi5b>pi5:ble'] }])
-  // the deepest fresh line; the desk lines and the Wi-Fi line never count
-  expect(sideDrop(sides[0], [link('pi5>unoq:ble', 30), link('pi5>pi5b:wifi', 25), link('pi5b>unoq:ble', 11.5), link('pi5b>pi5:ble', 13, 'stale')])).toBe(11.5)
+  expect(sides).toEqual([{ zone: 1, name: 'At the desk', links: ['pi5b>unoq:ble', 'pi5>pi5b:wifi', 'pi5>pi5b:ble', 'pi5b>pi5:ble'] }])
+  // The deepest fresh crossing line counts; desk-only and stale lines do not.
+  expect(sideDrop(sides[0], [link('pi5>unoq:ble', 30), link('pi5>pi5b:wifi', 25), link('pi5b>unoq:ble', 11.5), link('pi5b>pi5:ble', 13, 'stale')])).toBe(25)
   expect(sideDrop(sides[0], [link('pi5>unoq:ble', 30), link('pi5>unoq:wifi', 9)])).toBeNull()
   expect(traceStatus({ ...here('still'), links: [link('pi5b>unoq:ble', 12)] }, false, sides)).toBe('ok')
   expect(traceStatus({ ...here('still'), links: [link('pi5>unoq:wifi', 1)] }, false, sides)).toBe('no-readings')
@@ -57,7 +57,7 @@ test('the row turns the person colour while someone is on the spot', () => {
   expect(history.samples.map((s) => [s.drop, s.present])).toEqual([[[12], [true]], [[12], [false]]])
 })
 
-test('a spot that no Bluetooth line crosses has no row, and a two-zone layout keeps its sides', () => {
+test('a spot that no radio line crosses has no row, and a two-zone layout keeps its sides', () => {
   expect(signalSides({ ...layout, links: layout.links.map((l) => ({ ...l, crosses_spot: false })) })).toEqual([])
   // crosses_spot on a layout with two zones is not a spot: the sides are still worked out from the floor
   const two = { ...desk, links: desk.links.map((l) => ({ ...l, crosses_spot: true })) }
