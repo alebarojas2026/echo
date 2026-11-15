@@ -52,7 +52,8 @@ def summary(M):
     ok = [m for m in M if "armed" in m]
     out = {"n": len(M), "ran": len(ok) / max(len(M), 1),
            "baseline_s": _med([m.get("desk_baseline_s") for m in M]),
-           "baseline_late": _mean([(m.get("desk_baseline_s") or 999) > 45 for m in M if m.get("keep_model")])}
+           "baseline_late": _mean([(m.get("desk_baseline_s") or 999) > 60 for m in M if m.get("keep_model")]),
+           "blind_frac": _mean([m["blind_s"] / m["live_s"] for m in M if m.get("live_s")])}
     if not ok:
         return out
     em = sum(m["empty_min"] for m in ok) or 1e-9

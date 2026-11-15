@@ -65,6 +65,7 @@ AISLE_FAR_Y = -0.35          # the next row's desk edge: the aisle is 0.95 m wid
 CROSS = ("west>pi5b:ble", "west>unoq:ble", "east>unoq:ble", "east>pi5b:ble")
 ZONE_LINKS = {1: ("west>pi5b:ble", "west>unoq:ble"), 2: ("east>unoq:ble", "east>pi5b:ble")}
 SIX = ("pi5>unoq:wifi", "pi5>unoq:ble", "east>unoq:ble", "west>unoq:ble", "east>pi5:ble", "west>pi5:ble")
+BASELINE_ROOM_S = 100.0      # the operator gives the desk baseline this much longer than its capture
 VISITS = ("standard", "back40", "two", "backpack", "kid", "lean")
 
 
@@ -291,7 +292,7 @@ def build(seed: int, env: rf.Env, scene: dict = None):
     S.idle(3.0)
     S.cmd("baseline", keep_model=True)
     t_base = S.t
-    S.idle(p["baseline_s"] + 30.0)   # same here; what is left of this is an empty strip
+    S.idle(p["baseline_s"] + BASELINE_ROOM_S)   # same here; what is left of this is an empty strip
     S.span("desk_baseline", t_base, t_base + p["baseline_s"] + 3.0)
     t0 = S.t
     S.idle(30.0)
@@ -887,7 +888,12 @@ def score(S: Scene, plan: dict, res: dict, radio: DeskRadio, links) -> dict:
     m = {"trained": res["trained"], "keep_model": res["keep_model"], "desk_baseline_s": res["desk_baseline_t"],
          "blind_s": round(res["blind_s"], 1), "null_s": round(res["null_s"], 1),
          "live_s": round(plan["T"] - plan["tB"], 1), "decisions": sum(1 for _, d in log if d is not None)}
-    if not res["trained"] or not m["decisions"]:
+    # Not ready: the desk baseline was still running when the judge was due (it starts over
+    # whenever a link goes quiet for 1 s or health is not ok). Nothing after it is scored.
+    late = res["keep_model"] and (res["desk_baseline_t"] is None
+                                  or res["desk_baseline_t"] > plan["scene"]["baseline_s"] + BASELINE_ROOM_S - 5.0)
+    m["ready"] = bool(res["trained"] and m["decisions"] and not late)
+    if not m["ready"]:
         return m
     if brain.base:
         err = [brain.base[lk] - radio.quiet_dbm(lk, desk=res["desk_baseline_t"] is not None)

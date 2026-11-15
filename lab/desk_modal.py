@@ -109,12 +109,6 @@ def jobs_for(stage: str, n: int = None) -> list:
                     for reach in (0.35, 0.45):
                         add(f"B visit {v} reach {reach}", 3000 + s, r, scene=dict(BETTER, visit=v, reach_m=reach))
                     add(f"A visit {v} reach 0.35", 3000 + s, r, scene={"visit": v})
-    elif stage == "links":                     # strip-crossing links only, on the sweep's seeds
-        for s in range(n or 80):
-            for r in RATES:
-                for links in ("cross", "cross+ends"):
-                    add(f"A links {links}", 1000 + s, r, links=links)
-                    add(f"B links {links}", 1000 + s, r, scene=dict(BETTER), links=links)
     elif stage == "today":                     # the brain as it is on main: six links, tonight's place
         for s in range(n or 60):
             for r in RATES:
@@ -176,12 +170,17 @@ def _write(stage, results, total, suffix=""):
 
 
 if modal is not None:
-    @app.function(cpu=1.0, memory=1024, timeout=1500, retries=1, max_containers=400)
+    CORES = 8
+
+    @app.function(cpu=CORES, memory=6144, timeout=1500, retries=1, max_containers=60)
     def run_batch(jobs: list) -> list:
-        return run_jobs(jobs)
+        """One container works through its jobs in CORES processes."""
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(CORES) as ex:
+            return [r for rows in ex.map(run_jobs, [[j] for j in jobs]) for r in rows]
 
     @app.local_entrypoint()
-    def main(stage: str = "quick", n: int = 0, per_call: int = 12, suffix: str = ""):
+    def main(stage: str = "quick", n: int = 0, per_call: int = 64, suffix: str = ""):
         jobs = jobs_for(stage, n or None)
         batches = [jobs[i:i + per_call] for i in range(0, len(jobs), per_call)]
         print(f"{stage}: {len(jobs)} sessions in {len(batches)} calls; brain code from {BRAIN}")
