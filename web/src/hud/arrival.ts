@@ -3,6 +3,7 @@ import type { Feed } from '../room/feed'
 import { changingText } from './changing-text'
 import './arrival.css'
 import { judgeMoment } from './judge-moment'
+import { zonePlace } from './layout'
 
 type ArrivalState = StateMsg & { armed?: boolean }
 
@@ -13,17 +14,22 @@ export type ArrivalPhase = 'waiting' | 'found' | 'closed'
 /** "Found you." holds this long, then the card fades while the room flies down. */
 export const FOUND_HOLD_MS = 1200
 export const FOUND_FADE_MS = 1800
+/** Someone has to be there this long before "Found you.", so a person walking past does not flash it (#584). */
+export const FOUND_AFTER_MS = 1500
+/** "Someone passed by" stays this long. */
+export const PASSED_BY_MS = 5000
 
 export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTMLElement) {
   const view = document.createElement('section')
   view.className = 'hud-arrival'
   view.setAttribute('aria-label', 'Arrival')
   view.innerHTML = `<header><span>Radio Sight</span><span data-testid="arrival-source"></span></header>
-    <div class="arrival-message" aria-live="polite"><h1 data-testid="arrival-title"></h1><p data-testid="arrival-detail"></p></div>
+    <div class="arrival-message" aria-live="polite"><h1 data-testid="arrival-title"></h1><p data-testid="arrival-detail"></p><p class="arrival-passed" data-testid="arrival-passed"></p></div>
     <footer><span>Taught by a camera. Runs without one.</span><span data-testid="visitor-count">Visitor 0</span></footer>`
   document.body.append(view)
   const title = changingText(view.querySelector('h1')!)
   const detail = changingText(view.querySelector('.arrival-message p')!)
+  const passed = changingText(view.querySelector<HTMLElement>('.arrival-passed')!)
   const counter = view.querySelector('[data-testid="visitor-count"]')!
   const source = view.querySelector('[data-testid="arrival-source"]')!
   const arm = document.createElement('button')
@@ -42,6 +48,10 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   let hold: ReturnType<typeof setTimeout> | undefined
   let fade: Animation[] | undefined
   let phase: ArrivalPhase | undefined
+  let presentSince: number | null = null
+  let presentTimer: ReturnType<typeof setTimeout> | undefined
+  let passedBy = ''
+  let passedTimer: ReturnType<typeof setTimeout> | undefined
   const seen = new Set<string>()
   const cancelHold = () => { clearTimeout(hold); hold = undefined; fade?.forEach(animation => animation.cancel()); fade = undefined }
   const announce = (next: ArrivalPhase) => {
@@ -66,8 +76,13 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     view.dataset.tone = fault ? 'fault' : ''
     title.set(heading)
     detail.set(line)
+    // Small and calm, only while armed and only while nothing louder is on the card.
+    passed.set(state?.armed && !fault && !stale ? passedBy : '')
   }
   const render = () => {
+    const here = !stale && !!state?.pred?.present && state.pred.kind === 'person'
+    if (!here) { presentSince = null; clearTimeout(presentTimer); presentTimer = undefined }
+    else presentSince ??= performance.now()
     arm.textContent = state?.armed ? 'Disarm space' : 'Arm space'
     arm.disabled = !feed || stale
     source.textContent = state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO'
@@ -81,13 +96,15 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     }
     if (state.armed) {
       cancelHold()
-      intrusion ||= state.pred.present && state.pred.kind === 'person'
+      // Only the board's intrusion event raises the alarm: it has waited to see the person stay (#584).
       // An intrusion goes straight to the floor: the words stay, in the fault colour, over the room as it is now.
       show(intrusion ? 'Someone is here.' : 'Armed.', !state.pred ? 'Waiting for a room prediction.' : 'This space should be empty.', intrusion, intrusion ? 'closed' : 'waiting')
       return
     }
     if (complete) { close(); return }
-    if (state.pred.present && state.pred.kind === 'person') {
+    const waited = presentSince === null ? 0 : performance.now() - presentSince
+    if (here && waited < FOUND_AFTER_MS && !hold) presentTimer ??= setTimeout(() => { presentTimer = undefined; render() }, FOUND_AFTER_MS - waited)
+    if (here && (waited >= FOUND_AFTER_MS || hold)) {
       // The words hold, then the card fades as the room flies from the hall down to the floor.
       show('Found you.', state.cam === 'off' ? '0 cameras' : state.cam === 'on' ? 'Camera teaching' : 'Camera stalled', false, fade ? 'found' : 'waiting')
       if (!hold) hold = setTimeout(() => {
@@ -120,8 +137,16 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
       counter.textContent = `Visitor ${seen.size}`
     }
     if (event.kind === 'intrusion') intrusion = true
+    if (event.kind === 'passed_by') {
+      const zone = typeof event.info.zone === 'number' ? event.info.zone : null
+      passedBy = zone === null ? 'Someone passed by' : `Someone passed by ${zonePlace(zone)}`
+      clearTimeout(passedTimer)
+      passedTimer = setTimeout(() => { passedBy = ''; render() }, PASSED_BY_MS)
+    }
     if (event.kind === 'disarmed' || event.kind === 'reset') {
       intrusion = false
+      passedBy = ''
+      clearTimeout(passedTimer)
       if (state) state = { ...state, armed: false }
     }
     if (event.kind === 'reset') { complete = false; cancelHold() }
@@ -130,5 +155,5 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
   const visibility = new MutationObserver(render)
   visibility.observe(operator, { attributes: true, attributeFilter: ['hidden'] })
   render()
-  return () => { cancelHold(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
+  return () => { cancelHold(); clearTimeout(presentTimer); clearTimeout(passedTimer); passed.dispose(); unsubscribe?.(); offEvents?.(); visibility.disconnect(); title.dispose(); detail.dispose(); arm.remove(); skip.remove(); view.remove(); announce('closed'); host.inert = false; host.removeAttribute('aria-hidden') }
 }

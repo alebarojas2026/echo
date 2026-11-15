@@ -10,6 +10,8 @@
 .arrival-message { margin:auto 0; }
 .arrival-message h1 { font-size:72px; font-weight:600; letter-spacing:-.03em; line-height:1.04; margin:0 0 24px; }
 .arrival-message p { font-size:40px; margin:0; color:var(--text-2); }
+/* "Someone passed by": one small calm line with its own place, so nothing moves when it comes and goes. */
+.arrival-message .arrival-passed { font-size:28px; min-height:1.3em; margin-top:24px; }
 .hud-arrival[data-tone="fault"] h1 { color:var(--fault); }
 .hud-arrival footer { color:var(--text-2); flex-direction:column; gap:8px; }
 @media(max-width:768px) { .hud-arrival { padding:32px 24px; } .arrival-message h1 { font-size:56px; } .arrival-message p { font-size:32px; } .hud-arrival footer { flex-direction:column; } }

@@ -21,7 +21,7 @@ for (const [width, height] of [[1920,1080], [1440,900]]) {
     await expect(title).toHaveText('Nobody is here.')
     await capture(page, `${width}-empty`)
     await page.evaluate(() => { window.arrival.event('enter', 'one'); window.arrival.event('enter', 'one'); window.arrival.update('still') })
-    await page.clock.runFor(300)
+    await page.clock.runFor(1800)
     await expect(title).toHaveText('Found you.')
     await expect(page.getByTestId('arrival-detail')).toHaveText('0 cameras')
     await expect(page.getByTestId('visitor-count')).toHaveText('Visitor 1')
@@ -75,6 +75,7 @@ test('camera wording, cancelled handoff and disposal', async ({ page }) => {
   await page.goto('/tests/arrival-harness.html')
   await expect.poll(() => page.evaluate(() => !!window.arrival)).toBe(true)
   await page.evaluate(() => window.arrival.update('still', { cam: 'on' }))
+  await page.clock.runFor(1600)
   await expect(page.getByTestId('arrival-detail')).toHaveText('Camera teaching')
   await page.evaluate(() => window.arrival.update('blind'))
   await page.clock.fastForward(4000)
@@ -102,13 +103,13 @@ test('waiting shows the room beside readable words, and found fades the card as 
   await expect(page.locator('#room')).toHaveAttribute('data-arrival', 'waiting')
   await expect(card).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   // The words sit on the page colour, inside the rail, never over the room.
-  for (const part of ['h1', '.arrival-message p', 'footer']) {
+  for (const part of ['h1', '[data-testid="arrival-detail"]', 'footer']) {
     const box = await card.locator(part).boundingBox()
     expect(box.x + box.width).toBeLessThanOrEqual(640)
   }
   await capture(page, '1920-over-hall-waiting')
   await page.evaluate(() => window.arrival.update('still'))
-  await page.clock.runFor(1100)
+  await page.clock.runFor(1500 + 1100)
   await expect(page.getByTestId('arrival-title')).toHaveText('Found you.')
   expect(await phase(page)).toBe('waiting') // the words hold first: no fly behind a card that still covers it
   await expect(card.locator('.arrival-message')).toHaveCSS('opacity', '1')
@@ -148,7 +149,7 @@ test('armed waits over the room, and an intrusion goes straight to the floor in 
 test('reduced motion still hands over, and the operator can skip the card', async ({ page }) => {
   await overHall(page, { reduced: true })
   await page.evaluate(() => window.arrival.update('still'))
-  await page.clock.runFor(1300)
+  await page.clock.runFor(1500 + 1300)
   expect(await phase(page)).toBe('found')
   await page.clock.runFor(1800)
   await expect(page.locator('.hud-arrival')).toBeHidden()
@@ -163,3 +164,56 @@ test('reduced motion still hands over, and the operator can skip the card', asyn
   await expect(page.locator('.hud-arrival')).toBeHidden()
   expect(await phase(page)).toBe('closed')
 })
+
+// Foot traffic (#584, #586): a person walking past must not flash "Found you." or raise the alarm.
+test('a 1 s presence is not greeted, a 2 s presence is', async ({ page }) => {
+  await overHall(page)
+  const title = page.getByTestId('arrival-title')
+  await page.evaluate(() => window.arrival.update('still'))
+  for (let i = 0; i < 10; i++) {
+    await page.clock.runFor(100)
+    await expect(title).toHaveText('Nobody is here.')
+    await expect(title).toHaveCSS('opacity', '1') // no flicker either
+  }
+  await page.evaluate(() => window.arrival.update('empty'))
+  await page.clock.runFor(2000)
+  await expect(title).toHaveText('Nobody is here.')
+  expect(await phase(page)).toBe('waiting')
+  await page.evaluate(() => window.arrival.update('still'))
+  await page.clock.runFor(1400)
+  await expect(title).toHaveText('Nobody is here.')
+  await page.clock.runFor(600)
+  await expect(title).toHaveText('Found you.')
+})
+for (const [width, height] of [[1920, 1080], [1440, 900]]) {
+  test(`armed: passed by is one calm line, an intrusion is the alarm, at ${width}`, async ({ page }) => {
+    await overHall(page)
+    await page.setViewportSize({ width, height })
+    const title = page.getByTestId('arrival-title')
+    const line = page.getByTestId('arrival-passed')
+    await page.evaluate(() => window.arrival.update('empty', { armed: true }))
+    await page.clock.runFor(1000)
+    const top = (await title.boundingBox()).y
+    // Someone appears while armed: the card waits for the board to say which it was.
+    await page.evaluate(() => window.arrival.update('still', { armed: true }))
+    await page.clock.runFor(1000)
+    await expect(title).toHaveText('Armed.')
+    const zone = await page.evaluate(() => window.arrival.peek('still').pred.zone)
+    await page.evaluate(zone => { window.arrival.update('empty', { armed: true }); window.arrival.event('passed_by', undefined, { zone }) }, zone)
+    await page.clock.runFor(1000)
+    await expect(title).toHaveText('Armed.')
+    await expect(title).not.toHaveCSS('color', 'rgb(242, 85, 90)')
+    await expect(line).toHaveText(/^Someone passed by (on the (left|right)|in the bathroom)$/)
+    await expect(line).toHaveCSS('color', 'rgb(154, 163, 173)')
+    await expect(line).toHaveCSS('font-size', '28px')
+    expect((await title.boundingBox()).y).toBe(top) // nothing moved to make room for it
+    await capture(page, `${width}-passed-by`)
+    await page.clock.runFor(4500)
+    await expect(line).toHaveText('')
+    await page.evaluate(() => { window.arrival.update('still', { armed: true }); window.arrival.event('intrusion') })
+    await page.clock.runFor(300)
+    await expect(title).toHaveText('Someone is here.')
+    await expect(title).toHaveCSS('color', 'rgb(242, 85, 90)')
+    await capture(page, `${width}-intrusion`)
+  })
+}
