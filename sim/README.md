@@ -120,6 +120,7 @@ Use the short name: `python -m sim.fake zone_tour`.
 | `clipped_feet` | Stand in zone 2 then zone 1; labels are clipped from 6 s to 9 s | 18 s |
 | `demo` | The whole demo in order, for the fake brain (see below) | 64 s |
 | `still_flicker` | Stand still in zone 4 with one 0.3 s moving flicker; the alert must still fire at 10 s | 18 s |
+| `tamper` | Nobody there. Armed at 3 s (the path sends the cmd itself); the east beacon is unplugged from 10 s to 20 s: `tamper` at 13 s, `tamper_cleared` at 22 s; disarmed at 36 s | 40 s |
 | `tray_removed` | Person in zone 2 throughout; tray at T1 from 5 s to 14 s, gone from the picture about 1 s later | 20 s |
 | `lesson` | The live lesson (built from the layout in `sim/lesson.py`, no file): someone steps left and right, desk-view labels with no foot point, the camera unplugged at 45 s. The fake brain shows `model.training.lesson` ("learning: 6 of 10", then 8) from 25 s until the camera goes | 66 s |
 
@@ -196,7 +197,12 @@ sends the `reset` event and shows the narrator's template recap of the demo sinc
 `arm {on: true|false}` arms or disarms (section 6, Armed: `state.armed`, the `armed`,
 `disarmed` and `intrusion` events, one intrusion each time a person appears while armed; reset
 disarms), and the rest are accepted and ignored. The `arrival` path is the hero arrival: nobody,
-then someone steps in on the left, crosses right and stands still. Options: `--host`, `--port`, `--rate`, `--seed`,
+then someone steps in on the left, crosses right and stands still. The `tamper` path is tamper while armed
+(section 6, Tamper; wording in issue #533): `python -m sim.ws tamper --loop` arms by itself (a path's
+`"commands": [{"t", "cmd", "args"}]` are run by the fake brain at their times), then east goes silent: the event
+`tamper` with `info.node`, `state.tamper: ["east"]` with health blind and pred null, and `tamper_cleared` 2 s
+after east is back. `state.tamper` is absent while no node is listed. Any path's `outages` with a `node` silence
+every link of that node, so `{"node": "west", "t_on": 10, "t_off": 18}` unplugs another device. Options: `--host`, `--port`, `--rate`, `--seed`,
 `--speed`, `--loop`. The crowd game page can point at it with `?ws=ws://127.0.0.1:8765/ws`; its
 rounds count as practice because the source is `sim`.
 

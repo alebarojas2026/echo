@@ -32,8 +32,12 @@ def kinds(events):
 @pytest.mark.parametrize("name", sorted(p.stem for p in fake.PATHS_DIR.glob("*.json")))
 def test_every_message_passes_the_contract_checker(name):
     encode = encoder(1763149500000)
-    for m in state.run(fake.load_path(name)):
-        assert set(errors(json.loads(encode(m)))) <= UNMEASURED, (name, m["t"])
+    path = fake.load_path(name)
+    # A path that arms itself sends `armed` and `tamper`, which the schema doesn't list yet (#440, #541).
+    waived = ARMED_NOT_IN_SCHEMA + TAMPER_NOT_IN_SCHEMA if path.get("commands") else ()
+    for m in state.run(path):
+        for err in errors(json.loads(encode(m))):
+            assert err in UNMEASURED or any(word in err for word in waived), (name, m["t"], err)
 
 
 def test_starts_with_no_readings_no_baseline_and_no_model():
@@ -299,6 +303,7 @@ def test_reset_sends_the_reset_event_and_the_template_recap():
 # Section 5 and 6, Armed. The schema in contracts/ doesn't list `armed` or its events yet (its issue is
 # open), so these are the only schema errors allowed here.
 ARMED_NOT_IN_SCHEMA = ("armed", "disarmed", "intrusion", "Unevaluated properties are not allowed ('armed' was unexpected)")
+TAMPER_NOT_IN_SCHEMA = ("tamper", "tamper_cleared")   # the same for Tamper (#541)
 
 
 def test_armed_mode_raises_one_intrusion_per_arrival():
@@ -333,6 +338,51 @@ def test_no_intrusion_while_blind_or_disarmed():
     brain.recent.extend([("person", 3, False)] * 10)
     brain._intrusion(5.0, None)                                                     # pred null: blind or not trained
     assert not any(e["kind"] == "intrusion" for e in brain.events)
+
+
+def tamper_run(commands=None, **more):
+    path = {**fake.load_path("tamper"), **more}
+    if commands is not None:
+        path["commands"] = commands
+    msgs = list(state.run(path))
+    events = [(m["t"], m["kind"], m["info"]) for m in msgs if m["type"] == "event"]
+    return [m for m in msgs if m["type"] == "state"], events, msgs
+
+
+def test_tamper_path_armed_east_goes_silent_then_comes_back():
+    states, events, msgs = tamper_run()
+    told = [(t, k, i) for t, k, i in events if k in ("armed", "tamper", "tamper_cleared", "disarmed", "intrusion")]
+    assert told == [(3.0, "armed", {}), (13.0, "tamper", {"node": "east"}),          # 3 s after east stopped at 10 s
+                    (22.0, "tamper_cleared", {"node": "east"}), (36.0, "disarmed", {})]   # 2 s after it is back at 20 s
+    assert "tamper" not in at(states, 12) and "tamper" not in at(states, 23)          # absent when no node is listed
+    during = at(states, 16)
+    assert during["tamper"] == ["east"] and during["armed"] is True
+    assert during["health"]["status"] == "blind" and during["pred"] is None           # blind, and tamper still said
+    assert during["narration"]["text"] and len(during["narration"]["text"].split()) <= 16
+    encode = encoder(1763149500000)
+    not_in_schema = ARMED_NOT_IN_SCHEMA + TAMPER_NOT_IN_SCHEMA
+    for m in msgs:
+        for err in errors(json.loads(encode(m))):
+            assert err in UNMEASURED or any(word in err for word in not_in_schema), err
+
+
+def test_tamper_needs_armed_and_disarm_or_reset_clears_it():
+    _, events, _ = tamper_run(commands=[])                                            # never armed: only blind
+    assert not any(k.startswith("tamper") for _, k, _ in events) and any(k == "blind_on" for _, k, _ in events)
+    for cmd in ({"cmd": "arm", "args": {"on": False}}, {"cmd": "reset"}):             # east is still unplugged at 16 s
+        states, events, _ = tamper_run(commands=[{"t": 3, "cmd": "arm", "args": {"on": True}}, {"t": 16, **cmd}])
+        kinds = [(t, k) for t, k, _ in events if k in ("tamper", "tamper_cleared", "disarmed")]
+        assert kinds == [(13.0, "tamper"), (16.0, "disarmed"), (16.0, "tamper_cleared")]
+        assert "tamper" not in at(states, 17)
+    # armed with east already silent: raised at once
+    _, events, _ = tamper_run(commands=[{"t": 15, "cmd": "arm", "args": {"on": True}}])
+    assert [(t, k) for t, k, _ in events if k.startswith("tamper")] == [(15.0, "tamper"), (22.0, "tamper_cleared")]
+
+
+def test_a_person_stepping_in_while_a_device_is_silent_raises_no_intrusion():
+    person = [{"t": 0, "x": None}, {"t": 14, "x": 0.5, "y": 0.5}, {"t": 18, "x": 0.5, "y": 0.5}, {"t": 18.1, "x": None}]
+    _, events, _ = tamper_run(person=person)
+    assert [k for _, k, _ in events if k in ("tamper", "intrusion")] == ["tamper"]    # blind: the tamper is what is said
 
 
 def test_a_link_pi_b_hears_degrades_health_but_never_blinds_it(monkeypatch):
