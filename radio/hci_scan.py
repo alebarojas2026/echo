@@ -12,8 +12,9 @@ Scanning is one setting for the whole controller. When something else changes it
 kernel setting its own scan, which is half duty and filters duplicates; an HCI Reset), the scan is set
 up again with ours 1 s after the last outside change, and the journal says so.
 
-Only reports carrying manufacturer data FFFF 52 53 'S'|'E'|'W' are kept (radio/nodes.json); everything
-else is dropped before any JSON is built, and no address ever leaves the parser.
+Only reports carrying manufacturer data FFFF 52 53 'S'|'E'|'W' are kept (radio/nodes.json), plus the
+optional hall beacons listed there ('H'|'J'); everything else is dropped before any JSON is built, and
+no address ever leaves the parser.
 """
 import argparse
 import json
@@ -25,7 +26,7 @@ import sys
 import time
 
 from . import hci
-from .nodes import BEACONS, LINKS, RECEIVERS
+from .nodes import BEACONS, HEARD, LINKS, RECEIVERS
 
 MARK = b"\xff\xff\x52\x53"  # company id FFFF + "RS": a cheap test before parsing a packet
 
@@ -47,7 +48,7 @@ def kept(packet: bytes, rx: str):
             continue
         for payload in hci.manufacturer_data(data):
             link = f"{BEACONS.get(payload)}>{rx}:ble"
-            if link in LINKS:
+            if link in HEARD:
                 out.append((link, rssi))
                 break
     return out
@@ -86,7 +87,7 @@ def make_bus_emitter(sock: socket.socket, target: tuple[str, int], rx: str):
 
     def emit(link: str, dbm: int):
         nonlocal seq
-        tx = LINKS[link]["tx"]
+        tx = HEARD[link]["tx"]
         msg = {
             "v": 2,
             "type": "rssi",
