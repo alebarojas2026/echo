@@ -104,6 +104,23 @@ def test_an_older_file_is_left_as_it_was_and_the_chain_starts_at_the_first_new_r
     assert [e["kind"] for e in s.events()] == ["enter", "exit"]          # the old rows still answer
 
 
+def test_an_older_file_opened_by_two_programs_at_once_starts_both(tmp_path):
+    # The store and the web server open the same file as the board starts. The one that comes second
+    # may find the seq column added between its look and its own try: that must not end it.
+    path = tmp_path / "store.db"
+    db = sqlite3.connect(path)
+    db.executescript(OLD_SCHEMA)
+    db.commit()
+    db.close()
+    s = Store(path)
+    for table in ("events", "seconds"):
+        s._add_column(table, "seq", "integer")                           # already there: nothing happens
+    with pytest.raises(sqlite3.OperationalError):
+        s._add_column("no_such_table", "seq", "integer")                 # any other fault is still said
+    s.add(state(T0))
+    assert s.verify()["ok"] and s.chain_info()["records"] == 1
+
+
 def test_a_clock_stepped_backwards_does_not_break_the_chain():
     s = filled(Store(":memory:"), 3)
     for i in range(3):
