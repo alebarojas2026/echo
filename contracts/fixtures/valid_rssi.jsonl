@@ -5,3 +5,5 @@
 {"v":2,"type":"rssi","t":1763149512120,"seq":41,"src":"live","link":"west>pi5b:ble","kind":"ble","tx":"west","rx":"pi5b","dbm":-61}
 {"v":2,"type":"rssi","t":1763149512120,"seq":42,"src":"live","link":"east>pi5b:ble","kind":"ble","tx":"east","rx":"pi5b","dbm":-61}
 {"v":2,"type":"rssi","t":1763149512120,"seq":43,"src":"live","link":"pi5>pi5b:ble","kind":"ble","tx":"pi5","rx":"pi5b","dbm":-61}
+{"v":2,"type":"rssi","t":1763149512120,"seq":884,"src":"live","link":"h>unoq:ble","kind":"ble","tx":"h","rx":"unoq","dbm":-88}
+{"v":2,"type":"rssi","t":1763149512120,"seq":44,"src":"live","link":"j>pi5b:ble","kind":"ble","tx":"j","rx":"pi5b","dbm":-88}

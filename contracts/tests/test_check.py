@@ -41,8 +41,17 @@ INVALID = [
     "$.rx",                         # pi5>pi5b:wifi is heard by pi5b, not by the board
     "$.alert.zone",                 # an alert in zone 4
     "$.objects[0].near",            # the old tray spot: on the desk layout the board is the closest node, not pi5
-    "$.pred.why[0]",                # not one of the twelve links
+    "$.pred.why[0]",                # a hall link is never a core link
     "$.args.keep_model",            # keep_model is true or false
+    "$.link",                       # a hall beacon heard by east, which is not a receiver
+    "$.tx",                         # the link says beacon h, tx says j
+    "$.hall[0].activity",           # activity is 0-1
+    "$.hall[0].moving",             # a stale hall link is never moving
+    "$.hall[0].id",                 # a core link in the hall list
+    "$.armed",                      # armed is true or false
+    "'on' is a required property",   # arm says on or off
+    "$.info",                       # an intrusion names a zone or a hall link
+    "$.info",                       # an intrusion is never in zone 0
     "bad JSON",
 ]
 

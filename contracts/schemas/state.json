@@ -40,7 +40,7 @@
                      "static_db": {"type": "array", "items": {"type": "number"}}, "n_links": {"type": "integer", "minimum": 0}},
       "required": ["w", "h", "cell_m", "origin_m", "moving_db", "static_db", "n_links"], "additionalProperties": false},
     "alert": {
-      "$comment": "zone is null only while nothing is counting. limit_s is zones[zone].still_alert_s, null for zone 1.",
+      "$comment": "zone is null only while nothing is counting. limit_s is zones[zone].still_alert_s (10 s in both zones of the desk layout; null for a zone that never alerts).",
       "type": "object",
       "properties": {"state": {"enum": ["none", "counting", "check_on"]}, "zone": {"type": ["integer", "null"], "minimum": 0, "maximum": 2},
                      "still_s": {"type": "number", "minimum": 0}, "limit_s": {"type": ["number", "null"]}},
@@ -67,6 +67,16 @@
       "type": ["object", "null"],
       "properties": {"present": {"type": "boolean"}, "zone": {"$ref": "common.json#/$defs/zone"}, "motion": {"enum": ["moving", "still", null]}},
       "required": ["present", "zone", "motion"], "additionalProperties": false},
+    "hall": {
+      "$comment": "Optional (section 5): a missing hall reads as []. One row per hall link that has a reading. stale -> activity 0 and moving false.",
+      "type": "array", "items": {
+        "type": "object",
+        "properties": {"id": {"$ref": "common.json#/$defs/hall_link"}, "tx": {"$ref": "common.json#/$defs/hall_node"}, "rx": {"$ref": "common.json#/$defs/receiver"},
+                       "xy_m": {"anyOf": [{"$ref": "common.json#/$defs/xy_m"}, {"type": "null"}]}, "activity": {"type": "number", "minimum": 0, "maximum": 1},
+                       "moving": {"type": "boolean"}, "rate_hz": {"type": "number", "minimum": 0}, "stale": {"type": "boolean"}},
+        "required": ["id", "tx", "rx", "xy_m", "activity", "moving", "rate_hz", "stale"], "additionalProperties": false,
+        "if": {"properties": {"stale": {"const": true}}}, "then": {"properties": {"activity": {"const": 0}, "moving": {"const": false}}}}},
+    "armed": {"$comment": "Optional (section 6, Armed): true after arm {on: true}; missing means false.", "type": "boolean"},
     "model": {
       "$comment": "ver, train_s and ms_per_decision are null before training. Once trained, ver is set; train_s and ms_per_decision stay null when nothing was measured (the fake brain).",
       "type": "object",

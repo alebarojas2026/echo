@@ -35,8 +35,8 @@
   ],
   "zone_rule": "zone = 1 + (x >= 0.8) when 0 <= x <= 1.6 and 0 <= y <= 0.6; anywhere else 0 = empty",
   "zones": [
-    {"id": 1, "side": "W", "name": "Living room", "centre_m": [0.4, 0.3], "still_alert_s": null},
-    {"id": 2, "side": "E", "name": "Bathroom", "centre_m": [1.2, 0.3], "still_alert_s": 10}
+    {"id": 1, "side": "W", "name": "Left", "centre_m": [0.4, 0.3], "still_alert_s": 10},
+    {"id": 2, "side": "E", "name": "Right", "centre_m": [1.2, 0.3], "still_alert_s": 10}
   ],
   "router_spots": [
     {"id": "S-home", "xyz_m": [0.8, 1.1, 1.0]},
@@ -56,6 +56,13 @@
       {"node": "pi5b", "id": "B", "data_hex": "FFFF525342"},
       {"node": "east", "id": "E", "data_hex": "FFFF525345"},
       {"node": "west", "id": "W", "data_hex": "FFFF525357"}
+    ]
+  },
+  "hall": {
+    "note": "Optional beacons far outside the layout. A hall link is any link whose tx is one of them, heard by any receiver above: <node>><receiver>:ble. Hall links are never core links: they stay out of the links list above. xyz_m is each beacon's spot in the frame above, null until it is measured in the room.",
+    "beacons": [
+      {"node": "h", "id": "H", "data_hex": "FFFF525348", "xyz_m": null},
+      {"node": "j", "id": "J", "data_hex": "FFFF52534A", "xyz_m": null}
     ]
   }
 }
