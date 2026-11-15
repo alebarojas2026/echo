@@ -765,6 +765,8 @@ class Brain:
         intruder = self.armed.on_pred(pred)
         if intruder is not None:
             self.emit("intrusion", {"zone": intruder})
+        for zone in self.armed.pop_passed():   # only with settings.intrusion_confirm above 0 (not today's contract)
+            self.emit("passed_by", {"zone": zone})
 
     def _announce(self, zone: int) -> None:
         """enter, exit and zone_change, once the new zone has held for settings.zone_hold decisions.

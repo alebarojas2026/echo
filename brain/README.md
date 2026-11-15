@@ -112,6 +112,7 @@ The numbers of the people rules are in one place, `brain/settings.py`, with the 
 | `smooth_decisions`, `smooth_majority` | Alert: zone and kind are the majority of the last decisions | 10, 6 |
 | `moving_run` | Alert: "moving" decisions in a row before the still timer resets | 5 (0.5 s) |
 | `intrusion_decisions`, `intrusion_majority` | Armed: a person appears when present for the majority of the last decisions | 10, 6 |
+| `intrusion_confirm` | Armed: decisions the person must then stay before the intrusion is sent. 0 is the contract's rule (sent at once). Above 0 (30 = 3 s), somebody gone sooner gives a `passed_by` event with the zone instead, and no intrusion. Not in the contract or the schema yet, so it stays 0 | 0 |
 | `zone_hold` | Decisions in a row before `enter`, `exit` or `zone_change` is said (the brain's own) | 5 (0.5 s) |
 | `motion_links` | The links whose features decide moving or still; takes effect at the next `train` | null = every link |
 
@@ -125,7 +126,7 @@ python -m brain.replay data/sessions/crowd1.jsonl --sessions data/sessions --arm
 python -m brain.replay data/sessions/crowd1.jsonl --sessions data/sessions --train walk1 empty1 --set "motion_links=east>unoq:ble,west>unoq:ble"
 ```
 
-It reads `baseline.json` and `model.pkl` from the `--sessions` folder (a copy; the folder is never written to), feeds the recording to `brain.core.Brain` on the recording's own clock, and prints one JSON object: `intrusions`, `alerts`, `still_timer_resets` by cause (`moving`, `zone`, `gone`), `longest_still_s`, `present_s`, the other events, and the settings used. `--train` fits the model from named recordings instead of `model.pkl`. The counts say what the rules do with that recording; they are not accuracy numbers and go nowhere by themselves.
+It reads `baseline.json` and `model.pkl` from the `--sessions` folder (a copy; the folder is never written to), feeds the recording to `brain.core.Brain` on the recording's own clock, and prints one JSON object: `intrusions`, `alerts`, `still_timer_resets` by cause (`moving`, `zone`, `gone`), `passed_by`, `longest_still_s`, `present_s`, the other events, and the settings used. `--train` fits the model from named recordings instead of `model.pkl`. The counts say what the rules do with that recording; they are not accuracy numbers and go nowhere by themselves.
 
 ## The live lesson (`brain/lesson.py`)
 

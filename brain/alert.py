@@ -265,6 +265,10 @@ class Armed:
     nothing more; they have to be gone for the majority of 10 decisions before the next one
     counts. Objects never count. Decisions with pred null (blind, recalibrating) are not
     decisions: the count starts again when pred is back, and whoever was already in stays "in".
+
+    settings.intrusion_confirm (0 today, the contract's rule) makes it wait: the intrusion is sent
+    only when the person is still there that many decisions after appearing. Somebody gone before
+    then walked past: their zone goes to `passed` (pop_passed) and no intrusion is sent.
     """
 
     def __init__(self, settings: Optional[S.Settings] = None):
@@ -272,13 +276,21 @@ class Armed:
         self.on = False
         self._recent: deque = deque(maxlen=self.settings.intrusion_decisions)   # per decision: (a person is present, zone)
         self._inside = False
+        self._waited: Optional[int] = None   # decisions since a person appeared, while the wait runs
+        self._zone = 0                       # where they appeared
+        self._passed: List[int] = []
+
+    def pop_passed(self) -> List[int]:
+        """Zones of people who appeared while armed and were gone before the wait was over."""
+        out, self._passed = self._passed, []
+        return out
 
     def arm(self, on: bool) -> bool:
         """Returns True when this changed anything. Arming starts from "nobody in": someone
         already standing there is an intrusion within the next 6 decisions."""
         if on == self.on:
             return False
-        self.on, self._inside = on, False
+        self.on, self._inside, self._waited = on, False, None
         self._recent.clear()
         return True
 
@@ -290,13 +302,24 @@ class Armed:
         person = bool(pred.get("present")) and pred.get("kind") == "person"
         self._recent.append((person, pred.get("zone") or 0))
         inside = sum(1 for p, _ in self._recent if p)
+        zones = [z for p, z in self._recent if p]
         if not self._inside and inside >= self.settings.intrusion_majority:
             self._inside = True
             if self.on:
-                zones = [z for p, z in self._recent if p]
-                return max(set(zones), key=zones.count)
+                self._zone = max(set(zones), key=zones.count)
+                if self.settings.intrusion_confirm <= 0:
+                    return self._zone
+                self._waited = 0
         elif self._inside and len(self._recent) - inside >= self.settings.intrusion_majority:
             self._inside = False
+            if self._waited is not None:         # gone before the wait was over: they walked past
+                self._waited = None
+                self._passed.append(self._zone)
+        elif self._waited is not None:
+            self._waited += 1
+            if self._waited >= self.settings.intrusion_confirm:
+                self._waited = None              # still there: this is the intrusion
+                return max(set(zones), key=zones.count) if zones else self._zone
         return None
 
 

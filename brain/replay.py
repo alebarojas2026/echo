@@ -37,7 +37,7 @@ from brain.core import Brain, base_at, last_meta, read_session
 from brain.train import Model
 
 STATE_EVERY_MS = 100   # the live loop takes state about 10 times a second
-COUNTED = ("intrusion", "alert_on", "alert_off", "enter", "exit", "zone_change", "checkin", "blind_on")
+COUNTED = ("intrusion", "passed_by", "alert_on", "alert_off", "enter", "exit", "zone_change", "checkin", "blind_on")
 
 
 def replay(brain: Brain, messages: Iterable[dict], armed: bool = False) -> dict:
@@ -77,6 +77,7 @@ def replay(brain: Brain, messages: Iterable[dict], armed: bool = False) -> dict:
         "states_with_no_pred": hidden,               # blind, or no model: nothing was decided then
         "present_s": round(present * STATE_EVERY_MS / 1000, 1),
         "intrusions": kinds.count("intrusion"),
+        "passed_by": kinds.count("passed_by"),       # always 0 unless intrusion_confirm is above 0
         "alerts": kinds.count("alert_on"),
         "still_timer_resets": resets,                # a timer that had started, put back to zero
         "longest_still_s": round(longest_still, 1),

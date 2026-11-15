@@ -12,6 +12,11 @@ in brain/ carries its own copy.
                           still timer resets
     intrusion_decisions   Armed: a person appears when present for the        10 (1 s)
     intrusion_majority    majority of the last N decisions                    6
+    intrusion_confirm     Armed: decisions a person must then stay before     0 = at once
+                          the intrusion is sent. 0 is the contract's rule.
+                          Above 0 (30 = 3 s) somebody gone sooner gives a
+                          passed_by event instead: that needs the contract
+                          and the schema changed first, so it stays 0 here
     zone_hold             the brain's own: decisions in a row before enter,   5 (0.5 s)
                           exit or zone_change is said
     motion_links          which links' features decide moving / still         null = every link
@@ -42,6 +47,7 @@ class Settings:
     moving_run: int = 5
     intrusion_decisions: int = 10
     intrusion_majority: int = 6
+    intrusion_confirm: int = 0
     zone_hold: int = 5
     motion_links: Optional[Tuple[str, ...]] = None
 
@@ -54,8 +60,8 @@ class Settings:
                 if isinstance(value, str) or not value or not all(isinstance(k, str) for k in value):
                     raise ValueError("motion_links is a list of link ids, or null for every link")
                 object.__setattr__(self, f.name, tuple(value))
-            elif not isinstance(value, int) or isinstance(value, bool) or value < 1:
-                raise ValueError(f"{f.name} must be a whole number, 1 or more (got {value!r})")
+            elif not isinstance(value, int) or isinstance(value, bool) or value < (0 if f.name == "intrusion_confirm" else 1):
+                raise ValueError(f"{f.name} must be a whole number, {0 if f.name == 'intrusion_confirm' else 1} or more (got {value!r})")
         for part, whole in (("smooth_majority", "smooth_decisions"), ("intrusion_majority", "intrusion_decisions")):
             if not getattr(self, whole) / 2 < getattr(self, part) <= getattr(self, whole):
                 raise ValueError(f"{part} must be more than half of {whole} and at most {whole}")
