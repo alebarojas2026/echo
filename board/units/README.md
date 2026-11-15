@@ -21,6 +21,20 @@ journalctl -u radio-sight-bus -f  # every 30 s a links: line; "<link> quiet for 
 
 Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sudo (it uses sudo itself). It checks out the ref and restarts only what changed. The Pi uses the same commands; there it installs only `radio-sight-radio-node`, and runs it with or without `--no-pi`, since beacon S doesn't need the cable.
 
+## Going back
+Save the incident log first:
+`journalctl -u 'radio-sight-*' --since -5min > incident.txt`.
+Then run `board/deploy.sh <last-good-commit>` on the board and
+`board/push-web.sh --back` from the laptop. The latter swaps the board's current
+and previous screen builds in place: no rebuild and no asset transfer over the
+hotspot. It prints the build now served and fails without changing the live
+build if no previous build exists. Each normal push keeps just one previous
+build, so a second `--back` returns to the build you left.
+
+Finish with `python scripts/demo_check.py` from the laptop (or give its localhost
+HTTP/WebSocket addresses when running on the board). Rehearse this sequence on
+the kit and record the elapsed time; no rollback duration is measured yet.
+
 ## Placeholders
 | In the file | Becomes |
 |---|---|
