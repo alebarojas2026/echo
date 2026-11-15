@@ -162,38 +162,3 @@ How the sessions are walked decides what the model can learn. These steps come f
 3. Step out of view each time before counting. Windows with anybody in frame, and the 2 s after, are left out of training.
 
 In the demo, put the tray back on the same T1 mark. The model recognises it only near where it was recorded.
-
-## Hall links (`brain/hall.py`, optional)
-
-Two spare beacons far from the square (letters H and J, 10-25 m away) make long links. A hall link
-is any link whose tx is one of them, one per receiver in radio/nodes.json that hears it
-(`h>unoq:ble`, `j>pi5:ble`, ...). For each one the brain says whether there is
-movement along that path. It never says who, where along the path, or how many. The wording is
-proposed in issue #358; until it lands in CONTRACTS.md, state carries `hall` only once a hall link
-has been heard, and is otherwise exactly what it was.
-
-```jsonc
-"hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[x, y],"activity":0.0-1.0,"moving":false,"rate_hz":n,"stale":false}]
-```
-
-- A body moving near or across a radio path makes the signal change from reading to reading. Per
-  link, `spread_db` is the std of its 0.5 s means over the last 3 s.
-- Each link is compared with its own quiet level: the 20th percentile of that spread over the last
-  5 minutes (20 samples at least, never under 0.5 dB). No baseline capture, nothing learned.
-- `activity` = (spread / quiet - 2) / 4, held to 0-1. `moving` turns on at 0.5 and off after 1 s
-  under 0.25.
-- `stale` = fewer than 4 of the six 0.5 s bins hold a reading (the readings stopped, or are too
-  few to judge); it clears after 3 s. A stale link has activity 0 and moving false. On a link near
-  the receiver's limit a body in the path can stop the readings altogether: that shows as stale,
-  never as "no movement".
-- `busy` (wording in issue #584): a row has it only when radio/nodes.json gives that link an empty-hall quiet level, `"hall": {"links": [{"id": "h>unoq:ble", "empty_quiet_db": 0.6}]}`. While the link's current quiet level is above twice that, the path is busy: `busy` is true and `moving` is false, because in a hall that is full all the time "four times quiet" means nothing. No `busy` in a row = that link is not calibrated.
-- `xy_m` is the far beacon's spot from the `hall` section of radio/nodes.json, or null until it is
-  measured.
-
-The core links (the ones listed in nodes.json) never see any of it: `Brain.on_message` hands a hall reading to `Hall.take` and
-returns, so features, health, the x-ray, the alert, the check-in, advice and the recordings held
-for training are the same with and without hall beacons (brain/tests/test_hall.py compares every
-state of a whole demo run). Every entry point of the module catches its own errors.
-
-The thresholds are first values, and the tests use synthetic links. How far a link reaches in a
-full hall, and how a real crossing looks, have to be measured there (issue #95).
