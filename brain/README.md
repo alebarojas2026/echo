@@ -210,3 +210,24 @@ python -m brain.linkrank empty=s1 left=s2 empty=s3 right=s4 empty=s5   # blocks 
 ```
 
 Each link gets `clear`, `weak` or `no signal`, and the last lines say which links carry the detection and whether left can be told from right. Only the standard library.
+
+## A layout with a presence line (the gate)
+
+When `radio/nodes.json` has a `presence` block, the line it names decides whether somebody is on the spot, and three more things are read off that same line. Every number is a key of the block; a missing key takes the default. The kit's own numbers go in the layout file, never in code.
+
+| key | default | what it sets |
+|---|---|---|
+| `line`, `second` | | the line that decides. `second` is read and not used: no other line has a say |
+| `on_db`, `off_db` | 7, 4 | somebody is there once the line's 1 s median drop reaches `on_db`, until it is under `off_db` |
+| `second_hold_s` | 5 | how long the line's last word stands while it has no readings |
+| `moving_spread_db` | 2.0 | the line's spread (std of its readings) over 2 s at which somebody is moving; still again under 0.8 x that. A lesson with 20 or more moving and 20 or more still windows sets its own boundary, kept with the model (`spread_split`) |
+| `object_db`, `object_max_db` | 3, 10 | a thing left in the line takes at least `object_db` off it and less than `object_max_db` (`null` = no upper limit) |
+| `object_spread_db`, `object_hold_s` | 1.0, 3 | ... with a 2 s spread no larger than the empty line's, for this long |
+
+A thing left in the line is `pred.kind: "object"` with `present: false`: no enter, no still timer, no intrusion. While it stands there `advice` is about that line with `to_spot: null` (the router is cabled and does not move); when it is taken away `after_dbm` and an `advice_result` event carry the measured gain. A drop of a person's depth, or one that wobbles, is a person however long they stand still. The numbers for a thing in the line are not measured on the kit yet (the one try had the thing below the line): the rule is built and tested on made-up feeds only.
+
+`"classifier": false` on the presence line is ignored (and logged): that line is never switched off.
+
+Health on such a layout comes from the presence line alone: the sensor is blind only when that line is stale or silent. The level of a Bluetooth line, or of a line that does not cross the spot, never makes it blind, never raises an object or advice and never decides presence (in the kit's recordings the Bluetooth lines dipped 9 to 20 dB with nobody there). Those lines are still drawn, show stale in their own rows, and count for tamper.
+
+To set the two spreads from the kit, record the line empty, with somebody standing still and with somebody stepping about, and look at the 2 s std of `pi5>pi5b:wifi` in each: `object_spread_db` goes just above the empty value, `moving_spread_db` between still and stepping about.

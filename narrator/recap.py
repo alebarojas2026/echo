@@ -41,6 +41,13 @@ def _clock(ms: int) -> str:
 def _fact(kind: str, info: dict) -> str | None:
     zone, node = _zone(info.get("zone")), n.NODES.get(info.get("node"))
     before, after = n._dbm(info.get("before_dbm")), n._dbm(info.get("after_dbm"))
+    if n.spot() and kind in ("object_on", "object_off", "advice", "advice_result", "checkin"):
+        return {"object_on": ("something was left in the Wi-Fi line" if info.get("link") in n.CROSSING_WIFI
+                              else "an object was recorded at the desk"), "object_off": "the obstruction was cleared",
+                "advice": "the board advised clearing the obstruction or moving the receiving device",
+                "advice_result": (f"the Wi-Fi signal changed from {before} to {after} dBm"
+                                  if before is not None and after is not None else None),
+                "checkin": "a check-in was received"}[kind]
     if n.desk() or n.spot():   # in front of the desk: "on the left" or, with one spot, "at the desk"; "stepped up"
         side = (n._spot_words() if n.spot() else f"on the {zone.lower()}") if zone else None
         desk_facts = {
@@ -112,16 +119,19 @@ def template(events: list) -> str | None:
         place = (f" {n._spot_words()}" if n.spot() else
                  f" on the {where.lower()}" if n.desk() else f" in the {where} zone") if where else ""
         alert = f"A no-movement alert fired{place}"
-        out.append(alert + (" and a wave check-in answered it." if "checkin" in kinds else "."))
+        checkin = " and a check-in answered it." if n.spot() else " and a wave check-in answered it."
+        out.append(alert + (checkin if "checkin" in kinds else "."))
     elif "checkin" in kinds:
-        out.append("A wave check-in was received.")
+        out.append("A check-in was received." if n.spot() else "A wave check-in was received.")
     if "intrusion" in kinds:
         out.append("While it was armed, someone came in.")
     before, after = n._dbm(info.get("advice_result", {}).get("before_dbm")), n._dbm(info.get("advice_result", {}).get("after_dbm"))
     if before is not None and after is not None:
-        out.append(f"Moving the router took its Wi-Fi from {before} to {after} dBm.")
+        out.append(f"The Wi-Fi signal changed from {before} to {after} dBm." if n.spot()
+                   else f"Moving the router took its Wi-Fi from {before} to {after} dBm.")
     elif "object_on" in kinds:
-        out.append("A new object showed up in the radio picture.")
+        out.append(("Something was left in the Wi-Fi line." if info["object_on"].get("link") in n.CROSSING_WIFI
+                    else "An object was recorded at the desk.") if n.spot() else "A new object showed up in the radio picture.")
     elif "cam_off" in kinds:
         out.append("Setup ended and sensing carried on by radio alone.")
     return " ".join(out[:MAX_SENTENCES]) or None

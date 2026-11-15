@@ -141,8 +141,8 @@ The gate layout (radio/layouts/gate.json): one spot between Pi B and the desk. F
   width and 0 <= y <= strip depth; anywhere else 0. zones: [{id, name, centre_m, still_alert_s}]; "side" is optional.
   1 "At the desk", centre (0.4, 0.3), still_alert_s 10.
   "presence" (optional): {"line": <link>, "second": <link>, ...} names the one line that decides whether somebody
-  is on the spot, its second opinion, and the numbers of its rules (Presence line, section 6). Both are lines of
-  the layout marked crosses_spot. The gate: line pi5>pi5b:wifi, second pi5b>unoq:ble.
+  is on the spot and the numbers of its rules (Presence line, section 6; "second" is no longer used). Both are lines of
+  the layout marked crosses_spot. The gate: line pi5>pi5b:wifi.
   The router does not move on the gate (Pi A is cabled to the board's hub): router is always S-home, and advice
   never names a spot (to_spot null, section 5).
   gate-3 (radio/layouts/gate-3.json) is the gate cut down to three links, for a kit that can't give all six; the
@@ -339,8 +339,14 @@ Presence line (only on a layout whose nodes.json has "presence"; every number is
   default given here, and the kit's own numbers go in the file):
 - Drop = the line's baseline minus its median over the 1 s window. Somebody is there once the drop reaches on_db
   (7 dB), and stays until it is under off_db (4 dB). The model still gives probs, but it does not decide present.
-- "second" can keep somebody there for second_hold_s (5 s) while the line has no readings, if its own drop is
-  off_db or more. It never brings anybody in.
+- No other line has a say (decided from the kit's recordings: its Bluetooth lines dip 9 to 20 dB with nobody
+  there, and the short Wi-Fi line on the desk climbed 9 dB over one run). "second" may stay in the file and is
+  not used. While the line has no readings its last word stands for second_hold_s (5 s), and then it is nobody.
+- Health on such a layout comes from the presence line alone: health is blind only when that line is stale or
+  silent (the rate rule of Link health; the 6 dB jump rule is off for every link). The other lines stay in the
+  file, are drawn, show stale in their own rows (health degraded) and count for tamper when their device goes
+  quiet; their level never makes the sensor blind, never raises "object" or advice, and never decides present.
+  A layout with no presence line keeps every rule it had.
 - Spread = the std of the line's readings over the last 2 s. The line arrives 25 times a second and sits within
   1 dB when the spot is empty, so the spread tells a body (it wobbles) from a thing (it does not).
 - Moving and still: motion is "moving" when the spread is at or over the boundary, and "still" again once it is

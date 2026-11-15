@@ -1,68 +1,58 @@
 # Radio Sight: Spoken Pitch
 
-Radio Sight brings safety and after-hours security to buildings using the Wi-Fi already there. The desk round below is the primary story. Keep the laptop interface and hardware visible, and do not say a proof value that is still `__`.
+Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras during live sensing. This script is a three-minute rehearsal plan, not a measured performance claim; every result awaits PROOF.md. A beat is shown only after it passes preflight.
 
 ## Three-minute desk round
 
 ### Found you
 
-_Start with the setup camera disconnected. Ask the judge to step into the sensing area._
+**0:00–0:25 (25 seconds). Speaker: Talker. Action:** Judge steps into the one spot between the desk and Pi B; camera starts disconnected. **Screen:** Live signal trace and presence, with Wi-Fi across the gap drawn as the primary link.
 
-> This is Radio Sight: Wi-Fi that understands the room. The radio links changed when you stepped in, so it found a person without identifying you. That decision was made on the Arduino UNO Q.
+> Walk between two devices and the Wi-Fi signal gives you away. Found you. This Arduino UNO Q decides on device, on its Qualcomm Dragonwing CPU. The laptop is only a screen.
 
 ### Teach the room
 
-_Connect the setup camera and start a fresh lesson on the judge._
+**0:25–1:05 (40 seconds). Speaker: Talker. Action:** Operator connects the temporary teacher and starts the judge's lesson; wait for successful training. **Screen:** Camera teaching, labels and progress, never an image; if learning needs longer, cut optional time instead of claiming completion.
 
-> Buildings and people differ, so we teach the radio here. This temporary camera provides zone and motion labels for a short lesson. The Arduino UNO Q learns the radio pattern locally on its Qualcomm Dragonwing CPU. It saves no image.
+> The camera teaches this room locally, then leaves. Unlike a laser tripwire, this strand learns person versus thing and still versus moving, aiming to reuse compatible building Wi-Fi. A radio could sit in a bag or behind a panel; those placements still need testing.
 
 ### Camera unplug
 
-_Unplug the camera in one continuous shot and keep the cable visible._
+**1:05–1:35 (30 seconds). Speaker: Talker. Action:** Hardware unplugs the cable in one continuous view; judge moves, then stands still. **Screen:** Teacher off, radio only, still-present state and privacy panel.
 
-> The lesson is complete, and the camera is now unplugged. Its teacher status is off. From this point on, live sensing uses only the radio links around the room.
-
-### Still follows
-
-_Ask the judge to move, then stand still._
-
-> Radio Sight still reports your presence, zone, and movement state. It does not need a clear view, and standing still does not make you disappear. A blind radio link produces no prediction, never a false all-clear.
-
-### Arm the space
-
-_Ask the judge to step out. Arm the room only when the armed-mode feature gate passes._
-
-> Armed means this room should now be empty. Radio Sight keeps its learned room model on the board and watches for a new sustained person pattern.
+> Most Wi-Fi sensing only sees movement. Ours sees you standing still. Camera unplugged; Wi-Fi is primary, Bluetooth a second opinion.
 
 ### Intrusion alert
 
-_Ask the judge to re-enter. Show the phone page only after it displays the live intrusion event._
+**1:35–2:00 (25 seconds). Speaker: Talker. Action:** Judge steps out; Operator arms, judge returns and stays until a live intrusion event appears. **Screen:** Armed state and phone intrusion card; no alert is staged.
 
-> Your return creates one local intrusion alert for this entry. It names the zone, not the person. The phone is only another screen on our private network.
+> Armed means this spot should be empty. Stay here; the phone shows the board's local intrusion alert.
 
-### Ask the room
+### Dead zone
 
-_Use the prepared room question only when the local event-record feature gate passes._
+**2:00–2:30 (30 seconds). Speaker: Talker. Action:** Disarm; everybody leaves the spot; Hardware places the object, then clears it or moves Pi B only after the deployed advice is verified. Pi A stays beside the cabled hub. **Screen:** Object decision, blocked cross-gap Wi-Fi, then verified before-and-after gain.
 
-> Now we can ask what just happened. The answer comes from the room's own timestamped records: it was armed, a person entered, and the intrusion alert fired. No cloud history is required.
+> Nobody is here; an object blocks Wi-Fi. Clear it or move Pi B. The screen shows the measured change.
 
-### Proof
+### Ask the room and Proof
 
-_Finish on the proof strip._
+**2:30–3:00 (30 seconds). Speaker: Talker. Action:** Operator asks the prepared question and opens its source rows, then proof. **Screen:** Local answer with records and completed proof tiles; no blank is spoken.
 
-> Every measured result is on the proof screen with its method. Anything unmeasured is left out, not estimated. Radio Sight is taught by a camera, then runs without one.
+> The board answers from its own records. Every measured result is on the proof screen with its method. Anything unmeasured is left out, not estimated. We dug into a signal every building already has. Taught by a camera. Runs without one. We would like to keep building it.
+
+## If the judge interrupts
+
+Answer briefly, then resume at the next safe action. Cut optional Replay, Incident report, and Tamper alert first; next cut the extra Ask question, then shorten the teaching explanation without shortening successful training. Never drop Found you, Camera unplug, and at least one of Intrusion alert or Dead zone. If both alert and dead-zone checks fail, explain the limitation and finish on proof; do not stage either.
+
+If only a minute remains, use the already trained model for Found you, visibly disconnect the camera if connected, show still presence, then the one rehearsed intrusion or object-clearing result. Do not call that a fresh lesson. Skip any unverified result.
 
 ## Five-minute finalist extension
 
-Open with the whole-hall view and movement paths, then run the same eight beats in the same order. After **Proof**, add one or two of these only if the measured path is ready:
+Keep the same one-spot kit and six-beat order. Add only the features that passed preflight:
 
-- show a no-movement alert and clear it with a deliberate check-in;
-- place the tray, explain the person-versus-object result, and demonstrate router advice with measured before-and-after values;
-- show the end-of-demo recap from recorded local events; or
-- invite judges to try the crowd game, clearly labeled as a finalist interaction rather than a crowd-counting claim.
+- **Tamper alert:** unplug the rehearsed Pi B device while armed, show the named event, reconnect, and wait for healthy sensing and tamper cleared.
+- **Replay:** open saved local summaries with the recorded banner visible; missing records remain unknown.
+- **Incident report:** read an actual armed stretch from local records; the language model may word facts but cannot invent them.
+- **No-movement alert:** wait for sustained stillness, then ask the person to lean aside for the “I'm okay” check and wait for confirmation.
 
-The Pi and optional beacons stand in for radios and access points already spread through a building. The product direction is to reuse that infrastructure, not to require this exact collection of development boards in every room.
-
-## Feature gates
-
-A beat is shown only after it passes preflight on the day. If a gate fails, skip that beat and close on **Proof**. Never stage a fake alert or answer.
+The desk link is one strand of a possible building deployment. The learning aims to distinguish a person from a thing and stillness from movement; unseen objects, bags, panels, multiple people and other rooms need held-out tests. The direction is compatible building Wi-Fi, not a claim that every existing access point already works.

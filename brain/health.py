@@ -15,6 +15,8 @@ Rules (section 6):
   stale while it reads under 0.4 x expected_hz, and that is all. (At 1.6 a second a link
   has fewer than two readings in 2 s about one time in six with nothing wrong.)
 status is "degraded" when some link is stale or blind but health isn't blind.
+- On a layout with a presence line (judge_level False, classifier_links = that line alone) the
+  level of a link never blinds: health is blind only when the presence line is silent or stale.
 """
 from collections import deque
 
@@ -123,6 +125,7 @@ class Health:
         base_dbm = base_dbm or {}
         self.links = {k: _Link(k, expected_hz.get(k), base_dbm.get(k)) for k in links}
         self.classifier_links = list(classifier_links or links)
+        self.judge_level = True      # False: no link is ever blind by its level (a layout with a presence line)
         self.blind = False
         self._blind_links = []
         self._start = None
@@ -179,7 +182,7 @@ class Health:
         if self._start is None:
             self._start = now
         judge_rate = rates_known and now - self._start >= RATE_WINDOW_S - EPS_S   # a full window first
-        judge_jump = kind == "none" and router_home and not baseline_running
+        judge_jump = self.judge_level and kind == "none" and router_home and not baseline_running
         rows = [lk.judge(now, judge_rate, judge_jump) for lk in self.links.values()]
 
         all_blind = [r["id"] for r in rows if r["status"] == "blind"]

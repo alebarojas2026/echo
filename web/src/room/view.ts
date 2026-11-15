@@ -1,6 +1,6 @@
 import { Box3, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { FIGURE_HEIGHT_M } from './figure'
-import { NODES, SIZE_M, STRIP_M, ZONES, alertWordAt, deviceAcross, nodeLabelSide, toScene, zoneWords, type Vec3 } from './frame'
+import { NODES, SIZE_M, STRIP_M, ZONES, alertWordAt, deviceAcross, nodeLabelSide, toScene, zoneWords, zonesNamed, type Vec3 } from './frame'
 import { BG } from './palette'
 import { DESK_TOP_M } from './stage'
 
@@ -190,7 +190,7 @@ export function deskAnchors(personM = FIGURE_HEIGHT_M, width = 1280): Anchor[] {
   // Under each zone, in the aisle: its name (room-label--zone's size on this canvas), then the no-movement word.
   const zonePx = Math.max(32, 48 * Math.min(1, width / 1280))
   for (const z of ZONES) {
-    const half = Math.max(wordsPx('No movement'), zoneWords(z.id).length * CHAR_EM * zonePx) / 2
+    const half = Math.max(wordsPx('No movement'), zonesNamed() ? zoneWords(z.id).length * CHAR_EM * zonePx : 0) / 2
     add(alertWordAt(z.id)[0], half, half, 0, zonePx + 10 + LINE_PX)
   }
   // xray.ts's caption, read from the strip's west end. Not with a device across the spot: its chair stands there,

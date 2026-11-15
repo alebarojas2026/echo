@@ -1,0 +1,13 @@
+.presenter { display:grid; gap:16px; margin:24px 0; }
+.presenter > p,.presenter-clock p { color:var(--text-2); }
+.presenter-actions { display:flex; flex-wrap:wrap; gap:12px; }
+.presenter [data-action="lesson"] { background:var(--text); color:var(--bg); }
+.presenter button:disabled { opacity:.5; }
+.presenter-clock { border-top:1px solid var(--edge); padding-top:16px; }
+.presenter-clock h3 { font-size:28px; margin:0 0 8px; }
+.presenter-clock button { margin:12px 12px 12px 0; }
+
+.judge .hud-operator { display:flex; flex-direction:column; gap:16px; }
+.hud-operator > * { flex-shrink:0; }
+.hud-operator > h2 { order:-2; }
+.hud-operator > .presenter { order:-1; }

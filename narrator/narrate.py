@@ -139,6 +139,16 @@ def template(kind: str, info: dict) -> str | None:
     before, after = _dbm(info.get("before_dbm")), _dbm(info.get("after_dbm"))
     limit = info.get("limit_s") or ZONES.get(info.get("zone"), (None, None))[1]
     device = _device(info.get("node"))
+    if spot():
+        spot_sentences = {
+            "object_on": "Something was left in the Wi-Fi line.",
+            "object_off": "The obstruction in the Wi-Fi line is gone.",
+            "advice": "Clear the obstruction or move the receiving device, then measure the Wi-Fi again.",
+            "advice_result": (f"The Wi-Fi signal changed from {before} to {after} dBm."
+                              if before is not None and after is not None else "The new Wi-Fi signal is being measured."),
+        }
+        if kind in spot_sentences:
+            return spot_sentences[kind]
     if desk() or spot():   # in front of the desk: "on the left" or "at the desk", "stepped up", no rooms
         sentences = {
             "enter": (f"Someone is {zone}." if zone and spot() else
@@ -230,8 +240,18 @@ def set_devices(names: dict) -> None:
     DEVICES.update(names)
 
 
+def load_crossing_wifi(path=NODES_JSON):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return {link["id"] for link in json.load(f)["links"]
+                    if link.get("kind") == "wifi" and link.get("crosses_spot") is True}
+    except (OSError, ValueError, KeyError, TypeError):
+        return set()
+
+
 set_devices(load_devices())
 set_zones(load_zones())   # whoever imports this (the service, the recap, the rehearsal) gets the layout's zones
+CROSSING_WIFI = load_crossing_wifi()
 
 
 def _join(words: list) -> str:
@@ -241,6 +261,9 @@ def _join(words: list) -> str:
 def system() -> str:
     count = {1: "one zone", 2: "two zones", 3: "three zones", 4: "four zones"}.get(len(ZONES), f"{len(ZONES)} zones")
     where = (f"People stand on one spot in front of a desk. Say {_spot_words()}, never zone numbers and never a side. "
+             "Describe recorded motion as moving or standing still. A person is never a dead zone. "
+             "Wi-Fi across the gap is the main sensor; Bluetooth is a second opinion. "
+             "An obstruction can be cleared or the receiving device moved; do not advise moving the cabled router. "
              if spot() else
              f"People stand in front of a desk, {_join([f'on the {n.lower()}' for _, (n, _) in sorted(ZONES.items())])}. "
              "Say on the left or on the right, never zone numbers. "
@@ -268,6 +291,9 @@ def examples() -> tuple:
              ("enter", f"Someone just stepped up on the {name.lower()}.", f"Someone stepped up, on the {name.lower()} side.")
              if desk() else
              ("enter", f"Someone just walked into zone {z} ({name}).", f"Someone just stepped into zone {z}, by the {name.lower()}."))
+    if spot():
+        return (first, ("advice_result", "The Wi-Fi signal changed from -71 to -63 dBm.",
+                        "The Wi-Fi signal improved from -71 to -63 dBm."))
     return (first,
             ("advice_result", "After the move, the router's Wi-Fi went from -71 to -63 dBm.",
              "Moving the router lifted its Wi-Fi from -71 to -63 dBm."))
@@ -382,6 +408,12 @@ def problem(text: str, facts: str, camera_off: bool) -> str | None:
         return "banned word"
     if set(NUMBER.findall(text)) - set(NUMBER.findall(facts)):
         return "made-up number"
+    if spot():
+        if facts.startswith("Someone") and re.search(r"\bobject\b|dead.?zone", text, re.I):
+            return "person described as an obstruction"
+        move_router = r"\b(?:move|moved|moving) (?:the )?(?:router|Pi A)\b"
+        if re.search(move_router, text, re.I) and not re.search(move_router, facts, re.I):
+            return "unrecorded router move"
     return None
 
 
@@ -402,6 +434,7 @@ class Narrator:
         self.timeout_s, self.gap_ms, self.max_age_ms = timeout_s, gap_ms, max_age_ms
         self.warm = None          # called when a model call fails (a Warmer's kick), if set
         self.pending = None       # the most important event not yet narrated
+        self.state = None         # the latest existing state, used only to ground event wording
         self.cam = None           # on | off | stalled, from the brain
         self.seq = 0
         self.last_start_ms = None   # when the last sentence started being written
@@ -412,11 +445,18 @@ class Narrator:
 
     def observe(self, msg: dict) -> None:
         """Take any message from the brain."""
-        if msg.get("type") == "state" and "cam" in msg:
-            self.cam = msg["cam"]
+        if msg.get("type") == "state":
+            self.state = msg
+            if "cam" in msg:
+                self.cam = msg["cam"]
+            if spot() and self.pending and self.pending["kind"] == "object_on" and not self._current_object(msg.get("t")):
+                self.pending = None
         elif msg.get("type") == "event" and msg.get("kind") == "reset":
             self.pending = None   # a new judge: the last demo's waiting event is not said, the recap is next
+            self.state = None
         elif msg.get("type") == "event" and msg.get("kind") in EVENT_KINDS:
+            if spot() and msg["kind"] == "object_on" and self._current_person(msg.get("t")):
+                return
             if msg["kind"] in ("cam_off", "cam_on"):
                 self.cam = msg["kind"][4:]
             if msg["kind"] in NEVER:
@@ -428,6 +468,22 @@ class Narrator:
                     or not self._fresh(waiting, msg.get("t"))):
                 self.pending = msg
 
+    def _current_person(self, now):
+        state = self.state or {}
+        pred = state.get("pred") or {}
+        t = state.get("t")
+        return (isinstance(t, (int, float)) and isinstance(now, (int, float)) and 0 <= now - t <= self.max_age_ms
+                and pred.get("present") is True and pred.get("kind") == "person")
+
+    def _current_object(self, now):
+        state = self.state or {}
+        pred, t = state.get("pred") or {}, state.get("t")
+        return (isinstance(t, (int, float)) and isinstance(now, (int, float)) and 0 <= now - t <= self.max_age_ms
+                and pred.get("present") is False and pred.get("kind") == "object"
+                and any(link.get("id") in CROSSING_WIFI and link.get("status") == "ok"
+                        and isinstance(link.get("drop_db"), (int, float)) and link["drop_db"] >= 3
+                        for link in state.get("links", [])))
+
     def _fresh(self, event: dict, now) -> bool:
         t = event.get("t")
         return isinstance(t, (int, float)) and isinstance(now, (int, float)) and now - t <= self.max_age_ms
@@ -436,6 +492,9 @@ class Narrator:
         """The pending event if it may be narrated now. Drops it once it is too old."""
         event = self.pending
         if event is None:
+            return None
+        if spot() and event["kind"] == "object_on" and not self._current_object(now):
+            self.pending = None
             return None
         if not self._fresh(event, now):
             self.pending = None
@@ -451,6 +510,10 @@ class Narrator:
     def sentence(self, event: dict) -> tuple[str, str, str | None, str]:
         """(text, source, model, why) for one event."""
         facts = template(event["kind"], event.get("info") or {})
+        if spot() and event["kind"] in ("enter", "zone_change") and self._current_person(self.clock()):
+            motion = {"still": "standing still", "moving": "moving"}.get(self.state["pred"].get("motion"))
+            if motion:
+                facts = f"Someone is {_spot_words()}, {motion}."
         try:
             raw, model = within(self.timeout_s, self.llm, prompt(event["kind"], facts))
         except TimeoutError:
@@ -574,6 +637,8 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
     set_zones(load_zones(args.nodes))
     set_devices(load_devices(args.nodes))
+    CROSSING_WIFI.clear()
+    CROSSING_WIFI.update(load_crossing_wifi(args.nodes))
     llm = LlamaServer(args.llm)
 
     if args.once:

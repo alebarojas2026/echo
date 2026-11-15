@@ -14,7 +14,7 @@ import {
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
-import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, alertWordAt, deskEdge, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, zoneWords, type NodeId, type Vec3 } from './frame'
+import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_EDGES_X_M, alertWordAt, deskEdge, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, zoneWords, zonesNamed, type NodeId, type Vec3 } from './frame'
 import type { Hearing } from './heard'
 import { fade, Glide3 } from './motion'
 import { EDGE, FAULT, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
@@ -108,8 +108,8 @@ function buildShell(): { room: Group; square: Group } {
   ]
   for (const [a, b] of edges) strip(a, b, 0.014, SQUARE)
   if (STRIP_M) {
-    // One line between the strip's two zones; none across a strip that is one spot.
-    if (ZONE_SPLIT_X_M !== null) strip([ZONE_SPLIT_X_M, 0, 0], [ZONE_SPLIT_X_M, fh, 0], 0.007, EDGE)
+    // One line wherever two of the strip's zones meet; none across a strip that is one spot.
+    for (const x of ZONE_EDGES_X_M.slice(1, -1)) strip([x, 0, 0], [x, fh, 0], 0.007, EDGE)
   } else {
     strip([fw / 2, 0, 0], [fw / 2, fh, 0], 0.007, EDGE)
     strip([0, fh / 2, 0], [fw, fh / 2, 0], 0.007, EDGE)
@@ -250,7 +250,8 @@ export class Stage {
     // the middle. West zones read from their west edge, east zones end at their east edge.
     const inX = ZONE_IN_X
     const inY = 0.2
-    for (const z of ZONES) {
+    // (No names on the floor of a strip with more than two zones: zonesNamed.)
+    for (const z of zonesNamed() ? ZONES : []) {
       const [x0, y0, x1, y1] = zoneRect(z.id)!
       const { east, north } = zoneSide(z.id)
       // On the desk the person stands in the middle of a zone 0.6 m deep, on top of any name inside it: the name

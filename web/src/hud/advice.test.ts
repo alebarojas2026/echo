@@ -4,7 +4,7 @@ import { adviceResult } from './judge-advice-panel'
 test('hides absent advice and distinguishes measured gain from missing results', () => {
   expect(adviceResult(mockState('empty', 0, 0), false)).toBeNull()
   const state = mockState('object', 0, 1000)
-  state.router = state.advice!.to_spot
+  state.router = state.advice!.to_spot!
   expect(adviceResult(state, false)!.text).toBe('Measuring…')
   state.advice!.before_dbm = -71.2
   state.advice!.after_dbm = -63.4

@@ -12,7 +12,10 @@ def test_bench_brain_times_every_step_and_reaches_the_advisor():
     assert res["ticks"] == 600 and set(res["steps"]) == set(bench_brain.STEPS) | {"tick"}
     assert all(0 <= s["p50"] <= s["p95"] <= s["max"] for s in res["steps"].values())
     # A person, then the tray at the layout's T1: every part of the hot path gets real work.
-    assert res["pred"] > 500 and res["objects"] > 0 and res["advice"] > 0
+    assert res["pred"] > 500 and res["objects"] > 0
+    # On one spot the advisor is still called and timed, and gives no advice: the router is cabled and does not move.
+    one_spot = len(json.loads((bench_brain.REPO / "radio" / "nodes.json").read_text(encoding="utf-8"))["zones"]) == 1
+    assert res["advice"] == 0 if one_spot else res["advice"] > 0
     assert any(line.startswith("tick (all)") for line in lines)
 
 
