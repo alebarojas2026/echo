@@ -27,7 +27,6 @@ PIS = [node["id"] for node in DOC["nodes"] if "receiver" in node["roles"] and "b
 
 # The optional "hall" section of nodes.json; all of this is empty when the section is missing.
 HALL_BEACONS = {bytes.fromhex(p["data_hex"]): p["node"] for p in (DOC.get("hall") or {}).get("beacons", [])}
-RECEIVERS = [node["id"] for node in DOC["nodes"] if "receiver" in node["roles"]]
 HALL_LINKS = {f"{tx}>{rx}:ble": {"id": f"{tx}>{rx}:ble", "tx": tx, "rx": rx, "kind": "ble"}
               for rx in RECEIVERS for tx in HALL_BEACONS.values()}
 BEACONS.update(HALL_BEACONS)
