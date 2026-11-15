@@ -3,25 +3,12 @@
 import pytest
 from radio.report_hci import GATE_PATH, MIN_RATES, check, main, parse_gate2_md, warnings
 
-PASSING_MD = """
-## Gate 2 — Bluetooth raw scan (#20)
+from radio.report_hci import BEACON_OF
 
-**Pass criteria:** the Pi beacon ≥ 20 adverts/s at the board; each phone beacon ≥ 7 adverts/s.
-
-| Link          | Beacon | Adverts/s | Result |
-|---------------|--------|-----------|--------|
-| pi5>unoq:ble  | S      | 25.4      | PASS   |
-| east>unoq:ble | E      | 8.2       | PASS   |
-| west>unoq:ble | W      | 7.5       | PASS   |
-| east>pi5:ble  | E      | 9.1       | PASS   |
-| west>pi5:ble  | W      | 7.0       | PASS   |
-
-**Overall Gate 2:** PASS
-"""
-
-GOOD = [("pi5>unoq:ble", "S", "25.0", "PASS"), ("east>unoq:ble", "E", "8.0", "PASS"),
-        ("west>unoq:ble", "W", "8.0", "PASS"), ("east>pi5:ble", "E", "8.0", "PASS"),
-        ("west>pi5:ble", "W", "8.0", "PASS")]
+# Built from radio/nodes.json (through MIN_RATES), so these tests hold for any layout: a passing
+# row for every Bluetooth link, a Pi's beacon at 25/s and the others at 8/s.
+GOOD = [(link, BEACON_OF[link], "25.0" if rate == 20.0 else "8.0", "PASS") for link, rate in MIN_RATES.items()]
+LAST = GOOD[-1][0]
 
 
 def table(*rows):
@@ -35,10 +22,10 @@ def with_row(link, rate, result="__", beacon=None):
 
 
 def test_parse_passing_rows():
-    rows = parse_gate2_md(PASSING_MD)
+    rows = parse_gate2_md(table(*with_row("pi5>unoq:ble", "25.4", "PASS"), ("west>pi5:ble", "W", "7.0", "PASS")))
     assert set(rows) == set(MIN_RATES)
     assert rows["pi5>unoq:ble"][0]["rate"] == pytest.approx(25.4)
-    assert rows["west>pi5:ble"][0]["rate"] == pytest.approx(7.0)
+    assert rows["west>pi5:ble"][-1]["rate"] == pytest.approx(7.0)
     assert rows["pi5>unoq:ble"][0]["result"] == "PASS"
     assert check(rows) == []  # exactly 7.0 passes
 
@@ -58,8 +45,8 @@ def test_unmeasured():
 
 
 def test_missing_link():
-    rows = parse_gate2_md(table(*GOOD[:4]))
-    assert check(rows) == ["west>pi5:ble not found in the Gate 2 table"]
+    rows = parse_gate2_md(table(*GOOD[:-1]))
+    assert check(rows) == [f"{LAST} not found in the Gate 2 table"]
 
 
 def test_a_failing_run_among_three_fails_the_gate():
@@ -91,15 +78,14 @@ def test_beacon_must_match_the_link():
 
 
 def test_rows_outside_the_gate_2_section_are_ignored():
-    text = "## Gate 1\n| west>pi5:ble | W | 99 | PASS |\n\n" + table(*GOOD[:4])
-    assert check(parse_gate2_md(text)) == ["west>pi5:ble not found in the Gate 2 table"]
+    text = f"## Gate 1\n| {LAST} | {BEACON_OF[LAST]} | 99 | PASS |\n\n" + table(*GOOD[:-1])
+    assert check(parse_gate2_md(text)) == [f"{LAST} not found in the Gate 2 table"]
 
 
-def test_the_real_gate_md_parses_as_five_unmeasured_rows():
+def test_the_real_gate_md_has_one_unmeasured_row_per_bluetooth_link():
     rows = parse_gate2_md(GATE_PATH.read_text(encoding="utf-8"))
     assert {link: [(e["beacon"], e["rate_text"]) for e in rows[link]] for link in rows} == {
-        "pi5>unoq:ble": [("S", "__")], "east>unoq:ble": [("E", "__")], "west>unoq:ble": [("W", "__")],
-        "east>pi5:ble": [("E", "__")], "west>pi5:ble": [("W", "__")]}
+        link: [(BEACON_OF[link], "__")] for link in MIN_RATES}
     assert check(rows) == [f"{link}: not yet measured" for link in MIN_RATES]
 
 
@@ -108,9 +94,9 @@ def test_main_prints_the_lowest_rates(monkeypatch, tmp_path, capsys):
     gate.write_text(table(*GOOD, ("pi5>unoq:ble", "S", "21.5", "PASS")), encoding="utf-8")
     monkeypatch.setattr("radio.report_hci.GATE_PATH", gate)
     main()
+    lowest = {link: "21.5" if link == "pi5>unoq:ble" else rate for link, _, rate, _ in GOOD}
     assert capsys.readouterr().out.strip() == (
-        "GATE 2 PASS (lowest of each: pi5>unoq:ble: 21.5/s, east>unoq:ble: 8.0/s, west>unoq:ble: 8.0/s, "
-        "east>pi5:ble: 8.0/s, west>pi5:ble: 8.0/s)")
+        "GATE 2 PASS (lowest of each: " + ", ".join(f"{link}: {lowest[link]}/s" for link in MIN_RATES) + ")")
 
 
 def test_main_fails_on_the_template(monkeypatch, capsys):
