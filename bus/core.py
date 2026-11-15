@@ -170,11 +170,30 @@ class Recorder:
         return session
 
     def write(self, msg: dict) -> None:
+        """Append one line. A write that fails (a full disk) ends the recording instead of the bus:
+        it's said once, the file is let go and its mark removed, so a restarted bus doesn't pick
+        the same file up and fail again. Forwarding to the brain doesn't depend on any of this."""
         if self._file is None:
             return
-        self._file.write(json.dumps(msg, separators=(",", ":")) + "\n")
-        self._file.flush()
+        try:
+            self._file.write(json.dumps(msg, separators=(",", ":")) + "\n")
+            self._file.flush()
+        except OSError as e:
+            log.warning("recording %s stopped after %d lines: can't write to the file (%s). "
+                        "The bus keeps forwarding; free some space and record again.", self.session, self.lines, e)
+            self._let_go()
+            self.mark.unlink(missing_ok=True)
+            return
         self.lines += 1
+
+    def _let_go(self) -> None:
+        """Close the file, ignoring a flush that fails on a full disk."""
+        f, self._file, self.session = self._file, None, None
+        if f is not None:
+            try:
+                f.close()
+            except OSError:
+                pass
 
     def stop(self) -> None:
         """record_stop: close the file and forget it."""
@@ -183,10 +202,7 @@ class Recorder:
 
     def close(self) -> None:
         """The process is ending: close the file but keep the mark, so the next bus carries on."""
-        if self._file is not None:
-            self._file.close()
-        self._file = None
-        self.session = None
+        self._let_go()
 
 
 class Bus:
@@ -245,11 +261,12 @@ class Bus:
                 log.info("%s (%s) lost %d before seq %s (%d lost in all)", key, producer.type, lost,
                          msg.get("seq"), producer.lost)
 
-        self.recorder.write(msg)
+        # Forward first: the brain must get the reading whatever happens to the recording.
         try:
             self.send(encode(msg))
         except OSError as e:
             log.warning("forward failed: %s", e)
+        self.recorder.write(msg)
         return msg
 
     def command(self, msg: dict, recv_t: int) -> None:
@@ -276,9 +293,15 @@ class Bus:
         meta = {"v": 2, "type": "meta", "t": recv_t, "seq": self.seq, "src": "live",
                 "session": session, "purpose": purpose, "walker": args.get("walker"),
                 "recv_t": recv_t}
-        path = self.recorder.start(session, meta)
+        try:
+            path = self.recorder.start(session, meta)
+        except OSError as e:
+            log.warning("record_start %s: can't open the recording (%s); nothing is recorded", session, e)
+            self.recorder.stop()
+            path = None
         self._lost_at_start = self.lost()
-        log.info("recording %s (%s) to %s", session, purpose, path)
+        if path is not None:
+            log.info("recording %s (%s) to %s", session, purpose, path)
         try:
             self.send(encode(meta))
         except OSError as e:
