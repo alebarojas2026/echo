@@ -1,0 +1,45 @@
+const { test, expect } = require('@playwright/test')
+const path = require('node:path')
+const { layout } = require('./layout-fixture.cjs')
+const shots = process.env.HUD_SCREENSHOTS
+const name = id => layout.nodes.find(node => node.id === id)?.name ?? { east: 'East beacon', west: 'West beacon' }[id]
+
+for (const [width, height] of [[1920, 1080], [1440, 900]]) {
+  test(`a device unplugged while armed is named until it is back, at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height })
+    await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') })
+    await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'))
+    await page.goto('/tests/arrival-harness.html')
+    await expect.poll(() => page.evaluate(() => !!window.arrival)).toBe(true)
+    const alert = page.getByTestId('tamper-alert')
+    await page.evaluate(() => window.arrival.update('empty', { armed: true }))
+    await page.clock.runFor(400)
+    await expect(alert).toBeHidden()
+    // East is unplugged: its links go silent, so the sensor is blind as well. The alert still shows.
+    await page.evaluate(() => window.arrival.update('blind', { armed: true, tamper: ['east'] }))
+    await page.clock.runFor(400)
+    await expect(alert).toBeVisible()
+    await expect(page.getByTestId('tamper-text')).toHaveText(`${name('east')} unplugged while armed`)
+    await expect(page.getByTestId('tamper-text')).toHaveCSS('color', 'rgb(242, 85, 90)')
+    for (const part of await alert.locator('p, h2').all()) expect(parseFloat(await part.evaluate(el => getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(28)
+    const box = await alert.boundingBox()
+    expect(box.x + box.width).toBeLessThanOrEqual(640)
+    await expect(page.locator('body')).not.toContainText(/all clear/i)
+    await expect(alert).toHaveCSS('opacity', '1')
+    await expect(page.getByTestId('arrival-title')).toHaveCSS('opacity', '1')
+    if (shots) await page.screenshot({ path: path.join(shots, `${width}-tamper.png`) })
+    await page.evaluate(() => window.arrival.update('blind', { armed: true, tamper: ['east', 'west'] }))
+    await page.clock.runFor(200)
+    await expect(page.getByTestId('tamper-text')).toHaveText(`${name('east')} and ${name('west')} unplugged while armed`)
+    // Heard again: cleared. Disarmed: cleared (the brain empties state.tamper).
+    await page.evaluate(() => window.arrival.update('empty', { armed: true, tamper: [] }))
+    await page.clock.runFor(200)
+    await expect(alert).toBeHidden()
+    await page.evaluate(() => window.arrival.update('blind', { armed: true, tamper: ['west'] }))
+    await page.clock.runFor(200)
+    await expect(alert).toBeVisible()
+    await page.evaluate(() => window.arrival.update('empty', { armed: false }))
+    await page.clock.runFor(200)
+    await expect(alert).toBeHidden()
+  })
+}
