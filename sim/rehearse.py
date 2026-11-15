@@ -19,12 +19,18 @@ from narrator import narrate
 from narrator import recap as recaps
 
 from . import fake
+from .layout import LAYOUT
 from .wire import encoder
 
 START_MS = 1_763_149_500_000
 FEED, SCREEN, NARRATOR = ("127.0.0.1", 50000), ("127.0.0.1", 50001), ("127.0.0.1", 50002)   # stand-in senders
-Z = {1: (0.5, 1.5), 2: (1.5, 1.5), 3: (0.5, 0.5), 4: (1.5, 0.5)}   # zone centres
-TRAY = {"x": 1.0, "y": 0.2, "drop_db": 10}                         # the metal tray at T1
+# The layout from radio/nodes.json (sim/layout.py): zone centres, the tray spot, which zone alerts.
+Z = LAYOUT.centres                                             # zone centres
+TRAY = {"x": LAYOUT.tray[0], "y": LAYOUT.tray[1], "drop_db": 10}   # the metal tray at T1
+TOUR = LAYOUT.tour()                                           # every zone once (the square: 3, 4, 2, 1)
+STILL, CALM = LAYOUT.still_zone(), LAYOUT.calm_zone()          # where the alert fires; where nothing counts
+WEST_EDGE = lambda zone: {"x": 0.0, "y": Z[zone][1]}           # noqa: E731  walking in from the west
+EAST_EDGE = lambda zone: {"x": (LAYOUT.strip_m or LAYOUT.size_m)[0], "y": Z[zone][1]}   # noqa: E731
 
 
 def walk(stops, start=0.0, move_s=2.0):
@@ -38,20 +44,20 @@ def walk(stops, start=0.0, move_s=2.0):
 
 
 def training_walk():
-    stops, end = walk([(3, 8), (4, 8), (2, 8), (1, 8), (4, 8), (3, 6), (1, 6), (2, 6)], start=6.0)
-    person = [{"t": 0, "x": None}, {"t": 6.0, "x": 0.0, "y": 0.5}] + stops + [{"t": end + 0.1, "x": None}]
+    stops, end = walk([(z, 8) for z in TOUR] + [(STILL, 8)] + [(z, 6) for z in TOUR if z != STILL][::-1], start=6.0)
+    person = [{"t": 0, "x": None}, {"t": 6.0, **WEST_EDGE(TOUR[0])}] + stops + [{"t": end + 0.1, "x": None}]
     return {"name": "rehearse-walk", "duration_s": end + 6, "person": person}
 
 
 def demo_script():
     """The demo path, the commands the screen sends during it, and the beats to look for."""
-    tour, end = walk([(3, 4), (4, 4), (2, 4), (1, 4), (4, 22)], start=5.0)   # ends standing in zone 4
+    tour, end = walk([(z, 4) for z in TOUR] + [(STILL, 22)], start=5.0)   # ends standing in the alert zone
     still_from = end - 22
     wave, cam_off, leave = still_from + 15, still_from + 20, end
     tray_on, moved, tray_off, home, reset, finish = leave + 4, leave + 16, leave + 22, leave + 24, leave + 34, leave + 37
     path = {"name": "rehearsal", "duration_s": finish,
-            "person": [{"t": 0, "x": None}, {"t": 5.0, "x": 0.0, "y": 0.5}] + tour
-                      + [{"t": leave + 1, "x": 2.0, "y": 0.5}, {"t": leave + 1.1, "x": None}],
+            "person": [{"t": 0, "x": None}, {"t": 5.0, **WEST_EDGE(TOUR[0])}] + tour
+                      + [{"t": leave + 1, **EAST_EDGE(STILL)}, {"t": leave + 1.1, "x": None}],
             "waves": [{"t_on": wave, "t_off": wave + 2.5}],
             "camera": [{"t": 0, "state": "on"}, {"t": cam_off, "state": "off"}],
             "objects": [{**TRAY, "t_on": tray_on, "t_off": tray_off}],
@@ -67,14 +73,11 @@ def demo_script():
     def event(kind):
         return lambda e: e["kind"] == kind
 
-    stand = {n: 5.0 + 2.0 + i * 6.0 for i, n in enumerate((3, 4, 2, 1))}   # when each tour stop begins
+    stand = {n: 5.0 + 2.0 + i * 6.0 for i, n in enumerate(TOUR)}   # when each tour stop begins
     beats = [   # (name, from s, to s, "state" or "event", what must show up)
         ("empty room", 0, 5, "state", lambda s: pred(s, present=False, kind="none")),
         ("walk in", 5, 11, "state", lambda s: pred(s, present=True, kind="person")),
-        ("tour: zone 3 Hall", stand[3], stand[3] + 4, "state", zone(3)),
-        ("tour: zone 4 Bathroom", stand[4], stand[4] + 4, "state", zone(4)),
-        ("tour: zone 2 Chair", stand[2], stand[2] + 4, "state", zone(2)),
-        ("tour: zone 1 Bed", stand[1], stand[1] + 4, "state", zone(1)),
+        *[(f"tour: zone {n} {LAYOUT.names[n]}", stand[n], stand[n] + 4, "state", zone(n)) for n in TOUR],
         ("no-movement alert", still_from, wave, "event", event("alert_on")),
         ("wave check-in", wave, wave + 5, "event", event("checkin")),
         ("camera unplugged, radio only", cam_off, leave, "state",
@@ -114,13 +117,15 @@ def wander(zone: int, start: float, end: float, step_s: float = 1.5) -> list:
 
 def desk_script():
     """The 3-minute desk visit in docs/desk-demo.md, at its times: the judge walks in at 0:20 and
-    around, goes to the bathroom at 0:45 and stands still until the alert, waves at 1:10, moves to
-    the chair (no alert there) while the camera cable is pulled, and walks out at 2:10."""
+    around, goes to the bathroom (the zone with the shortest still limit) at 0:45 and stands still until
+    the alert, waves at 1:10, moves to a zone with no alert while the camera cable is pulled, and walks
+    out at 2:10."""
     wave, cam_off, leave, finish = 70.0, 95.0, 130.0, 155.0
     at = lambda zone, t: {"t": t, "x": Z[zone][0], "y": Z[zone][1]}   # noqa: E731
-    person = ([{"t": 0, "x": None}, {"t": 20.0, "x": 0.0, "y": 0.5}, at(3, 22.0), at(1, 25.0), at(2, 28.0)]
-              + wander(2, 29.0, 43.0) + [at(4, 47.0), at(4, wave + 4), at(2, wave + 6)] + wander(2, wave + 7, leave - 2)
-              + [{"t": leave, "x": 2.0, "y": 1.5}, {"t": leave + 0.1, "x": None}])
+    around = [at(z, 22.0 + 3 * i) for i, z in enumerate(TOUR)]   # walk through every zone, then keep moving
+    person = ([{"t": 0, "x": None}, {"t": 20.0, **WEST_EDGE(TOUR[0])}] + around
+              + wander(CALM, 23.0 + 3 * len(TOUR), 43.0) + [at(STILL, 47.0), at(STILL, wave + 4), at(CALM, wave + 6)]
+              + wander(CALM, wave + 7, leave - 2) + [{"t": leave, **EAST_EDGE(CALM)}, {"t": leave + 0.1, "x": None}])
     path = {"name": "desk", "duration_s": finish, "person": person,
             "waves": [{"t_on": wave + 1, "t_off": wave + 3.5}],
             "camera": [{"t": 0, "state": "on"}, {"t": cam_off, "state": "off"}],
@@ -132,11 +137,11 @@ def desk_script():
     beats = [
         ("nobody before the judge", 0, 20, "state", lambda s: pred(s, present=False)),
         ("judge walks in", 20, 45, "state", lambda s: pred(s, present=True, kind="person")),
-        ("still in the bathroom", 45, wave, "state", lambda s: pred(s, present=True, zone=4, motion="still")),
+        ("still in the bathroom", 45, wave, "state", lambda s: pred(s, present=True, zone=STILL, motion="still")),
         ("no-movement alert", 45, wave, "event", lambda e: e["kind"] == "alert_on"),
         ("wave check-in", wave, 90, "event", lambda e: e["kind"] == "checkin"),
         ("camera pulled, radio only", cam_off, leave, "state",
-         lambda s: s["cam"] == "off" and s["teacher"] is None and pred(s, present=True, zone=2)),
+         lambda s: s["cam"] == "off" and s["teacher"] is None and pred(s, present=True, zone=CALM)),
         ("walks out: nobody is here", leave, finish, "state", lambda s: pred(s, present=False)),
     ]
     return path, [], beats
