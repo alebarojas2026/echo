@@ -65,6 +65,13 @@ describe('the gate layout', () => {
   it('stands at the end of the desk by default, where the stair aisle has room for a gate a metre deep', () => {
     const hall: HallDesks = { centre_m: [0, 0], desk_depth_m: 0.45, desk_height_m: 0.75, desks: [{ row: 0, wedge: 0, r_m: 5, th0_deg: -10, th1_deg: 10, floor_m: 0 }] }
     expect(defaultSpot(hall).gap).toBe('end')
+    // Of a row's ends, the one on the widest stair aisle: the far end's table has to clear the next block.
+    const block = (wedge: number, th0: number, th1: number) => ({ row: 0, wedge, r_m: 26, th0_deg: th0, th1_deg: th1, floor_m: 0 })
+    const rows: HallDesks = { ...hall, desks: [block(0, -30, -11), block(1, -8.4, 0), block(2, 2.7, 10), block(3, 12.4, 30)] }
+    const aisle = (a: number, b: number) => (((rows.desks[b].th0_deg - rows.desks[a].th1_deg) * Math.PI) / 180) * 26
+    expect(aisle(1, 2)).toBeGreaterThan(aisle(0, 1)) // 1.23 m against 1.18 m
+    expect(aisle(1, 2)).toBeGreaterThan(aisle(2, 3)) // and 1.09 m
+    expect(defaultSpot(rows)).toMatchObject({ desk: { wedge: 1 }, along: 1, gap: 'end' })
     // The hall is placed with its desk's edge under the layout's (y = 0.8), not under the spot's north edge.
     const fit = deskFit(hall, defaultSpot(hall), { min: [-9, 0, -9], max: [9, 3, 9] }, 12)
     const far = deskFit(hall, { ...defaultSpot(hall), gap: 'behind' }, { min: [-9, 0, -9], max: [9, 3, 9] }, 12)
@@ -139,7 +146,7 @@ describe('the gate layout', () => {
       expect(box.min.y).toBeCloseTo(0) // its legs stand on the ground
       expect(box.max.y).toBeCloseTo(up - 0.04) // its top is just under the device, wherever that is
       expect(box.min.z).toBeCloseTo(-0.05) // the device at the table's near edge, the table reaching away from the spot
-      expect(box.max.z).toBeGreaterThan(0.3)
+      expect(box.max.z).toBeCloseTo(0.25) // a small table: it clears the next block across a 1.2 m aisle
     }
   })
 

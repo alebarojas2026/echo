@@ -144,8 +144,8 @@ export function standBase([x, y]: Vec3): Vec3 {
 }
 
 /** The table drawn under a device across the spot: its top's size, and the heights it is drawn for. */
-const TABLE_W_M = 0.7
-const TABLE_D_M = 0.45
+const TABLE_W_M = 0.5
+const TABLE_D_M = 0.3
 const TABLE_MIN_M = 0.25
 const TABLE_MAX_M = 1.3
 

@@ -75,10 +75,23 @@ export function defaultSpot(h: HallDesks): DeskSpot {
   const rows = [...new Set(h.desks.map((d) => d.row))].sort((a, b) => a - b)
   const row = rows[Math.min(2, rows.length - 1)]
   const desk = h.desks.filter((d) => d.row === row).sort((a, b) => mid(a) - mid(b))[0]
-  // With a device across the spot (the gate, about 1 m deep) the default is the desk's end: the stair aisle has
-  // the room for it, where the gap between two rows does not, so nothing is ever drawn inside the next desk.
-  return deviceAcross() ? { desk, along: 0.5, gap: 'end' } : { desk, along: 0.5 }
+  if (!deviceAcross()) return { desk, along: 0.5 }
+  // With a device across the spot (the gate, about 1 m deep) the default is a desk's end: a stair aisle has the
+  // room for it, where the gap between two rows does not. Of the row's east ends that open on a stair aisle, the
+  // widest one (the hall's are 1.1 to 1.4 m, and the far end's table must clear the next block); with no aisle in
+  // the row, the east end of the block nearest straight ahead.
+  const inRow = h.desks.filter((d) => d.row === row).sort((a, b) => a.th0_deg - b.th0_deg)
+  const aisles = inRow
+    .slice(0, -1)
+    .map((d, i) => ({ desk: d, wide: (((inRow[i + 1].th0_deg - d.th1_deg) * Math.PI) / 180) * d.r_m }))
+    .filter((a) => a.wide >= AISLE_MIN_M && a.wide <= AISLE_MAX_M)
+    .sort((a, b) => b.wide - a.wide || mid(a.desk) - mid(b.desk))
+  return { desk: aisles[0]?.desk ?? desk, along: 1, gap: 'end' }
 }
+
+/** A gap between two blocks of a row is a stair aisle when it is this wide: narrower is a join, wider is open floor. */
+const AISLE_MIN_M = 0.9
+const AISLE_MAX_M = 2
 
 const rad = (deg: number) => (deg * Math.PI) / 180
 /** A point of the hall in the model: `r` metres from the centre at angle `th` (radians). */
