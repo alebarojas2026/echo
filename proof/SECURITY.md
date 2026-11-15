@@ -7,6 +7,9 @@ Synthetic sessions test this pipeline only; they never populate measured proof.
 Alexander records on the board (its clock must stamp both streams):
 `python -m proof.security_walk <new-id> entries <walker>` and, separately,
 `python -m proof.security_walk <new-empty-id> empty <walker>`.
+Use `python -m proof.security_walk <new-pass-id> passes <walker>` for brief
+walk-throughs without stopping. Actual camera occupancy, not the prompt, decides
+whether an entry lasted long enough to expect an intrusion.
 These send the usual heldout record commands, arm the space, guide entries at
 the named zone centres from nodes.json, and record at least 10 minutes empty.
 Only numeric labels and state/event JSON are saved; no camera frames are saved.
@@ -21,11 +24,15 @@ and `--baseline data/sessions/baseline.json` for the device comparison, then
 also runs this stage before rendering PROOF.md. The optional security format is
 approved in #453; publishing stays gated until its schema lands with #415.
 
-An entry is an independently labeled empty-to-present transition. Its full
-two-second evaluation window needs continuous truth and captured states; gaps
+An entry is an independently labeled empty-to-present transition. Presence keeps
+its two-second deadline. Intrusion allows `armed.hold_s + 2` seconds from
+radio/nodes.json (hold defaults to 3); detection.within_s reports that intrusion
+deadline and hold_s records the policy. Full evaluation windows need continuous
+truth and captured states; gaps
 exclude a trial rather than inventing a miss. Explicit blind states count as
 missed detection, not an empty room. Armed intrusion trials also require armed
-coverage throughout. Detection reports n/N and Wilson 95% intervals (repeated
+coverage throughout the longer deadline and confirmed occupancy for at least the
+hold. Shorter walk-throughs are not intrusion misses. Detection reports n/N and Wilson 95% intervals (repeated
 entries should be spread over walkers and sessions, not treated as new people).
 
 False alarms count distinct captured `enter` and `intrusion` events during
@@ -33,6 +40,13 @@ independently observed empty, healthy time. Armed and all-empty denominators
 are separate and reported in seconds alongside events/hour. No observed time
 is unknown; a measured zero requires actual continuous capture. Event ids are
 deduplicated within each session. Never interpret blind intervals as all clear.
+An intrusion already matched to an eligible entry is never counted again as a
+false alarm after the person leaves. `passed_by` never counts as an intrusion.
+Its distinct event count and events/hour use all continuously captured armed
+time, including explicit blind states, separately from the empty-only false-alarm
+denominator. This is an observed event rate, not a count of people or recall.
+The additional fields and revised deadline await schema #625; publication remains
+schema-validated. Missing observed armed time stays null, rather than a zero rate.
 
 Device rows come from nodes.json: all configured nodes; router, receiver and
 the next two configured nodes; router plus receiver. Links require both endpoints.
