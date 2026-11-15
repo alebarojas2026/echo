@@ -34,6 +34,16 @@ const REPLAY_BAR_PX = 184
 /** What the room says when the browser gives it no 3D context. The text column runs on the feed alone. */
 export const NO_3D_WORDS = ['3D view unavailable', 'The radio keeps working.'] as const
 
+/** What the room says when the layout file was read but not understood (layout.ts, 'refused'). */
+export const LAYOUT_REFUSED_WORDS = ['Layout not understood', 'The room can\u2019t draw this layout file. The radio keeps working.'] as const
+
+/** Instead of mounting the room on a layout it does not understand: the notice, and nothing from any other
+ *  layout. The text column runs on the feed alone. */
+export function refuseLayout(host: HTMLElement) {
+  host.classList.add('room')
+  addNotice(host)(...LAYOUT_REFUSED_WORDS)
+}
+
 /** The room's notice: a heading and one line over the room, hidden while the heading is empty. */
 function addNotice(host: HTMLElement): (title: string, line: string) => void {
   const notice = document.createElement('div')
