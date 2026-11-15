@@ -118,3 +118,16 @@ def test_main_fails_on_the_template(monkeypatch, capsys):
         main()
     assert stopped.value.code == 1
     assert capsys.readouterr().out.startswith("GATE 2 FAIL")
+
+
+def test_rates_and_letters_come_from_nodes_json():
+    from radio.nodes import DOC, LINKS
+    from radio.report_hci import BEACON_OF, MIN_RATES
+    pis = {n["id"] for n in DOC["nodes"] if "receiver" in n["roles"] and "beacon" in n["roles"]}
+    assert set(MIN_RATES) == {lid for lid, link in LINKS.items() if link["kind"] == "ble"}
+    for link_id, rate in MIN_RATES.items():
+        assert rate == (20.0 if LINKS[link_id]["tx"] in pis else 7.0)
+    # Today's layout gives exactly the old hand-written table.
+    assert {k: MIN_RATES[k] for k in ("pi5>unoq:ble", "east>unoq:ble", "west>pi5:ble")} == \
+        {"pi5>unoq:ble": 20.0, "east>unoq:ble": 7.0, "west>pi5:ble": 7.0}
+    assert BEACON_OF["pi5>unoq:ble"] == "S" and BEACON_OF["east>pi5:ble"] == "E" and BEACON_OF["west>unoq:ble"] == "W"
