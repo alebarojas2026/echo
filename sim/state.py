@@ -47,6 +47,8 @@ SENTENCES = {   # template narration, one short sentence per event kind
     "router_moved": "The router was moved.", "router_home": "The router is back home.",
     "cam_on": "The camera is on.", "cam_stalled": "The camera has stalled.", "cam_off": "The camera is off.",
 }
+ARMED_SENTENCES = {"armed": "Armed: this space should be empty now.", "disarmed": "Disarmed.",
+                   "intrusion": "Someone is here while armed, in zone {zone}."}
 NO_NODE = {"object_on": "Something new is sitting in the room.", "object_off": "The new object is gone."}
 
 
@@ -88,6 +90,7 @@ class Brain:
         self.before = {"present": False, "zone": 0, "alert": "none", "cam": "on", "spot": "S-home",
                        "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
+        self.armed, self.intruded = False, False   # section 6, Armed: the space should be empty
         self.demo = []   # every event since the last reset, for the recap
 
     def see(self, event: dict) -> None:
@@ -96,8 +99,13 @@ class Brain:
 
     def command(self, msg: dict) -> None:
         """A screen -> brain cmd. reset_alert and reset change things; the rest are accepted."""
+        t = self.last_t or 0.0
+        if msg.get("cmd") == "arm":   # arm {on: true|false}: "this space should be empty now"
+            self._arm(t, bool((msg.get("args") or {}).get("on")))
         if msg.get("cmd") in ("reset_alert", "reset"):
             self.alert_s = 0.0
+        if msg.get("cmd") == "reset":
+            self._arm(t, False)
         if msg.get("cmd") == "reset":   # between judges: also the still timer, check-in, advice, narration
             self.still_s, self.checkin, self.narration = 0.0, None, None
             self.advice, self.advice_off = None, True
@@ -110,6 +118,23 @@ class Brain:
             if text:
                 self.narration = {"text": text, "event_id": f"e{self.n_events}", "t": self._ms(t),
                                   "source": "template", "gen_ms": 0}
+
+    def _arm(self, t: float, on: bool) -> None:
+        if on != self.armed:
+            self.armed, self.intruded = on, False
+            self._event(t, "armed" if on else "disarmed")
+
+    def _intrusion(self, t: float, pred) -> None:
+        """Section 6: while armed, one intrusion each time a person appears (person holds the majority
+        of the last 10 decisions, after it didn't). Never while blind or with no prediction."""
+        person = sum(k == "person" for k, _, _ in self.recent) > len(self.recent) / 2
+        if not self.armed or pred is None:
+            return
+        if person and not self.intruded:
+            self.intruded = True
+            self._event(t, "intrusion", zone=self.anchor[1] or None)
+        elif not person:
+            self.intruded = False
 
     def _ms(self, t: float) -> int:
         return self.start_ms + round(t * 1000)
@@ -309,6 +334,7 @@ class Brain:
                                    if t - o.get("t_on", 0.0) >= STATIC_AFTER_S]),
                 "n_links": len(links) - len(blind)} if baseline else None
 
+        self._intrusion(t, pred)
         self._diff(t, {"present": bool(pos), "zone": zone, "alert": alert["state"], "cam": cam, "spot": spot,
                        "blind": set(blind), "objects": {tuple(o["xy_m"]): o["near"] for o in objects},
                        "baseline": baseline, "trained": trained}, pred is not None)
@@ -319,7 +345,8 @@ class Brain:
                             "motion": ("moving" if moving else "still") if pos else None} if cam == "on" else None,
                 "model": {"trained": trained, "ver": "sim" if trained else None, "train_s": None,
                           "ms_per_decision": None, "windows": 0, "train_sessions": [], "training": None},
-                "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None}}
+                "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None},
+                **({"armed": True} if self.armed else {})}   # section 5: missing means false
 
     def _event(self, t: float, kind: str, **info) -> None:
         info = {k: v for k, v in info.items() if v is not None}   # an unknown node is left out, not sent as null
@@ -327,6 +354,11 @@ class Brain:
         self.events.append({"type": "event", "t": t, "id": f"e{self.n_events}", "kind": kind, "info": info})
         if kind == "reset":
             return   # no sentence of its own: the recap follows
+        if kind in ARMED_SENTENCES:
+            self.narration = {"text": ARMED_SENTENCES[kind].format(zone=info.get("zone", "")).replace(" in zone .", "."),
+                              "event_id": f"e{self.n_events}", "t": self._ms(t), "source": "template", "gen_ms": 0}
+            self.demo.append({"kind": kind, "info": info, "t": self._ms(t)})
+            return
         self.demo.append({"kind": kind, "info": info, "t": self._ms(t)})
         sentence = NO_NODE[kind] if kind in NO_NODE and info.get("node") is None else SENTENCES[kind]
         self.narration = {"text": sentence.format(**info), "event_id": f"e{self.n_events}",
