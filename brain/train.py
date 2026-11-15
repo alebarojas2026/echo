@@ -69,7 +69,8 @@ def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS) -> dict
 
 class Model:
     # The walkers whose windows the forests were fit on (pseudonyms from the sessions' meta).
-    # None = unknown: not fit yet, or a model file from before this was kept. That is not the
+    # None = unknown: not fit yet, a model file from before this was kept, or a fit in which some
+    # window with a person in it had no walker id (a partial list would look complete). That is not the
     # same as [], a fit whose windows had no walker at all (empty room and object sessions only).
     # A class default, so an older pickle without the attribute reads as unknown.
     train_walkers: Optional[List[str]] = None
@@ -109,7 +110,13 @@ class Model:
         self.train_s = time.monotonic() - t0
         self.windows = len(d["X"])
         self.train_sessions = sorted({s for s in d["session"] if s})
-        self.train_walkers = sorted({str(w).strip() for w in d["walker"] if w is not None and str(w).strip()})
+        names = [str(w).strip() if w is not None else "" for w in d["walker"]]
+        if any(not name for name, z in zip(names, d["zone"]) if z != 0):
+            # A person window with no walker id: we can't say who was trained on, and a partial
+            # list must never read as the whole of it.
+            self.train_walkers = None
+        else:
+            self.train_walkers = sorted({name for name in names if name})
         return self
 
     def predict(self, window: dict) -> dict:

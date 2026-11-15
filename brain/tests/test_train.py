@@ -138,10 +138,15 @@ def test_walkers_unknown_is_not_the_same_as_no_walkers(base):
     assert only_empty.train_walkers == []                    # fit, and known to have no walker
 
 
-def test_blank_walker_ids_are_not_counted(base):
-    fit = T.Model(base).fit([session("a", "zone_tour", walker="  ", seed=1),
-                             session("b", "zone_tour", walker=" w9 ", seed=2)])
-    assert fit.train_walkers == ["w9"]
+def test_a_person_window_without_a_walker_id_makes_the_whole_list_unknown(base):
+    unnamed = session("a", "zone_tour", walker="  ", seed=1)
+    named = session("b", "zone_tour", walker=" w9 ", seed=2)
+    assert T.Model(base).fit([unnamed]).train_walkers is None             # nobody named at all
+    assert T.Model(base).fit([unnamed, named]).train_walkers is None      # a partial list is not the whole of it
+    assert T.Model(base).fit([session("c", "zone_tour", walker=None, seed=3), named]).train_walkers is None
+    assert T.Model(base).fit([named]).train_walkers == ["w9"]             # ids are stripped
+    # No person in the unnamed session (an empty room): the list stays known.
+    assert T.Model(base).fit([session("e", "empty_room", seed=4), named]).train_walkers == ["w9"]
 
 
 def test_a_session_without_fitted_windows_adds_no_walker(base):
