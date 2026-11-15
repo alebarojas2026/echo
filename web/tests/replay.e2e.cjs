@@ -89,6 +89,22 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
   })
 }
 
+test('at 8x the headline is the second on screen, even a visit that lasts one second', async ({ page }) => {
+  // Twelve saved seconds, empty but for the sixth.
+  const brief = from => Array.from({ length: 12 }, (_, i) => ({ t: from + i * 1000, present: i === 5, zone: i === 5 ? zone : 0, zone_set: i === 5 ? [zone] : [], motion: i === 5 ? 'moving' : null, armed: false, alert: false, health: 'ok', tamper: [] }))
+  await open(page, brief)
+  await startLast(page)
+  const seen = new Set()
+  for (let step = 0; step < 60; step++) {
+    await page.clock.runFor(50)
+    const [at, words] = await page.evaluate(() => [document.querySelector('[data-testid="replay-track"]').getAttribute('aria-valuenow'), document.querySelector('[data-testid="judge-headline"]').textContent])
+    if (await page.getByTestId('replay').isHidden()) break
+    seen.add(at)
+    expect([at, /^Moving /.test(words)]).toEqual([at, at === '5'])
+  }
+  expect(seen.has('5')).toBe(true)
+})
+
 test('a live intrusion or tamper ends the replay at once', async ({ page }) => {
   await open(page, from => recorded(from))
   for (const kind of ['intrusion', 'tamper']) {
