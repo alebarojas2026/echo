@@ -2,6 +2,7 @@ import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import './judge.css'
 import { mountAskRoom } from './ask-room'
+import { mountArrival } from './arrival'
 import { changingText } from './changing-text'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
@@ -56,6 +57,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   document.addEventListener('keydown', key)
   const disposeAsk = mountAskRoom(root.querySelector('header')!)
+  const disposeArrival = mountArrival(root, feed, operator)
   let disposed = false
   let lastState: StateMsg | null = null
   let lastStale = true
@@ -96,7 +98,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposeAsk(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposeAsk(); disposeArrival(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
