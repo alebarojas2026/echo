@@ -67,16 +67,35 @@ def feeder(port):
     from sim import fake
     from sim.send import UdpOut
     from sim.wire import encoder
+    import select
     out = UdpOut("127.0.0.1", port)
     encode = encoder()
-    for line in sys.stdin:
-        job = json.loads(line)
-        path, rng = job["path"], random.Random(job["seed"])
+    hold, n = None, 0
+
+    def play(path, seed):
+        rng = random.Random(seed)
         start_ms = int(time.time() * 1000)
-        events = fake.simulate(path, rate=15.0, seed=job["seed"])
+        events = fake.simulate(path, rate=15.0, seed=seed)
         events = with_passers(events, path.get("passers") or [], rng, fake)
         fake.pace(((e["t"], encode({**e, "t": e["t"] + start_ms / 1000})) for e in events), out=out)
+
+    while True:
+        # The radios never stop: while the day waits between paths, the last spot is held, 1 s at a time.
+        if hold is not None and not select.select([sys.stdin], [], [], 0)[0]:
+            n += 1
+            play(hold, n)
+            continue
+        line = sys.stdin.readline()
+        if not line:
+            return
+        job = json.loads(line)
+        path = job["path"]
+        play(path, job["seed"])
         print(json.dumps({"end": path.get("name"), "t": time.time()}), flush=True)
+        last = (path.get("person") or [{"x": None}])[-1]
+        hold = {"name": "hold", "duration_s": 1.0, "label_mode": path.get("label_mode", "person"),
+                "person": [] if last.get("x") is None else [{"t": 0, "x": last["x"], "y": last["y"]}],
+                "camera": [{"t": 0, "state": (path.get("camera") or [{"state": "on"}])[-1]["state"]}]}
 
 
 def passer_at(p, t):
