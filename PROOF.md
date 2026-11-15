@@ -4,7 +4,7 @@ Every number shown on screen or in the pitch has a row here: what was measured, 
 
 | Number | Value | Method | N | Date | Commit |
 |---|---|---|---|---|---|
-| Zone accuracy (radio vs camera agreement; the "localization accuracy" in the Devpost draft) | pending | Held-out sessions with the camera still recording but the model predicting from radio only. Compare predicted zone to camera zone at each timestamp. Report % agreement, the confusion matrix (`proof.confusion.json`) and the chance level, which counts empty as a class: 1 in 3 on the desk layout (empty, Left, Right), 1 in 5 on the square. | 3+ people, 5+ held-out sessions | | |
+| Radio vs camera zone agreement | __ | Held-out sessions with the camera labeling and the model predicting from radio only. Compare predictions to labels using the zones in radio/nodes.json, including empty. Report agreement, its interval, the confusion matrix and the measured baseline; this makes no claim about sides the active layout does not define. | Planned: 3+ people, 5+ held-out sessions | __ | __ |
 | Presence accuracy | __ | Ten held-out cycles: 1 min empty, 1 min occupied; camera unplugged, a walker absent from the lesson. Compare radio decisions once per observed second with a written enter/leave log; show the always-empty score on the same seconds. | __ | __ | __ |
 | Person vs object accuracy | pending | Place a still object (box, chair, water jug) in the zone, then a person. Count how often each is labeled obstruction vs person. | 10+ trials each | | |
 | Time to train on the board | pending | Wall-clock time on the UNO Q from training start to model ready. Report the median. | 3+ runs | | |
@@ -13,6 +13,8 @@ Every number shown on screen or in the pitch has a row here: what was measured, 
 | No-movement alert latency | pending | Same video method: time from the person freezing to the alert, minus the configured wait period. | 5+ trials | | |
 | Dead-zone improvement | pending | Measured with tools independent of Radio Sight (otherwise circular): `iperf3` throughput and ping packet loss from a laptop in the problem spot, before and after the placement change, same position. Report change in Mbps and loss. | 5+ runs before, 5+ after | | |
 | Board power draw | pending | USB power meter inline on the board's cable. Average over 5 min idle and 5 min fully running. | 1 run each mode | | |
+| Images stored | __ | After a full lesson, audit project data, the App Lab app folder, teacher host mounts and its full filesystem using teacher/privacy.py suffixes. Missing scope fails the audit. See proof/MANUAL.md. | __ | __ | __ |
+| Bytes sent outside our network | __ | Board egress counter around a full rehearsal, with no IPv4 or IPv6 default route. Local laptop/phone traffic is allowed. See proof/MANUAL.md. | __ | __ | __ |
 
 ## What the measurements need
 - **Contracts (Ivan):** every message carries a timestamp and a sequence number, so speed numbers can be computed from logs.
