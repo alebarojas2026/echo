@@ -58,4 +58,5 @@ export const GATE_LAYOUT = {
     { id: 'S-E30', xyz_m: [0.66, 0.8, 0.75] },
   ],
   tray_spots: [{ id: 'T1', xyz_m: [0.48, 0.8, 0.75] }],
+  presence: { line: 'pi5>pi5b:wifi' },
 }

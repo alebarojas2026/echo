@@ -245,6 +245,53 @@ describe('the gate layout', () => {
   })
 })
 
+describe('the simulated feed on a layout with a presence line', () => {
+  beforeAll(() => expect(frame.applyLayout(GATE_LAYOUT)).toBe(true))
+  afterAll(() => expect(frame.applyLayout(DESK_LAYOUT)).toBe(true))
+
+  it('reads the line from the file, and none from a file without one or with a line the layout does not have', () => {
+    expect(frame.PRESENCE_LINE).toBe('pi5>pi5b:wifi')
+    expect(frame.applyLayout({ ...GATE_LAYOUT, presence: { line: 'east>unoq:ble' } })).toBe(true)
+    expect(frame.PRESENCE_LINE).toBeNull()
+    expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)
+    expect(frame.PRESENCE_LINE).toBeNull()
+    expect(frame.applyLayout(GATE_LAYOUT)).toBe(true)
+  })
+
+  it('leaves a thing in the Wi-Fi line with nobody there: an object, and advice that names no spot', () => {
+    const s = mockState('object', 1, 6000)
+    expect(s.router).toBe('S-home')
+    expect(s.pred).toMatchObject({ present: false, kind: 'object' })
+    expect(s.objects[0].xy_m).toEqual([0.38, 0.3]) // halfway from Pi A to Pi B, on the spot
+    expect(s.objects[0].near).toBeNull() // no device within half a metre
+    expect(s.advice).toMatchObject({ link: 'pi5>pi5b:wifi', to_spot: null, move_m: [0, 0], dist_change_m: 0, after_dbm: null })
+    expect(s.advice!.text).toBe('Something is standing in the Wi-Fi line from Pi A to Pi B.')
+    expect(s.advice!.text).not.toMatch(/router|move/i)
+    expect(s.links.find((l) => l.id === 'pi5>pi5b:wifi')!.drop_db).toBeGreaterThanOrEqual(3)
+  })
+
+  it('plays the dead-zone beat of the demo without moving the router: put in the line, taken away, the gain shown', () => {
+    const at = (sec: number) => mockState('demo', 1, sec * 1000, 'S-home', 0)
+    for (let sec = 0; sec < 90; sec += 1) expect(at(sec).router).toBe('S-home')
+    expect(at(58).advice).toMatchObject({ to_spot: null, after_dbm: null })
+    expect(at(58).pred!.kind).toBe('object')
+    const waiting = at(64) // taken away 2 s ago: the board has no new level yet
+    expect(waiting.objects).toEqual([])
+    expect(waiting.pred!.kind).toBe('none')
+    expect(waiting.advice).toMatchObject({ link: 'pi5>pi5b:wifi', after_dbm: null })
+    const shown = at(70)
+    expect(shown.advice!.after_dbm! - shown.advice!.before_dbm!).toBeGreaterThan(6) // the line is that much stronger
+    expect(shown.advice!.text).toBe('The Wi-Fi line from Pi A to Pi B is clear again.')
+    expect(at(78).advice).toBeNull() // 10 s after the result, it goes
+    expect(at(75).narration!.text).toBe('With it taken away, the Wi-Fi line is strong again.')
+    expect(at(85).narration!.text).not.toMatch(/router/i)
+  })
+
+  it('drops the advice at once when somebody steps on the spot', () => {
+    expect(mockState('still', 1, 5000).advice).toBeNull()
+  })
+})
+
 describe('the desk layout, after the gate', () => {
   it('still has two zones with a line between them, numbered names, and posts for its beacons', () => {
     expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)

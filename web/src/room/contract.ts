@@ -41,7 +41,7 @@ export interface Pred {
 
 export interface ObjectMark {
   xy_m: [number, number]
-  near: string
+  near: string | null // the closest node within 0.5 m of xy_m, or null (CONTRACTS.md section 5)
   since_s: number
   drop_db: number
 }
@@ -68,7 +68,7 @@ export interface Checkin { t: number; link: string }
 export interface Advice {
   id: string
   cause: string
-  near: string
+  near: string | null // the closest node within 0.5 m of xy_m, or null (CONTRACTS.md section 5)
   xy_m: [number, number]
   link: string
   to_spot: string | null // null = nothing to move: on one spot the router is cabled (CONTRACTS.md section 5)

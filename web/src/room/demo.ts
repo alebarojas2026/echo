@@ -1,6 +1,6 @@
 import type { Alert, Checkin, Narration } from './contract'
-import { HOME_SPOT, LINK_IDS, TRAY_SPOTS, ZONES, floorSize, routerId, zoneCenter } from './frame'
-import type { Scene } from './mock'
+import { HOME_SPOT, LINK_IDS, PRESENCE_LINE, TRAY_SPOTS, ZONES, floorSize, routerId, zoneCenter } from './frame'
+import { thingXy, type Scene } from './mock'
 
 // ?mock=demo: the whole demo as a 90 s loop, in the running order of plan/ui-research/03 section 4, so the kiosk
 // has an attract screen and the video and rehearsals have a repeatable take. Everything is mock data (src "sim").
@@ -19,6 +19,9 @@ import type { Scene } from './mock'
 //   62     the router is moved (pred pauses while it's off S-home)
 //   62+    the link no longer drops, so the advice clears; the result comes in the narration (73 s)
 //   82     a recap sentence closes the loop
+//
+// On a layout with a presence line (the gate) the router is cabled and never moves, so the dead-zone beat is a
+// thing left in the Wi-Fi line across the spot: put there at 48 s, taken away at 62 s, and the line's gain shown.
 //   90     the loop starts again
 
 export const DEMO_MS = 90_000
@@ -31,8 +34,8 @@ function places() {
   const inB = zoneCenter(b)!
   const [fw] = floorSize()
   const exit: [number, number] = [inB[0] > fw / 2 ? fw + 0.35 : -0.35, inB[1]]
-  const wifi = LINK_IDS.find((id) => id.startsWith(`${routerId()}>`) && id.endsWith(':wifi')) ?? LINK_IDS[0]
-  return { a, b, inA, inB, exit, tray: [TRAY_SPOTS[0][0], TRAY_SPOTS[0][1]] as [number, number], wifi }
+  const wifi = PRESENCE_LINE ?? LINK_IDS.find((id) => id.startsWith(`${routerId()}>`) && id.endsWith(':wifi')) ?? LINK_IDS[0]
+  return { a, b, inA, inB, exit, tray: thingXy() ?? ([TRAY_SPOTS[0][0], TRAY_SPOTS[0][1]] as [number, number]), wifi }
 }
 
 function lerp(a: [number, number], b: [number, number], u: number): [number, number] {
@@ -50,11 +53,12 @@ const lines = (a: number): [number, string, string][] => [
   [24, 'alert_on', `No movement for 10 seconds in ${zoneName(a)}.`],
   [31, 'checkin', `Check-in received from ${zoneName(a)}.`],
   [40, 'cam_off', 'Setup is done; sensing now runs on radio alone.'],
-  [54, 'object_on', 'An object, not a person, is next to the router.'],
-  [73, 'advice_result', 'Moving the router made its link to the receiver stronger.'],
+  [54, 'object_on', PRESENCE_LINE ? 'Something, not a person, is standing in the Wi-Fi line.' : 'An object, not a person, is next to the router.'],
+  [73, 'advice_result', PRESENCE_LINE ? 'With it taken away, the Wi-Fi line is strong again.' : 'Moving the router made its link to the receiver stronger.'],
   // The end-of-demo recap: up to 3 sentences and 45 words (contract section 6).
   [82, 'recap', 'Someone walked in, stood still until the no-movement alert, and waved to check in. ' +
-    'Then the camera came off and the radio kept up. It told the tray from a person and found a better router spot.'],
+    'Then the camera came off and the radio kept up. ' +
+    (PRESENCE_LINE ? 'It told a thing left in the Wi-Fi line from a person.' : 'It told the tray from a person and found a better router spot.')],
 ]
 
 export function demoScene(tMs: number, start: number): Scene {
@@ -85,8 +89,10 @@ export function demoScene(tMs: number, start: number): Scene {
 
   return {
     person,
-    object: s >= 48 ? tray : null,
-    router: s >= 62 ? 'S-W30' : HOME_SPOT,
+    // With a presence line the thing is taken away at 62 s and the router stays where it is.
+    object: s >= 48 && !(PRESENCE_LINE && s >= 62) ? tray : null,
+    router: s >= 62 && !PRESENCE_LINE ? 'S-W30' : HOME_SPOT,
+    clearedS: PRESENCE_LINE && s >= 62 ? s - 62 : undefined,
     blind: false,
     alert,
     checkin,
