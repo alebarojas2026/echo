@@ -100,10 +100,12 @@ def demo_script():
 
 def recap_shown(s) -> bool:
     """The end-of-demo recap is on the screen and fits the
-    recap limits (section 6). With no model in the rehearsal it is the template recap."""
+    recap limits (section 6). With no model in the rehearsal it is the template recap.
+    It tells of the router move, except on one spot: there the router is cabled and nothing says it moved."""
     n = s["narration"]
     return bool(n and n["source"] == "template" and recaps.problem(n["text"], [n["text"]], camera_off=True) is None
-                and "router" in n["text"] and any(name.lower() in n["text"].lower() for name in LAYOUT.names.values()))
+                and (len(LAYOUT.zones) == 1 or "router" in n["text"])
+                and any(name.lower() in n["text"].lower() for name in LAYOUT.names.values()))
 
 
 def no_model(messages):
