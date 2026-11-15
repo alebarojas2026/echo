@@ -2,6 +2,11 @@
 
 Radio Sight: safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras.
 
+**The three things this project is about. Every screen, sentence and feature should serve one of them:**
+1. **Safety and security.** It knows someone is in a space, on which side, and whether they've been still too long, and it tells someone when a space that should be empty isn't (armed mode, intrusion, tamper).
+2. **Privacy.** No camera watches anyone. A camera teaches the radio for half a minute and is unplugged. No image is ever stored and nothing leaves the board: no cloud, no internet. It can't tell who someone is and doesn't try. Privacy is a selling point, not a footnote: show it and measure it ("0 images, 0 bytes out").
+3. **Dead zones.** The same radio links that sense people also show where the Wi-Fi itself is weak or blocked. When something blocks a link, it says so, says where to move the router, and measures the gain after the move. Every building has Wi-Fi and every building has dead zones: this is the reason an owner installs it, and safety comes with it for free.
+
 - **Who it's for:** places where cameras can't go or aren't wanted (patient rooms, bathrooms, study rooms, offices after hours). It knows someone is in a space, where, and whether they've been still too long, and it tells someone when a space that should be empty isn't.
 - **What's new:** a camera teaches the radio in seconds, on the board, and is then unplugged. "Taught by a camera. Runs without one." Nothing leaves the board.
 - **Why the hardware makes sense:** a building already has Wi-Fi access points every 10-15 m. Our Pi stands in for one, the UNO Q (Qualcomm Dragonwing QRB2210) stands in for the chip inside it, and the beacons stand in for the other radios a building already has. Only the webcam is extra, and only for teaching.
@@ -18,7 +23,7 @@ The direction above is new (Saturday evening). Priorities, in order:
 3. Work from GitHub issues with your tag, using the loop below. Don't wait for a person. Fix review comments on your open PRs before starting new work.
 4. **Layout:** take node positions, links and zones from radio/nodes.json, never from constants in code. The layout is moving from the 2 x 2 m square to a strip in front of a desk (draft PR #415).
 5. **Hands-on hardware is Alexander's and Ivan's laptop session's** (issue #95). When a task needs the real devices, comment `needs Alexander:` on the issue with exact commands and what to look for, then take your next issue.
-6. Not in the 3-minute demo any more (don't polish them): the crowd game, the tray and router-advice beat, the recap. They stay working for the finalist round and questions.
+6. **The dead-zone beat is back on the hero path** (changed Saturday night): something blocks the router's link (the tray), the screen says a dead zone was found and where to move the router, the router is moved, and the measured gain shows. On the desk layout the router slides along the desk's back edge. Keep it to about 20 seconds. Not in the 3-minute demo (don't polish them): the crowd game and the recap. They stay working for the finalist round and questions.
 7. Lanes: advisor/ is Izet's; narrator/ and teacher/ are Alejandro's; radio/, pi/, board/, bus/ and mcu/ are worked by the lead's workers (Alexander is on hardware).
 8. **CI is down (the account's Actions limit), so a red check means nothing right now.** Until it's back, the merge gate is a local run: check out the PR merged with current main in a clean folder, run that lane's tests (pytest for the folder and `python -m pytest contracts`; for web: `npm ci && npx tsc --noEmit && npx vitest run && npx vite build`), and write the result in a PR comment ("CI unavailable; local: N passed"). Don't push empty commits to re-run CI.
 
