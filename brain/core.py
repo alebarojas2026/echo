@@ -28,6 +28,7 @@ from brain import settings as S
 from brain.alert import Armed, Tamper, Watch
 from brain.hall import Hall
 from brain.health import Health
+from brain.presence import Presence
 from brain.lesson import Lesson
 from brain.train import Model
 from brain.xray import Xray
@@ -176,6 +177,7 @@ class Brain:
         self._health_ok = True
         self._quiet: List[str] = []           # links that can blind the sensor and are stale right now
         self.nodes = nodes
+        self.presence = Presence(nodes)            # one spot: the Wi-Fi line across the gap decides (#789)
         self._recent: Dict[str, deque] = {link: deque() for link in links}   # (recv_t, dbm), last 10 s
         self.advice: Optional[dict] = None
         self._dismissed: Optional[list] = None    # xy_m of an advice that reset cleared
@@ -282,6 +284,7 @@ class Brain:
             elif msg.get("link") in self.links:
                 link, dbm = msg["link"], float(msg["dbm"])
                 self.health.add(link, t, dbm)
+                self.presence.add(link, t, dbm)
                 if link in self.model_links:
                     self.watch.on_rssi(msg)
                 self._heard.add(link)
@@ -657,6 +660,7 @@ class Brain:
     def _set_baseline(self, base: Dict[str, float], expected_hz: Dict[str, float],
                       quiet_db: Optional[Dict[str, float]] = None) -> None:
         self.base, self.expected_hz, self.quiet_db = dict(base), dict(expected_hz), dict(quiet_db or {})
+        self.presence.set_base(self.base)
         # The fixed dB numbers give way to a link's own quiet level where a setting says so
         # (brain/settings.py).
         s = self.settings
@@ -902,7 +906,8 @@ class Brain:
             return
         if not self._fresh:
             return
-        unheard = [] if self._raw["present"] else self._unheard(now)
+        raw = self._on_the_line(self._raw, self.presence.update(now))
+        unheard = [] if raw["present"] else self._unheard(now)
         if unheard:
             # "Nobody" from a window in which a link the sensor needs has no reading says nothing:
             # a link with no readings counts as sitting on its baseline, which is what an empty
@@ -913,7 +918,7 @@ class Brain:
                 self.armed.on_pred(None)
             return                               # otherwise the last decision stands (under 2 s)
         self._fresh = False
-        pred = dict(self._raw)
+        pred = dict(raw)
         self.watch.on_pred(self.window["end"], pred)
         pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
@@ -924,6 +929,27 @@ class Brain:
             self.emit("intrusion", {"zone": intruder})
         for zone in self.armed.pop_passed():   # appeared while armed and gone before the hold was over
             self.emit("passed_by", {"zone": zone})
+
+    def _on_the_line(self, raw: dict, line: Optional[bool]) -> dict:
+        """The classifier's decision, with presence settled by the line across the spot when the
+        layout names one (brain/presence.py). None = the line has no opinion: raw stands.
+
+        A person on the spot is never a dead zone, and something left standing in the line is not
+        a person: the line can't tell the two apart, so when it is down and the classifier says
+        "object", that stands."""
+        if line is None or (line and raw["kind"] == "object"):
+            return raw
+        if line == raw["present"]:
+            return raw
+        out = dict(raw)
+        if line:
+            zone = raw["zone"] or self.zone_ids[0]
+            out.update(present=True, kind="person", zone=zone, zone_set=[zone],
+                       motion=raw.get("motion") or "still")   # the classifier gave none: say the calmer one
+        else:
+            out.update(present=False, kind="none" if raw["kind"] == "person" else raw["kind"],
+                       zone=0, zone_set=[], motion=None)
+        return out
 
     def _unheard(self, now) -> List[str]:
         """The links that can blind the sensor and have no reading in the last window (1 s),
