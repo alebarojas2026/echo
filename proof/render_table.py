@@ -39,7 +39,8 @@ def agreement(section):
 
 def measurements(proof):
     zone = proof.get("zone") or {}
-    if "synthetic" in zone.get("method", "").lower():
+    presence = proof.get("presence") or {}
+    if any("synthetic" in block.get("method", "").lower() for block in (zone,presence)):
         raise ValueError("synthetic self-tests cannot populate the measured proof table")
     zone_value, zone_n = agreement(zone)
     ci = zone.get("ci95")
@@ -47,6 +48,8 @@ def measurements(proof):
         if len(ci) != 2 or any(numeric(v) is None or v > 1 for v in ci) or ci[0] > ci[1]:
             raise ValueError("invalid 95% interval")
     if zone_value != "__":
+        majority, _ = agreement({"correct":zone.get("majority_class_correct"),"total":zone.get("total")})
+        if majority != "__": zone_value += "; majority-class baseline " + majority
         zone_value += f"; 95% CI {100*ci[0]:.1f}–{100*ci[1]:.1f}%" if ci else "; 95% CI __"
         sessions = zone.get("sessions") or []
         noun = "walker" if zone.get("walkers") == 1 else "walkers"
@@ -54,6 +57,12 @@ def measurements(proof):
         if "walker-independent" in zone.get("method", ""):
             zone_n += " the model never saw"
     po_value, po_n = agreement(proof.get("person_vs_object") or {})
+    presence_value, presence_n = agreement(presence)
+    empty_value, _ = agreement({"correct":presence.get("always_empty_correct"),"total":presence.get("total")})
+    if presence_value != "__":
+        presence_n = presence_n.replace("decisions","sampled seconds")
+        if presence.get("cycles") is not None: presence_n += f"; {display(presence['cycles'])} cycles"
+        presence_value += "; always-empty baseline " + empty_value
     threshold_value, threshold_n = agreement(proof.get("threshold_zone") or {})
     timing = proof.get("ms_per_decision") or {}
     timing_value = "__"
@@ -64,6 +73,7 @@ def measurements(proof):
     if any(watts.get(k) is not None for k in ("idle", "teaching", "radio_only")):
         watt_value = "; ".join(f"{k.replace('_', ' ')} {display(watts.get(k), ' W')}" for k in ("idle", "teaching", "radio_only"))
     primary = {
+        "Presence accuracy": (presence_value,presence_n),
         "Zone accuracy": (zone_value, zone_n),
         "Radio vs camera zone agreement": (zone_value, zone_n),
         "Person vs object accuracy": (po_value, po_n),
@@ -126,6 +136,7 @@ def render(document, proof):
                 value, n = primary[key]
                 if key in {"Zone accuracy", "Radio vs camera zone agreement"} and "walker-independent" in (proof.get("zone") or {}).get("method", ""):
                     columns[2] = proof["zone"]["method"]
+                if key == "Presence accuracy" and value != "__": columns[2] = proof["presence"]["method"]
                 row_date, row_commit = (date, commit) if value != "__" else ("__", "__")
                 columns = [columns[0], value, columns[2], n, row_date, row_commit]
                 line = "| " + " | ".join(cell(c) for c in columns) + " |"

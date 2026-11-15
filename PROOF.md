@@ -4,8 +4,8 @@ Every number shown on screen or in the pitch has a row here: what was measured, 
 
 | Number | Value | Method | N | Date | Commit |
 |---|---|---|---|---|---|
-| Zone accuracy (radio vs camera agreement; the "localization accuracy" in the Devpost draft) | pending | Held-out sessions with the camera still recording but the model predicting from radio only. Compare predicted zone to camera zone at each timestamp. Report % agreement, the confusion matrix (`proof.confusion.json`) and the chance level, which counts empty as a class: 1 in 3 on the desk layout (empty, Left, Right), 1 in 5 on the square. | 3+ people, 5+ held-out sessions | | |
-| Presence accuracy | pending | Scripted cycles: 2 min empty room, 2 min occupied. Ground truth from the camera or a written enter/leave log. Report accuracy and false alarms while empty. | 10+ empty/occupied cycles | | |
+| Radio vs camera zone agreement | __ | Held-out sessions with the camera labeling and the model predicting from radio only. Compare predictions to labels using the zones in radio/nodes.json, including empty. Report agreement, its interval, the confusion matrix and the measured baseline; this makes no claim about sides the active layout does not define. | Planned: 3+ people, 5+ held-out sessions | __ | __ |
+| Presence accuracy | __ | Ten held-out cycles: 1 min empty, 1 min occupied; camera unplugged, a walker absent from the lesson. Compare radio decisions once per observed second with a written enter/leave log; show the always-empty score on the same seconds. | __ | __ | __ |
 | Person vs object accuracy | pending | Place a still object (box, chair, water jug) in the zone, then a person. Count how often each is labeled obstruction vs person. | 10+ trials each | | |
 | Time to train on the board | pending | Wall-clock time on the UNO Q from training start to model ready. Report the median. | 3+ runs | | |
 | Time per decision | pending | Time around the prediction step on the board. Report median and 95th percentile. | 1,000+ predictions | | |
