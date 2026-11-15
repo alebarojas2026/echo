@@ -21,7 +21,6 @@ looking at a report recording while choosing settings isn't something this tool 
 import argparse
 import json
 import math
-import os
 import random
 import re
 import shutil
@@ -31,13 +30,9 @@ import threading
 import time
 from pathlib import Path
 from statistics import median
+from proof.opkey import with_key
 
 
-
-def with_key(msg):
-    """The cmd with the board's operator key from OPERATOR_KEY (environment only), when one is set."""
-    key = os.environ.get("OPERATOR_KEY")
-    return dict(msg, key=key) if key else msg
 
 TRIAL_S, REST_S = 20, 5
 KINDS = {"stand": 16, "empty": 12, "walk": 12}

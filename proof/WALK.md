@@ -48,3 +48,15 @@ calibration, the 20 s baseline and training in the presentation room later.
 The coach's 20 s empty periods are recorded observations, not a replacement for
 the explicit baseline command and valid baseline artifact. Run teacher.quality
 before using a session. Verify the real label-mode mount and camera frame rate.
+
+When the board has an operator key (`OPERATOR_KEY` in its `.env`), every tool here that
+sends commands must send it, or the board ignores the command and nothing is recorded. That
+is `proof.walk`, `proof.lesson`, `proof.security_walk`, `proof.trials_walk`,
+`proof.presence_walk` and `proof.shuffled`. Set the same
+value in the shell that runs the tool: `OPERATOR_KEY=... python -m proof.walk ...`. It is read
+from the environment only, added to each command, and never printed or written anywhere. If
+the board doesn't report `recording` after the first prompt, the key is missing or wrong.
+
+Keyed commands require the operator-key contract (#702) and the board enforcement (#752).
+Do not deploy this as a locked-board setup until the other senders in #657 are ready.
+With no OPERATOR_KEY set, commands keep the existing unkeyed format.

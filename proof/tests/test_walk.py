@@ -99,3 +99,35 @@ def test_square_wording_is_unchanged(square):
 def test_the_layout_file_can_come_from_the_environment(monkeypatch):
     monkeypatch.setenv("RADIO_SIGHT_NODES", str(DESK))
     assert "Left" in " ".join(s[0] for s in script("train"))
+
+
+# ---- the operator key (#657): a locked board ignores commands without it ----
+
+def run_coach(**kw):
+    sent, now = [], [0.0]
+    coach("s-key", "train", "w1", sent.append, prompt=lambda text: None,
+          sleep=lambda s: now.__setitem__(0, now[0] + s), clock=lambda: now[0], **kw)
+    return sent
+
+
+def test_every_command_carries_the_operator_key_when_one_is_given(square):
+    sent = run_coach(key="desk-7-key")
+    assert len(sent) > 10 and all(m["key"] == "desk-7-key" for m in sent)
+    assert sent[0]["cmd"] == "record_start" and sent[-1]["cmd"] == "record_stop"
+
+
+def test_no_key_means_no_key_field(square):
+    assert all("key" not in m for m in run_coach())
+    assert all("key" not in m for m in run_coach(key=""))
+
+
+def test_the_key_comes_from_the_environment_and_is_never_printed():
+    import inspect
+    from proof import walk
+    src = inspect.getsource(walk.main)
+    assert 'os.environ.get("OPERATOR_KEY")' in src and "--key" not in src
+    printed = []
+    now = [0.0]
+    coach("s-key2", "train", "w1", lambda m: None, prompt=printed.append,
+          sleep=lambda s: now.__setitem__(0, now[0] + s), clock=lambda: now[0], key="desk-7-key")
+    assert "desk-7-key" not in " ".join(printed)

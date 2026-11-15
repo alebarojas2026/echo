@@ -8,12 +8,13 @@ import threading
 import time
 
 from proof.provenance import require_board
+from proof.opkey import with_key
 
 
 def run(session,walker,send,mark,ask=input,say=print,sleep=time.sleep,clock=time.time,ready=lambda:True,line=None):
     """line: the layout's presence line, when it has one. Then there is no model and no lesson to wait for."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}",session) or not walker.strip(): raise ValueError("use a new id and a heldout walker pseudonym")
-    command = lambda cmd,**args: send({"v":2,"type":"cmd","cmd":cmd,"args":args})
+    command = lambda cmd,**args: send(with_key({"v":2,"type":"cmd","cmd":cmd,"args":args}))
     command("record_start",session=session,purpose="heldout",walker=walker)
     try:
         command("arm",on=False)
