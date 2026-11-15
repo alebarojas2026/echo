@@ -102,8 +102,9 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     if (!state || stale) { cancelHold(); show('No data', 'Waiting for the room signal.'); return }
     if (state.armed && state.tamper?.length) { cancelHold(); close(true); return }
     if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', 'A radio link stopped.'); return }
-    // Once the visitor has been found, a dead zone (advice, the router moved) is the main screen's moment.
-    if (complete && !state.armed && (state.advice || state.router !== 'S-home')) { cancelHold(); close(); return }
+    // Once the visitor has been found the card stays away: a dead zone, the router off its spot and a recalibration
+    // are the main screen's moments.
+    if (complete && !state.armed) { cancelHold(); close(); return }
     if (!state.pred || state.router !== 'S-home') {
       cancelHold()
       const [heading, line] = judgeMoment(state, false)
