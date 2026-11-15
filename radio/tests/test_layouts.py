@@ -133,10 +133,13 @@ def test_on_the_gate_the_wifi_line_to_pi_b_decides_and_pi_bs_roles_keep_it_alive
         # on_db, off_db and moving_spread_db are the values chosen from the kit's recordings (the note in the file
         # says how). A change to one of them is a new choice from recordings, not an edit.
         assert d["presence"] == {"line": "pi5>pi5b:wifi", "second": "pi5b>unoq:ble", "on_db": 7, "off_db": 3, "second_hold_s": 5,
-                                 "object_db": 3, "object_max_db": 10, "object_spread_db": 1.0, "object_hold_s": 3,
+                                 "object_db": 3, "object_max_db": 10, "object_spread_db": 1.0, "object_hold_s": 3600,
                                  "moving_spread_db": 2.5, "still_spread_db": 1.5, "motion_hold_s": 1.5,
                                  "checkin_return_s": 8}
         assert d["presence"]["still_spread_db"] < d["presence"]["moving_spread_db"]
+        # On the one spot the object rule is off (an hour's hold): on the kit a very still person at 9 to 10 dB was
+        # called a thing. Turning it back on is a new choice from recordings, not an edit.
+        assert d["presence"]["object_hold_s"] >= 3600
         assert d["armed"] == {"hold_s": 3}               # the walk-throughs on the kit were all gone well inside it
         # a thing in the line is shallower than any person seen on the kit (13.5 dB), and off_db < on_db < that.
         # Somebody is let go where a thing's range begins (off_db is object_db), never under it.
