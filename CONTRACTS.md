@@ -22,12 +22,16 @@ Units: absolute signal in dBm (fields end in _dbm); differences in dB (_db); dis
 ## 2. Hosts, ports and binds
 ```
 Addresses:
-- Board (UNO Q) hub Ethernet: 192.168.77.2/24. Pi A (pi5) eth0: 192.168.77.1/24. The Ethernet cable carries all
-  traffic except sensing and Pi B's readings.
+- Board (UNO Q) hub Ethernet: 192.168.77.2/24. Pi A (pi5) eth0: 192.168.77.1/24. The one Ethernet cable carries
+  Pi A's readings and the page data between Pi A and the board, and what Pi A forwards from the hotspot (Pi B's
+  readings, the screen). Sensing itself is the only thing that never uses it.
 - Sensing Wi-Fi: Pi A's 5 GHz hotspot, 10.42.0.1/24. The board's wlan0 gets DHCP from it.
 - Pi B (pi5b) has no Ethernet address. Its wlan0 joins the sensing hotspot (DHCP from 10.42.0.1/24), and that
   link is itself a sensor (pi5>pi5b:wifi). Pi B's readings go to 192.168.77.2:5600 through Pi A, which forwards
   hotspot -> Ethernet (the hotspot's shared mode), so on the board they arrive from 192.168.77.1.
+- Screen: a laptop on the sensing hotspot opens http://192.168.77.2:8080/?src=ws. Pi A routes it over the cable the
+  same way. No monitor, no kiosk on a Pi. Only light traffic on the hotspot while the model runs: the page, never
+  file copies.
 Ports:
 - bus: UDP 0.0.0.0:5600 on the board. Senders:
   - processes on the board send to 127.0.0.1:5600;
@@ -329,9 +333,10 @@ Board host: python -m bus | python -m radio.wifi_rssi | python -m radio.hci_scan
             python -m teacher.camwatch | python -m brain.main | python board/serve.py |
             llama-server (narrator/llm.service) | python -m narrator.narrate
 Board App Lab: the camera teacher app (teacher/applab/), set as the default app. Nothing else runs in App Lab.
-Pi A: python -m pi.radio_node --node pi5 (root) | the hotspot profile from pi/ap.sh | the kiosk command from board/kiosk-notes.md
+Pi A: python -m pi.radio_node --node pi5 (root) | the hotspot profile from pi/ap.sh
 Pi B: python -m pi.radio_node --node pi5b (root) | WIFI_LINK=pi5>pi5b:wifi python -m radio.wifi_rssi |
       joined to the sensing hotspot, with BUS_HOST=192.168.77.2 for both programs. No hotspot, no Ethernet, no model.
+Screen: a laptop's browser on the sensing hotspot (section 2). Nothing is started for it, and no Pi runs a kiosk.
 Every folder that's run as a module has an __init__.py.
 ```
 
