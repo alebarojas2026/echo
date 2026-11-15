@@ -123,7 +123,7 @@ def test_real_brain_replay_never_receives_camera_truth():
     class Model:
         train_sessions = ["train"]
         train_s = None
-        def predict(self, window, hold=False):   # hold: the brain may pass it on a one-spot layout
+        def predict(self, window, hold=False, present=None):   # hold, present: the brain may pass them on a one-spot layout
             assert window["label"] is None
             return dict(present=True, zone=4, kind="person", motion="moving", why=[])
         def why(self, window):
