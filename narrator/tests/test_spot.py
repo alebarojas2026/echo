@@ -199,3 +199,35 @@ def test_a_line_that_now_says_the_opposite_is_put_right_at_the_next_turn_however
     clock[0] = 40_000
     nar.observe(_state(40_000, True)); nar.observe(_event(36_000, "zone_change", "e4"))
     assert nar.step() is None                                  # nothing to put right: an old event is dropped as before
+
+
+def test_stepping_aside_and_back_never_leaves_the_line_saying_they_left():
+    # The check-in on the one spot. Seen with the kit's recording: the leaving was said, then the
+    # check-in and the arrival came 3 s later; the check-in (more important) took the waiting place,
+    # was too old at the next turn and was dropped, and "stepped away" stayed under "Someone is here"
+    # until the person really left ten seconds later.
+    from contracts.check import errors
+    nar, sent, clock = _spot_narrator()
+    nar.observe(_state(10_000, True)); nar.observe(_event(10_000, "enter", "e1")); nar.step()
+    clock[0] = 24_300
+    nar.observe(_state(24_300, True)); nar.observe(_event(24_300, "alert_on", "e2")); nar.step()
+    clock[0] = 35_500
+    nar.observe(_state(35_500, False)); nar.observe(_event(35_500, "exit", "e3")); nar.step()
+    assert [m["event_kind"] for m in sent if m["source"] == "template"] == ["enter", "alert_on", "exit"]
+    clock[0] = 38_700
+    nar.observe(_state(38_700, True))
+    for kind, id in (("checkin", "e4"), ("alert_off", "e5"), ("enter", "e6")):
+        nar.observe(_event(38_700, kind, id))
+    assert nar.step() is None                                  # inside the 8 s after "stepped away"
+    clock[0] = 43_500
+    nar.observe(_state(43_500, True))
+    msg = nar.step()                                           # the first turn: the line is put right
+    assert msg is not None and msg["event_kind"] == "enter" and msg["text"] == "Someone is at the desk, standing still."
+    assert errors(msg) == [] and nar.said_here is True
+    clock[0] = 52_000
+    nar.observe(_state(52_000, True))
+    assert nar.step() is None                                  # and nothing more is said while it is right
+    clock[0] = 60_000
+    nar.observe(_state(60_000, False))                         # gone, and the leaving's event never came
+    msg = nar.step()
+    assert msg["event_kind"] == "exit" and "desk" in msg["text"]
