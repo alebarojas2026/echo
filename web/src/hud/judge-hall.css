@@ -2,7 +2,7 @@
 /* The hall-first judge's page (the one-spot layout). The hall is the whole screen and the words sit on it: the name
    top left, one headline and one line bottom left, one control bottom right. Everything else the rail carried is
    not drawn here. The words stand on two plain bands the room draws (room.css), never on the picture itself.
-   Every family comes from --sans, and nothing is sized to one face's widths: a headline may wrap. */
+   Every family comes from the tokens (the name and the headline are titles, the rest is text), and nothing is sized to one face's widths: a headline may wrap. */
 :root[data-judge-layout="hall"] {
   --hall-pad: clamp(40px, 3.334vw, 64px);
   --hall-foot: 48px;
@@ -28,7 +28,7 @@
 
 /* Top left: the name, then what it never uses. */
 :root[data-judge-layout="hall"] :is(.judge,.hud-arrival) > header { position:fixed; top:calc(var(--hall-sim) + 34px); left:var(--hall-pad); display:flex; justify-content:flex-start; align-items:baseline; gap:24px; font:500 28px/36px var(--sans); color:var(--text); }
-:root[data-judge-layout="hall"] :is(.judge,.hud-arrival) > header > span:first-child { color:var(--text); font-weight:600; letter-spacing:-.01em; }
+:root[data-judge-layout="hall"] :is(.judge,.hud-arrival) > header > span:first-child { color:var(--text); font-family:var(--font-title); font-weight:var(--title-weight); font-synthesis:none; letter-spacing:-.01em; }
 :root[data-judge-layout="hall"] :is([data-testid="source-badge"],[data-testid="arrival-source"]) { display:none; }
 
 /* Top right, small and calm: the sealed record's line. */
@@ -36,7 +36,7 @@
 
 /* Bottom left: one headline, one line under it. */
 :root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) { position:fixed; left:var(--hall-pad); bottom:var(--hall-foot); min-height:0; margin:0; max-width:calc(100vw - 2 * var(--hall-pad) - 400px); }
-:root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) h1 { margin:0 0 0 -.04em; font:600 var(--hall-head)/1 var(--sans); letter-spacing:-.03em; text-wrap:balance; }
+:root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) h1 { margin:0 0 0 -.04em; font:var(--title-weight) var(--hall-head)/1 var(--font-title); font-synthesis:none; letter-spacing:-.03em; text-wrap:balance; }
 :root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) p { margin:16px 0 0; font:500 var(--hall-line)/1.2 var(--sans); }
 :root[data-judge-layout="hall"] :is(.judge-moment,.arrival-message) p:not(.arrival-passed) { color:var(--text); }
 :root[data-judge-layout="hall"] .judge-moment p:empty { display:none; }

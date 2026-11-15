@@ -4,6 +4,7 @@
 .signal { display:grid; gap:12px; color:var(--text-2); font:500 28px/1.2 var(--sans); font-variant-numeric:tabular-nums; }
 .signal[hidden],.signal [hidden] { display:none; }
 .signal header { display:flex; justify-content:space-between; gap:24px; }
+.signal header > :last-child { white-space:nowrap; }
 .signal-rows { display:grid; grid-template-columns:max-content minmax(0,1fr) max-content; column-gap:24px; row-gap:8px; align-items:start; }
 .signal-row { display:contents; }
 .signal-row canvas { display:block; width:100%; height:56px; }

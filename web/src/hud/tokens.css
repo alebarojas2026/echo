@@ -3,10 +3,35 @@
   so the panels, the room's labels and the game page take colours from one place.
   Each colour means one thing, and a status colour always comes with a word.
 */
+/* Two faces, both self-hosted (the kit has no internet) and both under the SIL Open Font License 1.1; the
+   licence texts sit beside the files. Poppins is the text face in three weights. Tenor Sans is the title face
+   and has one weight, 400: a title is never bold, and font-synthesis stops the browser from faking one. */
 @font-face {
-  font-family: 'Hanken Grotesk';
-  src: url('./fonts/hanken-grotesk.woff2') format('woff2');
-  font-weight: 100 900;
+  font-family: 'Poppins';
+  src: url('./fonts/poppins-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('./fonts/poppins-500.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('./fonts/poppins-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Tenor Sans';
+  src: url('./fonts/tenor-sans-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
   font-display: swap;
 }
 
@@ -28,6 +53,12 @@
   /* Radius: cards 8, controls and badges 6, bars 2. Nested: inner = outer - padding, never more. */
   --r-card: 8px; --r-control: 6px; --r-bar: 2px;
 
-  --sans: 'Hanken Grotesk', system-ui, sans-serif;
+  /* Type. Text is Poppins (500 for most, 600 for buttons and the words that carry a status, 400 where it reads
+     better large). A title is Tenor Sans at 400: the one headline per moment, the name "Echo", a page heading,
+     the big word on the alarm page. Every screen takes its family from these and names no typeface itself. */
+  --font-text: 'Poppins', system-ui, sans-serif;
+  --font-title: 'Tenor Sans', 'Poppins', system-ui, sans-serif;
+  --title-weight: 400;
+  --sans: var(--font-text);
 }
 

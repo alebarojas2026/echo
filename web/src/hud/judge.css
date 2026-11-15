@@ -4,7 +4,9 @@
 .judge :is(h1,h2,p,dl,dd) { margin:0; }
 .judge header { display:flex; justify-content:space-between; align-items:center; font-size:28px; }
 .judge-moment { min-height:208px; }
-.judge h1 { font-size:64px; line-height:1.04; font-weight:600; letter-spacing:-.03em; }
+/* Titles: the name and the one headline. Tenor Sans has one weight, so no bold, and none faked. */
+.judge > header > span:first-child { font-family:var(--font-title); font-weight:var(--title-weight); font-synthesis:none; }
+.judge h1 { font-size:64px; line-height:1.04; font-family:var(--font-title); font-weight:var(--title-weight); font-synthesis:none; letter-spacing:-.03em; }
 .judge p { font-size:28px; }
 .judge-moment p { margin-top:12px; color:var(--text-2); }
 .judge dt { color:var(--text-2); }

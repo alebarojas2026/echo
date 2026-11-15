@@ -1,3 +1,7 @@
+/* The two typefaces and their tokens (--font-text, --font-title) come from the panels' tokens, so the room, the
+   game page and the alarm page take their family from the same place. */
+@import '../hud/tokens.css';
+
 /* The room's colour tokens (AGENTS.md Style). The same values drive the 3D scene from palette.ts. */
 :root {
   --bg: #111316;
@@ -160,6 +164,9 @@
   margin: 0 0 16px;
   color: var(--text);
   font: 600 72px/1 var(--sans, system-ui, sans-serif);
+  font-family: var(--font-title, var(--sans, system-ui, sans-serif));
+  font-weight: var(--title-weight, 400);
+  font-synthesis: none;
 }
 
 .room-notice p {
@@ -268,7 +275,7 @@
   padding: 2px 6px;
   background: var(--floor);
   color: var(--fault);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -284,7 +291,7 @@
 .room-label--alert {
   translate: 0 -50%;
   color: var(--fault);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .room-label--alert-west {
@@ -308,7 +315,7 @@
   translate: 0 -50%;
   color: var(--person);
   font-size: 36px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .room-label--object {
@@ -317,7 +324,7 @@
   border: 1px solid var(--square);
   background: var(--floor);
   color: var(--text);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }

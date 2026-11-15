@@ -10,15 +10,17 @@ html[data-hud-arrival="waiting"] .room-legend { visibility:hidden; }
 .hud-arrival[hidden] { display:none; }
 .hud-arrival header,.hud-arrival footer { display:flex; justify-content:space-between; gap:32px; }
 .arrival-message { margin:auto 0; }
-.arrival-message h1 { font-size:72px; font-weight:600; letter-spacing:-.03em; line-height:1.04; margin:0 0 24px; }
-.arrival-message p { font-size:40px; margin:0; color:var(--text-2); }
+/* 64 and 36 px, a step under the old 72 and 40: the two faces are wider, and "Someone is here." and "This space
+   should be empty." each stay on one line of the rail. */
+.arrival-message h1 { font-size:64px; font-family:var(--font-title); font-weight:var(--title-weight); font-synthesis:none; letter-spacing:-.03em; line-height:1.04; margin:0 0 24px; }
+.arrival-message p { font-size:36px; margin:0; color:var(--text-2); }
 /* "Someone passed by": one small calm line with its own place, so nothing moves when it comes and goes. */
 .arrival-message .arrival-passed { font-size:28px; min-height:1.3em; margin-top:24px; }
 .hud-arrival[data-tone="fault"] h1 { color:var(--fault); }
 .hud-arrival footer { color:var(--text-2); flex-direction:column; gap:8px; }
 @media(max-width:768px) { .hud-arrival { padding:32px 24px; } .arrival-message h1 { font-size:56px; } .arrival-message p { font-size:32px; } .hud-arrival footer { flex-direction:column; } }
 
-.hud-arrival > header > span:first-child { color:var(--text-2); }
+.hud-arrival > header > span:first-child { color:var(--text-2); font-family:var(--font-title); font-weight:var(--title-weight); font-synthesis:none; }
 
 .arrival-ask { margin-top:24px; padding:8px 16px; min-height:48px; font:inherit; color:var(--text); background:var(--floor); border:1px solid var(--square); }
 .arrival-ask:focus-visible { outline:2px solid var(--person); outline-offset:4px; }

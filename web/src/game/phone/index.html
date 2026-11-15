@@ -7,14 +7,14 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="../../room/room.css">
     <style>
-      /* Colours come from the shared tokens in room.css. Each one means one thing, and always has a word.
+      /* Colours and the two typefaces come from the shared tokens by way of room.css. Each colour means one thing,
+         and always has a word.
          Everything someone reads is at least 28 px (1.75rem). */
-      @font-face { font-family: 'Hanken Grotesk'; src: url('../../hud/fonts/hanken-grotesk.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
       * { box-sizing: border-box; }
       html, body { height: 100%; }
       body {
         margin: 0; background: var(--bg); color: var(--text);
-        font: 1.1rem/1.45 'Hanken Grotesk', system-ui, sans-serif;
+        font: 1.1rem/1.45 var(--font-text);
       }
       main {
         min-height: 100dvh; display: flex; flex-direction: column; gap: 1rem;
@@ -24,9 +24,9 @@
         flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 1rem;
         padding: 1.5rem; background: var(--floor); border: 2px solid var(--edge); border-radius: 0.75rem;
       }
-      .label { margin: 0; font-size: 1.75rem; font-weight: 700; letter-spacing: 0.08em; color: var(--text-2); }
+      .label { margin: 0; font-size: 1.75rem; font-weight: 600; letter-spacing: 0.08em; color: var(--text-2); }
       .title {
-        margin: 0; font: 600 clamp(2.2rem, 10.5vw, 3.4rem)/1.08 'Hanken Grotesk', system-ui, sans-serif;
+        margin: 0; font: var(--title-weight) clamp(2.2rem, 10.5vw, 3.4rem)/1.08 var(--font-title); font-synthesis: none;
         letter-spacing: -0.01em; text-wrap: balance;
       }
       .zone { color: var(--person); }

@@ -122,8 +122,8 @@ Colours: each one means one thing and nothing else.
 - Green and red are status only, and always come with a word ("Wave seen", "No movement", "no signal"). Never colour alone.
 - Take colours from the shared tokens (web/src/room/palette.ts and the CSS variables), never a hard-coded hex.
 
-Type: Hanken Grotesk only (self-hosted in web/src/hud/fonts/). No serif.
-- One headline per moment, built from the state (instant, never waits on the narrator): 600 weight, 56-84 px. Examples: "Still in the bathroom", "An object, not a person", "Nobody is here".
+Type: two faces, both self-hosted in web/src/hud/fonts/. Titles are Tenor Sans at 400 (it has no bold: never ask for one). All other text is Poppins. Take the family from the tokens in web/src/hud/tokens.css (`--font-title`, `--font-text`); never name a typeface in a page. No serif.
+- One headline per moment, built from the state (instant, never waits on the narrator): 400 weight, 56-84 px. Examples: "Still in the bathroom", "An object, not a person", "Nobody is here".
 - Anything a judge needs to read is at least 28 px. Numbers use tabular figures.
 - Plain words, never ids on screen: "East to UNO Q, Bluetooth", not east>unoq:ble.
 - Operator controls and debug values are hidden from judges (shown with the O key or ?op=1).

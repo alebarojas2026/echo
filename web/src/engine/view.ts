@@ -26,6 +26,13 @@ function say(node: HTMLElement, text: string) {
   if (node.textContent !== text) node.textContent = text
 }
 
+/** A number set figure by figure, each in its own box (engine.css: the title face's figures differ in width), so a
+ *  count that changes moves nothing. The text reads the same. */
+function sayFigures(node: HTMLElement, text: string) {
+  if (node.textContent === text) return
+  node.replaceChildren(...[...text].map((c) => (c >= '0' && c <= '9' ? el('span', 'eng-digit', c) : c)))
+}
+
 function tagged<T extends HTMLElement>(node: T, testid: string): T {
   node.dataset.testid = testid
   return node
@@ -295,7 +302,7 @@ export function mountEngine(host: HTMLElement, source: Source): () => void {
     heading.classList.toggle('eng-fault', a.fault && !!chain)
     say(alarm, a.words)
     alarm.classList.toggle('eng-fault', a.fault)
-    say(number, chain ? count(chain.head.seq) : '__')
+    sayFigures(number, chain ? count(chain.head.seq) : '__')
     number.dataset.known = chain ? 'yes' : 'no'
     number.setAttribute('aria-label', chain ? `Record ${count(chain.head.seq)} is the newest` : 'No record to show')
 

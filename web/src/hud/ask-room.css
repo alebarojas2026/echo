@@ -5,7 +5,7 @@
 .ask-room [hidden] { display:none; }
 .ask-room header { display:flex; align-items:center; justify-content:space-between; gap:24px; }
 .ask-room :is(h2,h3,p,ul) { margin:0; }
-.ask-room h2 { font-size:56px; font-weight:600; letter-spacing:-.03em; }
+.ask-room h2 { font-size:56px; font-family:var(--font-title); font-weight:var(--title-weight); font-synthesis:none; letter-spacing:-.03em; }
 .ask-room h3 { font-size:28px; font-weight:600; margin-bottom:12px; }
 .ask-room :is(button,input) { box-sizing:border-box; font:inherit; min-height:48px; padding:8px 16px; color:var(--text); background:transparent; border:1px solid var(--square); }
 .ask-room :is(button,input):focus-visible,.ask-trigger:focus-visible { outline:2px solid var(--person); outline-offset:4px; }
