@@ -28,6 +28,9 @@ def test_every_beat_shows_up(results):
         # With a presence line only a thing in that line is an object (CONTRACTS.md section 6): a tray on the
         # desk's own line beside the router raises none. The one-spot rehearsal plays the thing left in the line.
         failed -= {"tray near the router"}
+        # And a wave is not a check-in there: the only check-in is stepping out of the presence line and back
+        # (brain/tests/test_steady_word.py, and the recording from the kit). The rehearsal still plays the wave.
+        failed -= {"wave check-in"}
     assert failed <= KNOWN_FAILING, f"beats that did not show: {sorted(failed - KNOWN_FAILING)}"
 
 
