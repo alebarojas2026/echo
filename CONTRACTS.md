@@ -71,14 +71,22 @@ Link id = "<tx>><rx>:<kind>". Twelve links, always in this order (nodes.json, fe
   Each link in nodes.json carries expected_hz, written after the baseline capture.
 Zones: two, in the strip only, split at x = 0.8 (frame.zone_split_x_m).
   zone = 1 + (x >= 0.8) when 0 <= x <= 1.6 and 0 <= y <= 0.6; anywhere else 0 = empty.
-  1 West "Living room", centre (0.4, 0.3). 2 East "Bathroom", centre (1.2, 0.3).
-  zones: [{id, side, name, centre_m, still_alert_s}] with 1 -> null, 2 -> 10.
+  1 West "Left", centre (0.4, 0.3). 2 East "Right", centre (1.2, 0.3). The names are the sides as seen on the screen.
+  zones: [{id, side, name, centre_m, still_alert_s}] with 1 -> 10, 2 -> 10.
   The desk top (y > 0.6) is never a zone: only objects are there (the tray), never a person.
 router_spots: S-home (0.8, 1.1, 1.0), S-W30 (0.5, 1.1, 1.0), S-E30 (1.1, 1.1, 1.0): Pi A slides along the desk's
   back edge. Gate 7 sets the distance.
 tray_spots: T1 (0.86, 1.0, 1.0).
 Beacons are matched by manufacturer data FFFF 52 53 <'S' | 'B' | 'E' | 'W'>, never by MAC.
   S = pi5, B = pi5b, E = east, W = west.
+Hall links (optional): up to two more beacons far outside the layout, as tripwires.
+  Hall beacons: manufacturer data FFFF 52 53 'H' and FFFF 52 53 'J' -> nodes h and j (beacon only, never a receiver).
+  They live in nodes.json under "hall", with their positions (same frame, metres; may be many metres outside the
+  layout; null until measured in the room).
+  A hall link is any link whose tx is a hall beacon: "<h|j>><rx>:ble" for every receiver rx in nodes.json
+  (h>unoq:ble, j>pi5:ble, h>pi5b:ble, ...). The scanners send them as ordinary section 4 rssi messages (kind ble).
+  The core links are the twelve listed in nodes.json "links". Hall links are never core links: they are not listed
+  there and never appear in state.links, health, pred.why, xray, objects, checkin or advice.
 Code takes ids, positions, links, zones and spots from nodes.json, not from constants of its own.
 ```
 
@@ -124,6 +132,11 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
            "before_dbm":-71.2,"after_dbm":null,"why":["pi5>unoq:wifi","east>pi5:ble"]},   // or null
  "narration":{"text":"...","event_id":"e123","t":1763149513000,"source":"llm","gen_ms":6120},
  "teacher":{"present":true,"zone":1,"motion":"still"},                       // null when the camera is off
+ "hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[14.0,9.5],"activity":0.62,"moving":true,"rate_hz":6.5,"stale":false}],
+        // Optional: may be missing, and a screen reads a missing hall as []. One row per hall link once it has a reading,
+        // by receiver in nodes.json order, then by beacon. xy_m = the far beacon's position (the tx end), or null when
+        // nodes.json has none; the other end is the rx node. activity is 0-1. rate_hz = readings over the last 2 s.
+        // It means "movement on this path": never who, where along it, or how many. stale:true -> activity 0, moving false.
  "model":{"trained":true,"ver":"m3","train_s":8.4,"ms_per_decision":3.1,"windows":612,"train_sessions":["s07","s08"],"training":null},
         // training is null unless a fit is running; while it runs: {"started_t": epoch ms, "progress": 0..1 or null, "sessions": [ids]}.
         // train_s and ms_per_decision are null when nothing was measured (the fake brain), even when trained is true.
@@ -175,6 +188,10 @@ Link health:
   5 s at most), is < 0.8 dB. A steady drop is an object, not a broken link. Above base, or off base and not steady, is still a jump.
 - health is blind when any classifier link is blind. Then pred is null and the screen shows SENSOR BLIND (never "empty").
   Alert timers pause. It clears after 3 s ok.
+- The links Pi B hears (rx pi5b: links 8, 9, 10 and 11) are the exception. Their readings reach the board over the
+  hotspot, which can lose packets for reasons that have nothing to do with the radio path. Each of them is still
+  judged stale or blind by the rules above and shows it in state.links, and health.status is then degraded; but they
+  never make health blind, never go into health.blind, never null pred and never pause the alert timers.
 Object (a training label): only in label_mode object. Every frame must have persons_in_frame == 0, and one or more
   links must drop >= 3 dB for >= 2 s with the std of their 0.5 s means < 0.8 dB.
 Check-in (a rule, not learned): on pi5>unoq:wifi, >= 4 alternating crossings of +/-1.5 dB around the 1 s rolling median
@@ -189,6 +206,16 @@ Armed (after hours: the space should be empty):
 - While armed, an intrusion event is sent once each time a person appears: pred.present is true with kind person for
   the majority of the last 10 decisions, after it was not. It names the zone. Objects never raise it.
 - While health is blind or pred is null, no intrusion is raised and the screen says so (never "all clear").
+Hall activity (a rule, not learned; per hall link, from that link's readings only):
+- spread_db = the std of the link's 0.5 s means over the last 3 s.
+- stale when fewer than 4 of those six 0.5 s bins hold a reading (the readings stopped, or are too few to judge);
+  it clears after 3 s not stale. While stale: activity 0, moving false, and the screen draws nothing for the link.
+- quiet_db = the link's own quiet level: the 20th percentile of spread_db, sampled once a second while not stale,
+  over the last 5 min. It needs 20 samples (before that: activity 0, moving false) and is never under 0.5 dB.
+- activity = (spread_db / quiet_db - 2) / 4, held to 0-1 (0 up to twice the quiet level, 1 at six times).
+- moving turns true when activity >= 0.5 (four times quiet), and false again after activity has stayed < 0.25
+  (three times) for 1 s.
+- The thresholds are first values, tuned at the hardware test (#95).
 X-ray:
 - The grid covers the whole layout rectangle (frame.size_m: the strip and the desk top, 1.6 x 1.1 m) plus 0.2 m on each
   side: x from -0.2 to 1.8, y from -0.2 to 1.3. The brain sends 16 x 12 cells of 0.125 m with origin_m [-0.2, -0.2].
