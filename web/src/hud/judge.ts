@@ -13,6 +13,7 @@ import type { Proof } from './state'
 import { judgeMoment } from './judge-moment'
 import { mountReplay } from './replay'
 import { recordsClient } from './records'
+import { holdAdvice } from './dead-zone'
 
 type Panel = { update(state: StateMsg | null, stale: boolean): void; dispose?(): void }
 type PanelModule = { mountPanel(root: HTMLElement): Panel }
@@ -82,6 +83,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     lastState = state
     lastStale = stale
     if (feed?.source === 'mock') state = alignMockState(state)
+    state = holdAdvice(state)
     const [headline, detail] = judgeMoment(state, stale)
     headlineText.set(headline)
     set('judge-detail', detail)

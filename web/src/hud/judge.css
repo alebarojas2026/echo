@@ -6,8 +6,8 @@
 .judge-moment { min-height:208px; }
 .judge h1 { font-size:64px; line-height:1.04; font-weight:600; letter-spacing:-.03em; }
 .judge p { font-size:28px; }
-.judge-detail,.judge dt { color:var(--text-2); }
-.judge-moment p { margin-top:12px; }
+.judge-moment p { margin-top:12px; color:var(--text-2); }
+.judge dt { color:var(--text-2); }
 .judge-extra { display:grid; gap:16px; }
 .judge footer { margin-top:auto; border-top:1px solid var(--edge); padding-top:24px; }
 .judge footer dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 24px; }
