@@ -23,7 +23,7 @@ function outward(y: number): number {
  */
 export function adviceArrow(advice: Advice | null, router: string): { from: string; to: string; done: boolean } | null {
   if (deviceAcross()) return null
-  if (!advice || !ROUTER_SPOTS[advice.to_spot] || advice.to_spot === HOME_SPOT) return null
+  if (!advice || !advice.to_spot || !ROUTER_SPOTS[advice.to_spot] || advice.to_spot === HOME_SPOT) return null
   return { from: HOME_SPOT, to: advice.to_spot, done: router === advice.to_spot }
 }
 
