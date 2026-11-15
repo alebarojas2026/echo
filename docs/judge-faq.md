@@ -2,11 +2,11 @@
 
 ## How does Radio Sight work?
 
-Radio Sight reads changes across Wi-Fi and Bluetooth links around a room. A model on the Arduino UNO Q's Dragonwing CPU turns those patterns into presence, movement, zone, and person-versus-object predictions while link health prevents a broken sensor from looking like an empty room.
+Walk between two devices and the signal gives you away. Wi-Fi between the two Pis is the main sensor; Bluetooth to the Arduino UNO Q gives a second opinion. That same Wi-Fi link shows a dead zone.
 
 ## Why are there so many boards?
 
-The boards create several radio paths so the prototype can learn where and how the room changed. They stand in for compatible radios and access points already distributed through a building, not a requirement to install this exact hardware set in every room.
+The three devices are the Arduino and two Pis, standing in for building radios. The UNO Q and Pi A sit together on the desk, with Pi B about a metre away at desk height.
 
 ## Why not just use a camera?
 
@@ -18,7 +18,7 @@ A basic motion sensor can stop reporting when a person stands still, while Radio
 
 ## Can it identify people or count a crowd?
 
-No: it classifies a radio pattern as person or object and reports presence, zone, and movement, not identity. It does not claim crowd counting, and a multi-person scene remains outside the measured scope.
+It reports someone present and moving or still in one spot, without identity. It does not claim crowd counting, and a multi-person scene remains outside the measured scope.
 
 ## Does it work in any building?
 

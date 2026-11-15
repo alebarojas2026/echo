@@ -93,9 +93,9 @@ class DemoRunbookTest(unittest.TestCase):
         finalist = self.lower.split("## five-minute finalist round", 1)[1].split(
             "## if asked", 1
         )[0]
-        self.assertIn("pi5>unoq:wifi", finalist)
-        self.assertIn("drop_db` of at least `3 db`", finalist)
-        self.assertIn("advice does not appear without that live drop", finalist)
+        self.assertIn("pi5>pi5b:wifi", finalist)
+        self.assertIn("configured drop threshold", finalist)
+        self.assertIn("stop this beat if it still targets the short desk link", finalist)
 
     def test_finish_order_clears_optional_hardware_before_reset(self):
         steps = (
@@ -124,9 +124,10 @@ class DemoRunbookTest(unittest.TestCase):
     def test_desk_layout_and_same_layout_recovery_are_explicit(self):
         for phrase in (
             "power pi b",
-            "three `25 cm` boxes",
-            "two cardboard arms",
-            "string knotted at `0`, `0.5`, `0.8`, `1.1`, and `1.6 m`",
+            "three devices for one spot",
+            "pi b about a metre away at desk height",
+            "wi-fi from pi a to pi b is the main presence sensor",
+            "lean aside",
             "step up to the desk",
             "baseline {keep_model: true}",
             "camera unplugged",

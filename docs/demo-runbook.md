@@ -8,7 +8,7 @@ Use this checklist for the live building-safety demo. It follows `CONTRACTS.md` 
 |---|---|---|---|
 | Talker | __ | Says the round, hands over the camera cable and phone | Touches the laptop |
 | Operator | __ | Drives the laptop: arm, reset between judges, and Ask | Explains while typing |
-| Hardware | __ | Handles the board, beacons, camera hand-off, and anything knocked | Leaves the desk |
+| Hardware | __ | Handles the Arduino, two Pis, camera hand-off, and anything knocked | Leaves the desk |
 | Spotter | __ | Keeps the aisle behind the judge clear and places a second judge | Blocks the sensing strip |
 
 Keep at least two people at the desk for every half hour:
@@ -41,8 +41,8 @@ While the Operator fixes a failure, the Talker says exactly one of these:
 - [ ] Confirm `ws://192.168.77.2:8765/ws` produces contract v2 `state` messages.
 - [ ] Confirm the source is `live`, the feed is fresh, and `health.status` is `ok`.
 - [ ] Power Pi B, join it to Pi A's hotspot, and confirm its reader sends through Pi A to the board.
-- [ ] Place every radio from `radio/nodes.json`: three `25 cm` boxes on the desk and two cardboard arms over the aisle. Do not rely on remembered zone or node positions.
-- [ ] Use the string knotted at `0`, `0.5`, `0.8`, `1.1`, and `1.6 m` to mark the strip, its Left/Right split, and the desk positions.
+- [ ] Set the three devices for one spot: Arduino UNO Q and Pi A together on the desk, Pi B about a metre away at desk height on a chair. Confirm the deployed `radio/nodes.json` matches this kit.
+- [ ] Keep the path between Pi B and the desk clear. Wi-Fi from Pi A to Pi B is the main presence sensor and the dead-zone link; Bluetooth from Pi B to the board is a second opinion. Do not connect extra beacon devices.
 - [ ] Connect the temporary setup camera and confirm `cam-status` reports `on`.
 - [ ] Clear people and movable objects from the sensing area before the baseline.
 - [ ] Let the narrator warm its local model in the background. The template path remains available, so do not delay the demo.
@@ -55,7 +55,7 @@ Do not start while the screen says `NO DATA` or `SENSOR BLIND`. Neither state me
 1. Set label mode to `off`, clear the sensing strip and desk, and start the baseline.
 2. Wait for `baseline_done`; confirm every required link is healthy and health returns to `ok`.
 3. Start a named training recording and set label mode to `person`.
-4. Walk the configured zones while the camera teacher supplies zone and motion labels.
+4. Step into and out of the spot, move, and stand still while the camera teacher supplies presence and motion labels.
 5. Stop recording, start training, and wait for the `trained` event.
 6. Confirm `model.trained` is true and a radio prediction appears.
 
@@ -68,9 +68,9 @@ Use these exact beat names and keep them in this order.
 1. **Found you:** Start with the camera disconnected. Ask the judge to step up to the desk, into the sensing strip. Show a fresh `person` prediction and say, “Found you. Camera disconnected.” Do not substitute a numeric camera claim while proof remains pending.
 2. **Teach the room:** Connect the camera, start the fresh judge lesson, and display `Lesson time: __ s`. Show labels, not an image. Wait for successful training before continuing.
 3. **Camera unplug:** Unplug the camera in one continuous shot. Follow the camera-unplug proof below and leave the cable visible.
-4. **Still follows:** Ask the judge to move and then stand still. Show presence, zone, and motion state continuing from radio alone. If a required link goes blind, say so and stop; never call it empty.
+4. **Still follows:** Ask the judge to move and then stand still in the spot. Show presence and motion continuing from radio alone, with Wi-Fi across the gap as the main sensor. If a required link goes blind, say so and stop; never call it empty.
 5. **Arm the space:** Ask the judge to step out. Use the arm control only if the current build exposes contract v2 `armed` state, emits `armed`, and the phone page is connected to the live feed.
-6. **Intrusion alert:** Ask the judge to re-enter. Continue only after one live `intrusion` event names the zone and the phone page shows it. Do not identify the judge or claim crowd counting.
+6. **Intrusion alert:** Ask the judge to re-enter and stay in the spot. Continue only after the board emits the live `intrusion` event and the phone page shows it. A passer-by gets no intrusion alert. Do not identify the judge or claim crowd counting.
 7. **Ask the room:** Ask the prepared question only if the current build can answer from its local timestamped event records. Read the returned facts; do not improvise an answer.
 8. **Proof:** Finish on `/proof.json`. Say only completed values. Close with `Images stored: __` and `Bytes sent outside local network: __` until proof records replace them.
 
@@ -88,12 +88,12 @@ The camera supplies temporary setup labels. The demo must not show or save an im
 
 ## Five-minute finalist round
 
-Open with the whole-hall view and movement paths. Then run **Found you**, **Teach the room**, **Camera unplug**, **Still follows**, **Arm the space**, **Intrusion alert**, **Ask the room**, and **Proof** in that same order.
+Run the same one-spot kit: **Found you**, **Teach the room**, **Camera unplug**, **Still follows**, **Arm the space**, **Intrusion alert**, **Ask the room**, and **Proof** in that same order.
 
 After the primary path, use only the extensions that passed preflight:
 
-- **No-movement alert and check-in:** Wait for the configured local alert, then use the practiced wave and confirm `checkin-toast` clears it.
-- **Tray and router advice:** Ask Alexander to place the tray. Confirm `pi5>unoq:wifi` is dropping with `drop_db` of at least `3 dB`; advice does not appear without that live drop. Wait for `advice-text`, move only to a spot from `/nodes.json`, send `router_moved`, and report the before/after result only if proof contains it.
+- **No-movement alert and check-in:** Wait for the configured local alert, ask the judge to lean aside for the “I'm okay” check, and confirm `checkin-toast` clears it. Do not claim success before that confirmation.
+- **Tray and router advice:** Ask Alexander to place the tray across the gap. Confirm the deployed advisor uses the cross-gap Wi-Fi link `pi5>pi5b:wifi` and its configured drop threshold; stop this beat if it still targets the short desk link. Wait for `advice-text`, move only to a spot from `/nodes.json`, send `router_moved`, and report the before/after result only if proof contains it.
 - **Recap:** Show the fact-based local recap. If generation is unavailable, use the template recap; never invent an event.
 - **Game:** Invite interaction without saying the system counts or identifies the crowd.
 
@@ -115,7 +115,7 @@ Alexander handles the tray and Pi; the operator handles software controls.
 5. Disarm if needed, stop active recording, and send `reset`.
 6. If the recap was used, keep the screen visible until the fact-based recap appears. The narrator warms its normal sentence prompt again in the background after the recap; do not hold the next judge for that warmup.
 
-If a cardboard arm or node was knocked, secure it and restore the positions from `radio/nodes.json`. Keep everyone out of the strip, then start `baseline {keep_model: true}` and wait for its `20 s` capture to finish. It can run with the camera unplugged and keeps the trained model; do not use plain `baseline {}` for this same-layout recovery.
+If a device was knocked, secure it and restore the positions from `radio/nodes.json`. Keep everyone out of the spot, then start `baseline {keep_model: true}` and wait for its `20 s` capture to finish. It can run with the camera unplugged and keeps the trained model; do not use plain `baseline {}` for this same-layout recovery.
 
 ## Proof check
 
