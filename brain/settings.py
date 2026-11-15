@@ -10,6 +10,9 @@ in brain/ carries its own copy.
     smooth_majority       ... and a value needs this many of them             6
     moving_run            Alert: "moving" decisions in a row before the       5 (0.5 s)
                           still timer resets
+    spot_moving_run       ... on a layout that marks the lines crossing the   30 (3 s)
+                          spot: the lines are few and slow there, and a
+                          short run of "moving" is often wrong
     intrusion_decisions   Armed: a person appears when present for the        10 (1 s)
     intrusion_majority    majority of the last N decisions                    6
     zone_hold             the brain's own: decisions in a row before enter,   5 (0.5 s)
@@ -20,7 +23,7 @@ in brain/ carries its own copy.
                           has had a reading for this long
     tamper_clear_ms       ... and back when they all have for this long       2000
 
-Five more make a fixed dB number give way to the link's own quiet level where that is larger.
+Seven more make a fixed dB number give way to the link's own quiet level where that is larger.
 A link's quiet level is the std of its 0.5 s means over the baseline capture (quiet_db in
 baseline.json): about 0.2 dB on the Wi-Fi links and 1 to 3 dB on the Bluetooth links, measured
 on the kit. 0 switches a setting off, and the rule then uses the contract's number alone.
@@ -44,6 +47,21 @@ on the kit. 0 switches a setting off, and the rule then uses the contract's numb
                           drops, averaged, are still 3 dB or more, or this
                           x their quiet level. Arriving is the model's call
                           alone.
+    suspect_x_quiet       Drift (below): the empty level stops following the  1 (0: 2 dB only)
+                          crossing lines once they are 2 dB down, or this x
+                          their quiet level
+    lean_x_quiet          Check-in on such a layout ("lean aside to say       2.5 (0: 4 dB only)
+                          you're okay"): the crossing lines come back up by
+                          4 dB, or this x their quiet level, for 0.3 to 2.5 s
+                          and drop again
+
+And one is a time:
+
+    drift_follow_s        On a layout that marks the lines crossing the spot,  30 (0: a fixed baseline)
+                          their empty level follows slow drift while the
+                          decision is "nobody", with this time constant, and
+                          is frozen while somebody is there or suspected.
+                          The kit's empty level moved 5 dB in five minutes.
 
 One number of these rules is not here because the contract puts it in radio/nodes.json: how
 long an armed space waits before an appearance is an intrusion, armed.hold_s (3 s when the file
@@ -72,6 +90,7 @@ class Settings:
     smooth_decisions: int = 10
     smooth_majority: int = 6
     moving_run: int = 5
+    spot_moving_run: int = 30
     intrusion_decisions: int = 10
     intrusion_majority: int = 6
     zone_hold: int = 5
@@ -83,6 +102,9 @@ class Settings:
     settle_x_quiet: float = 2.0
     object_x_quiet: float = 4.0
     stay_x_quiet: float = 1.5
+    suspect_x_quiet: float = 1.0
+    lean_x_quiet: float = 2.5
+    drift_follow_s: int = 30
 
     def __post_init__(self):
         for f in fields(self):
@@ -97,6 +119,9 @@ class Settings:
                 if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 20:
                     raise ValueError(f"{f.name} must be a number from 0 (off) to 20 (got {value!r})")
                 object.__setattr__(self, f.name, float(value))
+            elif f.name == "drift_follow_s":
+                if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 600:
+                    raise ValueError(f"drift_follow_s must be whole seconds from 0 (off) to 600 (got {value!r})")
             elif not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise ValueError(f"{f.name} must be a whole number, 1 or more (got {value!r})")
         for part, whole in (("smooth_majority", "smooth_decisions"), ("intrusion_majority", "intrusion_decisions")):

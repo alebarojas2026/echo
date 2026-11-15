@@ -24,10 +24,11 @@ def test_the_defaults_are_the_contract_values():
     assert S.DEFAULT.as_dict() == {
         "smooth_decisions": 10, "smooth_majority": 6,          # section 6, Alert: the majority of the last 10
         "moving_run": 5,                                       # ... 5 moving decisions in a row (0.5 s)
+        "spot_moving_run": 30,                                 # ... 3 s of them on a layout that marks the crossing lines
         "intrusion_decisions": 10, "intrusion_majority": 6,    # section 6, Armed: the majority of the last 10
         "zone_hold": 5, "motion_links": None,
         "tamper_silent_ms": 3000, "tamper_clear_ms": 2000,     # section 6, Tamper
-        "steady_x_quiet": 1.5, "checkin_x_quiet": 4.0, "settle_x_quiet": 2.0, "object_x_quiet": 4.0, "stay_x_quiet": 1.5}   # on: each link's own quiet level counts (#734)
+        "steady_x_quiet": 1.5, "checkin_x_quiet": 4.0, "settle_x_quiet": 2.0, "object_x_quiet": 4.0, "stay_x_quiet": 1.5, "suspect_x_quiet": 1.0, "lean_x_quiet": 2.5, "drift_follow_s": 30}   # on: each link's own quiet level counts (#734)
     assert Brain().settings == S.DEFAULT
     quick = Brain(settings=S.DEFAULT.with_(tamper_silent_ms=1000, tamper_clear_ms=500)).tamper
     assert (quick.silent_ms, quick.clear_ms) == (1000, 500) and Brain().tamper.silent_ms == 3000

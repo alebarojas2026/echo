@@ -203,3 +203,102 @@ def test_three_links_are_enough():
     assert comings(events) == [] and not any(s["pred"]["present"] for _, s in rows)
     assert not any(e["kind"].startswith("object") for _, e in events)
     assert rows[-1][1]["health"]["status"] == "ok" and rows[-1][1]["xray"]["n_links"] == 3
+
+
+# What the kit's acceptance run showed (issue #95): the one good line falls 3 to 12 dB with a person,
+# typically 7; its empty level drifted 5 dB in five minutes; a walk straight through is a 5 to 7 dB dip
+# of a second or two.
+WEAK = {"pi5b>unoq:ble": 4.0, "pi5>pi5b:ble": 3.0, "pi5b>pi5:ble": 4.0}       # the weakest person seen
+
+
+def drifting_kit(seed=7, **feed):
+    kit = Kit(seed)
+    kit.feed = Feed(T0_MS, seed, 1.0, drift_db_per_min=1.0, **feed)
+    return kit.teach()
+
+
+def test_the_empty_level_follows_a_drift_of_five_db_in_five_minutes():
+    kit = drifting_kit()
+    start = dict(kit.brain.base)
+    _, rows, events = kit.play([(300, "nobody")])
+    assert comings(events) == [] and not any(s["pred"]["present"] for _, s in rows)     # the drift is never "somebody"
+    moved = {k: start[k] - kit.brain.base[k] for k in kit.brain.crossing if k.endswith(":ble")}
+    assert all(3.5 <= v <= 6.5 for v in moved.values()), moved                          # 5 dB down, followed
+    assert kit.brain.base["pi5>unoq:ble"] == start["pi5>unoq:ble"]                      # the desk's lines keep theirs
+    # after the drift a person is still found, and still released
+    start_ms, _, events = kit.play([(6, "still")])
+    assert comings(events) == ["enter"] and (when(events, "enter") - start_ms) / 1000 <= 1.5
+    start_ms, _, events = kit.play([(5, "nobody")])
+    assert comings(events) == ["exit"] and (when(events, "exit") - start_ms) / 1000 <= 2.0
+
+
+def test_with_a_fixed_baseline_the_same_drift_ends_as_somebody_who_is_not_there():
+    """What the setting is for: drift_follow_s 0 is the fixed 20 s baseline of the contract."""
+    from brain import settings as S
+    kit = Kit(7)
+    kit.brain = Brain(nodes=GATE, settings=S.DEFAULT.with_(drift_follow_s=0))
+    kit.feed = Feed(T0_MS, 7, 1.0, drift_db_per_min=1.6)
+    kit.teach()
+    _, rows, events = kit.play([(300, "nobody")])
+    assert "enter" in comings(events) or any(s["pred"]["present"] for _, s in rows)
+
+
+def test_a_person_standing_still_for_three_minutes_is_never_taken_for_the_empty_spot():
+    kit = drifting_kit()
+    kit.play([(20, "nobody")])
+    kit.play([(2, "still")])
+    held = dict(kit.brain.base)
+    _, rows, events = kit.play([(180, "still")])
+    assert comings(events) == [] and all(s["pred"]["present"] for _, s in rows)
+    assert kit.brain.base == held                                   # frozen from the moment they stepped in
+    _, _, events = kit.play([(6, "nobody")])
+    assert comings(events) == ["exit"]
+
+
+def test_the_weakest_person_is_found_and_kept():
+    kit = drifting_kit(drop=WEAK)
+    # taught on this person: the lesson's labels are what set where "present" begins
+    found = 0
+    for _ in range(10):
+        _, rows, events = kit.play([(6, "still")])
+        found += comings(events)[:1] == ["enter"] and comings(events).count("exit") == 0
+        kit.play([(6, "nobody")])
+    assert found >= 7, found      # 3 to 4 dB is at the edge of what these lines can hold: most visits, not all
+
+
+def test_a_walk_straight_through_is_passed_by_and_never_an_intrusion():
+    kit = Kit(seed=11).teach()
+    kit.brain.on_cmd(cmd("arm", on=True))
+    kit.play([(5, "nobody")])
+    seen = []
+    for seconds in (1.0, 1.5, 2.0, 1.2, 1.8):
+        _, _, events = kit.play([(seconds, "moving"), (8, "nobody")])
+        seen += [e["kind"] for _, e in events if e["kind"] in ("intrusion", "passed_by")]
+    assert "intrusion" not in seen and seen.count("passed_by") >= 3, seen
+    _, _, events = kit.play([(6, "still"), (4, "nobody")])          # somebody who stops is an intrusion
+    assert [e["kind"] for _, e in events if e["kind"] in ("intrusion", "passed_by")] == ["intrusion"]
+
+
+def alerts(events):
+    return [e["kind"] for _, e in events if e["kind"] in ("alert_on", "alert_off", "checkin")]
+
+
+def test_leaning_aside_is_the_check_in_and_leaving_ends_the_alert_without_one():
+    kit = Kit(seed=13).teach()
+    kit.play([(4, "nobody")])
+    done = 0
+    for lean_s in (0.8, 1.0, 1.3, 1.6, 1.0, 0.8, 1.3, 1.0, 1.6, 1.0):
+        _, rows, events = kit.play([(14, "still")])                   # the limit is 10 s
+        assert alerts(events) == ["alert_on"] and rows[-1][1]["alert"]["state"] == "check_on"
+        _, rows, events = kit.play([(lean_s, "lean"), (4, "still")])
+        done += alerts(events) == ["checkin", "alert_off"] and rows[-1][1]["checkin"] is not None
+        kit.brain.on_cmd(cmd("reset_alert"))
+        kit.play([(5, "nobody")])
+        kit.brain.pop_events()
+    assert done >= 8, done
+    # standing there, still or shifting, is never taken for a check-in
+    _, _, events = kit.play([(14, "still"), (60, "shift"), (60, "still")])
+    assert alerts(events) == ["alert_on"]
+    # and walking away ends the alert with no check-in said
+    _, rows, events = kit.play([(8, "nobody")])
+    assert alerts(events) == ["alert_off"] and rows[-1][1]["alert"]["state"] == "none"

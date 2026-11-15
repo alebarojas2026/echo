@@ -52,6 +52,10 @@ TRAIN_KEEP = 8           # a fit reads the newest this-many recordings of each k
                          # room for 3+ walkers with two walks each, and a bound on an afternoon of lessons
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 GONE_READINGS = 8        # a link is gone, not just slow, once silent for this many readings at its own rate
+SUSPECT_DB = 2.0         # the empty level stops following a crossing line once the lines are this far down ...
+UNSTICK_MS = 30_000      # ... unless the model has said "nobody" all through a dip this long: then that is the new empty
+DRIFT_NOTE_MS = 10_000   # the followed level is noted for the recordings this often, when it has moved
+DRIFT_NOTE_DB = 0.5
 STAY_DB = 3.0            # somebody who was there stays while the crossing lines are still this far down (settings.stay_x_quiet)
 SILENT_MS = 3_000        # a baseline restarts only for a link with no reading for this long
 LABEL_MODES = ("person", "object", "off")
@@ -168,7 +172,11 @@ class Brain:
         self.xray = Xray.from_nodes(dict(nodes, links=[k for k in nodes["links"] if k["id"] not in thin]))
         self.router_links = [k for k in self.router_links if k not in thin]   # the 3 s check after router_home
         self.hall = Hall.from_nodes(nodes)    # optional long links (brain/hall.py); none unless nodes.json lists them
-        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led, self.settings)
+        # On a layout that marks the lines crossing the spot, moving and still are told apart on few, slow
+        # lines, and a short run of "moving" is often wrong: the still timer wants spot_moving_run of them.
+        crossing = any(link.get("crosses_spot") is True for link in nodes["links"])
+        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led,
+                           self.settings.with_(moving_run=self.settings.spot_moving_run) if crossing else self.settings)
         # after hours: a person who appears and is still there armed.hold_s later is an intrusion
         self.armed = Armed(self.settings, S.hold_s(nodes))
         self.tamper = Tamper.from_nodes(nodes, silent_ms=self.settings.tamper_silent_ms,
@@ -189,6 +197,9 @@ class Brain:
         self.settle: Optional[int] = None         # when router_home came, while its 3 s check runs
         self.recalibrating = False                # the automatic baseline after a failed check
         self._old_base: Dict[str, float] = {}
+        self._drift_t: Optional[int] = None        # when the empty level last followed the crossing lines
+        self._suspect_t: Optional[int] = None      # since when those lines have been down with the model saying nobody
+        self._noted = (0, {})                      # (when, the levels) last noted for the recordings
         self._said_zone = 0                        # the zone last announced (0 = nobody)
         self._next_zone = (0, 0)                   # (a different zone, decisions in a row)
         self._said_cam = "off"                     # the camera state last announced
@@ -693,6 +704,8 @@ class Brain:
         self.watch.checkin_rule.other_db_of = {k: s.checkin_x_quiet * q for k, q in self.quiet_db.items()}
         self.xray.object_min_db = {k: s.object_x_quiet * q for k, q in self.quiet_db.items()}
         self.windower, self.window = F.Windower(self.base, self.model_links), None
+        self._drift_t = self._suspect_t = None
+        self._noted = (self.now(), dict(self.base))
         self.health.set_base(self.base)
         self.health.set_expected(self.expected_hz)
         self.xray.reset()
@@ -952,8 +965,13 @@ class Brain:
         self._fresh = False
         pred = dict(self._raw)
         self.watch.on_pred(self.window["end"], pred)
+        if self.crossing:                        # the check-in on this layout: leaning out of the lines
+            quiet = [self.quiet_db[k] for k in self.crossing if k in self.quiet_db]
+            self.watch.on_crossing(self.window["end"], F.crossing_drop(self.window, self.crossing),
+                                   sum(quiet) / len(quiet) if quiet else 0.0, self.crossing[0])
         pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
+        self._follow_drift(self.window["end"], pred)
         self.lesson.saw(now, pred, self.label)
         self._announce(pred["zone"] if pred["present"] else 0)
         intruder = self.armed.on_pred(pred)
@@ -961,6 +979,61 @@ class Brain:
             self.emit("intrusion", {"zone": intruder})
         for zone in self.armed.pop_passed():   # appeared while armed and gone before the hold was over
             self.emit("passed_by", {"zone": zone})
+
+    def _follow_drift(self, now, pred) -> None:
+        """The empty level of the lines that cross the spot follows slow drift (settings.drift_follow_s).
+
+        On the kit the empty level of the one good line moved 5 dB in five minutes, more than the
+        weakest person takes off it. So while the decision is "nobody", each crossing line's
+        baseline moves towards its median in this window with a time constant of drift_follow_s:
+        at 30 s a drift of 1 dB a minute is followed half a dB behind, and a person stepping in
+        over a second moves it by a tenth of a dB before it stops. It stops (the level is frozen)
+        the moment the lines are SUSPECT_DB down, or settings.suspect_x_quiet x their quiet level,
+        which is well before the model says "present", and stays stopped for as long as somebody
+        is there: a person standing still for three minutes, or thirty, is never taken for the
+        empty spot. The one way back: the model has said "nobody" all through a dip of
+        UNSTICK_MS, so the dip is the room (a chair moved), not a person.
+        Only the crossing lines: the desk's own lines keep the captured baseline, since a tray
+        left on them is what the dead-zone advice measures. A layout that marks no crossing
+        lines keeps the fixed baseline it always had."""
+        tau_ms = self.settings.drift_follow_s * 1000
+        if not (self.crossing and tau_ms and self.windower):
+            return
+        last, self._drift_t = self._drift_t, now
+        if pred["present"] or last is None:
+            self._suspect_t = None
+            return
+        drop = F.crossing_drop(self.window, self.crossing)
+        quiet = [self.quiet_db[k] for k in self.crossing if k in self.quiet_db]
+        floor = max(SUSPECT_DB, self.settings.suspect_x_quiet * (sum(quiet) / len(quiet) if quiet else 0.0))
+        if drop is None:
+            return
+        if drop >= floor:
+            self._suspect_t = now if self._suspect_t is None else self._suspect_t
+            if now - self._suspect_t < UNSTICK_MS:
+                return
+        else:
+            self._suspect_t = None
+        share = 1.0 - math.exp(-min(now - last, 1000) / tau_ms)
+        for link in self.crossing:
+            stats = self.window["links"].get(link) or {}
+            if stats.get("n") and link in self.base:
+                self.base[link] += (stats["median"] - self.base[link]) * share
+                self.windower.base[link] = self.base[link]
+        self.health.set_base({k: self.base[k] for k in self.crossing if k in self.base})
+        noted_t, noted = self._noted
+        if now - noted_t >= DRIFT_NOTE_MS and any(abs(self.base[k] - noted.get(k, self.base[k] + 99)) >= DRIFT_NOTE_DB
+                                                  for k in self.crossing if k in self.base):
+            # A recording is read against the level in force when it was made (train), so the
+            # followed level is kept with the baselines: in memory, and in baselines.jsonl.
+            self._noted = (now, dict(self.base))
+            self._base_log.append({"t": now, "base": dict(self.base)})
+            if self.sessions_dir:
+                try:
+                    with open(self.sessions_dir / "baselines.jsonl", "a", encoding="utf-8") as f:
+                        f.write(json.dumps({"t": now, "base": self.base}) + "\n")
+                except OSError:
+                    pass   # the level is still followed; only a later fit reads it less exactly
 
     def _still_down(self) -> bool:
         """True when the last decision sent said somebody is there and the lines that cross the
