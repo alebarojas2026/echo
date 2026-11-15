@@ -243,8 +243,12 @@ def aisle_script():
         # Since the 3 s hold (#582) a short appearance while armed is a passed_by, not an intrusion: allowed, counted.
         ("aisle: armed, passed_by events while people walk past", arm, disarm, "count", lambda e: e["kind"] == "passed_by"),
         ("aisle: the judge steps in and is found", back, still_from + 4, "state", person_here),
-        ("aisle: the judge stands still while others pass: no-movement alert", still_from + 9.5, still_from + 16,
-         "event", lambda e: e["kind"] == "alert_on"),
+        # On a layout with a presence line a passer-by who makes that line read "moving" restarts the count:
+        # real movement puts the timer back to zero there, by design (CONTRACTS.md section 6). The alert then
+        # comes 10 s after the last movement, which can be later than 16 s after stepping in; it must never be
+        # lost. So there the beat asks for it by the end of the scene (38 s after stepping in), not by 16 s.
+        ("aisle: the judge stands still while others pass: no-movement alert", still_from + 9.5,
+         finish if LAYOUT.presence_line else still_from + 16, "event", lambda e: e["kind"] == "alert_on"),
     ]
     return path, commands, beats
 
