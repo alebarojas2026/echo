@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ENGINE_SCENES, MOCK_LAYOUT, engineScene, fakeHash, records, sceneAt, witnessIds } from './mock'
 import { mockProve } from './source'
-import { ago, blocks, boardId, citesWords, count, deviceViews, hash8, headlines, heardNow, hearsLines, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveAsk, proveWords, seenHeads, span, timings, watchLine, type ChainInfo } from './model'
+import { ago, blocks, boardId, citesWords, count, deviceViews, hash8, headlines, heardNow, hearsLines, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveAsk, proveWords, recordRows, rowWords, seenHeads, signedWords, span, timings, watchLine, alarmWords, checkedWords, type ChainInfo } from './model'
 
 const HASH = 'a3f09c21'.repeat(8)
 const chain = (over: Partial<ChainInfo> = {}): ChainInfo => ({
@@ -180,9 +180,53 @@ describe('the strip of records', () => {
   })
 })
 
+describe('the one picture', () => {
+  const links = MOCK_LAYOUT.links.map((l) => ({ id: l.id, rate_hz: 6, status: 'ok' }))
+  const rows = (c: ChainInfo | null, layout = MOCK_LAYOUT) => recordRows(deviceViews(layout, { t: 100_000, links }, c, 100_000, new Map()), layout)
+
+  it('says when the witnesses last signed, counted from the one that signed longest ago', () => {
+    expect(signedWords(chain(), MOCK_LAYOUT, 100_000)).toBe('Both signed 2 s ago')
+    expect(signedWords(chain({ witnesses: [chain().witnesses[0], { ...chain().witnesses[1], last_t: 95_000 }] }), MOCK_LAYOUT, 100_000)).toBe('Both signed 5 s ago')
+    expect(signedWords(chain({ witnesses: [chain().witnesses[0]] }), MOCK_LAYOUT, 100_000)).toBe('Pi A signed 2 s ago')
+    expect(signedWords(chain({ witnesses: [] }), MOCK_LAYOUT, 100_000)).toBe('No witness is enrolled')
+    expect(signedWords(null, MOCK_LAYOUT, 100_000)).toBe('')
+    // A silent witness is left out of the line: its own row says it.
+    const silent = chain({ witnesses: [chain().witnesses[0], { node: 'pi5b', last_seq: 1170, last_t: 88_000, sig_ok: true, silent: true }] })
+    expect(signedWords(silent, MOCK_LAYOUT, 100_000)).toBe('Pi A signed 2 s ago')
+    expect(signedWords(chain({ witnesses: chain().witnesses.map((w) => ({ ...w, silent: true })) }), MOCK_LAYOUT, 100_000)).toBe('')
+  })
+
+  it('gives a row to the board and to each computer that can sign, and says in words what a row that is not signing is doing', () => {
+    expect(rows(chain()).map((v) => v.name)).toEqual(['Board', 'Pi A', 'Pi B'])
+    expect(rows(chain()).map((v) => rowWords(v, chain()))).toEqual([null, null, null])
+    const five: typeof MOCK_LAYOUT = { nodes: [...MOCK_LAYOUT.nodes, { id: 'east', name: 'East beacon', device: 'esp32', roles: ['beacon'] }], links: MOCK_LAYOUT.links }
+    expect(rows(chain(), five).map((v) => v.name)).toEqual(['Board', 'Pi A', 'Pi B'])
+    const silent = chain({ witnesses: [chain().witnesses[0], { node: 'pi5b', last_seq: 1170, last_t: 88_000, sig_ok: true, silent: true }] })
+    expect(rowWords(rows(silent)[2], silent)).toEqual({ words: 'Silent witness: has not signed for 12 s. The chain goes on.', fault: true })
+    const bad = chain({ witnesses: [chain().witnesses[0], { ...chain().witnesses[1], sig_ok: false }] })
+    expect(rowWords(rows(bad)[2], bad)).toEqual({ words: 'Its signature on record #1,185 did NOT check.', fault: true })
+    const one = chain({ witnesses: [chain().witnesses[0]] })
+    expect(rowWords(rows(one)[2], one)).toEqual({ words: 'Not enrolled as a witness', fault: false })
+    // With no witness at all the line under the rows says so once; the rows stay, empty.
+    const none = chain({ witnesses: [] })
+    expect(rows(none).map((v) => rowWords(v, none))).toEqual([null, null, null])
+  })
+
+  it('makes a chain that does not verify the heading itself, and says when no board answers', () => {
+    expect(alarmWords(chain(), true)).toEqual({ title: 'The sealed record', words: '', fault: false })
+    expect(alarmWords(chain({ verified: false, first_bad_seq: 1181 }), true)).toEqual({ title: 'The chain does NOT verify', words: 'It breaks at record #1,181.', fault: true })
+    expect(alarmWords(null, false)).toMatchObject({ words: 'The board is not answering.', fault: true })
+    expect(alarmWords(null, true)).toMatchObject({ words: 'The board gives no sealed record.', fault: true })
+    expect(checkedWords(chain(), 100_000)).toEqual({ words: 'Checked 14 s ago', fault: false })
+    expect(checkedWords(chain({ verified: 'checking' }), 100_000)).toEqual({ words: 'Checking', fault: false })
+    expect(checkedWords(chain({ verified: false }), 100_000)).toEqual({ words: 'Does not verify', fault: true })
+    expect(checkedWords(null, 100_000)).toEqual({ words: '', fault: false })
+  })
+})
+
 describe('the simulated kit', () => {
   it('knows its scenes, and plays "running" for a name it does not know', () => {
-    expect([...ENGINE_SCENES]).toEqual(['running', 'silent', 'broken', 'answer', 'none'])
+    expect([...ENGINE_SCENES]).toEqual(['running', 'silent', 'broken', 'answer', 'nowitness', 'badsig', 'none'])
     expect(engineScene('silent')).toBe('silent')
     expect(engineScene('whatever')).toBe('running')
     expect(engineScene(null)).toBe('running')
