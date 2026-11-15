@@ -144,3 +144,8 @@ def test_by_default_every_rule_keeps_the_contract_number():
 def test_a_factor_must_be_a_number_from_0_to_20(value):
     with pytest.raises(ValueError, match="steady_x_quiet"):
         S.DEFAULT.with_(steady_x_quiet=value)
+
+
+def test_replay_takes_a_factor_with_a_decimal_point():
+    from brain.replay import parse_set
+    assert parse_set(["steady_x_quiet=1.5", "moving_run=8"]) == {"steady_x_quiet": 1.5, "moving_run": 8}

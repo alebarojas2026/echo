@@ -131,9 +131,9 @@ def parse_set(pairs: List[str]) -> dict:
             out[name] = None if value in ("", "null", "all") else [k for k in value.split(",") if k]
         else:
             try:
-                out[name] = int(value)
+                out[name] = float(value) if name.endswith("_x_quiet") else int(value)
             except ValueError:
-                raise SystemExit(f"--set {name}: {value!r} is not a whole number")
+                raise SystemExit(f"--set {name}: {value!r} is not a {'number' if name.endswith('_x_quiet') else 'whole number'}")
     return out
 
 
