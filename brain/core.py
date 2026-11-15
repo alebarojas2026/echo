@@ -47,6 +47,7 @@ HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable (Pi B): their readings
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
+GONE_READINGS = 8        # a link is gone, not just slow, once silent for this many readings at its own rate
 SILENT_MS = 3_000        # a baseline restarts only for a link with no reading for this long
 LABEL_MODES = ("person", "object", "off")
 CAM_STATES = ("on", "off", "stalled")
@@ -769,15 +770,16 @@ class Brain:
             return
         if not self._fresh:
             return
-        if not self._raw["present"] and self._unheard(now):
+        unheard = [] if self._raw["present"] else self._unheard(now)
+        if unheard:
             # "Nobody" from a window in which a link the sensor needs has no reading says nothing:
             # a link with no readings counts as sitting on its baseline, which is what an empty
             # area looks like (#650). A decision that somebody is there still goes out.
-            if self._quiet and self.pred is not None:
-                self.pred = None                 # stale by now: unknown, as for blind, until it is back
+            if self._gone(now, unheard) and self.pred is not None:
+                self.pred = None                 # unknown, as for blind, until the link is back
                 self.watch.on_pred(now, None)
                 self.armed.on_pred(None)
-            return                               # not stale yet (under 2 s): the last decision stands
+            return                               # otherwise the last decision stands (under 2 s)
         self._fresh = False
         pred = dict(self._raw)
         self.watch.on_pred(self.window["end"], pred)
@@ -792,10 +794,19 @@ class Brain:
             self.emit("passed_by", {"zone": zone})
 
     def _unheard(self, now) -> List[str]:
-        """The links that can blind the sensor and are stale, or have no reading in the last
-        window (1 s) though the baseline heard them."""
-        return self._quiet or [k for k in self.health.classifier_links
-                               if self.expected_hz.get(k) and now - self._last_seen.get(k, -10**15) > F.WINDOW_MS]
+        """The links that can blind the sensor and have no reading in the last window (1 s),
+        though the baseline heard them."""
+        return [k for k in self.health.classifier_links
+                if self.expected_hz.get(k) and now - self._last_seen.get(k, -10**15) > F.WINDOW_MS]
+
+    def _gone(self, now, unheard) -> bool:
+        """True when one of them is stale as well, and has been silent for longer than chance
+        allows at its own rate: GONE_READINGS readings' worth, and never under the 1 s window.
+        (A healthy link at 5 or 6 readings a second has a 1 s gap about once a minute, and a
+        2 s stretch with too few readings about as often; neither may blink "unknown".)"""
+        return any(k in self._quiet
+                   and now - self._last_seen[k] > max(F.WINDOW_MS, GONE_READINGS * 1000 / self.expected_hz[k])
+                   for k in unheard)
 
     def _announce(self, zone: int) -> None:
         """enter, exit and zone_change, once the new zone has held for settings.zone_hold decisions.
@@ -863,7 +874,7 @@ class Brain:
         self._health_ok = health["health"]["status"] == "ok"
         self._quiet = [row["id"] for row in health["links"]
                        if row["status"] != "ok" and row["id"] in self.health.classifier_links]
-        if self._quiet and self.pred is not None and not self.pred["present"]:
+        if self.pred is not None and not self.pred["present"] and self._gone(now, self._unheard(now)):
             self.pred = None                     # a link the sensor needs has gone quiet: not "nobody"
             self.watch.on_pred(now, None)
             self.armed.on_pred(None)

@@ -86,3 +86,22 @@ def test_a_link_heard_over_the_hotspot_going_quiet_changes_nothing():
     msgs, _ = desk_feed(ids, [(8, 0)], start + 66, 21, silent=[i for i in ids if ">pi5b:" in i])
     seen = watch(brain, msgs)
     assert all(state["pred"] is not None and state["pred"]["present"] is False for _, state, _ in seen)
+
+
+def test_a_healthy_link_at_five_readings_a_second_never_blinks_unknown():
+    """Measured on the kit: pi5b>unoq:ble gives 4 to 6 readings a second, unevenly. Its chance gaps of
+    over a second must not turn "nobody" into unknown."""
+    import random
+
+    brain, ids, play = taught_desk()
+    slow, rng = "pi5b>unoq:ble", random.Random(5)
+    play([(3, 0)], 20)
+    brain.expected_hz[slow] = 5.0                  # as a baseline on the kit would have counted it
+    brain.health.set_expected({slow: 5.0})
+    start = max(brain._last_seen.values())
+    msgs, _ = desk_feed(ids, [(300, 0)], start + 66, 22)
+    msgs = [m for m in msgs if m.get("link") != slow or rng.random() < 1 / 3]   # 5 a second, at random
+    times = [m["recv_t"] for m in msgs if m.get("link") == slow]
+    assert max(b - a for a, b in zip(times, times[1:])) > 1000           # the feed does have gaps of over a second
+    seen = watch(brain, msgs)
+    assert all(state["pred"] is not None and state["pred"]["present"] is False for _, state, _ in seen)
