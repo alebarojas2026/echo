@@ -49,6 +49,9 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     await expect(quiet).toHaveCount(1)
     await expect(quiet).toContainText('Silent witness')
     await expect(quiet).toContainText('The chain goes on')
+    // The fault colour is on the words that name the fault; the devices that are fine carry none of it.
+    await expect(quiet.locator('.eng-signed')).toHaveClass(/eng-fault/)
+    await expect(page.locator('.eng-device[data-state="ok"] .eng-fault')).toHaveCount(0)
     const head = await page.getByTestId('engine-head').textContent()
     await expect.poll(() => page.getByTestId('engine-head').textContent(), { timeout: 8000 }).not.toBe(head)
     await readable(page)
@@ -75,8 +78,18 @@ for (const [width, height] of [[1920, 1080], [1440, 900]]) {
     expect(errors).toEqual([])
 
     errors = await open(page, 'answer', width, height)
-    await expect(page.getByTestId('engine-ask')).toContainText('Cites records', { timeout: 10000 })
+    await expect(page.getByTestId('engine-ask')).toContainText(/Cites \d+ records, #[\d,]+ to #[\d,]+/, { timeout: 10000 })
     await expect(page.getByTestId('engine-ask')).toContainText('the chain verified over them')
+    // A story of several sentences with the detective's five steps: the steps and the cited records are all on
+    // the page, inside the panel, and the page does not scroll.
+    await expect(page.locator('.eng-steps li')).toHaveCount(5)
+    const fit = await page.evaluate(() => {
+      const box = document.querySelector('[data-testid="engine-ask"]')
+      const inner = box.getBoundingClientRect().bottom - parseFloat(getComputedStyle(box).paddingBottom)
+      return { scrolls: document.documentElement.scrollHeight > window.innerHeight, lowest: Math.max(...[...box.children].map((e) => e.getBoundingClientRect().bottom)), inner }
+    })
+    expect(fit.scrolls).toBe(false)
+    expect(fit.lowest).toBeLessThanOrEqual(fit.inner + 1)
     await expect(page.locator('[data-testid="engine-strip"] .eng-block--cited')).not.toHaveCount(0)
     await shot(page, `engine-${width}-answer`)
     expect(errors).toEqual([])
