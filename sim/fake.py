@@ -291,7 +291,11 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
             yield {"type": "cam", "t": t, "state": cam,
                    "fps": rate / label_every if cam == "on" else 0.0}
         cam_was = cam
-        yield from later
+        for reading in later:
+            while h < len(hall) and hall[h]["t"] <= reading["t"]:
+                yield hall[h]
+                h += 1
+            yield reading
 
 
 def load_path(name_or_file: str) -> dict:

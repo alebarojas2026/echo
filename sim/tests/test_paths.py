@@ -73,4 +73,5 @@ def test_metal_object_drops_only_the_links_of_its_node(each_layout):
 def test_cli_accepts_a_short_name(capsys):
     fake.main(["empty_room", "--fast"])
     n = len(fake.LINKS)   # the layout in radio/nodes.json: 6 links on the square, 12 on the strip
-    assert len(capsys.readouterr().out.splitlines()) == 1 + 30 * 15 * n + 30 * 15 // 2 + 30  # meta, rssi, labels, cam
+    more = 30 * (25 - 15) if fake.LAYOUT.presence_line else 0   # a presence line comes 25 times a second, not 15
+    assert len(capsys.readouterr().out.splitlines()) == 1 + 30 * 15 * n + more + 30 * 15 // 2 + 30  # meta, rssi, labels, cam

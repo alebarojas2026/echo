@@ -2,6 +2,7 @@
 import pytest
 
 from sim import rehearse
+from sim.tests.conftest import ONE_SPOT, two_sides
 
 # Beats the real stack does not show yet. Each needs an issue; keep this empty for the demo.
 KNOWN_FAILING = set()
@@ -26,6 +27,7 @@ def test_every_beat_shows_up(results):
     assert failed <= KNOWN_FAILING, f"beats that did not show: {sorted(failed - KNOWN_FAILING)}"
 
 
+@two_sides
 def test_beats_show_in_good_time(results):
     shown = {name: s for name, passed, s in results if passed and s is not None}
     assert "advice to move the router" in shown        # #260: state carries the brain's advice
@@ -83,11 +85,13 @@ def test_the_desk_visit_plays_the_hero_path_in_order(desk):
     assert path["duration_s"] <= 180                                          # it fits the 3-minute visit
 
 
+@two_sides
 def test_every_desk_beat_shows_up(desk):
     failed = [name for name, passed, _ in desk if not passed]
     assert failed == [], failed
 
 
+@two_sides
 def test_desk_beats_show_in_good_time(desk):
     shown = {name: s for name, _, s in desk}
     assert shown["found: the judge steps up"] <= 2.0
@@ -116,7 +120,7 @@ def test_desk_flag_runs_the_desk_visit(capsys, monkeypatch):
     seen = []
     monkeypatch.setattr(rehearse, "rehearse", lambda script=None: seen.append(script) or [("a beat", True, 1.0)])
     assert rehearse.main(["--desk"]) == 0
-    assert seen[0][0]["name"] == "desk" and "1 of 1 beats passed" in capsys.readouterr().out
+    assert seen[0][0]["name"] == ("spot" if ONE_SPOT else "desk") and "1 of 1 beats passed" in capsys.readouterr().out
 
 
 def test_the_unplugged_beacon_raises_one_tamper_and_no_intrusion():
@@ -188,4 +192,4 @@ def test_aisle_flag_runs_the_aisle_script(capsys, monkeypatch):
     seen = []
     monkeypatch.setattr(rehearse, "rehearse", lambda script=None, **k: seen.append(script) or [("a beat", True, None)])
     assert rehearse.main(["--aisle"]) == 0
-    assert seen[0][0]["name"] == "aisle-rehearsal" and "1 of 1 beats passed" in capsys.readouterr().out
+    assert seen[0][0]["name"] == ("spot" if ONE_SPOT else "aisle-rehearsal") and "1 of 1 beats passed" in capsys.readouterr().out

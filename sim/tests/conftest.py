@@ -51,6 +51,12 @@ def each_layout(request, monkeypatch):
     return pin(monkeypatch, request.param)
 
 
+# Tests that play left and right, the tour or the router's move through the real brain can't run when
+# radio/nodes.json is a layout with one spot (the gate): the one-spot rehearsal and test_one_spot.py cover it there.
+ONE_SPOT = len(layout.load().zones) == 1
+two_sides = pytest.mark.skipif(ONE_SPOT, reason="radio/nodes.json has one spot: no left and right, no tour, no router move")
+
+
 def schema_fits(lay: layout.Layout) -> bool:
     """The schema in contracts/ lists the links of the layout in radio/nodes.json, so a pinned
     layout's messages are checked against it only when that is the same layout."""
