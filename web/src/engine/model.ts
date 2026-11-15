@@ -439,3 +439,58 @@ export function watchLine(state: EngineState | null, privacy: Privacy | null, si
       : [`${count(privacy.images)} images stored`, `${count(privacy.bytes_out)} bytes out`]
   return [cam, 'No microphone on any device', ...meter]
 }
+
+/** How many records the one row shows: the newest and the eighteen before it. */
+export const ROW_BLOCKS = 19
+
+/**
+ * The line under the witnesses' rows: when the ones that are signing last signed, counted from the one that
+ * signed longest ago. A witness that is silent or whose signature did not check is said on its own row, in
+ * words, and is left out here. Nothing with no word from the board.
+ */
+export function signedWords(chain: ChainInfo | null, layout: Layout | null, now: number): string {
+  if (!chain) return ''
+  if (!chain.witnesses.length) return 'No witness is enrolled'
+  const name = (id: string) => layout?.nodes.find((n) => n.id === id)?.name ?? id
+  const signing = chain.witnesses.filter((w) => !w.silent && w.sig_ok && w.last_t !== null)
+  if (!signing.length) return ''
+  const when = ago(now - Math.min(...signing.map((w) => w.last_t!)))
+  if (signing.length < chain.witnesses.length) return `${signing.map((w) => name(w.node)).join(' and ')} signed ${when}`
+  return signing.length === 1 ? `${name(signing[0].node)} signed ${when}` : signing.length === 2 ? `Both signed ${when}` : `All ${signing.length} signed ${when}`
+}
+
+/**
+ * What a witness's own row says when it is not simply signing: silent (the chain goes on), a signature that did
+ * not check, not enrolled, or nothing signed yet. Null while it signs: its marks under the records say it.
+ */
+export function rowWords(v: DeviceView, chain: ChainInfo | null): { words: string; fault: boolean } | null {
+  if (v.board) return null
+  const w = v.witness
+  if (!w) return chain && chain.witnesses.length ? { words: 'Not enrolled as a witness', fault: false } : null
+  if (w.silent) return { words: `Silent witness: ${w.quiet}. The chain goes on.`, fault: true }
+  if (w.seq === null) return { words: 'No signature yet', fault: false }
+  if (!w.ok) return { words: `Its signature on record #${count(w.seq)} did NOT check.`, fault: true }
+  return null
+}
+
+/** The devices that get a row in the picture: the board (it seals), then every computer that can sign. A beacon
+ *  with no computer in it signs nothing and has no row. */
+export function recordRows(views: readonly DeviceView[], layout: Layout): DeviceView[] {
+  const computer = new Set(layout.nodes.filter((n) => n.device.startsWith('pi')).map((n) => n.id))
+  return views.filter((v) => v.board || v.witness !== null || computer.has(v.id))
+}
+
+/** The last check, in a few words for the corner of the screen. */
+export function checkedWords(chain: ChainInfo | null, now: number): { words: string; fault: boolean } {
+  if (!chain) return { words: '', fault: false }
+  if (chain.verified === false) return { words: 'Does not verify', fault: true }
+  if (chain.verified === 'checking' || chain.last_verify_t === null) return { words: 'Checking', fault: false }
+  return { words: `Checked ${ago(now - chain.last_verify_t)}`, fault: false }
+}
+
+/** What stands where the heading is when something is wrong: a chain that does not verify, or no board. */
+export function alarmWords(chain: ChainInfo | null, heard: boolean): { title: string; words: string; fault: boolean } {
+  if (!chain) return { title: 'The sealed record', words: heard ? 'The board gives no sealed record.' : 'The board is not answering.', fault: true }
+  if (chain.verified === false) return { title: 'The chain does NOT verify', words: chain.first_bad_seq === null ? 'The board could not name the record.' : `It breaks at record #${count(chain.first_bad_seq)}.`, fault: true }
+  return { title: 'The sealed record', words: '', fault: false }
+}

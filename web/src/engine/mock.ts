@@ -9,9 +9,11 @@ import type { Scene } from './source'
 //   ?mock=silent    one witness goes silent from 8 s to 30 s, then comes back; the chain goes on; loops every 45 s
 //   ?mock=broken    the chain does not verify: it breaks 6 records back
 //   ?mock=answer    running, with a detective's answer that cites records in the strip
+//   ?mock=nowitness no witness is enrolled: the board seals alone
+//   ?mock=badsig    the last witness's signature does not check
 //   ?mock=none      no board: nothing answers
 
-export const ENGINE_SCENES = ['running', 'silent', 'broken', 'answer', 'none'] as const
+export const ENGINE_SCENES = ['running', 'silent', 'broken', 'answer', 'nowitness', 'badsig', 'none'] as const
 export type EngineScene = (typeof ENGINE_SCENES)[number]
 
 export function engineScene(name: string | null): EngineScene {
@@ -77,7 +79,7 @@ function signs(scene: EngineScene, node: string, witnesses: readonly string[], s
  * "witness back" once each when one stops and starts.
  */
 export function records(scene: EngineScene, layout: Layout, upTo: number, from = 0): Rec[] {
-  const witnesses = witnessIds(layout)
+  const witnesses = scene === 'nowitness' ? [] : witnessIds(layout)
   const out: Rec[] = []
   let seq = START_SEQ
   const lastSigned = new Map(witnesses.map((w) => [w, from]))
@@ -108,7 +110,7 @@ export function sceneAt(scene: EngineScene, tMs: number, layout: Layout = MOCK_L
   // The kit was running before the page opened: half a minute of records is already there.
   const all = records(scene, layout, s, -RUNNING_BEFORE_S)
   const head = all.at(-1)!
-  const witnesses = witnessIds(layout)
+  const witnesses = scene === 'nowitness' ? [] : witnessIds(layout)
   const last = (keep: (r: Rec) => boolean) => all.filter(keep).at(-1) ?? null
   const lastOf = (w: string) => last((r) => r.kind === 'witness' && r.node === w)
   const isSilent = (w: string) => {
@@ -125,7 +127,7 @@ export function sceneAt(scene: EngineScene, tMs: number, layout: Layout = MOCK_L
     verified: firstBad !== null ? false : verifiedS === null ? 'checking' : true,
     last_verify_t: verifiedS === null ? null : START_T + verifiedS * 1000,
     first_bad_seq: firstBad,
-    witnesses: witnesses.map((w) => ({ node: w, last_seq: lastOf(w)?.for_seq ?? null, last_t: lastOf(w)?.t ?? null, sig_ok: true, silent: isSilent(w) })),
+    witnesses: witnesses.map((w) => ({ node: w, last_seq: lastOf(w)?.for_seq ?? null, last_t: lastOf(w)?.t ?? null, sig_ok: !(scene === 'badsig' && w === witnesses.at(-1)), silent: isSilent(w) })),
     last_verify_checked: verifiedS === null ? null : 600,
     last_verify_ms: verifiedS === null ? null : 3,
   }
