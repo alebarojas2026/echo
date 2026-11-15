@@ -100,8 +100,9 @@ export class AlertMarks {
     this.view.host.dataset.alertZone = look.zone ? String(look.zone) : ''
     this.word.hidden = alert?.state !== 'check_on' || !look.zone
     if (!this.word.hidden) {
-      const [at, west] = alertWordAt(look.zone!)
-      this.word.classList.toggle('room-label--alert-west', west)
+      const [at, side] = alertWordAt(look.zone!)
+      this.word.classList.toggle('room-label--alert-west', side === 'west')
+      this.word.classList.toggle('room-label--alert-south', side === 'south')
       this.view.moveLabel(this.word, v3(at))
     }
     this.view.requestRender()

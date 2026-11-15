@@ -49,7 +49,7 @@ describe('layout from nodes.json', () => {
     // the layout's centre is the scene's origin
     expect(frame.toScene([0.8, 0.55, 0])).toEqual([0, 0, 0])
     expect(frame.nodePosition('pi5', 'S-W30')).toEqual([0.5, 1.1, 1])
-    expect(frame.nodeLabelSide('west')).toBe('left')
+    expect(frame.nodeLabelSide('west')).toBe('below-right')
     expect(frame.nodeLabelSide('pi5')).toBe('above')
     expect(frame.TRAY_SPOTS[0]).toEqual([0.86, 1.0, 1.0])
   })

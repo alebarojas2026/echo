@@ -168,7 +168,8 @@ export class Fly {
   private show(shot: Shot, arrived?: Framing) {
     this.shot = shot
     this.view.setShot(arrived === 'square' ? roomShot : shot)
-    this.wide = this.hall ? wideness(shot, this.square(), this.hall) : 0
+    // Arrived is exact: the last step's shot can sit a rounding error off the square's, which would read as "flying".
+    this.wide = !this.hall || arrived === 'square' ? 0 : arrived === 'hall' ? 1 : wideness(shot, this.square(), this.hall)
     this.view.host.dataset.view = this.wide >= 1 ? 'hall' : this.wide <= 0 ? 'square' : 'flying'
     this.onWide(this.wide)
   }

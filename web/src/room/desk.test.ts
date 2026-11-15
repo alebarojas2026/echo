@@ -4,10 +4,10 @@ import { laneShifts } from './beams'
 import { demoScene } from './demo'
 import { buildState, mockState } from './mock'
 import { FIGURE_HEIGHT_M } from './figure'
-import { LINK_IDS, NODES, alertWordAt, applyLayout, toScene, type Vec3 } from './frame'
+import { LINK_IDS, NODES, alertWordAt, applyLayout, nodeLabelSide, toScene, type Vec3 } from './frame'
 import { DESK_LAYOUT } from './layouts.fixture'
 import { DESK_TOP_M, standBase } from './stage'
-import { FOV_DEG, fitCamera, roomShot } from './view'
+import { FOV_DEG, deskAnchors, fitCamera, roomShot } from './view'
 
 // The whole room on the desk layout of the contract PR (#415): this file applies it once; every other test file
 // keeps the built-in square.
@@ -82,12 +82,44 @@ describe('the room drawn on the desk layout', () => {
     expect(shifts.get('east>unoq:ble')).toBe(0)
   })
 
-  it('puts each zone\'s no-movement word outside the strip on its own side, level with its name', () => {
-    const [[x1, y1], west1] = alertWordAt(1)
-    const [[x2, y2], west2] = alertWordAt(2)
-    expect([x1, y1, west1]).toEqual([-0.08, 0.2, true])
-    expect(x2).toBeCloseTo(1.68)
-    expect([y2, west2]).toEqual([0.2, false])
+  it('frames the strip and desk large on a laptop (an 800 x 900 canvas beside the panels), centred, every word on it', () => {
+    const [w, h] = [800, 900]
+    const c = new PerspectiveCamera(FOV_DEG, 1, 0.1, 60)
+    fitCamera(c, w, h, roomShot(w, h))
+    const at = (p: Vector3) => {
+      const v = p.clone().project(c)
+      return [((v.x + 1) / 2) * w, ((1 - v.y) / 2) * h]
+    }
+    // The strip's aisle edge takes most of the canvas's width (45% when it was framed like the square).
+    const [x0] = at(new Vector3(...toScene([0, 0, 0])))
+    const [x1] = at(new Vector3(...toScene([1.6, 0, 0])))
+    expect(x1 - x0).toBeGreaterThan(0.65 * w)
+    // Every device with its name, a head anywhere in the strip and the words in the aisle are on the canvas, with
+    // as much room on one side as on the other (24 px edges, and the legend's 72 px row at the bottom).
+    const reach = deskAnchors().map((a) => {
+      const [x, y] = at(a.at)
+      return { left: x - a.left, right: x + a.right, top: y - a.up, bottom: y + a.down }
+    })
+    const left = Math.min(...reach.map((r) => r.left)) - 24
+    const right = w - 24 - Math.max(...reach.map((r) => r.right))
+    const top = Math.min(...reach.map((r) => r.top)) - 24
+    const bottom = h - 72 - Math.max(...reach.map((r) => r.bottom))
+    for (const room of [left, right, top, bottom]) expect(room).toBeGreaterThan(-1)
+    expect(Math.abs(left - right)).toBeLessThan(2)
+    expect(Math.abs(top - bottom)).toBeLessThan(2)
+  })
+
+  it('names each device on the desk above it, and each beacon over the aisle just below it, reading inward', () => {
+    expect(['unoq', 'pi5', 'pi5b'].map((id) => nodeLabelSide(id))).toEqual(['above', 'above', 'above'])
+    expect(nodeLabelSide('west')).toBe('below-right')
+    expect(nodeLabelSide('east')).toBe('below-left')
+  })
+
+  it('puts each zone\'s no-movement word in the aisle, under the middle of its zone', () => {
+    expect(alertWordAt(1)).toEqual([[0.4, -0.06, 0], 'south'])
+    const [[x2, y2, z2], side2] = alertWordAt(2)
+    expect(x2).toBeCloseTo(1.2)
+    expect([y2, z2, side2]).toEqual([-0.06, 0, 'south'])
   })
 
   it('stands the desk devices on the desk and the aisle beacons on arms from its edge', () => {

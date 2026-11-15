@@ -139,22 +139,29 @@ export function zoneSide(zone: number): { east: boolean; north: boolean } {
   return { east: x > SIZE_M[0] / 2, north: y > SIZE_M[1] / 2 }
 }
 
-/** Which side of its head a node's name goes: outward at the east and west edges, above at the north edge
- *  (the square's UNO Q, the desk's Pi A), else to the right. */
-export function nodeLabelSide(id: NodeId): 'above' | 'right' | 'left' {
+export type LabelSide = 'above' | 'right' | 'left' | 'below-right' | 'below-left'
+
+/** Which side of its head a node's name goes. On the square: outward at the east and west edges, above at the
+ *  north edge (the UNO Q), else to the right. On the desk the names take no room beside the strip: a device on the
+ *  desk has its name above it, and a beacon out over the aisle has it just below, reading inward from its stand
+ *  (every link from it runs up toward the desk, and its stand runs down). */
+export function nodeLabelSide(id: NodeId): LabelSide {
   const [x, y] = NODES[id]?.xyz ?? [0, 0, 0]
+  if (STRIP_M) return y >= STRIP_M[1] - 0.01 ? 'above' : x < SIZE_M[0] / 2 ? 'below-right' : 'below-left'
   if (x <= 0.05) return 'left'
   if (x >= SIZE_M[0] - 0.05) return 'right'
   return y >= SIZE_M[1] - 0.05 ? 'above' : 'right'
 }
 
-/** Where a zone's no-movement word goes: on the floor just outside the floor area, level with the zone's name,
- *  on the zone's own side (east zones to the east, west zones to the west). Returns the point and whether
- *  it's west. */
-export function alertWordAt(zone: number): [Vec3, boolean] {
+/** Where a zone's no-movement word goes, and which way it reads from that point. On the square: on the floor just
+ *  outside it, level with the zone's name, on the zone's own side (east zones to the east, west zones to the
+ *  west). On the desk: in the aisle just in front of its zone, under its middle ('south'), where it takes no
+ *  room beside the strip. */
+export function alertWordAt(zone: number): [Vec3, 'west' | 'east' | 'south'] {
+  const [x0, y0, x1, y1] = zoneRect(zone) ?? [0, 0, 0, 0]
+  if (STRIP_M) return [[(x0 + x1) / 2, -0.06, 0], 'south']
   const { east, north } = zoneSide(zone)
-  const [, y0, , y1] = zoneRect(zone) ?? [0, 0, 0, 0]
-  return [[east ? floorSize()[0] + 0.08 : -0.08, north ? y1 - 0.2 : y0 + 0.2, 0], !east]
+  return [[east ? floorSize()[0] + 0.08 : -0.08, north ? y1 - 0.2 : y0 + 0.2, 0], east ? 'east' : 'west']
 }
 
 /** Where a node sits now. The router follows state.router to its spot. */
