@@ -5,12 +5,23 @@
 
 The language model (llama-server on 127.0.0.1:8091) only picks ONE tool and its arguments;
 a JSON schema forces the shape of its reply. Python runs the tool on the store and fills
-the answer from the rows, so the model never writes a number or a fact. If the model is
-down or slow, the tool is picked by keywords, and the reply says so (picked_by "rules").
-A question that fits no tool gets the list of what can be asked.
+the answer from the rows, so the model never writes a number or a fact. A question that
+fits no tool gets the list of what can be asked.
+
+Before the model:
+- a question the records can't answer (who someone is, how many people, orders, tricks
+  aimed at the prompt) gets the list at once;
+- a question with a plain keyword ("armed", "router", "still", "Wi-Fi", ...) is picked by
+  keywords. The model only sees the rest, and if it is down or slow they get the list.
+picked_by says which one picked: "llm" or "rules".
+The time ("since 2", "in the last hour") and the zone ("on the left") are read from the
+question by Python, never guessed by the model. A question test (lab/ask_bench on the
+lab-ask-bench branch) checks all of this against a few thousand questions.
 """
 import argparse
+import difflib
 import json
+import math
 import re
 import time
 import urllib.request
@@ -24,10 +35,71 @@ TIMEOUT_S = 8.0
 MAX_QUESTION = 200
 MINUTES = (1, 1440, 10)   # least, most, when not said
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
-RULES = (("intrusions", r"intru|armed|after hours|break"), ("alerts", r"alert|check.?in|alarm"),
-         ("still_spans", r"still|not mov|without mov|no movement|motionless"),
-         ("explain_advice", r"advice|advis|router|dead zone"), ("model_card", r"model|train|learn|cloud|private|camera"),
-         ("link_history", r"link|signal|dbm|blind|radio"), ("presence", r"anyone|anybody|someone|somebody|who|here|empty|person|people"))
+
+# Questions the records can't answer: who someone is, how many people, what they look like or
+# are doing, orders, tricks aimed at the prompt, and things that aren't about the room.
+CANT = re.compile(
+    r"\bhow many (people|persons|visitors|judges|guys|ppl|of them|men|women)\b|\bcount (the |how many )?(people|visitors|ppl|persons)\b"
+    r"|\bwho(?!\s+trained)\b|\bwhos\b|\bwho's\b|\bwhose\b|\bidentif|\brecogni"
+    r"|\bman or (a )?woman\b|\bwas it a (man|woman|guy|girl)\b|\bwearing\b|\bhow tall\b|\bhow old\b|\bhis name\b|\bher name\b"
+    r"|\blook like\b|\bsame person\b|\bphoto\b|\bpicture\b|\bheart\b|\bbreathing\b|\bon (his|her|their) phone\b"
+    r"|\bignore\b|\bpretend\b|\brepeat after\b|\bsystem prompt\b|\byou are now\b|\bjailbreak|\bforget (the|your|all)\b"
+    r"|\bweather\b|\bjoke\b|\bpoem\b|\bhaiku\b|\bpassword\b|\bcapital of\b|\bstock\b|\bwhat time is it\b"
+    r"|^\W*(please )?(arm|disarm|turn (on|off)|reset|delete|send|call|open|play|set|translate|write|say|tell me a)\b", re.I)
+# "Is that Ivan?", "Where is Ivan?": a capitalised name that isn't one of the zones.
+NAME = re.compile(r"\b(?:(?:[Ii]s|[Ww]as) (?:that|this|it)(?: guy| girl| person)?|[Ww]here is|[Ww]here's) ([A-Z][a-z]+)\b")
+CANT_ANSWER = "I only answer from this room's records, and they never say who someone is or how many people there were."
+
+RULES = [  # (tool, keywords): first match wins, so the order matters
+    ("intrusions", r"intru|\barmed\b|\barm(ed)? mode|break.?ins?\b|broke in|trespass|after.?hours|sneak|security (alarm|mode|system)"),
+    ("alerts", r"no.?movement (alert|alarm|warning)|not.?moving (alert|alarm)|\balerts?\b|\balarms?\b|check.?ins?\b|\bcheck in\b|still (alert|alarm)|\bwarn"),
+    ("explain_advice", r"router|advice|advis|suggest|dead (zone|spot)|blocking|obstruct|in the way|the move\b|move the pi\b|arrow"),
+    ("still_spans", r"\b(stand|stood|standing|stay|stayed|staying|sit|sat|sitting|hold|held|keep|kept|been|be) still\b"
+                    r"|\bstill\b(?! (here|there|working|blind|on\b))|not mov|without mov|motionless|stationary|stay(ed)? put"
+                    r"|freez|frozen|hold still|keep still|in one (spot|place)|didn.?t move|stop(ped)? moving"),
+    ("link_history", r"wi.?fi|signal|\blinks?\b|bluetooth|\bble\b|dbm|rssi|blind|radio|interference|dropouts?|stale"),
+    ("model_card", r"\bmodel\b|train|learn|camera|cloud|internet|online|private|privacy|data (leave|get|sent)|upload"
+                   r"|neural|\bai\b|decision|decide|accura|\brun(s|ning)? on\b"),
+    ("presence", r"\b(any|some|no|every)\s?(one|body)\b|\bppl\b|\bperson\b|\bpeople\b|visit|occupied|empty|presen"
+                 r"|walk(ed)? (past|by|up|behind)|pass(ed)? (by|through)|c[oa]me by|stop(ped)? by|show(ed)? up|detected|activity|movement"),
+]
+RULES = [(t, re.compile(p, re.I)) for t, p in RULES]
+
+# Words the keywords and the time reader look for. A typo one letter away from one of them
+# ("sinec", "alamr", "anyoe") is read as that word first. KEEP: real words that are close.
+VOCAB = sorted(set("""
+since minutes minute hours hour today seconds right left side empty anyone anybody someone somebody person people
+visitors visited occupied presence detected movement still standing frozen motionless stationary moving without stay
+alert alerts alarm alarms warning check intrusion intrusions intruder intruders armed break trespassed security
+signal signals link links wifi bluetooth radio blind interference dropouts router advice advise suggest blocking
+obstruction camera model trained training learn cloud internet private privacy decision accurate many count
+""".split()))
+KEEP = set("""
+mode modes wearing hearing stand stands sits time times with were what when here there come came went move moved moves wave waved
+rain raining light lights sign signs like lift many arms army alter mail sale stall stalls rights sight sites
+""".split())
+
+WORDS = {w: i for i, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve".split())}
+WORDS.update({"fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "forty-five": 45, "fifty": 50, "sixty": 60,
+              "a": 1, "an": 1, "couple of": 2, "few": 5})
+NUM = r"(\d+(?:\.\d+)?|" + "|".join(sorted(map(re.escape, WORDS), key=len, reverse=True)) + r")"
+SPAN = re.compile(r"\b" + NUM + r"\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?)\b", re.I)
+HOURS = r"(\d{1,2}|" + "|".join(w for w, n in WORDS.items() if 1 <= n <= 12 and w not in ("a", "an", "few")) + r")"
+SINCE = re.compile(r"\bsince\s+(noon|midday|" + HOURS + r")(?::(\d\d))?\s*(am|pm|a\.m\.|p\.m\.|o'?clock)?", re.I)
+LEFT = re.compile(r"\b(left|lft)\b", re.I)
+RIGHT = re.compile(r"\b(on|in|at|to|the) (the )?(right|rigth)\b(?! now)|\b(right|rigth)[- ]?(side|zone|half|hand|end|one)\b", re.I)
+
+SHOTS = [  # example questions and picks, sent before the real question
+    ("anyone on the right in the last 5 minutes?", {"tool": "presence", "minutes": 5, "zone": 2, "link": "any"}),
+    ("how long did they stay without moving?", {"tool": "still_spans", "minutes": 10, "zone": 0, "link": "any"}),
+    ("who was that?", {"tool": "none", "minutes": 10, "zone": 0, "link": "any"}),
+    ("did the wifi signal drop in the last hour?", {"tool": "link_history", "minutes": 60, "zone": 0, "link": "any"}),
+    ("is the room armed?", {"tool": "intrusions", "minutes": 10, "zone": 0, "link": "any"}),
+    ("how many people walked past?", {"tool": "none", "minutes": 10, "zone": 0, "link": "any"}),
+    ("is there a camera?", {"tool": "model_card", "minutes": 10, "zone": 0, "link": "any"}),
+    ("why move the router?", {"tool": "explain_advice", "minutes": 10, "zone": 0, "link": "any"}),
+    ("did a no-movement alert go off today?", {"tool": "alerts", "minutes": 1440, "zone": 0, "link": "any"}),
+]
 
 
 def layout(path=NODES_JSON):
@@ -55,7 +127,10 @@ def messages(question: str, zones: dict, links: list) -> list:
               f"minutes: how far back to look ({MINUTES[2]} if not said; an hour is 60).\n"
               f"zone: 0 for anywhere, or {', '.join(f'{z} for {n}' for z, n in sorted(zones.items()))}.\n"
               f"link: any, or one of {', '.join(links)}.")
-    return [{"role": "system", "content": system}, {"role": "user", "content": question}]
+    shots = []
+    for q, pick in SHOTS:
+        shots += [{"role": "user", "content": q}, {"role": "assistant", "content": json.dumps(pick)}]
+    return [{"role": "system", "content": system}] + shots + [{"role": "user", "content": question}]
 
 
 class Picker:
@@ -73,13 +148,102 @@ class Picker:
             return json.loads(json.load(r)["choices"][0]["message"]["content"])
 
 
-def by_rules(question: str) -> dict:
-    """The keyword pick, for when the model can't be reached."""
+def fix_typos(question: str) -> str:
+    """The question with words one typo away from a keyword read as that keyword."""
+    out = []
+    for w in re.findall(r"\w+|\W+", question):
+        lw = w.lower()
+        if len(lw) >= 4 and w.isalpha() and lw not in VOCAB and lw not in KEEP:
+            near = difflib.get_close_matches(lw, VOCAB, n=1, cutoff=0.8)
+            if near and abs(len(near[0]) - len(lw)) <= 1:
+                w = near[0]
+        out.append(w)
+    return "".join(out)
+
+
+def cant_answer(question: str, zones: dict) -> bool:
+    """True for a question the records can't answer (who, how many, orders, prompt tricks)."""
+    if CANT.search(question):
+        return True
+    names = {n.lower() for n in zones.values()}
+    return any(m.group(1).lower() not in names for m in NAME.finditer(question))
+
+
+def keyword_tool(question: str):
+    """The first tool whose keywords match, or None."""
+    return next((tool for tool, pattern in RULES if pattern.search(question)), None)
+
+
+def _num(s: str) -> float:
+    s = s.lower()
+    return float(s) if s[0].isdigit() else float(WORDS[s])
+
+
+def minutes_said(question: str, now_hm: tuple):
+    """How many minutes back the question asks about, or None when it names no time.
+    now_hm = (hour, minute) of the board's clock, for "since 2" and "today"."""
     q = question.lower()
-    tool = next((name for name, pattern in RULES if re.search(pattern, q)), "none")
-    n = re.search(r"(\d+)\s*(min|hour|hr)", q)
-    minutes = int(n.group(1)) * (1 if n.group(2) == "min" else 60) if n else ("hour" in q and 60) or MINUTES[2]
-    return {"tool": tool, "minutes": minutes, "zone": 0, "link": "any"}
+    now = now_hm[0] * 60 + now_hm[1]
+    if re.search(r"half (an )?hour", q):
+        return 30
+    if re.search(r"quarter (of an )?hour", q):
+        return 15
+    m = SINCE.search(q)
+    if m:
+        if m.group(1) in ("noon", "midday"):
+            h, mm = 12, 0
+        else:
+            h, mm = int(_num(m.group(1))), int(m.group(3) or 0)
+            if h > 24 or mm > 59:
+                return None
+        ampm = (m.group(4) or "").replace(".", "")
+        t = h * 60 + mm
+        if ampm == "pm" and h < 12:
+            t += 720
+        options = [t] if ampm in ("am", "pm") or h > 12 else [t, t + 720]   # "since 2" is the latest 2 o'clock
+        past = [o for o in options if o <= now]
+        t = max(past) if past else max(options) - 1440
+        return max(MINUTES[0], min(MINUTES[1], now - t))
+    m = SPAN.search(q)
+    if m and not (m.group(2) in ("s", "m", "h") and not m.group(1)[0].isdigit()):
+        n, unit = _num(m.group(1)), m.group(2)[0]
+        mins = n / 60 if unit == "s" else n * 60 if unit == "h" else n * 1440 if unit == "d" else n
+        return max(MINUTES[0], min(MINUTES[1], math.ceil(mins)))
+    m = re.search(r"\b(last|past|this) (minute|hour|day)\b", q)
+    if m:
+        return {"minute": 1, "hour": 60, "day": 1440}[m.group(2)]
+    if re.search(r"\byesterday\b", q):
+        return 1440
+    if re.search(r"\b(today|so far today|this morning)\b", q):
+        return max(1, now)
+    if re.search(r"\bthis afternoon\b", q):
+        return max(1, now - 12 * 60)
+    if re.search(r"\b(right now|at the moment|at this moment|currently)\b", q):
+        return 1
+    if re.search(r"\b(just now|a moment ago|a bit ago|a minute ago)\b", q):
+        return 2
+    if re.search(r"\b(a few minutes ago|last few minutes)\b", q):
+        return 5
+    return None
+
+
+def zone_said(question: str, zones: dict) -> int:
+    """The one zone the question names ("on the left", "in Right", "the bathroom"), else 0."""
+    hits = set()
+    for z, name in zones.items():
+        n = name.lower()
+        pattern = LEFT if n == "left" else RIGHT if n == "right" else re.compile(rf"\b{re.escape(n)}\b", re.I)
+        if pattern.search(question):
+            hits.add(z)
+    return hits.pop() if len(hits) == 1 else 0
+
+
+def by_rules(question: str, now_hm=None) -> dict:
+    """The keyword pick: the tool from the keywords ("none" when nothing matches)."""
+    now_hm = now_hm or time.localtime()[3:5]
+    said = minutes_said(question, now_hm)
+    return {"tool": keyword_tool(question) or "none", "minutes": MINUTES[2] if said is None else said,
+            "zone": 0, "link": "any"}
 
 
 def checked(pick, zones: dict, links: list) -> tuple:
@@ -92,26 +256,39 @@ def checked(pick, zones: dict, links: list) -> tuple:
                           "link": pick.get("link") if pick.get("link") in links else None}
 
 
+USES_MINUTES = ("presence", "still_spans", "alerts", "intrusions", "link_history")
+
+
 def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=None, timer=time.monotonic) -> dict:
     """{"answer", "rows", "tool", "args", "picked_by": "llm"|"rules", "src", "ms"} for one question.
     src is the newest record's src ("live", "sim" or "replay"; None when the store is empty)."""
     start = timer()
     if zones is None or links is None:
         zones, links = layout()
+    now_ms = int(time.time() * 1000) if now_ms is None else now_ms
     question = " ".join(str(question).split())[:MAX_QUESTION]
-    pick, picked_by = None, "rules"
-    if llm is not None:
-        try:
-            pick, picked_by = llm(messages(question, zones, links), schema(zones, links)), "llm"
-        except Exception:   # down, slow, or not JSON: the keywords still answer
-            pick = None
-    if pick is None:
-        pick = by_rules(question)
+    read = fix_typos(question)   # the keywords and the time read this; the model gets the question as typed
+    refused = cant_answer(question, zones) or cant_answer(read, zones)
+    pick, picked_by = {"tool": "none"}, "rules"
+    if not refused:
+        tool = keyword_tool(read)
+        if tool:
+            pick = {"tool": tool, "link": "any"}
+        elif llm is not None:
+            try:
+                pick, picked_by = llm(messages(question, zones, links), schema(zones, links)), "llm"
+            except Exception:   # down, slow, or not JSON: the list of what can be asked
+                pick = {"tool": "none"}
+    if isinstance(pick, dict):
+        said = minutes_said(read, time.localtime(now_ms / 1000)[3:5])
+        pick = {**pick, "minutes": MINUTES[2] if said is None else said, "zone": zone_said(read, zones)}
     tool, args = checked(pick, zones, links)
     if tool is None:
-        out = {"answer": can_answer(), "rows": []}
+        out = {"answer": (CANT_ANSWER + " " if refused else "") + can_answer(), "rows": []}
     else:
-        out = TOOLS[tool](store, int(time.time() * 1000) if now_ms is None else now_ms, zones, **args)
+        out = TOOLS[tool](store, now_ms, zones, **args)
+        if tool in USES_MINUTES:   # the minutes in the answer are in a row too
+            out = {**out, "rows": out["rows"] + [{"row": "asked", "minutes": args["minutes"]}]}
     latest = store.latest()
     return {**out, "tool": tool, "args": args, "picked_by": picked_by, "src": latest and latest["src"],
             "ms": round((timer() - start) * 1000)}
