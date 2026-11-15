@@ -21,7 +21,7 @@ Echo: **a witness that never watches.** It knows when someone is in a space, kee
 **Re-read this file every time you pull. The "Right now" section is how the team lead redirects everyone.**
 
 ## Right now
-**Status, Sunday 6:50 AM. Written by the team lead for every worker; Alejandro's worker, your list is at the end of this section.**
+**Status, Sunday 7:15 AM. Written by the team lead for every worker; Alejandro's worker, your list is at the end of this section.**
 
 **What is on the kit**
 - **`kit-5` (c79da9b) is tagged and running on the board and both Pis.** It is the witness set on top of `kit-4.2`: the sealed record, the two Pis signing it, "What happened?" from the record, the engine room.
@@ -35,13 +35,15 @@ Echo: **a witness that never watches.** It knows when someone is in a space, kee
 - **So this is now true and may be said:** the sealed record and the signing have run on the real board. Numbers for the pitch, the screen and Devpost still come only from PROOF.md and `docs/numbers-to-say.md`; the run above is not in them until the proof worker adds it.
 - **Not checked by eye on the kit yet:** the engine room page.
 
-**What is being finished now**
-- **`kit-5.1` is cut (nothing more goes into it) and is in its last checks.** It is `kit-5` plus only these: the accent is blue #1FA5CF (#897); a "What happened?" button on the judge's page (#899); a "Sealed record · verified · 2 witnesses" line (#902); placing the screen by clicking the desk the kit is on (press P, click the desk, G for the other side, Enter saves; #901); the name Echo everywhere a person reads it (#906); the alarm page's hint says step aside and back (#903); "was anyone here" shows its steps and records (#904); the narrator never contradicts the headline (#905); a chain check beside a prune cannot give a false alarm (#907); and a fix from the kit, a wave on another link is no longer a check-in on the one spot (#909).
-- The candidate passed a cold start (no model, no camera, the kit's recordings, the pages looked at). The lead tags it; Ivan deploys it (about 10 minutes, no keys to make) before 9:30 AM. If anything looks wrong the board goes back to `kit-5`.
-- **After `kit-5.1`, nothing that the board runs or a judge sees is merged.** Only `docs/` may change, until 10:30 AM.
+**What is final, and the one thing still being built**
+- **`kit-5.1` (4be0eea) is tagged. It is the FINAL software for the board and both Pis.** Nothing under board/, brain/, bus/, pi/, radio/, store/, narrator/, the agent or contracts/ merges again today, whatever it fixes. It is `kit-5` plus only these: the accent is blue #1FA5CF (#897); a "What happened?" button on the judge's page (#899); a "Sealed record · verified · 2 witnesses" line (#902); placing the screen by clicking the desk the kit is on (press P, click the desk, G for the other side, Enter saves; #901); the name Echo everywhere a person reads it (#906); the alarm page's hint says step aside and back (#903); "was anyone here" shows its steps and records (#904); the narrator never contradicts the headline (#905); a chain check beside a prune cannot give a false alarm (#907); and a fix from the kit, a wave on another link is no longer a check-in on the one spot (#909). It passed every lane on Linux on both layouts and a cold start with the kit's recordings. Ivan deploys it (about 10 minutes, no keys to make; steps on #95). If anything looks wrong the devices go back to `kit-5`.
+- **`kit-5.2` is the page only (web/ and docs/), approved by Ivan at 6:55 AM, and is the only thing still being built:** the judge's page with the hall filling the whole screen and the text on it (branch `judge-page-hall-first`), the engine room as one picture of the sealed record instead of a card grid (branch `engine-room-one-picture`), and a new font (Poppins for text; the title face is being chosen; Hanken Grotesk goes). It reaches the board by `board/push-web.sh` alone: no deploy, no restart, no baseline; `board/push-web.sh --back` undoes it. It goes on only if it is reviewed safe by 9:00 AM; otherwise the page stays as `kit-5.1` has it. A PR for it that touches anything outside web/ and docs/ is out.
+- **Known and left alone on purpose:** when Pi B is unplugged, Pi A can be shown silent for about 4 s (two late signatures against a 15 s limit) and then recovers. The fix waits until after the demo.
+- Besides `kit-5.2`, only `docs/`, `proof/` and PROOF.md may change, until 10:30 AM.
 
 **What comes next, in order**
 1. `kit-5.1` on the kit: baseline, one stand, the blue, P to place the stand, both Pis still signing, the engine room looked at by eye.
+   Then the `kit-5.2` page push by the lead, if it is safe, and a look at both pages on the kit.
 2. Each screen laptop joins the kit's own Wi-Fi and opens its page: the judge's page `http://192.168.77.2:8080/`, the engine room `/engine/`, the alarm page `/phone/` on a phone.
 3. Three rehearsals of the 3-minute round at the desk.
 4. Devpost page and video; Ivan submits by 10:30 AM. Judging is 1:00 to 3:00 PM, three minutes a desk.
@@ -52,11 +54,12 @@ Echo: **a witness that never watches.** It knows when someone is in a space, kee
 - Pi B's clock resets every time it loses power, and its cable came out once: secure the power cable, and set the clocks after any power-up, before the baseline.
 - After the install, Pi B's signing program needed one manual start. Check it is running on each Pi after any restart.
 - A small nudge of one device costs the margin: the empty line should read about -44 dBm or better. Placed and checked before each session.
-- When Pi B was unplugged, Pi A was shown silent for about 4 s though nobody touched it. Being looked at; do not write "the others never miss a beat".
+- When Pi B was unplugged, Pi A was shown silent for about 4 s though nobody touched it, then recovered. Do not write "the others never miss a beat".
 
 **Decisions made this morning that a worker must not undo**
 - The architecture pictures carry plain titles ("Architecture", "Data path"): no tagline, no "no internet, no camera, no microphone" banner, no "what it does not do" note on the pictures. Do not add them back to `docs/architecture.svg`.
 - The accent is blue #1FA5CF, not orange. Screenshots in docs that still show orange are old.
+- The font is changing (Ivan, 7:00 AM): Poppins for text and an elegant title face. Do not write "Hanken Grotesk" into new docs; the Style section below is updated when the face is chosen.
 - Screens at the stand join the kit's own Wi-Fi. There is no public web link.
 - No backups or spare plans in docs: one way of doing each thing.
 
