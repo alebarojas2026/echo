@@ -123,8 +123,9 @@ async function saveAll(fit: ScanFit, beacons: HallBeacons | undefined, places?: 
       const room = await post('/__room-scan', json)
       const hall = beacons ? await post('/__hall-beacons', JSON.stringify(beacons.positions())) : null
       const devices = places?.length ? await post('/__nodes', JSON.stringify(places)) : null
-      // On this machine only (room.local.json, nodes.local.json: git-ignored), so a save never changes a tracked file.
-      if (room.ok) return `Saved on this machine${devices?.ok ? ', with the devices\u2019 places' : ''}${hall?.ok ? ' (the beacons into radio/nodes.json)' : ''}. Not in git; it goes into a build made here.`
+      // To this machine only (room.local.json, nodes.local.json: git-ignored), so a save never changes a tracked file.
+      // (web/tests/room-features reads "Saved to" here.)
+      if (room.ok) return `Saved to this machine${devices?.ok ? ', with the devices\u2019 places' : ''}${hall?.ok ? ' (the beacons into radio/nodes.json)' : ''}. Not in git; it goes into a build made here.`
     } else {
       const res = await post('/layout', layoutBody(fit, beacons?.positions(), places))
       if (res.ok) return `Saved on the board${places?.length ? ', with the devices\u2019 places' : ''}. A reload keeps it.`
