@@ -19,7 +19,7 @@
     "health": {"type": "object", "properties": {"status": {"enum": ["ok", "degraded", "blind"]}, "blind": {"$ref": "common.json#/$defs/links"}, "reason": {"enum": ["rate", "jump", null]}},
       "required": ["status", "blind", "reason"], "additionalProperties": false},
     "pred": {
-      "$comment": "null before training, while blind, while recalibrating and while the router is off S-home. present false -> zone 0, zone_set [] and motion null; motion is null only then.",
+      "$comment": "null before training, while blind, while recalibrating and while the router is off S-home. present false -> zone 0, zone_set [] and motion null; motion is null only then. zone_set with every zone = somebody, not sure where.",
       "type": ["object", "null"],
       "properties": {"present": {"type": "boolean"}, "kind": {"enum": ["person", "object", "none"]}, "zone": {"$ref": "common.json#/$defs/zone"},
                      "zone_set": {"type": "array", "items": {"$ref": "common.json#/$defs/zone"}},
