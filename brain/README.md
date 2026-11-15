@@ -226,6 +226,8 @@ When `radio/nodes.json` has a `presence` block, the line it names decides whethe
 
 A thing left in the line is `pred.kind: "object"` with `present: false`: no enter, no still timer, no intrusion. While it stands there `advice` is about that line with `to_spot: null` (the router is cabled and does not move); when it is taken away `after_dbm` and an `advice_result` event carry the measured gain. A drop of a person's depth, or one that wobbles, is a person however long they stand still. The numbers for a thing in the line are not measured on the kit yet (the one try had the thing below the line): the rule is built and tested on made-up feeds only.
 
+No model and no lesson are needed on such a layout: after a baseline the line alone gives the whole decision (`present`, the one zone, `kind`, `motion`, `probs` 0 or 1), with `model.trained` false. A trained model, if there is one, still gives `probs` and `why`.
+
 `"classifier": false` on the presence line is ignored (and logged): that line is never switched off.
 
 Health on such a layout comes from the presence line alone: the sensor is blind only when that line is stale or silent. The level of a Bluetooth line, or of a line that does not cross the spot, never makes it blind, never raises an object or advice and never decides presence (in the kit's recordings the Bluetooth lines dipped 9 to 20 dB with nobody there). Those lines are still drawn, show stale in their own rows, and count for tamper. The lean-aside check-in and the drift follow read the presence line alone too, and only its empty level follows drift.

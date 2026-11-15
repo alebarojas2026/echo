@@ -1046,7 +1046,8 @@ class Brain:
         self._decide(now)
 
     def _decide(self, now):
-        if not (self.model and self.window):
+        # A layout with a presence line needs no model and no lesson: the line decides by itself (_line_pred).
+        if not ((self.model or self.presence_line) and self.window):
             self.pred = self.raw_kind = None
             self.watch.on_pred(now, None)
             return
@@ -1056,7 +1057,7 @@ class Brain:
             # present is passed only on a layout with a presence line: everywhere else the call is the one
             # it always was, for anything that stands in for the model (proof's replay does).
             line = {"present": False if thing else self._line_says()} if self.presence_line else {}
-            self._raw = self.model.predict(self.window, hold=self._still_down(), **line)
+            self._raw = self.model.predict(self.window, hold=self._still_down(), **line) if self.model                 else self._line_pred(line["present"])
             if thing:
                 self._raw["kind"] = "object"   # down and steady with no body in it: never a person, never nobody
                 self._raw["why"] = [self.presence_line]
@@ -1164,6 +1165,18 @@ class Brain:
                 except OSError:
                     pass   # the level is still followed; only a later fit reads it less exactly
 
+    def _line_pred(self, present: Optional[bool]) -> dict:
+        """The decision on a layout with a presence line when no model has been trained (no lesson was ever
+        run, or a baseline dropped the model): the line's word alone. Somebody there is a person in the
+        layout's zone (the one spot), and probs says the same, 0 or 1: there is no model to weigh anything.
+        The caller adds what it adds to a model's answer: "object" for a thing left in the line, and moving
+        or still from the line's spread."""
+        here, zone = bool(present), self.zone_ids[0]
+        return {"present": here, "kind": "person" if here else "none", "zone": zone if here else 0,
+                "zone_set": [zone] if here else [],
+                "probs": [0.0 if here else 1.0, 1.0 if here else 0.0] + [0.0] * (len(self.zone_ids) - 1),
+                "motion": None, "still_s": None, "why": [self.presence_line] if here else []}
+
     def _line_says(self) -> Optional[bool]:
         """What the layout's presence line says about this window: True somebody, False nobody, None when
         the layout names no such line (then the model decides, as on every other layout)."""
@@ -1250,8 +1263,12 @@ class Brain:
         allows at its own rate: GONE_READINGS readings' worth, and never under the 1 s window.
         (A healthy link at 5 or 6 readings a second has a 1 s gap about once a minute, and a
         2 s stretch with too few readings about as often; neither may blink "unknown".)"""
+        # On a layout with a presence line that line's last word stands for second_hold_s while it has no
+        # readings (section 6): a pause of a second or two never blanks the decision. If the line stays silent
+        # the sensor goes blind before the hold is over, and that hides the decision.
+        floor = max(F.WINDOW_MS, self.presence_hold_ms) if self.presence_line else F.WINDOW_MS
         return any(k in self._quiet
-                   and now - self._last_seen[k] > max(F.WINDOW_MS, GONE_READINGS * 1000 / self.expected_hz[k])
+                   and now - self._last_seen[k] > max(floor, GONE_READINGS * 1000 / self.expected_hz[k])
                    for k in unheard)
 
     def _announce(self, zone: int) -> None:

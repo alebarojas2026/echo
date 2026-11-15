@@ -193,6 +193,7 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
         // The desk has two zones: [empty, z1, z2]. With one zone (the gate): [empty, z1], zone is 1 when present
         // and zone_set is [1].
         // pred is null before training, while health is blind, while recalibrating, and while the router is off S-home.
+        // On a layout with a presence line pred needs no training: it is there from the first baseline (section 6).
         // present:false -> zone 0, zone_set [], motion null. present:true -> motion is moving or still.
         // Not sure where: when somebody is there but the links read unlike anything in training (a feature more than
         // 6 dB outside what the model saw), zone_set lists every zone the model knows. zone is still its best guess.
@@ -342,6 +343,11 @@ Presence line (only on a layout whose nodes.json has "presence"; every number is
   default given here, and the kit's own numbers go in the file):
 - Drop = the line's baseline minus its median over the 1 s window. Somebody is there once the drop reaches on_db
   (7 dB), and stays until it is under off_db (4 dB). The model still gives probs, but it does not decide present.
+- No model and no lesson are needed (the camera is not used in the demo): after a baseline, with no model
+  trained, pred is the line's word alone. present true is kind "person" in the layout's zone (zone_set that
+  zone), probs is [0, 1] (present) or [1, 0] (nobody), why is the line, and moving or still, a thing left in
+  the line, still_s, the alert, the check-in, armed, intrusion and passed_by all follow as below. model says
+  trained false; pred is never null for that reason. A trained model still gives probs and why, as before.
 - No other line has a say (decided from the kit's recordings: its Bluetooth lines dip 9 to 20 dB with nobody
   there, and the short Wi-Fi line on the desk climbed 9 dB over one run). "second" may stay in the file and is
   not used. While the line has no readings its last word stands for second_hold_s (5 s), and then it is nobody.

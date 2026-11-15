@@ -416,6 +416,101 @@ def test_a_walk_straight_through_is_passed_by_and_never_an_intrusion():
     assert [e["kind"] for _, e in events if e["kind"] in ("intrusion", "passed_by")] == ["intrusion"]
 
 
+def cold_kit(seed):
+    """A brain started cold on the gate: a baseline, and no lesson, no camera, no model."""
+    kit = Kit(seed)
+    kit.brain.on_cmd(cmd("baseline"))
+    kit.play([(26, "nobody")])
+    assert [e["kind"] for _, e in kit.events if e["kind"] == "baseline_done"] == ["baseline_done"]
+    assert kit.brain.model is None
+    return kit
+
+
+def test_with_no_model_and_no_lesson_the_presence_line_alone_gives_the_whole_decision():
+    """The camera is not used: no lesson is ever run. On a layout with a presence line the brain still
+    publishes a full decision, and everything that follows from it works (made-up feed, not a measurement)."""
+    kit = cold_kit(seed=21)
+    first = len(kit.rows)
+    kit.play([(5, "nobody")])
+    assert kit.rows[-1][1]["pred"] == {"present": False, "kind": "none", "zone": 0, "zone_set": [], "probs": [1.0, 0.0],
+                                        "motion": None, "still_s": 0.0, "why": []}
+    start, rows, events = kit.play([(10, "still")])                       # step on, 10 s
+    assert comings(events) == ["enter"] and (when(events, "enter") - start) / 1000 <= 1.5
+    here = [s["pred"] for t, s in rows if t - start > 2000]
+    assert all(p["present"] and p["kind"] == "person" and p["zone"] == 1 and p["zone_set"] == [1]
+               and p["probs"] == [0.0, 1.0] and p["why"] == ["pi5>pi5b:wifi"] for p in here)
+    assert sum(p["motion"] == "still" for p in here) >= 0.9 * len(here)
+    start, rows, _ = kit.play([(8, "moving")])                            # stepping about on the spot
+    moving = [s["pred"]["motion"] for t, s in rows if t - start > 3000]
+    assert moving.count("moving") >= 0.6 * len(moving)
+    start, _, events = kit.play([(5, "nobody")])                          # off
+    assert comings(events) == ["exit"] and (when(events, "exit") - start) / 1000 <= 2.0
+    _, rows, events = kit.play([(15, "still")])                           # stand still 15 s: the alert at 10 s
+    assert alerts(events) == ["alert_on"] and rows[-1][1]["alert"]["state"] == "check_on"
+    _, _, events = kit.play([(1.0, "lean"), (4, "still")])                # lean aside: the check-in
+    assert alerts(events) == ["checkin", "alert_off"]
+    kit.play([(5, "nobody")])
+    kit.brain.on_cmd(cmd("arm", on=True))                                 # armed: a walk through, then somebody who stays
+    _, _, events = kit.play([(3, "nobody"), (1.5, "moving"), (6, "nobody"), (6, "still"), (4, "nobody")])
+    assert [e["kind"] for _, e in events if e["kind"] in ("intrusion", "passed_by")] == ["passed_by", "intrusion"]
+    kit.brain.on_cmd(cmd("arm", on=False))
+    _, rows, events = kit.play([(10, "thing")])                           # a thing left in the line
+    assert rows[-1][1]["pred"]["kind"] == "object" and rows[-1][1]["pred"]["present"] is False
+    assert rows[-1][1]["advice"]["to_spot"] is None and "enter" not in comings(events)
+    kit.play([(8, "nobody")])
+    # the model says honestly that no lesson has been run, and every state is the contract's
+    states = [s for _, s in kit.rows[first:]]
+    assert all(s["model"]["trained"] is False and s["pred"] is not None for s in states)
+    bad = [err for s in states for err in check.errors(json.loads(json.dumps(s)), layout=GATE)]
+    assert not bad, bad[:5]
+
+
+def test_a_pause_of_the_presence_line_never_blanks_the_decision():
+    """The line's readings come over the hotspot and can pause for a second. Its last word stands meanwhile:
+    1.5 s without readings keeps somebody there, keeps nobody as nobody, and pred is never null."""
+    line = "pi5>pi5b:wifi"
+
+    def pause(kit, who, seconds=1.5):
+        kit.feed.next[line] = float("inf")
+        _, rows, events = kit.play([(seconds, who)])
+        kit.feed.next[line] = kit.feed.t
+        _, after, more = kit.play([(3, who)])
+        return rows + after, events + more
+
+    kit = cold_kit(seed=24)
+    kit.play([(5, "nobody")])
+    rows, events = pause(kit, "nobody")                                   # empty spot, the line pauses
+    assert all(s["pred"] is not None and s["pred"]["present"] is False for _, s in rows)
+    assert all(s["health"]["status"] != "blind" for _, s in rows) and comings(events) == []
+    kit.play([(6, "still")])
+    rows, events = pause(kit, "still")                                    # somebody standing there, the line pauses
+    assert all(s["pred"] is not None and s["pred"]["present"] and s["pred"]["kind"] == "person" for _, s in rows)
+    assert comings(events) == [] and not any(e["kind"].startswith("blind") for _, e in events)
+    # a line that stays silent is another matter: the sensor goes blind and the decision is hidden
+    kit.feed.next[line] = float("inf")
+    _, rows, events = kit.play([(10, "still")])
+    assert rows[-1][1]["health"]["status"] == "blind" and rows[-1][1]["pred"] is None
+
+
+def test_with_no_model_ten_empty_minutes_give_nothing():
+    kit = cold_kit(seed=22)
+    kit.brain.on_cmd(cmd("arm", on=True))
+    _, rows, events = kit.play([(600, "nobody")])
+    kinds = {e["kind"] for _, e in events} - {"armed"}
+    assert not kinds & {"enter", "exit", "intrusion", "passed_by", "alert_on", "checkin", "object_on", "advice", "blind_on"}, kinds
+    assert all(s["pred"] is not None and s["pred"]["present"] is False and s["pred"]["kind"] == "none" for _, s in rows)
+
+
+def test_a_layout_with_no_presence_line_still_waits_for_a_model():
+    plain = dict(GATE)
+    plain.pop("presence")
+    kit = Kit(seed=23)
+    kit.brain = Brain(nodes=plain)
+    kit.brain.on_cmd(cmd("baseline"))
+    _, rows, _ = kit.play([(26, "nobody"), (6, "still")])
+    assert kit.brain.model is None and rows[-1][1]["pred"] is None and rows[-1][1]["model"]["trained"] is False
+
+
 def alerts(events):
     return [e["kind"] for _, e in events if e["kind"] in ("alert_on", "alert_off", "checkin")]
 
