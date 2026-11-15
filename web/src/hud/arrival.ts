@@ -88,6 +88,8 @@ export function mountArrival(host: HTMLElement, feed: Feed | null, operator: HTM
     source.textContent = state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO'
     if (!state || stale) { cancelHold(); show('No data', 'Waiting for the room signal.'); return }
     if (state.health.status === 'blind') { cancelHold(); show('Sensor blind', 'A radio link stopped.'); return }
+    // Once the visitor has been found, a dead zone (advice, the router moved) is the main screen's moment.
+    if (complete && !state.armed && (state.advice || state.router !== 'S-home')) { cancelHold(); close(); return }
     if (!state.pred || state.router !== 'S-home') {
       cancelHold()
       const [heading, line] = judgeMoment(state, false)

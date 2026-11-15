@@ -1,0 +1,24 @@
+@import './tokens.css';
+/* The dead-zone card and the Wi-Fi line (#612). The action colour is for the advice and a measured gain; the
+   readings themselves stay in the text colour. */
+.dead-zone { display:grid; gap:24px; border-left:4px solid var(--edge); padding-left:16px; }
+.dead-zone[hidden],.dead-zone [hidden] { display:none; }
+.judge .dead-zone-text { display:flex; align-items:center; gap:16px; font-size:36px; line-height:1.1; font-weight:600; letter-spacing:-.02em; color:var(--text); }
+.dead-zone-text svg { flex:none; width:36px; height:36px; fill:none; stroke:currentColor; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; display:none; }
+.dead-zone:is([data-step="found"],[data-step="better"]) { border-left-color:var(--action); }
+.dead-zone:is([data-step="found"],[data-step="better"]) .dead-zone-text { color:var(--action); }
+.dead-zone[data-step="found"]:not([data-way="0"]) svg { display:block; }
+.dead-zone[data-step="found"][data-way="1"] svg { transform:scaleX(-1); }
+.judge .dead-zone[data-step="better"] .dead-zone-text { font-size:64px; letter-spacing:-.03em; }
+.dead-zone dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; margin:0; }
+.dead-zone dt { color:var(--text-2); font-size:28px; }
+.dead-zone dd { margin:0; font-size:32px; font-weight:600; white-space:nowrap; }
+.dead-zone[data-step="measuring"] [data-part="after"] dd { color:var(--text-2); }
+
+.judge > .wifi-line { display:flex; justify-content:space-between; align-items:baseline; gap:24px; margin:auto 0 0; border-top:1px solid var(--edge); padding-top:24px; color:var(--text-2); font:500 28px/1.2 var(--sans); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.wifi-line[hidden] { display:none; }
+.wifi-line b { font-weight:500; color:var(--text); }
+.wifi-line[data-status="weak"] b { font-weight:600; }
+.wifi-line:is([data-status="no-signal"],[data-status="no-data"],[data-status="no-baseline"]) b { color:var(--text-2); }
+.wifi-line [data-testid="wifi-value"] { color:var(--text); min-width:136px; text-align:right; }
+.judge > .wifi-line + .signal { margin-top:0; border-top:0; padding-top:0; }
