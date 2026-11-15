@@ -95,6 +95,8 @@ Events for the narrator, each with only the info keys `contracts/schemas/event.j
 
 The automatic baseline after `router_home` also runs with the camera unplugged; with the camera on it must still see nobody. A baseline asked for with the `baseline` cmd always needs the camera.
 
+**The automatic baseline with the camera unplugged.** After `router_home` the automatic baseline has nobody to ask whether the area is empty, so its finished 20 s are checked: if a link's 0.5 s mean sat more than 3 dB from that link's median for more than a quarter of the capture, somebody was walking in it. It is not used, the 20 s start again, and the log names the link. A passer-by for a second or two is let through, since the baseline is a median. A baseline asked for by hand is never judged this way. Somebody standing still for all 20 s can't be told from an empty area by radio: everyone stays out until `baseline_done`.
+
 ## Check-in and no-movement alert (`brain/alert.py`)
 
 `Watch` holds both section 6 rules. Give it every rssi message (`on_rssi`) and every decision (`on_pred`); it returns the state's `alert` block (`alert_block()`), the last `checkin`, and `alert_on`, `alert_off` and `checkin` events (`pop_events()`).

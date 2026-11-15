@@ -33,6 +33,13 @@ from brain.train import Model
 from brain.xray import Xray
 
 BASELINE_MS = 20_000
+# The automatic baseline with the camera unplugged has nobody to ask whether the area is empty.
+# A capture in which a link's 0.5 s mean sat more than MOVED_DB from that link's median for more
+# than MOVED_SHARE of the 20 s had somebody walking in it, and is not used. First values (#518).
+MOVED_DB = 3.0
+MOVED_SHARE = 0.25
+MOVED_BIN_MS = 500
+MOVED_BIN_MIN = 3        # a 0.5 s bin with fewer readings than this is too noisy to judge
 BASELINE_GIVE_UP_MS = 120_000   # a baseline asked for by hand that still can't start after this long is dropped
 HOME = "S-home"
 NODES_JSON = layout.NODES_JSON   # radio/nodes.json
@@ -801,10 +808,43 @@ class Brain:
             return "link health is blind"
         return None
 
+    def _capture_moved(self) -> Optional[str]:
+        """Why a finished capture can't be trusted to be of an empty area, in words for the log;
+        None when it can, or when it isn't ours to judge.
+
+        Only the automatic baseline, and only when the camera was off for some of it: with the
+        camera on, section 6's "it sees nobody" already holds. The baseline is each link's median,
+        so somebody passing for a second or two does no harm and is let through; somebody walking
+        about for much of the 20 s moves the median, and shows as many 0.5 s means far from it.
+        A person who stands still for the whole capture can't be told from an empty area by the
+        radio alone: that case is the runbook's (everyone out until baseline_done)."""
+        capture = self.capture
+        if capture["by_hand"] or not capture.get("no_cam"):
+            return None
+        worst = None
+        for link in self.links:
+            readings = [(m["recv_t"], float(m["dbm"])) for m in capture["messages"] if m["link"] == link]
+            if not readings:
+                continue
+            middle = statistics.median(d for _, d in readings)
+            bins: Dict[int, List[float]] = {}
+            for t, dbm in readings:
+                bins.setdefault((t - capture["start"]) // MOVED_BIN_MS, []).append(dbm)
+            means = [sum(v) / len(v) for v in bins.values() if len(v) >= MOVED_BIN_MIN]
+            off = sum(1 for m in means if abs(m - middle) > MOVED_DB)
+            if means and off / len(means) > MOVED_SHARE and (worst is None or off > worst[1]):
+                worst = (link, off)
+        if worst is None:
+            return None
+        return f"{worst[0]} moved for about {worst[1] * MOVED_BIN_MS / 1000:.0f} s of the 20: somebody was in the area"
+
     def _tick(self):
         now = self.now()
         if self.capture:
             wait = self._capture_wait(now)
+            cam_on = bool(self.cam and self.cam[1] == "on" and now - self.cam[0] <= CAM_SILENT_MS)
+            if not cam_on:
+                self.capture["no_cam"] = True       # nobody to ask for at least part of this capture
             if self.capture["asked"] is None and now > 0:
                 # On the feed clock time is 0 until the first reading. A state tick before it must
                 # not start the 120 s there, or the first reading (epoch ms) gives up at once (#598).
@@ -825,6 +865,10 @@ class Brain:
                 self._start_capture()               # a condition broke: the 20 s start again
             elif self.capture["start"] is None:
                 self.capture["start"] = now
+            elif now - self.capture["start"] >= BASELINE_MS and self._capture_moved():
+                # the 20 s start again, and the log says why: pred stays hidden until the area is quiet
+                logging.getLogger("brain").warning("baseline not used: %s. Capturing again.", self._capture_moved())
+                self._start_capture()
             elif now - self.capture["start"] >= BASELINE_MS:
                 msgs, new_place, self.capture = self.capture["messages"], self.capture["new_place"], None
                 self._wait_said = ()
