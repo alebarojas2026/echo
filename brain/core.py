@@ -24,7 +24,7 @@ from typing import Callable, Dict, List, Optional
 from advisor.advise import advise
 from brain import features as F
 from brain import layout
-from brain.alert import Armed, Watch
+from brain.alert import Armed, Tamper, Watch
 from brain.health import Health
 from brain.lesson import Lesson
 from brain.train import Model
@@ -140,6 +140,7 @@ class Brain:
         self.xray = Xray.from_nodes(nodes)
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
         self.armed = Armed()                  # after hours: a person appearing is an intrusion
+        self.tamper = Tamper.from_nodes(nodes)   # ... and a device going silent is tampering
         self._heard = set()                   # links with at least one reading
         self._last_seen: Dict[str, int] = {}  # link -> recv_t of its last reading
         self._last_dbm: Dict[str, float] = {} # link -> the last dbm we sent (or its last reading)
@@ -811,6 +812,8 @@ class Brain:
             {"xray": None, "objects": [], "events": []}
         for e in health["events"] + xray["events"]:
             self.emit(e["kind"], e["info"])
+        for kind, info in self.tamper.update(now, self.armed.on, self._last_seen):
+            self.emit(kind, info)   # judged whatever health says: blind is exactly when it matters
         self._watch_events()
         weights = self._why_weights()
         links = [self._link_row(row, weights) for row in health["links"]
@@ -838,6 +841,8 @@ class Brain:
                  "pred": self.pred, "objects": xray["objects"], "xray": xray["xray"],
                  "alert": self.watch.alert_block(), "checkin": self.watch.checkin, "advice": self.advice and dict(self.advice), "narration": self.narration, "teacher": teacher,
                  "model": model, "board": self.board_stats()}
+        if self.tamper.silent:
+            state["tamper"] = list(self.tamper.silent)   # only while a node is listed (absent = none)
         if self.armed.on:
             # Section 5: a missing "armed" means false. Sent only while armed until state.json
             # knows the field (#440); a state that never arms is byte for byte what it was.
