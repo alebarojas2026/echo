@@ -309,7 +309,7 @@
    nodes stay in view. */
 .room-align {
   position: fixed;
-  z-index: 2;
+  z-index: 30; /* an operator's tool: above the panels and the arrival card (20) */
   top: 24px;
   left: 24px;
   box-sizing: border-box;

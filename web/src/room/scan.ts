@@ -20,6 +20,10 @@ export interface Scan {
   bounds(): Box3
   /** The cutaway in front of the strip (ghostBox): 0 solid, 1 fully see-through. */
   ghost(amount: number): void
+  /** The model's own box, in its own metres, before any alignment. */
+  box: { min: number[]; max: number[] }
+  /** The desk it stands at only because nothing was saved yet (desks.ts), named for the operator; else unset. */
+  defaultDesk?: string
 }
 
 export type ScanSource = {
@@ -319,6 +323,7 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
         for (const t of twins) t.visible = a > 0 // no second pass while nothing is see-through
         view.requestRender()
       },
+      box: { min: box.min.toArray(), max: box.max.toArray() },
     }
     handle.apply(source.fit)
     drawnRoom.visible = false
