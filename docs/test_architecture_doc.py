@@ -3,7 +3,21 @@ import unittest
 from pathlib import Path
 
 
-ARCHITECTURE = Path(__file__).with_name("architecture.md")
+DOCS = Path(__file__).parent
+ARCHITECTURE = DOCS / "architecture.md"
+PICTURE = DOCS / "architecture.svg"
+
+# Parts that were cut from the product: nothing a judge reads may bring them back.
+CUT = ("camera teacher", "camera lesson", "dead-zone", "dead zone", "router advisor",
+       "move the router", "beacon", "esp32", "bluetooth", "lean aside", "radio sight",
+       "walked through", "passed by")
+CLAIMS_IT_MUST_NOT_MAKE = ("tracks", "locates", "pinpoints", "which side", "surveillance")
+COLOURS = {"#101216", "#14171C", "#171A20", "#1B1F26", "#3A404A", "#F2F4F6", "#A3ABB6",
+           "#1FA5CF", "#E5484D"}
+
+
+def mermaid_blocks(text):
+    return re.findall(r"```mermaid\n(.*?)```", text, re.DOTALL)
 
 
 class ArchitectureDocTest(unittest.TestCase):
@@ -11,69 +25,77 @@ class ArchitectureDocTest(unittest.TestCase):
     def setUpClass(cls):
         cls.text = ARCHITECTURE.read_text(encoding="utf-8")
         cls.lower = cls.text.lower()
+        cls.diagrams = mermaid_blocks(cls.text)
+        cls.picture = PICTURE.read_text(encoding="utf-8")
 
-    def test_mermaid_covers_contract_data_flow(self):
-        self.assertIn("```mermaid", self.text)
-        for phrase in (
-            "Wi-Fi RSSI reader",
-            "Bluetooth HCI reader",
-            "Camera teacher",
-            "Message bus",
-            "Brain",
-            "Router advisor",
-            "Narrator",
-            "llama-server",
-            "LED grid",
-            "Laptop browser",
-        ):
-            self.assertIn(phrase, self.text)
+    def test_the_product_is_called_echo(self):
+        self.assertTrue(self.text.startswith("# Echo"))
+        self.assertIn("a witness that never watches", self.lower)
 
-    def test_contract_v2_ports_are_exact(self):
-        for endpoint in (
-            "UDP 0.0.0.0:5600",
-            "UDP 127.0.0.1:5601",
-            "127.0.0.1:5600",
-            "192.168.77.2:5600",
-            "msgpack-rpc-router:5600",
-            "ws://192.168.77.2:8765/ws",
-            "http://192.168.77.2:8080",
-            "http://127.0.0.1:8091",
-        ):
-            self.assertIn(endpoint, self.text)
+    def test_main_diagram_shows_three_devices_one_line_and_the_edge(self):
+        main = self.diagrams[0]
+        for phrase in ("Pi A", "Pi B", "The board", "Arduino UNO Q", "Qualcomm Dragonwing QRB2210",
+                       "THE ONE SENSING LINE", "Seals every record", "signature every 5 s",
+                       "Screens", "one Ethernet cable",
+                       "NO INTERNET · NO CAMERA · NO MICROPHONE",
+                       "What an attacker would have to break"):
+            self.assertIn(phrase, main)
+        self.assertEqual(main.count("signature every 5 s"), 2, "one signature from each Pi")
+        boxes = re.findall(r"^\s+[A-Z]+\[\"<b>", main, re.M)
+        self.assertLessEqual(len(boxes), 9, "a judge reads this in ten seconds")
 
-    def test_current_kit_and_records_are_drawn(self):
-        diagram = self.text.split("```mermaid", 1)[1].split("```", 1)[0]
-        for phrase in ("Pi A", "Pi B", "main presence and dead-zone sensor",
-                       "Bluetooth second opinion", "lean aside", "store/",
-                       "agent/", "Recorded replay", "Incident report", "Tamper rule"):
-            self.assertIn(phrase, diagram)
-        for stale in ("east/west", "beacon S", "#FAF7EF", "#4F5E2E"):
-            self.assertNotIn(stale, diagram)
-        for token in ("#111316", "#1A1D21", "#353B43", "#E6E8EB", "#858E99"):
-            self.assertIn(token, diagram)
+    def test_data_path_is_six_steps_in_order(self):
+        path = self.diagrams[1]
+        steps = re.findall(r"<b>(\d) (\w+)</b>", path)
+        self.assertEqual(steps, [("1", "Reading"), ("2", "Decision"), ("3", "Record"),
+                                 ("4", "Seal"), ("5", "Signature"), ("6", "Answer")])
+        self.assertIn("R --> D --> W --> S --> G --> A", path)
+        for rate in ("25 a second", "1 a second", "SHA-256", "Ed25519", "every 5 s"):
+            self.assertIn(rate, path)
 
-    def test_advisor_is_drawn_inside_brain(self):
-        brain = re.search(
-            r'subgraph BRAIN\["Brain"\](.*?)\n        end',
-            self.text,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(brain)
-        self.assertIn('ADVISOR["Router advisor"]', brain.group(1))
+    def test_one_accent_colour_and_one_red(self):
+        for drawing in (*self.diagrams, self.picture):
+            colours = {c.upper() for c in re.findall(r"#[0-9A-Fa-f]{6}\b", drawing)}
+            self.assertIn("#1FA5CF", colours)
+            self.assertLessEqual(colours, COLOURS)
 
-    def test_compute_and_privacy_boundaries_are_clear(self):
-        for phrase in (
-            "all trained models and learned decisions run on the uno q's dragonwing cpu",
-            "the pi provides network and radio functions, routes the laptop browser to the board, and runs no model",
-            "the camera teacher is for setup labels only and saves no image or video",
-            "the arduino router bridge carries that small command",
-            "not venue wi-fi or a cloud service",
-        ):
-            self.assertIn(phrase, self.lower)
+    def test_every_part_is_explained_in_plain_words(self):
+        section = self.text.split("## How each part works", 1)[1].split("\n## ", 1)[0]
+        for part in ("Pi A", "Pi B", "The sensing line", "The board", "The decision", "The record",
+                     "The seal", "The signatures", "The answer", "The small language model",
+                     "The screens", "The one Ethernet cable"):
+            self.assertRegex(section, rf"- \*\*{re.escape(part)}[ .]")
+        for line in section.splitlines():
+            if line.startswith("- "):
+                self.assertLessEqual(len(line), 420, "short enough to read aloud: " + line[:40])
 
-        self.assertNotIn("pi-driven display", self.lower)
-        self.assertIn("http://192.168.77.2:8080/?src=ws", self.lower)
-        self.assertIn("ws://192.168.77.2:8765/ws", self.lower)
+    def test_limits_are_said_plainly(self):
+        box = self.text.split("## What it does not do", 1)[1].split("\n## ", 1)[0].lower()
+        for phrase in ("does not know **who**", "does not know **where**", "one spot",
+                       "does not count people", "no camera and no microphone",
+                       "nothing to the internet", "not been tested through a wall",
+                       "a few seconds on the line"):
+            self.assertIn(phrase, box)
+
+    def test_cut_parts_and_forbidden_claims_are_absent(self):
+        for where in (self.lower, self.picture.lower()):
+            for phrase in CUT + CLAIMS_IT_MUST_NOT_MAKE:
+                self.assertNotIn(phrase, where)
+
+    def test_the_model_is_never_the_source_of_a_fact(self):
+        self.assertIn("every fact, time and number comes from a record", self.lower)
+        self.assertIn("the pis run no model", self.lower)
+
+    def test_picture_is_a_plain_hand_made_svg(self):
+        self.assertIn("](architecture.svg)", self.text)
+        self.assertIn('viewBox="0 0 1920 1080"', self.picture)
+        self.assertIn('role="img"', self.picture)
+        for phrase in ("NO INTERNET · NO CAMERA · NO MICROPHONE", "The one sensing line",
+                       "Seals every record", "What an attacker would have to break",
+                       "Hanken Grotesk"):
+            self.assertIn(phrase, self.picture)
+        for banned in ("<image", "<script", "Gradient", "filter=", 'href="http'):
+            self.assertNotIn(banned, self.picture)
 
 
 if __name__ == "__main__":
