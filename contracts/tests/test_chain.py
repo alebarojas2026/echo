@@ -99,6 +99,11 @@ def test_an_answer_may_show_its_steps_its_records_and_whether_the_chain_held():
     assert any("$.cites[0]" in e for e in check.errors({**more, "cites": [0]}, "ask_reply"))
     assert any("$.steps[0]" in e for e in check.errors({**more, "steps": [{"tool": "records"}]}, "ask_reply"))
     assert any("$.chain_ok" in e for e in check.errors({**more, "chain_ok": "yes"}, "ask_reply"))
+    story = {**more, "tool": "story", "rows": [{"text": "Someone stepped in at 18:21:49.", "cites": [4012]}],
+             "span": {"from_t": 1763149309000, "to_t": 1763149329000}}
+    assert check.errors(story, "ask_reply") == []                                # the detective's own tool
+    del story["chain_ok"]                                                        # no sealed record to check: left out
+    assert check.errors(story, "ask_reply") == []
 
 
 def test_the_hash_rule_in_the_contract_is_the_one_python_computes():

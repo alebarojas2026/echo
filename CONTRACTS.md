@@ -717,9 +717,13 @@ POST http://192.168.77.2:8080/chain/prove        // operator only; JSON; the bod
 // The detective (POST /ask, section 10). "What happened" questions are answered from sealed records only, and the
 // answer may carry:
 "steps": [{"tool": "records", "ms": 12, "rows": 61}, {"tool": "verify", "ms": 3, "rows": 61}], "cites": [4012, 4040], "chain_ok": true
-   // steps: what was run, in order. cites: the seq of each record the answer rests on. chain_ok: the chain was
-   //   verified over the cited range before answering. If it does not verify, the answer says so first and names
-   //   the record.
+   // tool is "story" for such an answer (one more value of tool in section 10).
+   // steps: what was run, in order; ms may be a decimal. cites: the seq of each record the answer rests on.
+   // chain_ok: the chain was verified over the cited range before answering. If it does not verify, the answer
+   //   says so first and names the record. chain_ok is left out (never false) when the store holds no sealed
+   //   record to check.
+   // rows: one row for each sentence of the story, each with its own cites; span (section 10) covers the whole
+   //   stretch, so the screen can offer a replay of it.
 
 // The engine room (/engine/, a second screen, operator's): the three devices and their readings a second, the
 // chain head ticking, signatures arriving from each witness, the last verify and its time, the models' timings and
