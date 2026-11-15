@@ -5,6 +5,7 @@ fake data follows a new layout the way the real code does. Only x and y are used
 is at the same height.
 """
 import json
+import math
 from pathlib import Path
 
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
@@ -31,6 +32,12 @@ class Layout:
         self.grid = {"w": round((self.size_m[0] + 2 * MARGIN_M) / cell),
                      "h": round((self.size_m[1] + 2 * MARGIN_M) / cell),
                      "cell_m": cell, "origin_m": [-MARGIN_M, -MARGIN_M]}
+        # How a person blocks a link in the fake feed: the full drop within body_m of the line, then
+        # fading with width_m. The square's 2 m links were fine with a thin line. The strip's links are 0.6-1.2 m and
+        # some pass 0.2 m from a zone centre, so there the body's own width counts: a person at a zone
+        # centre drops both links that cross their side by 4 dB or more, and the links over the desk
+        # (0.3 m away) by under 1 dB. The x-ray bump shrinks with the cells (0.24 m -> 0.125 m).
+        self.body_m, self.width_m, self.bump_m = (0.1, 0.13, 0.15) if self.strip_m else (0.0, 0.2, 0.3)
 
     def _square_centre(self, zone: int) -> tuple:
         w, h = self.size_m
@@ -70,11 +77,31 @@ class Layout:
     def area_width(self) -> float:
         return (self.strip_m or self.size_m)[0]
 
+    def zone(self, name) -> int:
+        """A zone by number, or by its part in a path, so one path plays on every layout:
+        "tour1", "tour2", ... the stops of tour() in turn (wrapping round when there are fewer
+        zones), "still" the zone with the shortest no-movement limit, "calm" the zone next to it."""
+        if isinstance(name, int):
+            return name
+        if name == "still":
+            return self.still_zone()
+        if name == "calm":
+            return self.calm_zone()
+        if name.startswith("tour"):
+            tour = self.tour()
+            return tour[(int(name[4:]) - 1) % len(tour)]
+        raise ValueError(f"unknown zone {name!r}")
+
+    def end_near(self, zone: int) -> str:
+        """The end of the area nearer the zone's centre ("west" on a tie)."""
+        return "east" if self.centres[zone][0] > self.area_width() / 2 else "west"
+
     def resolve(self, path: dict) -> dict:
         """A path written against the layout instead of in metres, turned into metres:
-        a waypoint {"t", "zone": n, "dx", "dy"} stands at zone n's centre (plus an offset);
-        {"t", "zone": n, "edge": "west" | "east"} is at that end of the area, level with zone n;
-        {"t", "zone": n, "outside": "west" | "east"} is 0.4 m past that end (not in the area);
+        a waypoint {"t", "zone": z, "dx", "dy"} stands at zone z's centre (plus an offset), where z
+        is a number or a part (see zone(): "tour1", "still", "calm");
+        {"t", "zone": z, "edge": "west" | "east" | "near"} is at that end of the area, level with zone z;
+        {"t", "zone": z, "outside": "west" | "east" | "near"} is 0.4 m past that end (not in the area);
         an object {"spot": "T1"} sits on that tray spot, {"near": node, "inset_m": d} next to the
         node, d metres in from it along x. Points and objects already in metres are kept."""
         out = dict(path)
@@ -82,14 +109,31 @@ class Layout:
             out["person"] = [self._waypoint(p) for p in path["person"]]
         if path.get("objects"):
             out["objects"] = [self._object(o) for o in path["objects"]]
+        if path.get("router") and out.get("objects"):
+            first = out["objects"][0]
+            out["router"] = [dict(r, spot=self.clear_spot((first["x"], first["y"]))) if r["spot"] == "clear" else r
+                             for r in path["router"]]
         return out
+
+    def clear_spot(self, xy) -> str:
+        """A router step {"spot": "clear"}: the spot other than S-home whose link to the board passes
+        farthest from the path's first object (the first in the file on a tie), as the advice picks it."""
+        def away(spot):
+            (ax, ay), (bx, by) = self.router_spots[spot], self.nodes["unoq"]
+            f = max(0.0, min(1.0, ((xy[0] - ax) * (bx - ax) + (xy[1] - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2)))
+            return round(math.dist(xy, (ax + f * (bx - ax), ay + f * (by - ay))), 3)
+        spots = [s for s in self.router_spots if s != "S-home"]
+        return max(spots, key=lambda s: (away(s), -spots.index(s)))
 
     def _waypoint(self, p: dict) -> dict:
         if "zone" not in p or "x" in p:
             return p
         p = dict(p)
-        x, y = self.centres[p.pop("zone")]
+        zone = self.zone(p.pop("zone"))
+        x, y = self.centres[zone]
         end = p.pop("edge", None) or p.get("outside")
+        if end == "near":
+            end = self.end_near(zone)
         if end:
             past = 0.4 if p.pop("outside", None) else 0.0
             x = -past if end == "west" else self.area_width() + past

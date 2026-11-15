@@ -2,8 +2,17 @@ import io
 import json
 from statistics import mean
 
+import pytest
+
 from sim import fake
 from sim.wire import encoder
+
+
+@pytest.fixture(autouse=True)
+def _on_the_square(square):
+    """These tests check rules with the square's points and numbers, so they pin the square
+    (sim/tests/conftest.py) whichever layout radio/nodes.json holds."""
+
 
 DIAGONAL = {1: "west>unoq:ble", 2: "east>unoq:ble", 3: "west>pi5:ble", 4: "east>pi5:ble"}
 CENTRES = {1: (0.5, 1.5), 2: (1.5, 1.5), 3: (0.5, 0.5), 4: (1.5, 0.5)}
@@ -141,3 +150,28 @@ def test_cli_fast_prints_contract_lines(tmp_path, capsys):
     assert len(msgs) == 1 + 60 + 10 + 1  # meta, rssi, labels (10 fps at this rate), cam
     assert msgs[0]["t"] == 1763149500000 and msgs[-1]["t"] == 1763149500900
     assert [m["seq"] for m in msgs] == list(range(1, len(msgs) + 1))
+
+
+# ---- the desk strip: 0.6-1.2 m links, so the person's own width counts (sim/layout.py) ----
+
+CROSSING = {1: ("west>unoq:ble", "west>pi5b:ble"), 2: ("east>unoq:ble", "east>pi5b:ble")}
+OVER_THE_DESK = ("pi5>unoq:wifi", "pi5>unoq:ble", "pi5>pi5b:wifi", "pi5>pi5b:ble", "pi5b>pi5:ble")
+
+
+def test_on_the_strip_a_zone_centre_drops_its_crossing_links_and_not_the_desk_links(strip):
+    for zone, centre in strip.centres.items():
+        drops = {fake.link_id(*l): fake.person_drop(centre, strip.nodes[l[0]], strip.nodes[l[1]]) for l in fake.LINKS}
+        assert all(drops[link] >= 4 for link in CROSSING[zone]), (zone, drops)
+        assert all(drops[link] <= 1 for link in OVER_THE_DESK), (zone, drops)
+        other = CROSSING[3 - zone]
+        assert all(drops[link] <= 1 for link in other), (zone, drops)   # the other side's links stay quiet
+
+
+def test_on_the_strip_the_feed_shows_those_drops(strip):
+    empty = list(fake.simulate(path(duration=6)))
+    for zone, centre in strip.centres.items():
+        events = list(fake.simulate(path(still(*centre), duration=6)))
+        for link in CROSSING[zone]:
+            assert avg_dbm(empty, link) - avg_dbm(events, link) > 3.5, (zone, link)
+        for link in OVER_THE_DESK:
+            assert abs(avg_dbm(empty, link) - avg_dbm(events, link)) < 1.2, (zone, link)

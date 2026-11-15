@@ -36,7 +36,8 @@ PATHS_DIR = Path(__file__).parent / "paths"
 
 REF_DBM = {"wifi": -40.0, "ble": -55.0}  # empty-room level at 1 m
 PERSON_DROP_DB = 8.0   # peak drop when a person stands on the link line
-PERSON_WIDTH_M = 0.2   # how fast the drop fades with distance from the line
+PERSON_WIDTH_M = LAYOUT.width_m   # how fast the drop fades with distance from the line (sim/layout.py)
+PERSON_BODY_M = LAYOUT.body_m     # the full drop within this distance of the line
 MOVING_SPEED = 0.25    # m/s over 1 s, contract section 6
 
 
@@ -48,8 +49,9 @@ def zone_of(x: float, y: float) -> int:
     return LAYOUT.zone_of(x, y)
 
 
-def baseline(tx: str, rx: str, kind: str, nodes: dict = NODES) -> float:
+def baseline(tx: str, rx: str, kind: str, nodes: dict = None) -> float:
     """Empty-room level in dBm (log-distance path loss)."""
+    nodes = NODES if nodes is None else nodes
     return REF_DBM[kind] - 20.0 * math.log10(math.dist(nodes[tx], nodes[rx]))
 
 
@@ -62,8 +64,13 @@ def dist_to_link(p, a, b) -> float:
     return math.dist(p, (ax + f * dx, ay + f * dy))
 
 
-def drop(p, a, b, peak_db: float, width_m: float) -> float:
-    return peak_db * math.exp(-((dist_to_link(p, a, b) / width_m) ** 2))
+def drop(p, a, b, peak_db: float, width_m: float, body_m: float = 0.0) -> float:
+    return peak_db * math.exp(-((max(0.0, dist_to_link(p, a, b) - body_m) / width_m) ** 2))
+
+
+def person_drop(p, a, b) -> float:
+    """What a person standing at p takes off the link from a to b, before any flutter."""
+    return drop(p, a, b, PERSON_DROP_DB, PERSON_WIDTH_M, PERSON_BODY_M)
 
 
 def active(item: dict, t: float) -> bool:
@@ -146,7 +153,7 @@ def simulate(path: dict, rate: float = 15.0, label_rate: float = 7.5,
                 if active(j, t) and j["link"] == link:
                     dbm += j["db"] + j.get("wobble_db", 0.0) * math.sin(2 * math.pi * 0.4 * (t - j.get("t_on", 0.0)))
             if pos:
-                d = drop(pos, nodes[tx], nodes[rx], PERSON_DROP_DB, PERSON_WIDTH_M)
+                d = person_drop(pos, nodes[tx], nodes[rx])
                 if moving:  # a moving body makes the drop flutter
                     d *= max(0.0, 1.0 + rng.gauss(0.0, 0.25))
                 dbm -= d

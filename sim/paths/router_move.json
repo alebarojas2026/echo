@@ -1,8 +1,14 @@
 {
   "name": "router_move",
-  "about": "Empty for 25 s, tray at T1 from 25 s, router moved to S-W30 at 45 s (its link clears), tray removed at 60 s, router home at 65 s.",
+  "about": "Empty for 25 s, tray at T1 from 25 s, router moved at 45 s to the spot whose link the tray blocks least (the square: S-W30; the strip: S-E30), so its link clears, tray removed at 60 s, router home at 65 s.",
   "duration_s": 75,
   "person": null,
-  "objects": [{"x": 1.0, "y": 0.2, "drop_db": 10, "t_on": 25, "t_off": 60}],
-  "router": [{"t": 0, "spot": "S-home"}, {"t": 45, "spot": "S-W30"}, {"t": 65, "spot": "S-home"}]
+  "objects": [
+    {"spot": "T1", "drop_db": 10, "t_on": 25, "t_off": 60}
+  ],
+  "router": [
+    {"t": 0, "spot": "S-home"},
+    {"t": 45, "spot": "clear"},
+    {"t": 65, "spot": "S-home"}
+  ]
 }

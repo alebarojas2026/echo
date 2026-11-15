@@ -28,6 +28,7 @@ narrate.set_zones(narrate.load_zones())   # the zone words the board's narrator 
 
 STILL_ALERT_S = dict(LAYOUT.zones)   # zone -> still_alert_s, from radio/nodes.json (section 3)
 GRID = LAYOUT.grid                   # section 6: the layout plus 0.2 m on each side
+BUMP_M = LAYOUT.bump_m               # the x-ray bump's size, scaled with the grid's cells
 BASELINE_AT_S, TRAINED_AT_S = 1.0, 2.0
 STALE_RATIO, BLIND_AFTER_S, CLEAR_AFTER_S = 0.4, 3.0, 3.0   # section 6, link health
 OBJECT_AFTER_S, STATIC_AFTER_S, CHECKIN_AFTER_S = 2.0, 5.0, 1.25
@@ -65,7 +66,7 @@ def blob(points) -> list:
     for iy in range(h):
         for ix in range(w):
             cx, cy = ox + (ix + 0.5) * cell, oy + (iy + 0.5) * cell
-            out.append(round(sum(p * math.exp(-((cx - x) ** 2 + (cy - y) ** 2) / (2 * 0.3 ** 2))
+            out.append(round(sum(p * math.exp(-((cx - x) ** 2 + (cy - y) ** 2) / (2 * BUMP_M ** 2))
                                  for x, y, p in points), 1))
     return out
 
@@ -321,7 +322,7 @@ class Brain:
                   "reason": "rate" if stale else "jump" if blind else None}
 
         # how much of each link's drop the person explains, for "why"
-        share = {fake.link_id(*l): fake.drop(pos, nodes[l[0]], nodes[l[1]], fake.PERSON_DROP_DB, fake.PERSON_WIDTH_M)
+        share = {fake.link_id(*l): fake.person_drop(pos, nodes[l[0]], nodes[l[1]])
                  if pos else 0.0 for l in fake.LINKS}
         total = sum(share.values())
         for l in links:
@@ -362,7 +363,7 @@ class Brain:
 
         pred = None
         if trained and not blind and spot == "S-home":
-            probs = [0.03] * (len(STILL_ALERT_S) + 1)   # empty, then one per zone
+            probs = [round(0.12 / len(STILL_ALERT_S), 4)] * (len(STILL_ALERT_S) + 1)   # empty, then one per zone
             probs[zone] = 0.88
             pred = {"present": bool(pos), "kind": kind, "zone": zone, "zone_set": [zone] if pos else [],
                     "probs": probs, "motion": ("moving" if moving else "still") if pos else None,
