@@ -686,13 +686,16 @@ class Brain:
         now = self.now()
         if self.capture:
             wait = self._capture_wait(now)
-            if self.capture["asked"] is None:
+            if self.capture["asked"] is None and now > 0:
+                # On the feed clock time is 0 until the first reading. A state tick before it must
+                # not start the 120 s there, or the first reading (epoch ms) gives up at once (#598).
                 self.capture["asked"] = now
             if wait != self._wait_said:             # said once per reason, not on every message
                 self._wait_said = wait
                 log = logging.getLogger("brain")
                 log.warning("baseline is waiting: %s", wait) if wait else log.info("baseline: capturing 20 s")
-            if wait and self.capture["by_hand"] and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS:
+            if (wait and self.capture["by_hand"] and self.capture["asked"] is not None
+                    and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS):
                 # Pressed by mistake in front of an audience, or the room never cleared: without
                 # this pred stays hidden for ever. The old baseline and the model are untouched.
                 logging.getLogger("brain").warning(
