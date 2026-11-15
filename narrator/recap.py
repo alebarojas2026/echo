@@ -41,10 +41,10 @@ def _clock(ms: int) -> str:
 def _fact(kind: str, info: dict) -> str | None:
     zone, node = _zone(info.get("zone")), n.NODES.get(info.get("node"))
     before, after = n._dbm(info.get("before_dbm")), n._dbm(info.get("after_dbm"))
-    if n.desk():   # the strip in front of the desk: "on the left", "stepped up"
-        side = f"on the {zone.lower()}" if zone else None
+    if n.desk() or n.spot():   # in front of the desk: "on the left" or, with one spot, "at the desk"; "stepped up"
+        side = (n._spot_words() if n.spot() else f"on the {zone.lower()}") if zone else None
         desk_facts = {
-            "enter": f"someone stepped up {side}" if side else "someone stepped up to the desk",
+            "enter": (f"someone stepped up {side}" if side and not n.spot() else "someone stepped up to the desk"),
             "zone_change": f"someone moved over, now {side}" if side else None,
             "exit": "someone stepped away from the desk",
             "alert_on": f"no-movement alert {side}" if side else "no-movement alert",
@@ -99,7 +99,9 @@ def template(events: list) -> str | None:
         if e.get("kind") in ("enter", "zone_change") and z and z not in zones:
             zones.append(z)
     out = []
-    if zones and n.desk():
+    if zones and n.spot():
+        out.append("Someone stepped up to the desk.")
+    elif zones and n.desk():
         out.append(f"Someone stood {_join([f'on the {z.lower()}' for z in zones])}.")
     elif zones:
         out.append(f"Someone visited the {_join(zones)} zone{'s' if len(zones) > 1 else ''}.")
@@ -107,7 +109,8 @@ def template(events: list) -> str | None:
         out.append("Someone came into the room.")
     if "alert_on" in kinds:
         where = _zone(info["alert_on"].get("zone"))
-        place = (f" on the {where.lower()}" if n.desk() else f" in the {where} zone") if where else ""
+        place = (f" {n._spot_words()}" if n.spot() else
+                 f" on the {where.lower()}" if n.desk() else f" in the {where} zone") if where else ""
         alert = f"A no-movement alert fired{place}"
         out.append(alert + (" and a wave check-in answered it." if "checkin" in kinds else "."))
     elif "checkin" in kinds:

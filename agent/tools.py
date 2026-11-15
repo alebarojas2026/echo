@@ -16,8 +16,19 @@ def _last(minutes) -> str:
     return "the last minute" if minutes == 1 else f"the last {minutes} minutes"
 
 
+def place(name: str, only: bool):
+    """How an answer says a zone by its name alone, or None when it has no such words. A name that is already a
+    place ("At the desk") is said as it is; the only zone in the layout with any other name is just "here"."""
+    words = name.strip()
+    if words.split(" ")[0].lower() in ("at", "by", "in", "on"):
+        return words[0].lower() + words[1:]
+    return "here" if only else None
+
+
 def _where(zone, zones) -> str:
-    return f"in {zones[zone]}" if zone in zones else "here"
+    if zone not in zones:
+        return "here"
+    return place(zones[zone], len(zones) == 1) or f"in {zones[zone]}"
 
 
 def _spans(rows: list, zones: dict) -> list:

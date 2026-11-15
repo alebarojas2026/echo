@@ -91,9 +91,22 @@ def desk() -> bool:
     return bool(ZONES) and all(name.lower() in ("left", "right") for name, _ in ZONES.values())
 
 
+def spot() -> bool:
+    """One zone in the file: one spot in front of the desk. There is no side to name, so sentences say
+    where with the zone's own name when it reads as a place ("At the desk" -> "at the desk"), else "here"."""
+    return len(ZONES) == 1
+
+
+def _spot_words() -> str:
+    name = next(iter(ZONES.values()))[0].strip().lower()
+    return name if name.split(" ")[0] in ("at", "by", "in", "on") else "here"
+
+
 def _zone(z) -> str | None:
     if z not in ZONES:
         return None
+    if spot():
+        return _spot_words()
     return f"on the {ZONES[z][0].lower()}" if desk() else f"zone {z} ({ZONES[z][0]})"
 
 
@@ -126,9 +139,10 @@ def template(kind: str, info: dict) -> str | None:
     before, after = _dbm(info.get("before_dbm")), _dbm(info.get("after_dbm"))
     limit = info.get("limit_s") or ZONES.get(info.get("zone"), (None, None))[1]
     device = _device(info.get("node"))
-    if desk():   # the strip in front of the desk: "on the left", "stepped up", no rooms
+    if desk() or spot():   # in front of the desk: "on the left" or "at the desk", "stepped up", no rooms
         sentences = {
-            "enter": f"Someone just stepped up {zone}." if zone else "Someone just stepped up to the desk.",
+            "enter": (f"Someone is {zone}." if zone and spot() else
+                      f"Someone just stepped up {zone}." if zone else "Someone just stepped up to the desk."),
             "exit": "Someone just stepped away from the desk.",
             "zone_change": f"Someone moved over, now {zone}." if zone else "Someone moved over.",
             "checkin": f"Check-in received {zone}." if zone else "Check-in received on the router link.",
@@ -153,7 +167,7 @@ def template(kind: str, info: dict) -> str | None:
         "tamper": f"{_cap(device or 'a device')} went quiet while the space was armed.",
         "tamper_cleared": f"{_cap(device or 'the quiet device')} is back.",
         "intrusion": f"Someone is here while armed, in {zone}." if zone else "Someone is here while armed.",
-        "object_on": f"A new object{near or (' on the desk' if desk() else ' in the room')} is weakening the signal.",
+        "object_on": f"A new object{near or (' on the desk' if desk() or spot() else ' in the room')} is weakening the signal.",
         "object_off": f"The object{near} is gone.",
         "advice": "There is a new tip for placing the router.",
         "advice_result": (f"After the move, the router's Wi-Fi went from {before} to {after} dBm."
@@ -226,7 +240,9 @@ def _join(words: list) -> str:
 
 def system() -> str:
     count = {1: "one zone", 2: "two zones", 3: "three zones", 4: "four zones"}.get(len(ZONES), f"{len(ZONES)} zones")
-    where = (f"People stand in front of a desk, {_join([f'on the {n.lower()}' for _, (n, _) in sorted(ZONES.items())])}. "
+    where = (f"People stand on one spot in front of a desk. Say {_spot_words()}, never zone numbers and never a side. "
+             if spot() else
+             f"People stand in front of a desk, {_join([f'on the {n.lower()}' for _, (n, _) in sorted(ZONES.items())])}. "
              "Say on the left or on the right, never zone numbers. "
              if desk() else
              f"The room has {count}: {_join([f'zone {z} ({name})' for z, (name, _) in sorted(ZONES.items())])}. "
@@ -247,6 +263,8 @@ def examples() -> tuple:
     name = ZONES[z][0] if ZONES else ""
     first = (("enter", "Someone just walked into the room.", "Someone just stepped into the room.")
              if not ZONES else
+             ("enter", f"Someone is {_spot_words()}.", "Someone just stepped up to the desk.")
+             if spot() else
              ("enter", f"Someone just stepped up on the {name.lower()}.", f"Someone stepped up, on the {name.lower()} side.")
              if desk() else
              ("enter", f"Someone just walked into zone {z} ({name}).", f"Someone just stepped into zone {z}, by the {name.lower()}."))
