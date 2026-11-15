@@ -5,3 +5,4 @@
 {"hall":{"links":[{"id":"h>unoq:ble"}]}}
 {"hall":{"links":[{"id":"h>unoq:ble","empty_quiet_db":0}]}}
 {"links":[{"id":"pi5>pi5b:ble","classifier":"no"}]}
+{"nodes":[{"id":"east","device":"ESP32 S3"}]}
