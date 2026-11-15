@@ -1,3 +1,4 @@
+import { mountIncidentReport } from './report'
 import { loadHudLayout, linkName } from './layout'
 import { alignMockState } from './mock-layout'
 import { routerWords } from './router-words'
@@ -66,6 +67,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   document.addEventListener('keydown', key)
   const disposeAsk = mountAskRoom(root.querySelector('header')!, undefined, replay ? span => void replay.start(span) : undefined)
+  const disposeReport = mountIncidentReport(live, recordsClient(live?.source), span => { void replay?.start(span) })
   const disposeArrival = mountArrival(root, live, operator)
   if (replay) {
     const last = document.createElement('button')
@@ -116,7 +118,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposeReport(); disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
