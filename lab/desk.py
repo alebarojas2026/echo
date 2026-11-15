@@ -40,6 +40,7 @@ its percentages are not accuracies.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import inspect
 import json
@@ -609,13 +610,32 @@ def _brain_modules():
     return AL, core, F, TR
 
 
-def use_links(links):
-    """Point the brain's classifier at a link list (brain/features.py's LINKS and the defaults bound to it)."""
-    _, core, F, _ = _brain_modules()
+@contextlib.contextmanager
+def model_links(links):
+    """For one run, the model's feature vector is built from `links` only.
+
+    A brain that passes the layout's links to its Model (main since #500) gets a Model that
+    is handed `links` instead. An older one binds brain/features.py's LINKS at import, so
+    that constant and the defaults bound to it are pointed at `links`. Both are put back."""
+    _, core, F, TR = _brain_modules()
     links = tuple(links)
-    F.LINKS = links
-    for fn in (F.vector, F.feature_names, F.windows, F.Windower.__init__):
-        fn.__defaults__ = (links,)
+    fns = (F.vector, F.feature_names, F.windows, F.Windower.__init__)
+    saved = (core.Model, F.LINKS, [fn.__defaults__ for fn in fns])
+    if "links" in inspect.signature(TR.Model.__init__).parameters:
+        def model(base, ver="m1", links_=None, zones=None, **kw):
+            kw = dict(kw, zones=zones) if zones is not None else kw
+            return TR.Model(base, ver=ver, links=links, **kw)
+        core.Model = lambda base, ver="m1", links=None, zones=None, **kw: model(base, ver, links, zones, **kw)
+    else:
+        F.LINKS = links
+        for fn in fns:
+            fn.__defaults__ = (links,)
+    try:
+        yield
+    finally:
+        core.Model, F.LINKS = saved[0], saved[1]
+        for fn, d in zip(fns, saved[2]):
+            fn.__defaults__ = d
 
 
 def quiet_baseline(messages, span_ms=20_000, step_ms=5_000):
@@ -660,7 +680,6 @@ def drive(msgs, S: Scene, plan: dict, doc: dict, links, base_est="median"):
     """Feed the session through brain.core.Brain. Returns the decision log and the brain's events."""
     AL, core, F, TR = _brain_modules()
     logging.getLogger("brain").setLevel(logging.ERROR)
-    use_links(links)
     keep_model = "keep_model" in inspect.getsource(core.Brain._cmd_baseline)
     saved = (F.baseline, core.BASELINE_MS)
     # The brain keeps every link of the layout (rates, baseline, windows); `links` is what the
@@ -1060,7 +1079,8 @@ def session(seed=0, env=None, scene=None, links="twelve", base_est="median", kee
     msgs, radio = messages(S, lay, plan, seed)
     t1 = time.perf_counter()
     names = link_set(links, doc)
-    res = drive(msgs, S, plan, doc, names, base_est)
+    with model_links(names):
+        res = drive(msgs, S, plan, doc, names, base_est)
     metrics = score(S, plan, res, radio, names)
     t2 = time.perf_counter()
     out = {"seed": seed, "env": env.to_dict(), "scene": plan["scene"], "links": links, "base_est": base_est,

@@ -120,6 +120,13 @@ def jobs_for(stage: str, n: int = None) -> list:
                 for v in ("standard", "back40", "two", "backpack", "kid", "lean"):
                     add(f"B visit {v} reach 0.45", 3000 + s, r, scene=dict(BETTER, visit=v, reach_m=0.45))
                     add(f"A visit {v} reach 0.45", 3000 + s, r, scene={"visit": v, "reach_m": 0.45})
+    elif stage == "confirm":                   # the main settings again, on whatever brain DESK_BRAIN names
+        for s in range(n or 40):
+            for r in RATES:
+                add("A ref", 1000 + s, r)
+                add("B ref", 1000 + s, r, scene=dict(BETTER))
+                add("B links six", 1000 + s, r, scene=dict(BETTER), links="six")
+                add("B loss 0.3", 1000 + s, r, scene=dict(BETTER, loss=0.3))
     elif stage == "today":                     # the brain as it is on main: six links, tonight's place
         for s in range(n or 60):
             for r in RATES:
