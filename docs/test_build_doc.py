@@ -2,95 +2,62 @@ import unittest
 from pathlib import Path
 
 
-BUILD = Path(__file__).with_name("build.md")
+CUT = ("webcam", "esp32", "beacon", "cardboard arm", "left/right", "twelve core links", "bluetooth",
+       "s-home", "sensing strip", "five nodes", "train on the uno q", "dead zone", "radio x-ray")
 
 
 class BuildDocTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.text = BUILD.read_text(encoding="utf-8")
+        cls.text = Path(__file__).with_name("build.md").read_text(encoding="utf-8")
         cls.lower = cls.text.lower()
 
     def test_required_parts_are_listed(self):
-        for part in (
-            "arduino uno q",
-            "two raspberry pi 5",
-            "powered usb-c hub with ethernet and power delivery",
-            "usb webcam",
-            "two esp32-s3 boards",
-            "laptop for the demo browser",
-            "tape for the final presentation-hour layout",
-            "three `25 cm` boxes",
-            "two cardboard arms",
-            "string knotted at `0`, `0.5`, `0.8`, `1.1`, and `1.6 m`",
-        ):
+        for part in ("arduino uno q", "two raspberry pi 5", "powered usb-c hub with ethernet and power delivery",
+                     "laptop for the demo browser", "a phone for the alarm page",
+                     "tape for the final presentation-hour layout"):
             self.assertIn(part, self.lower)
+        self.assertIn("there is no camera and no microphone on the kit", self.lower)
 
     def test_setup_steps_are_in_safe_order(self):
-        steps = (
-            "### finish internet installs first",
-            "### bring up the direct ethernet link",
-            "### mark the layout with loose markers",
-            "### calibrate the setup camera",
-            "### start pi a's private hotspot",
-            "### run the signal test",
-        )
+        steps = ("### finish internet installs first", "### bring up the direct ethernet link",
+                 "### start pi a's private hotspot", "### choose the layout before building the page",
+                 "### set up the signing on each pi", "### set the clocks", "### run the signal test",
+                 "### take the baseline", "### open the pages")
         positions = [self.lower.index(step) for step in steps]
         self.assertEqual(positions, sorted(positions))
 
-    def test_presentation_hour_requires_fresh_setup(self):
-        for phrase in (
-            "tape the final floor marks and cardboard arms only now",
-            "redo the camera calibration",
-            "redo the `20 s` baseline and training",
-            "every node on its assigned mark at `1.0 m`",
-        ):
+    def test_three_devices_and_one_spot(self):
+        for phrase in ("uno q and pi a side by side on one desk", "gap of 85 to 100 cm, at desk height",
+                       "on a chair seat it fails", "pi b to the same hotspot", "its address comes from dhcp",
+                       "never run `pi/install.sh --wifi-off` on pi b", "python3 -m radio.use_layout gate",
+                       "`pi5>pi5b:wifi` reports 20 readings a second or more",
+                       "there is no training: after the baseline the line alone gives the decision"):
+            self.assertIn(phrase, self.lower)
+
+    def test_signing_setup_keeps_the_private_key_on_the_pi(self):
+        for phrase in ("python3 -m pi.witness --init", "the key is made on the pi and never leaves it",
+                       "only the public key goes in the board's local key file",
+                       "never paste a key into an issue, a chat or a document"):
             self.assertIn(phrase, self.lower)
 
     def test_roles_and_network_reference_are_clear(self):
-        for phrase in (
-            "all learned work runs locally",
-            "it runs no model",
-            "laptop browser shows the local interface",
-            "do not copy files or bundles over the hotspot",
-            "sudo bash pi/eth.sh",
-            "sudo bash board/eth.sh",
-            "sudo bash pi/ap.sh",
-            "sudo bash radio/wifi_join.sh",
-            "http://192.168.77.2:8080/?src=ws",
-            "[network guide](network.md)",
-            "do not plan around venue wi-fi",
-            "no image or video is saved",
-            "all twelve core links",
-            "two wi-fi and ten bluetooth",
-            "baseline {keep_model: true}",
-            "camera unplugged",
-        ):
+        for phrase in ("everything runs locally", "it runs no model", "laptop browser shows the local interface",
+                       "do not copy files or bundles over the hotspot", "sudo bash pi/eth.sh",
+                       "sudo bash board/eth.sh", "sudo bash pi/ap.sh", "sudo bash radio/wifi_join.sh",
+                       "http://192.168.77.2:8080/", "http://192.168.77.2:8080/engine/",
+                       "http://192.168.77.2:8080/phone/", "[network guide](network.md)",
+                       "do not plan around venue wi-fi", "pi b's clock resets whenever it loses power"):
             self.assertIn(phrase, self.lower)
 
-        self.assertNotIn("drives the display", self.lower)
-
-    def test_east_and_west_beacons_are_not_phones(self):
-        for phrase in (
-            "east and west bluetooth beacons",
-            "east and west esp32-s3 beacons on the tips",
-            "phones are not used as beacons",
-        ):
+    def test_presentation_hour_requires_fresh_setup(self):
+        for phrase in ("tape their places only now", "redo the `20 s` baseline with the gap empty",
+                       "press `p` on the judge's page", "the correct result is no decision, not \"empty.\""):
             self.assertIn(phrase, self.lower)
 
-        self.assertNotIn("beacon phones", self.lower)
-
-    def test_desk_strip_layout_replaces_the_square(self):
-        for phrase in (
-            "`1.6 x 0.6 m` sensing strip",
-            "pi a at `s-home`",
-            "pi b to the same hotspot",
-            "its address comes from dhcp",
-            "left/right split",
-        ):
-            self.assertIn(phrase, self.lower)
-
-        self.assertNotIn("the " + "square", self.lower)
+    def test_cut_parts_are_absent(self):
+        for cut in CUT:
+            self.assertNotIn(cut, self.lower)
 
 
 if __name__ == "__main__":
