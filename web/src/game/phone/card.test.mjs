@@ -1,7 +1,7 @@
 // Run with: node --test web/src/game/phone/card.test.mjs
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { card, checkinText, isState, MOCKS, shouldChime, wsUrl } from './card.js'
+import { card, checkinText, isState, MOCKS, personHeld, shouldChime, wsUrl } from './card.js'
 
 const show = (name, age = 100) => card(MOCKS[name], age)
 
@@ -87,4 +87,12 @@ test('armed: nobody is calm, a person is an intrusion with a chime, no predictio
   assert.match(notReady.detail, /cannot say the space is empty/)
   assert.equal(card({ ...MOCKS.intrusion, armed: false }, 0).mode, 'calm')      // disarmed: a person is just calm
   assert.equal(card({ ...MOCKS.intrusion, health: { status: 'blind' } }, 0).mode, 'blind')
+})
+
+test('an intrusion waits for a person to hold the majority of the last 10 states', () => {
+  assert.equal(personHeld([false, false, false, false, false, false, false, false, false, true]), false)   // one flicker
+  assert.equal(personHeld([false, false, false, false, true, true, true, true, true, true]), true)
+  assert.equal(card(MOCKS.intrusion, 0, false).mode, 'armed')
+  assert.equal(card(MOCKS.intrusion, 0, true).mode, 'intrusion')
+  assert.equal(card(MOCKS.calm, 0, false).mode, 'calm')   // not armed: a person shows at once, as before
 })
