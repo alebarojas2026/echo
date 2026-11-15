@@ -3,6 +3,7 @@
     python -m lab.ask_bench.payloads --tag base                    # on the PC: the exact requests
     modal run lab/ask_bench/modal_bench.py --tag base              # answers to out/results-base.jsonl
     modal run lab/ask_bench/modal_bench.py --tag base --threads 4  # same requests, other thread count
+    modal run lab/ask_bench/modal_bench.py --tag base --rep 1 --variants pr474,pr474_shots   # a repeat
 
 Each container starts llama-server with narrator/llm.service's settings (2 threads, one slot,
 ctx 1024, no host prompt cache) on the same GGUF, pinned by sha256, and sends the requests one at
@@ -89,15 +90,18 @@ def run_shard(items: list, threads: int = 2) -> dict:
 
 
 @app.local_entrypoint()
-def main(tag: str = "base", threads: int = 2, shard: int = 400, rate_per_s: float = 1.0):
+def main(tag: str = "base", threads: int = 2, shard: int = 400, rate_per_s: float = 1.0, rep: int = 0,
+         variants: str = ""):
     items = [json.loads(l) for l in open(OUT / f"payloads-{tag}.jsonl", encoding="utf-8")]
+    if variants:   # only these variants, e.g. for a repeat run
+        items = [it for it in items if it["key"].split("|")[0] in variants.split(",")]
     shards = [items[i:i + shard] for i in range(0, len(items), shard)]
     est_h = len(items) * rate_per_s / 3600
     print(f"{len(items)} requests in {len(shards)} containers; about {est_h:.2f} container-hours, "
           f"about ${est_h * 0.12 + 0.02 * len(shards):.2f} at 2 cores + 2 GiB")
     t0 = time.time()
     meta, n = None, 0
-    suffix = "" if threads == 2 else f"-t{threads}"
+    suffix = ("" if threads == 2 else f"-t{threads}") + (f"-r{rep}" if rep else "")
     with open(OUT / f"results-{tag}{suffix}.jsonl", "w", encoding="utf-8") as f:
         for res in run_shard.map(shards, kwargs={"threads": threads}):
             meta = meta or {k: v for k, v in res.items() if k != "results"}

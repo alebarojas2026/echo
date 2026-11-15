@@ -196,7 +196,8 @@ WORDS.update({"fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "forty-fiv
               "a": 1, "an": 1, "couple of": 2, "few": 5})
 NUM = r"(\d+(?:\.\d+)?|" + "|".join(sorted(map(re.escape, WORDS), key=len, reverse=True)) + r")"
 SPAN = re.compile(r"\b" + NUM + r"\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?)\b", re.I)
-SINCE = re.compile(r"\bsince\s+(noon|midday|" + NUM + r")(?::(\d\d))?\s*(am|pm|o'?clock)?", re.I)
+HOURS = r"(\d{1,2}|" + "|".join(w for w, n in WORDS.items() if 1 <= n <= 12 and w not in ("a", "an", "few")) + r")"
+SINCE = re.compile(r"\bsince\s+(noon|midday|" + HOURS + r")(?::(\d\d))?\s*(am|pm|a\.m\.|p\.m\.|o'?clock)?", re.I)
 
 
 def _num(s):
