@@ -31,10 +31,12 @@ describe('hall paths', () => {
     expect(pathLooks([row('k', 'unoq', { xy_m: null })])[0].show).toBe(false)
   })
 
-  it('use the spot placed in align mode until the brain sends one', () => {
+  it('use the spot placed in align mode before the brain\'s, which is only read when the brain starts', () => {
     const placed = structuredClone(DESK_LAYOUT)
     placed.hall.beacons[1].xyz_m = [-14, 6, 1]
     expect(applyLayout(placed)).toBe(true)
     expect(pathLooks([row('j', 'unoq', { xy_m: null })])[0]).toMatchObject({ show: true, xy: [-14, 6] })
+    expect(pathLooks([row('j', 'unoq', { xy_m: [5, 5] })])[0].xy).toEqual([-14, 6]) // just saved; the brain has the old spot
+    expect(pathLooks([row('h', 'unoq', { xy_m: [3, 19] })])[0].xy).toEqual([3, 19]) // not placed here: the brain's
   })
 })

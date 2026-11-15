@@ -22,7 +22,8 @@ export interface PathLook {
   tx: string
   show: boolean
   moving: boolean
-  /** The beacon's floor spot: the brain's xy_m, else where align mode placed it (nodes.json). */
+  /** The beacon's floor spot: where it was placed (nodes.json, saved by align mode), else the brain's xy_m. The
+   *  brain reads positions only when it starts, so after a save its xy_m is still the old spot. */
   xy: [number, number] | null
   /** The receiver the line runs to: the board when it hears the beacon, else the first that does. */
   rx: string | null
@@ -34,7 +35,7 @@ export function pathLooks(rows: readonly HallLink[] | undefined): PathLook[] {
   return [...byTx].map(([tx, list]) => {
     const live = list.filter((r) => !r.stale)
     const placed = HALL_BEACONS.find((b) => b.node === tx)?.xyz
-    const xy = live.find((r) => r.xy_m)?.xy_m ?? (placed ? [placed[0], placed[1]] as [number, number] : null)
+    const xy = placed ? ([placed[0], placed[1]] as [number, number]) : (live.find((r) => r.xy_m)?.xy_m ?? null)
     const rx = (live.find((r) => r.rx === 'unoq') ?? live[0])?.rx ?? null
     return { tx, show: live.length > 0 && !!xy && !!rx, moving: live.some((r) => r.moving), xy, rx }
   })
