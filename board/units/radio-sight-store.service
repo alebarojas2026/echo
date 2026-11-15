@@ -1,0 +1,19 @@
+[Unit]
+Description=Radio Sight event store (saves the brain's events and a summary of state each second)
+After=radio-sight-brain.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+Environment=PYTHONUNBUFFERED=1
+# Writes data/sessions/store.db, where /ask, /history and /report read it. It follows the brain's
+# WebSocket and reconnects by itself when the brain restarts.
+ExecStart=@PYTHON@ -m store
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

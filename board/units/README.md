@@ -39,6 +39,7 @@ Later updates: `board/deploy.sh <tag|sha>`, as the clone's owner and without sud
 | radio-sight-serve | `python board/serve.py` | `@USER@` | |
 | radio-sight-llm | llama-server, from `narrator/llm.service` | arduino | |
 | radio-sight-narrate | `python -m narrator.narrate` | `@USER@` | |
+| radio-sight-store | `python -m store`: the brain's events and a summary each second, into data/sessions/store.db (what /ask, /history and /report read) | `@USER@` | |
 | radio-sight-radio-node (Pi only) | `python -m pi.radio_node` | root | no: it advertises and scans without the Ethernet link, and forwards once it's up |
 
 A unit whose program doesn't exist yet still installs and keeps restarting until it does; `journalctl -u <unit>` shows why. If an older `llm.service` from the narrator README is installed, deploy removes it, so two model servers don't fight over port 8091.
