@@ -8,7 +8,7 @@ import pytest
 from contracts import check
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
-BODIES = ["chain", "chain_verify", "chain_prove", "record"]
+BODIES = ["chain", "chain_verify", "chain_prove", "chain_tail", "record"]
 
 BAD = {
     "chain": ["$.head.hash",                # a hash is 64 hex
@@ -22,6 +22,10 @@ BAD = {
                      "'ms' is a required property"],
     "chain_prove": ["$.ok",                 # an altered copy never verifies
                     "'altered_seq' is a required property"],
+    "chain_tail": ["'for_seq' is a required property",   # a signature says which record it vouches for
+                   "False schema does not allow 4119",   # only a signature names a record
+                   "'body' was unexpected",              # the tail never carries a body
+                   "is not of type 'object'"],           # the list sits under "records"
     "record": ["'hash' is a required property",
                "$.seq",                     # seq starts at 1
                "$.prev",                    # prev is a hash
@@ -122,5 +126,13 @@ def test_section_13_names_what_the_schemas_hold():
     section = text[text.index("## 13. The sealed record"):]
     for word in ("chain_head", "chain_witness", "witness_silent", "witness_back", "witness_bad", "/chain/verify", "/chain/prove",
                  "hash8", "witnesses_ok", "first_bad_seq", "altered_seq", "last_verify_t", "pkeyutl -verify", "-rawin",
-                 "sort_keys=True", "anchor", "unsealed"):
+                 "sort_keys=True", "anchor", "unsealed", "/chain/tail", "for_seq", "last_verify_checked", "last_verify_ms"):
         assert word in section, word
+
+
+def test_the_last_check_may_say_how_much_it_walked_and_how_long_it_took():
+    chain = json.loads(lines("chain_valid.jsonl")[0])
+    assert "last_verify_checked" not in chain                                    # optional: an older answer stays valid
+    assert check.errors({**chain, "last_verify_checked": 600, "last_verify_ms": 3.4}, "chain") == []
+    assert check.errors({**chain, "last_verify_checked": None, "last_verify_ms": None}, "chain") == []
+    assert any("$.last_verify_ms" in e for e in check.errors({**chain, "last_verify_ms": "fast"}, "chain"))

@@ -127,6 +127,16 @@
       ],
       "additionalProperties": false
     },
+    "last_verify_checked": {
+      "$comment": "Optional: how many records the last 30 s check walked; null before the first.",
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "last_verify_ms": {
+      "$comment": "Optional: how long that check took on the board; null before the first.",
+      "type": ["number", "null"],
+      "minimum": 0
+    },
     "unsealed": {
       "$comment": "Optional: rows saved before the record was sealed. They are not in the chain.",
       "type": "integer",

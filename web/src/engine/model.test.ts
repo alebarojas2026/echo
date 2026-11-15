@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ENGINE_SCENES, MOCK_LAYOUT, engineScene, fakeHash, records, sceneAt, witnessIds } from './mock'
-import { ago, blocks, boardId, count, deviceViews, hash8, headlines, heardNow, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveWords, seenHeads, span, timings, watchLine, type ChainInfo } from './model'
+import { mockProve } from './source'
+import { ago, blocks, boardId, count, deviceViews, hash8, headlines, heardNow, hearsLines, kindWord, parseAsk, parseChain, parseLayout, parsePrivacy, parseProve, parseTail, proveAsk, proveWords, seenHeads, span, timings, watchLine, type ChainInfo } from './model'
 
 const HASH = 'a3f09c21'.repeat(8)
 const chain = (over: Partial<ChainInfo> = {}): ChainInfo => ({
@@ -33,7 +34,8 @@ describe('what the board says, read carefully', () => {
     expect(ask).toEqual({ question: null, answer: 'Nobody was here.', steps: [{ tool: 'presence', ms: 12, rows: 60 }], cites: [1180, 1185], chain_ok: true })
     expect(parseAsk({ answer: '' })).toBeNull()
     expect(parsePrivacy({ ok: true, images: 0, bytes_out: 0, since_t: 1, t: 2 })).toEqual({ images: 0, bytes_out: 0 })
-    expect(parsePrivacy({ ok: false, why: 'privacy meter is not running' })).toBeNull()
+    expect(parsePrivacy({ ok: false, why: 'privacy meter is not running' })).toEqual({ why: 'privacy meter is not running' })
+    expect(parsePrivacy({ ok: true })).toBeNull()
   })
 
   it('reads the devices and lines from the layout file', () => {
@@ -50,6 +52,8 @@ describe('words and numbers', () => {
     expect([0, 400, 2000, 89_000, 150_000, 3 * 3600_000].map(ago)).toEqual(['now', 'now', '2 s ago', '89 s ago', '3 min ago', '3 h ago'])
     expect(span(12_000)).toBe('12 s')
     expect(kindWord('summary')).toBe('second')
+    expect(kindWord('second')).toBe('second') // the board's own name for the once-a-second record
+    expect(kindWord('witness_bad')).toBe('bad signature')
     expect(kindWord('witness_silent')).toBe('witness silent')
     expect(kindWord('something_new')).toBe('something new') // an unknown kind is shown as it is
   })
@@ -81,6 +85,8 @@ describe('words and numbers', () => {
   it('never writes a zero it has not measured', () => {
     expect(watchLine(null, null)).toEqual(['Camera: __', 'No microphone on any device', 'privacy meter not answering'])
     expect(watchLine({ t: 0, cam: 'off' }, { images: 0, bytes_out: 0 })).toEqual(['0 cameras', 'No microphone on any device', '0 images stored', '0 bytes out'])
+    // The board's own reason for having no numbers is shown as it gave it.
+    expect(watchLine({ t: 0, cam: 'off' }, { why: 'privacy meter is not running' })).toEqual(['0 cameras', 'No microphone on any device', 'privacy meter is not running'])
     expect(watchLine({ t: 0, cam: 'on' }, null, true)).toEqual(['Camera ON', 'No microphone on any device', 'privacy meter: simulated, nothing measured'])
     expect(timings({ t: 0, model: { ms_per_decision: null, train_s: null } }, null)).toEqual([])
     expect(timings({ t: 0, model: { ms_per_decision: 3.1, train_s: null }, narration: { gen_ms: 410 } }, { question: null, answer: 'x', steps: [{ tool: 'a', ms: 3, rows: 1 }, { tool: 'b', ms: 12, rows: 1 }], cites: [], chain_ok: true })).toEqual(['Decision 3.1 ms', 'Sentence 410 ms', 'Answer 15 ms'])
@@ -96,9 +102,19 @@ describe('the devices', () => {
     expect(board).toMatchObject({ name: 'Board', board: true, does: 'Senses, decides, seals the record', hz: 37, heard: true, witness: null })
     expect(a.board).toBe(false)
     expect(board.hears).toEqual([{ from: 'Pi A', radio: 'Wi-Fi', hz: 25 }, { from: 'Pi A', radio: 'Bluetooth', hz: 6 }, { from: 'Pi B', radio: 'Bluetooth', hz: 6 }])
-    expect(a).toMatchObject({ name: 'Pi A', does: 'The Wi-Fi of the room, and a witness', hz: 6, heard: true })
+    expect(a).toMatchObject({ name: 'Pi A', does: 'The Wi-Fi of the room', hz: 6, heard: true })
     expect(a.witness).toEqual({ seq: 1185, ago: '2 s ago', ok: true, silent: false, quiet: null })
-    expect(b).toMatchObject({ name: 'Pi B', does: 'Listens across the gap, and a witness', hz: 31 })
+    expect(b).toMatchObject({ name: 'Pi B', does: 'Listens across the gap', hz: 31 })
+  })
+
+  it('lists at most three of the lines a device hears, and says what a beacon is', () => {
+    const hears = [1, 2, 3, 4, 5].map((i) => ({ from: `Device ${i}`, radio: 'Bluetooth', hz: i }))
+    expect(hearsLines(hears.slice(0, 3))).toHaveLength(3)
+    expect(hearsLines(hears)).toEqual(['Device 1 over Bluetooth: 1 a second', 'Device 2 over Bluetooth: 2 a second', 'and 3 more lines'])
+    expect(hearsLines([{ from: 'Pi A', radio: 'Wi-Fi', hz: null }])).toEqual(['Pi A over Wi-Fi: no reading'])
+    const five = { nodes: [...MOCK_LAYOUT.nodes, { id: 'east', name: 'East beacon', device: 'esp32', roles: ['beacon'] }], links: [...MOCK_LAYOUT.links, { id: 'east>unoq:ble', tx: 'east', rx: 'unoq', kind: 'ble' }] }
+    const east = deviceViews(five, null, chain(), 0, new Map()).find((d) => d.id === 'east')!
+    expect(east).toMatchObject({ does: 'Sends a signal the others hear', witness: null, hz: null })
   })
 
   it('says how long a device has not been heard and how long a witness has not signed; the rest goes on', () => {
@@ -135,6 +151,16 @@ describe('the strip of records', () => {
     expect(blocks(tail, MOCK_LAYOUT, [], 12).map((b) => b.bad)).toEqual([false, false, true, true, true])
   })
 
+  it('asks the board to alter a record that is on the strip, so the copy can be drawn; nothing to ask with no strip', () => {
+    const long = parseTail(Array.from({ length: 40 }, (_, i) => ({ seq: 100 + i, kind: 'second', hash: fakeHash(100 + i) })))!
+    expect(proveAsk(long)).toEqual({ n: 40, seq: 134 }) // six back from the head, in a copy of what the strip holds
+    expect(proveAsk(tail)).toBeNull() // five records: too few to draw around
+    expect(proveAsk(null)).toBeNull()
+    const scene = sceneAt('running', 20_000)
+    expect(mockProve(scene, { n: 40, seq: 1200 })).toMatchObject({ ok: false, altered_seq: 1200, first_bad_seq: 1200 })
+    expect(mockProve(sceneAt('none', 0), { n: 40, seq: 1200 })).toBeNull()
+  })
+
   it('keeps the heads it has seen when the board gives no list, and starts again when the log does', () => {
     let seen = seenHeads([], { seq: 5, hash: HASH })
     seen = seenHeads(seen, { seq: 5, hash: HASH })
@@ -156,10 +182,10 @@ describe('the simulated kit', () => {
   it('seals one record a second with no gaps, each witness signing the head every 5 s', () => {
     const all = records('running', MOCK_LAYOUT, 30)
     expect(all.map((r) => r.seq)).toEqual(all.map((_, i) => all[0].seq + i))
-    expect(all.filter((r) => r.kind === 'summary')).toHaveLength(31)
+    expect(all.filter((r) => r.kind === 'second')).toHaveLength(31)
     const signed = all.filter((r) => r.kind === 'witness')
     expect(signed).toHaveLength(14) // 7 rounds, two witnesses
-    for (const s of signed) expect(all.find((r) => r.seq === s.for_seq)!.kind).toBe('summary')
+    for (const s of signed) expect(all.find((r) => r.seq === s.for_seq)!.kind).toBe('second')
     expect(witnessIds(MOCK_LAYOUT)).toEqual(['pi5', 'pi5b'])
     // The same record number always has the same made-up hash, 64 hex characters.
     expect(fakeHash(1187)).toMatch(/^[0-9a-f]{64}$/)
