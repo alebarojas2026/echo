@@ -358,7 +358,8 @@ The values below show the format only; they are not results.
                    "presence_per_hour":null,"intrusions_per_hour":null},
    "fewer_devices":[{"name":"...","nodes":["unoq","pi5"],"links":["pi5>unoq:wifi"],
                      "zone":{"correct":null,"total":null},"presence":{"entries":null,"detected":null,"ci95":null}}]}}
-   // A number not yet measured is null and shows as "__". Never invent one.
+   // A number not yet measured is null. Never invent one. PROOF.md, the docs and the operator's view show it as "__".
+   // The judge-facing screen leaves its tile out (section 8). A measured 0 is a number and is shown.
    // security is optional (the whole object may be missing). Every unmeasured value in it is null.
    // detection: entries are independently labeled empty -> present transitions; a trial counts only with continuous
    //   truth and captured predictions through the deadline (within_s). Intrusion trials also need captured armed coverage.
@@ -380,6 +381,9 @@ Arrival: "Found you." is shown once pred has been present for 1.5 s, then held 3
   does not get it.
 While armed: a passed_by is shown small and calm ("Someone passed by"), never in the fault colour. The intrusion
   alert is the only armed message in the fault colour.
+Proof tiles (judge-facing screen): a tile with no measured value is not drawn at all. When no tile has one, the
+  proof block and its divider are not drawn either. The test ids above stay in the page, hidden. A measured 0 is
+  drawn. Nothing on any screen shows a number that is not measured.
 Hall paths: "movement on this path" when moving, "path busy" when busy, "not calibrated" for a link with no
   empty_quiet_db in nodes.json. Never "clear".
 ```

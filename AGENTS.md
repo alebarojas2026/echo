@@ -85,7 +85,7 @@ Motion: calm and meaningful, opacity and transform only.
 - **Open every PR against main.** Never base a PR on another PR's branch: when that branch merges and is deleted, your PR closes. If you need unmerged work, wait for it to merge, or build against main with a small stub.
 - **No images or video, ever.** Never write a camera frame to disk. Never commit image or video files (test screenshots in web/tests/ are the only exception).
 - **No secrets or device identifiers in the repo.** No passwords, keys, MAC addresses, BSSIDs, personal device names, or IP addresses other than the ones in CONTRACTS.md. Local values go in `.env` (gitignored).
-- **No invented numbers.** Every number on screen or in docs is measured and has a PROOF.md row. Until then, show `__`.
+- **No invented numbers.** Every number on screen or in docs is measured and has a PROOF.md row. Until then it is left off the judge-facing screen (its proof tile isn't drawn), and shown as `__` anywhere it has to appear (PROOF.md, proof.json's null, the docs).
 - **Commit and PR text are plain and human.** No Co-authored-by lines, no "Generated with", no session links, and no tool or AI names in commits, PR titles or bodies, branch names or code comments.
 - **Words:**
   - say "no-movement alert", never "fall detection";
