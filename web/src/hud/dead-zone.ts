@@ -47,12 +47,12 @@ export function wifiLine(state: StateMsg | null, stale: boolean): WifiLine {
 
 /** "30 cm left": how far and which way, from advice.move_m. On the desk the sides are named as seen on the screen
  *  (x runs east along the desk, so west is left); on the square they are compass points. */
-export function moveWords(advice: Pick<Advice, 'move_m'>): string {
+export function moveWords(advice: Pick<Advice, 'move_m'>, desk = !!STRIP_M): string {
   const [dx, dy] = advice.move_m ?? [0, 0]
   const cm = Math.round(Math.hypot(dx, dy) * 100)
   if (!Number.isFinite(cm) || cm === 0) return ''
   const alongX = Math.abs(dx) >= Math.abs(dy)
-  const way = alongX ? (STRIP_M ? (dx < 0 ? 'left' : 'right') : dx < 0 ? 'west' : 'east') : dy < 0 ? 'south' : 'north'
+  const way = alongX ? (desk ? (dx < 0 ? 'left' : 'right') : dx < 0 ? 'west' : 'east') : dy < 0 ? 'south' : 'north'
   return `${cm} cm ${way}`
 }
 

@@ -1,12 +1,12 @@
 import { afterEach, expect, test } from 'vitest'
 import desk from '../../tests/fixtures/desk-layout.json'
-import square from '../../../radio/nodes.json'
+import file from '../../../radio/nodes.json'
 import { applyLayout } from '../room/frame'
 import { mockState } from './mock-layout'
 import { deadZone, holdAdvice, moveWords, wifiLine } from './dead-zone'
 import { judgeMoment } from './judge-moment'
 
-afterEach(() => { applyLayout(square) })
+afterEach(() => { applyLayout(file) })
 
 test('the Wi-Fi line reads the router link as the board sent it, and never a number it does not have', () => {
   applyLayout(desk)
@@ -35,9 +35,9 @@ test('the move is read from the advice: left and right on the desk, compass poin
   expect(moveWords({ move_m: [-0.3, 0] })).toBe('30 cm left')
   expect(moveWords({ move_m: [0.25, 0] })).toBe('25 cm right')
   expect(moveWords({ move_m: [0, 0] })).toBe('')
-  applyLayout(square)
-  expect(moveWords({ move_m: [-0.3, 0] })).toBe('30 cm west')
-  expect(moveWords({ move_m: [0, 0.3] })).toBe('30 cm north')
+  // A layout with no strip (the 2 x 2 m square was one) has compass points.
+  expect(moveWords({ move_m: [-0.3, 0] }, false)).toBe('30 cm west')
+  expect(moveWords({ move_m: [0, 0.3] }, false)).toBe('30 cm north')
 })
 
 test('found, measuring, and the gain or loss the board measured', () => {
