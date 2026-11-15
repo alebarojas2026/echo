@@ -6,6 +6,7 @@ import { DESK_LAYOUT, GATE_LAYOUT } from './layouts.fixture'
 import { mockState, tourAt } from './mock'
 import { clearBox } from './scan'
 import { chairGeometry, onChair, standBase } from './stage'
+import { defaultSpot, deskFit, type HallDesks } from './desks'
 import { mixShot } from './fly'
 import { xrayGeometry } from './xray'
 import { deskAnchors, deskShot, fitCamera, inSituShot, sideOnDeg } from './view'
@@ -58,6 +59,18 @@ describe('the gate layout', () => {
     const z = (y: number) => frame.toScene([0, y, 0])[2]
     expect(Math.min(...rows.get(floor)!)).toBeCloseTo(z(0.6)) // the floor part ends at the spot's north edge
     expect(Math.max(...rows.get(desk)!)).toBeCloseTo(z(0.8)) // the desk part starts at the desk's edge
+  })
+
+  it('stands at the desk's end by default, where the stair aisle has room for a gate a metre deep', () => {
+    const hall: HallDesks = { centre_m: [0, 0], desk_depth_m: 0.45, desk_height_m: 0.75, desks: [{ row: 0, wedge: 0, r_m: 5, th0_deg: -10, th1_deg: 10, floor_m: 0 }] }
+    expect(defaultSpot(hall).gap).toBe('end')
+    // The hall is placed with its desk's edge under the layout's (y = 0.8), not under the spot's north edge.
+    const fit = deskFit(hall, defaultSpot(hall), { min: [-9, 0, -9], max: [9, 3, 9] }, 12)
+    const far = deskFit(hall, { ...defaultSpot(hall), gap: 'behind' }, { min: [-9, 0, -9], max: [9, 3, 9] }, 12)
+    expect(fit.offset_m).not.toEqual(far.offset_m)
+    expect(frame.applyLayout(DESK_LAYOUT)).toBe(true)
+    expect(defaultSpot(hall).gap).toBeUndefined() // the desk layout stays behind its desk
+    expect(frame.applyLayout(GATE_LAYOUT)).toBe(true)
   })
 
   it('draws the links that cross the spot in full and the two along the desk faint, by the file', () => {
