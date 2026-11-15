@@ -47,7 +47,7 @@ HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable (Pi B): their readings
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
-SILENT_MS = 3_000        # a keep-model baseline restarts only for a link with no reading for this long
+SILENT_MS = 3_000        # a baseline restarts only for a link with no reading for this long
 LABEL_MODES = ("person", "object", "off")
 CAM_STATES = ("on", "off", "stalled")
 
@@ -690,16 +690,16 @@ class Brain:
             return "the camera sees somebody"
         if self.label_mode != "off":
             return f"label mode is {self.label_mode}, not off"
-        # baseline {keep_model: true} is the same layout set down at a new desk, in a hall full of
-        # phones: only a link silent for 3 s, or health blind, holds it up. A stale link does not.
-        lenient = bool(self.capture and self.capture["by_hand"] and not self.capture["new_place"])
-        gap = SILENT_MS if lenient else LINK_FRESH_MS
-        quiet = [link for link in self.links if now - self._last_seen.get(link, -10**15) > gap]
+        # Measured on the kit (#634): Bluetooth links give 7 to 13 readings a second, one of them 1.7,
+        # and unevenly. A link that slow goes a full second without a reading every few seconds, and
+        # reads "stale" by chance, so 1 s of silence or any not-ok health restarted the 20 s for ever.
+        # Every kind of baseline now waits only for a link silent for 3 s (the blind rule's and
+        # tamper's silence) or for health blind.
+        quiet = [link for link in self.links if now - self._last_seen.get(link, -10**15) > SILENT_MS]
         if quiet:
-            return f"no readings in the last {gap // 1000} s from " + ", ".join(quiet) if lenient else \
-                "no readings in the last second from " + ", ".join(quiet)
-        if self.health.blind or (not self._health_ok and not lenient):
-            return "link health is blind" if lenient else "link health is not ok"
+            return f"no readings in the last {SILENT_MS // 1000} s from " + ", ".join(quiet)
+        if self.health.blind:
+            return "link health is blind"
         return None
 
     def _tick(self):

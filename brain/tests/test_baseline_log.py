@@ -14,7 +14,7 @@ def test_the_log_says_what_a_baseline_is_waiting_for(caplog):
     baseline_feed(brain, edit=east_pi5_never_reports)
     assert brain.capture is not None                       # still waiting, as the contract wants
     said = [r.getMessage() for r in caplog.records if "baseline" in r.getMessage()]
-    assert "baseline is waiting: no readings in the last second from east>pi5:ble" in said
+    assert "baseline is waiting: no readings in the last 3 s from east>pi5:ble" in said
     assert len(said) < 10                                  # once per reason, not once per message
     caplog.clear()
     for m in sim_to_v2("empty_room", seed=2, t0=brain.feed_t + 100):   # every link reports: it goes through

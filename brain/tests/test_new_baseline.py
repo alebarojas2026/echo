@@ -173,9 +173,10 @@ def test_a_keep_model_baseline_finishes_with_30_percent_of_the_readings_lost_in_
     assert done is not None and done <= 25 and brain.model is model       # stale links don't hold it up
     assert all(abs(brain.base[k] - model.base[k]) <= 1.5 for k in brain.base)   # and the baseline is a sound one
 
-    brain.on_cmd(cmd("baseline"))                         # a new place keeps the strict rule: a 1 s gap starts it again
+    brain.on_cmd(cmd("baseline"))                         # a new place waits for the same things now (#634)
     done, feed.t = lossy_capture(brain, feed.t, 60, bursts)
-    assert done is None and brain.capture is not None and brain.model is model
+    assert done is not None and done <= 25 and brain.capture is None
+    assert brain.model is None                            # and it is still a new place: the old model is dropped
 
 
 def test_a_keep_model_baseline_still_restarts_for_a_link_silent_3_s():
