@@ -3,12 +3,13 @@ export function changingText(element: HTMLElement) {
   let generation = 0
   const cancel = () => element.getAnimations().forEach(animation => animation.cancel())
   return {
-    set(value: string) {
+    /** instant: no fade, for text that changes faster than a fade lasts (a replay at 8x). */
+    set(value: string, instant = false) {
       if (requested === value) return
       requested = value
       const current = ++generation
       cancel()
-      if (!element.textContent || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (instant || !element.textContent || matchMedia('(prefers-reduced-motion: reduce)').matches) {
         element.textContent = value
         return
       }

@@ -85,7 +85,8 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     if (feed?.source === 'mock') state = alignMockState(state)
     state = holdAdvice(state)
     const [headline, detail] = judgeMoment(state, stale)
-    headlineText.set(headline)
+    // A replayed second lasts 125 ms at 8x, less than a fade: the headline keeps up by changing at once.
+    headlineText.set(headline, !!(state as { replay?: unknown } | null)?.replay)
     set('judge-detail', detail)
     set('source-badge', state?.src === 'sim' ? 'SIM' : state?.src === 'replay' ? 'REPLAY' : state?.links.some(link => (link.rate_hz ?? 0) > 0) ? 'LIVE' : 'NO RADIO')
     if (!Object.keys(extraPanels).some(path => path.includes('camera'))) set('cam-status', state ? { on: 'Camera on', off: 'Camera unplugged · radio only', stalled: 'Camera stalled · radio only' }[state.cam] : '')
