@@ -1,4 +1,5 @@
 import './judge.css'
+import { mountAskRoom } from './ask-room'
 import { changingText } from './changing-text'
 import type { StateMsg } from '../room/contract'
 import type { Feed } from '../room/feed'
@@ -52,6 +53,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     if (event.key === 'Escape') operator.hidden = true
   }
   document.addEventListener('keydown', key)
+  const disposeAsk = mountAskRoom(root.querySelector('header')!)
   let disposed = false
   const render = (state: StateMsg | null, stale: boolean) => {
     const [headline, detail] = judgeMoment(state, stale)
@@ -84,7 +86,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposeAsk(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
