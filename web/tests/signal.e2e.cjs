@@ -46,7 +46,7 @@ const heights = (page, view) => page.evaluate(view => {
   const canvas = document.querySelector('[data-testid="' + view + '"] canvas')
   const { data, width, height } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
   const tops = new Set()
-  for (let x = 0; x < width; x += 4) {
+  for (let x = 0; x < width; x++) {
     for (let y = 0; y < height; y++) {
       const i = 4 * (y * width + x)
       if (data[i + 3] > 200 && data[i] > 100) { tops.add(y); break }
