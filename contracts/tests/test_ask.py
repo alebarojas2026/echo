@@ -41,6 +41,15 @@ BAD_HISTORIES = [
     "$.to_t",                           # the stretch runs forwards
     "'rows' is a required property",
 ]
+BAD_LAYOUTS = [
+    "$",                                # nothing to save
+    "$.room.scale",                     # a scale of 10 is a typo
+    "'cut_m' is a required property",
+    "$.hall_beacons[0].node",           # only hall beacons are placed: the layout's own nodes stay in nodes.json
+    "$.hall_beacons[0].xyz_m",          # x, y and z
+    "$.hall_beacons[0].xyz_m[2]",       # 40 m up
+    "'nodes' was unexpected",
+]
 BAD_REPORTS = [
     "$.intrusions[0]",                  # a hall link is its link id, not the beacon's letter
     "$.intrusions[0].zone",             # never in zone 0
@@ -56,14 +65,15 @@ def lines(name):
     return (FIXTURES / name).read_text(encoding="utf-8").splitlines()
 
 
-@pytest.mark.parametrize("schema", ["ask_question", "ask_reply", "history", "report"])
+@pytest.mark.parametrize("schema", ["ask_question", "ask_reply", "history", "report", "layout"])
 def test_valid_ask_bodies_pass(schema):
     count, failures, warnings = check.check_lines(lines(f"{schema}_valid.jsonl"), schema)
     assert count >= 1 and failures == [] and warnings == []
 
 
 @pytest.mark.parametrize("schema, reasons", [("ask_question", BAD_QUESTIONS), ("ask_reply", BAD_REPLIES),
-                                             ("history", BAD_HISTORIES), ("report", BAD_REPORTS)])
+                                             ("history", BAD_HISTORIES), ("report", BAD_REPORTS),
+                                             ("layout", BAD_LAYOUTS)])
 def test_each_invalid_ask_body_fails_for_its_reason(schema, reasons):
     bad = lines(f"{schema}_invalid.jsonl")
     assert len(bad) == len(reasons)
@@ -73,7 +83,7 @@ def test_each_invalid_ask_body_fails_for_its_reason(schema, reasons):
 
 
 def test_ask_bodies_are_not_bus_messages():
-    assert not {"ask_question", "ask_reply", "history", "report"} & set(check.TYPES)
+    assert not {"ask_question", "ask_reply", "history", "report", "layout"} & set(check.TYPES)
     assert "unknown type" in check.check_lines(lines("ask_reply_valid.jsonl"))[1][0][1]
 
 

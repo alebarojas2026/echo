@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/layout.json",
+  "$comment": "Section 2: /layout on the board's web server, for drawing only. GET answers with both keys. POST takes either key or both, and its room is never null. Not a bus message: no envelope.",
+  "type": "object",
+  "properties": {
+    "room": {
+      "$comment": "How the hall scan sits on the layout: the four numbers align mode saves. null = nothing saved yet.",
+      "type": ["object", "null"],
+      "properties": {"offset_m": {"type": "array", "items": {"type": "number", "minimum": -100, "maximum": 100}, "minItems": 2, "maxItems": 2},
+                     "yaw_deg": {"type": "number", "minimum": -360, "maximum": 360}, "scale": {"type": "number", "minimum": 0.25, "maximum": 4},
+                     "cut_m": {"type": "number", "minimum": 0, "maximum": 20}},
+      "required": ["offset_m", "yaw_deg", "scale", "cut_m"], "additionalProperties": false},
+    "hall_beacons": {"type": "array", "items": {
+      "type": "object",
+      "properties": {"node": {"$ref": "common.json#/$defs/hall_node"},
+                     "xyz_m": {"$comment": "Section 3 frame, metres; null until measured in the room.", "type": ["array", "null"],
+                               "prefixItems": [{"type": "number", "minimum": -100, "maximum": 100}, {"type": "number", "minimum": -100, "maximum": 100},
+                                               {"type": "number", "minimum": 0, "maximum": 10}],
+                               "minItems": 3, "maxItems": 3}},
+      "required": ["node", "xyz_m"], "additionalProperties": false}}
+  },
+  "minProperties": 1,
+  "additionalProperties": false
+}
