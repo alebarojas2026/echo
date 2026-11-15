@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { describeFit, layoutBody, nudge, tidyFit } from './align'
+import { guideWordsShown, handWords, nudgePlace, placesToSave } from './guide'
 
 describe('align mode keys', () => {
   it('moves 2 cm a press, 10 cm with Shift, east and north', () => {
@@ -66,5 +67,52 @@ describe('saving on the board (POST /layout)', () => {
     expect(JSON.parse(layoutBody({ floor_m: 0.312 }, undefined)).room.floor_m).toBe(0.312)
     const both = JSON.parse(layoutBody({}, [{ node: 'h', xyz_m: [3, 19, 1] }, { node: 'j', xyz_m: null }]))
     expect(both.hall_beacons).toEqual([{ node: 'h', xyz_m: [3, 19, 1] }, { node: 'j', xyz_m: null }])
+  })
+})
+
+describe('the placement guide', () => {
+  it('sends the devices\u2019 places to the board as nodes, only when a placement is being saved', () => {
+    const places = [{ id: 'pi5b', xyz_m: [0.8, -0.38, 0.94] as [number, number, number] }]
+    expect(JSON.parse(layoutBody({}, undefined, places)).nodes).toEqual([{ id: 'pi5b', xyz_m: [0.8, -0.38, 0.94] }])
+    expect(JSON.parse(layoutBody({}, undefined, []))).not.toHaveProperty('nodes')
+    expect(JSON.parse(layoutBody({}, undefined))).not.toHaveProperty('nodes')
+  })
+
+  it('moves a picked device 5 cm a press (Shift 20 cm), up and down too, never below the floor', () => {
+    expect(nudgePlace([0.8, -0.38, 0.94], 'ArrowRight', false)).toEqual([0.85, -0.38, 0.94])
+    expect(nudgePlace([0.8, -0.38, 0.94], 'ArrowDown', true)).toEqual([0.8, -0.58, 0.94])
+    expect(nudgePlace([0.8, -0.38, 0.94], 'PageUp', false)).toEqual([0.8, -0.38, 0.99])
+    expect(nudgePlace([0.8, -0.38, 0.03], 'PageDown', false)).toEqual([0.8, -0.38, 0])
+    expect(nudgePlace([0.8, -0.38, 0.94], 'q', false)).toBeNull()
+  })
+
+  it('says where a device moved by hand is, in numbers someone can measure', () => {
+    expect(handWords('Pi B', [0.85, -0.38, 0.94])).toBe('Pi B: placed by hand, 0.85 m east, -0.38 m north, 0.94 m high')
+  })
+})
+
+describe('what the guide saves and says', () => {
+  const marks = [
+    { id: 'pi5', xyz: [0.36, 0.88, 0.8] as [number, number, number], moved: false },
+    { id: 'unoq', xyz: [0.44, 0.88, 0.8] as [number, number, number], moved: false },
+    { id: 'pi5b', xyz: [0.4, -0.37, 0.8] as [number, number, number], moved: false },
+  ]
+
+  it('saves nothing for places nobody chose: stepping to a desk and pressing S saves the alignment alone', () => {
+    expect(placesToSave(marks)).toEqual([])
+    expect(JSON.parse(layoutBody({}, undefined, placesToSave(marks)))).not.toHaveProperty('nodes')
+  })
+
+  it('saves only the devices moved by hand', () => {
+    const moved = marks.map((m) => (m.id === 'pi5b' ? { ...m, xyz: [0.4, -0.2, 0.75] as [number, number, number], moved: true } : m))
+    expect(placesToSave(moved)).toEqual([{ id: 'pi5b', xyz_m: [0.4, -0.2, 0.75] }])
+    expect(JSON.parse(layoutBody({}, undefined, placesToSave(moved))).nodes).toEqual([{ id: 'pi5b', xyz_m: [0.4, -0.2, 0.75] }])
+  })
+
+  it('leaves the words off a box that sits on or right beside its device, and shows them once it is moved away', () => {
+    expect(guideWordsShown([0.36, 0.88, 0.8], [0.36, 0.8, 0.75])).toBe(false) // 9 cm from Pi A as drawn
+    expect(guideWordsShown([0.4, -0.37, 0.8], [0.4, -0.2, 0.75])).toBe(false) // 18 cm from Pi B as drawn
+    expect(guideWordsShown([0.4, -0.6, 0.8], [0.4, -0.2, 0.75])).toBe(true)
+    expect(guideWordsShown([0.4, -0.37, 0.8], null)).toBe(true) // a device the layout doesn't draw
   })
 })
