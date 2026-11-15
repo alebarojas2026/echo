@@ -50,7 +50,10 @@ const read = () => page.evaluate(() => {
   const text = (id) => (q(id)?.textContent ?? null)
   const s = window.__soak
   return {
-    no_data: shown('no-data'), blind: shown('sensor-blind'), feed: document.getElementById('room')?.dataset.feed ?? null,
+    // The judge layout says it in its headline instead.
+    no_data: shown('no-data') || text('judge-headline') === 'No data',
+    blind: shown('sensor-blind') || text('judge-headline') === 'Sensor blind',
+    headline: text('judge-headline'), feed: document.getElementById('room')?.dataset.feed ?? null,
     badge: text('source-badge'), cam: text('cam-status'), zone: text('pred-zone'), pkind: text('pred-kind'),
     alert: text('alert-banner'), checkin: text('checkin-toast'), narr: text('narrator-text'),
     heap: performance.memory ? performance.memory.usedJSHeapSize : null, nodes: document.getElementsByTagName('*').length,
