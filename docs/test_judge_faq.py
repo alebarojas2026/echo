@@ -6,7 +6,7 @@ from pathlib import Path
 class JudgeFaqTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.text = Path(__file__).with_name("judge-faq.md").read_text()
+        cls.text = Path(__file__).with_name("judge-faq.md").read_text(encoding="utf-8")
         cls.lower = cls.text.lower()
         cls.questions = re.findall(
             r"^## ([^\n]+\?)\n\n(.*?)(?=\n\n## |\Z)",
@@ -21,22 +21,28 @@ class JudgeFaqTest(unittest.TestCase):
                 self.assertEqual(len(re.findall(r"[.!?](?:\s|$)", answer)), 2)
                 self.assertNotIn("__", answer)
 
-    def test_tripwire_distinction_keeps_hidden_placement_unmeasured(self):
-        answer = self.questions[0][1].lower()
-        for phrase in ("bag", "panel", "needs testing", "one strand",
-                       "person versus thing", "still versus moving", "building wi-fi"):
-            self.assertIn(phrase, answer)
-
-    def test_hard_questions_and_current_boundaries(self):
-        for phrase in ("threshold", "csi", "two people", "recording me", "cloud",
-                       "dead zone", "pi a stays beside the cabled hub",
-                       "clearing the object or moving pi b", "spoof", "jamming",
-                       "single point of failure", "held-out accuracy", "language model",
-                       "lean aside", "cost", "libraries", "let's dig in"):
+    def test_hard_questions_and_honest_limits(self):
+        for phrase in ("tripwire", "threshold", "csi", "two people", "recording me", "cloud", "what exactly runs on the chip?", "what breaks it?",
+                       "a walk straight through is not reliably seen",
+                       "not edited", "forging both signatures", "spoof", "jamming",
+                       "single point of failure", "language model", "step aside and back",
+                       "cost", "let's dig in", "senses one spot", "does not count people",
+                       "a few seconds on the line", "desk height", "no camera and no microphone"):
             self.assertIn(phrase, self.lower)
         self.assertNotIn("__", self.text)
-        for stale in ("wave", "east/west", "five boards", "esp32"):
-            self.assertNotIn(stale, self.lower)
+
+    def test_numbers_are_sentences_we_may_say(self):
+        allowed = Path(__file__).with_name("numbers-to-say.md").read_text(encoding="utf-8")
+        for _, answer in self.questions:
+            for sentence in re.split(r"(?<=[.!?]) ", answer):
+                if re.search(r"\d", sentence):
+                    self.assertIn(sentence, allowed)
+
+    def test_nothing_cut_from_the_product_is_claimed(self):
+        for cut in ("taught by", "lesson", "dead zone", "beacon", "bluetooth", "move the router",
+                    "lean aside", "wave", "esp32", "passed by", "walked through", "second opinion",
+                    "blockchain", "unhackable", "tamper-proof", "counts people"):
+            self.assertNotIn(cut, self.lower)
 
 
 if __name__ == "__main__":

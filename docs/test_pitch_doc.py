@@ -68,10 +68,21 @@ class PitchDocTest(unittest.TestCase):
     def test_theme_and_ask_close_the_pitch(self):
         for phrase in (
             "we dug into a signal every building already has",
-            "taught by a camera. runs without one",
+            "it can't see you, it can't be edited, and it still tells you exactly what happened",
             "we would like to keep building it",
         ):
             self.assertIn(phrase, self.spoken.lower())
+
+    def test_spoken_numbers_are_sentences_we_may_say(self):
+        allowed = PITCH.with_name("numbers-to-say.md").read_text(encoding="utf-8")
+        for sentence in re.split(r"(?<=[.!?]) ", self.spoken):
+            if re.search(r"\d", sentence):
+                self.assertIn(sentence, allowed)
+
+    def test_nothing_cut_from_the_product_is_spoken_or_planned(self):
+        for cut in ("taught by", "camera unplug", "lesson", "dead zone", "beacon", "bluetooth",
+                    "move the router", "lean aside", "passed by", "walk-through", "walked through"):
+            self.assertNotIn(cut, self.lower)
 
     def test_feature_status_is_current(self):
         self.assertIn("a beat is shown only after it passes preflight", self.lower)

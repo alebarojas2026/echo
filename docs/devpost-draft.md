@@ -1,123 +1,132 @@
-# Echo: Wi-Fi that understands the room
+# Echo
 
-**Taught by a camera. Runs without one.**
+**A witness that never watches. Echo knows when someone is in a space, keeps a record nobody can edit, and tells you what happened. No camera, no microphone, no cloud.**
 
 ## Inspiration
 
-Some places need to know someone is present without keeping a camera on them: patient rooms, bathrooms, study rooms and offices after hours. We wanted safety and after-hours security using the Wi-Fi already there, with a clear privacy boundary and a useful answer when the connection itself is blocked.
+Some places need a record of who was there and when, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. A camera is too much in those places, and a log that someone can quietly edit is not enough.
 
-We built Echo at MadHacks 2026 for the Qualcomm / N+1 track and the theme “Let's Dig In.” We dug into the signal changes that an ordinary connection indicator hides.
+We wanted a witness that can't see you, can't be edited, and still tells you exactly what happened. We built Echo at MadHacks 2026 for the Qualcomm / N+1 Institute track and the theme "Let's Dig In": we dug into what an ordinary Wi-Fi signal already knows about the space it crosses.
 
 ## What it does
 
-Walk between two devices and the Wi-Fi signal gives you away. Echo reports presence and movement in one spot from the Wi-Fi path between Pi A and Pi B; Bluetooth to the Arduino UNO Q gives a second opinion.
+The demonstration has six beats:
 
-Most Wi-Fi sensing only sees movement. Ours sees you standing still. A temporary camera teaches the local model, then is unplugged; the radio keeps supplying the presence evidence. The prototype aims to distinguish person-vs-object patterns and movement from stillness, without identifying anyone or counting a crowd.
+- **Found you:** two small computers sit a metre apart. A body between them weakens the Wi-Fi signal. From that one line the board knows someone arrived, how long they stayed, whether they are standing still or moving, and when they left. Stand still long enough and a no-movement alert asks for a check-in: step aside and back.
+- **Intrusion alert:** armed, the spot should be empty. Step in and stay, and the board raises an intrusion alert on a phone page.
+- **Tamper alert:** unplug one of Echo's own devices and it says which one went quiet. The record carries on, and the gap itself is recorded.
+- **What happened:** everything Echo senses, and every event, is a record on the board. Ask "What happened?" and a program on the board answers in plain words from the sealed record only, showing its steps and the records it used.
+- **Engine room:** a second screen shows the three devices, the record counting up, the signatures arriving and a prove-it check. The check changes one record in a copy, verifies the copy and names the record that broke the seal. The real record is never touched.
+- **Proof:** the measured results below, each with its count and range.
 
-The six-beat demonstration is:
+**It seals what it sensed.** Each record carries the SHA-256 hash of the one before it, so a changed record breaks every seal after it and the board can name the record that was changed.
 
-- **Found you:** the live signal changes as the judge enters the spot.
-- **Teach the room:** a temporary camera provides labels and the UNO Q learns locally.
-- **Camera unplug:** the cable comes out, the teacher goes off, and radio sensing continues while the person moves and stands still.
-- **Intrusion alert:** the judge returns to an armed spot and stays until a local event appears on the phone.
-- **Dead zone:** with nobody present, an object blocks the cross-gap Wi-Fi path; clearing it or moving Pi B provides a before-and-after test.
-- **Ask the room and Proof:** the board answers from its saved records, and every published result has a proof method.
+**Two more machines vouch for it.** Each Raspberry Pi keeps signing the board's latest record with its own Ed25519 key.
 
-The radio X-ray visualizes measured link changes. A no-movement alert prompts a check, and the “I'm okay” check-in is to lean aside and wait for confirmation. A tamper alert names a device that goes silent while armed; Replay shows recorded summaries, and Incident report summarizes an armed stretch from those same records. Missing history remains unknown.
+### What it does not do
 
-### Privacy by design
-
-The camera is a temporary teacher, not the continuing sensor. No camera image is saved, the system does not identify anyone, and the laptop and phone use our private network. The sensing loop, records, on-board narrator and room questions need no cloud service; nothing is sent to the internet during the local demo. Live privacy counts are published only after verification.
+Echo does not know who a person is, and it does not know which part of a room they are in. It senses one spot. A person needs a few seconds on the line to be found. There is no camera and no microphone on the kit.
 
 ### Proof
 
-Every measured result stays blank until the [proof record](https://github.com/alebarojas2026/echo/blob/main/PROOF.md) supplies its method, sample size, date and commit. A live demonstration does not substitute for held-out validation.
+One person, one night, replayed from recordings taken on the kit. The recordings were split into a tuning set and a held-out set before the settings were chosen, and these numbers come from the held-out set only. Each has its method in PROOF.md in our repository.
 
-| Result | Measured value |
-|---|---:|
-| Presence accuracy | __ |
-| Person versus object | __ |
-| Still versus moving | __ |
-| Time to train | __ |
-| Decision latency | __ |
-| Update latency | __ |
-| No-movement alert latency | __ |
-| Dead-zone improvement | __ |
-| Images stored | __ |
-| Bytes sent outside the local network | __ |
-
-### Current boundary
-
-This is one spot with three devices, not a measured building deployment. No unfinished beat will be staged as live: each must pass preflight on the deployed kit. We do not claim validated operation with multiple people, unfamiliar objects, radios hidden in bags or panels, or different room layouts.
+- One person stood on the spot for ten seconds, ten times, and Echo found them 10 of 10 times; with this few trials the true rate is probably between 69% and 100%.
+- Five of those ten stands were with the second device hidden in a backpack, and it found 5 of 5; with this few trials the true rate is probably between 47% and 100%.
+- With nobody on the spot it said somebody 0 times in 9.4 empty minutes; with this little time the true rate is probably under 0.4 a minute.
+- Once the signal dropped, the decision came 0.50 to 0.58 seconds later; that leaves out the time a person takes to step in, which we did not record.
+- In one session of standing still, 167 of 170 decisions said still, and in one session of stepping about, 154 of 170 said moving: one session each, so it shows it can work, not how often. Every miss was in the first seconds: the word takes about 3 to 5 seconds to change.
+- With the second device low on a chair seat it found 0 of 5 stands. That is a limit: the device has to be at about desk height.
+- Only the Wi-Fi line decides: in the open a person took 11 to 24 dB off it and the empty line dipped 2 dB at most, while the Bluetooth lines dipped 7 to 14.5 dB with nobody there.
+- Those numbers are one spot, one person and one night, replayed from recordings taken on the kit. In one run with the board deciding by itself at the time, it said an arrival for 10 of 10 stands and none in the two empty minutes after.
 
 ## How we built it
 
-The Arduino UNO Q, powered by Qualcomm Dragonwing, is the computing hub. The board forms windows of radio readings, checks link health, trains compact models and makes learned decisions entirely on device on its Dragonwing CPU. Local contract-v2 messages connect readers, camera labels, decisions, controls and events.
+### What runs on the UNO Q
 
-The Arduino UNO Q and Pi A sit together on the desk, with Pi B about a metre away at desk height on a chair. Our development boards stand in for access points and radios in a building: Pi A provides the hotspot and wired route to the board, and Pi B supplies the far endpoint across the gap. Neither Pi runs a model.
+Everything runs on an Arduino UNO Q (Qualcomm Dragonwing QRB2210, four Cortex-A53 cores, 4 GB of memory), all on the Dragonwing CPU:
 
-A laptop browser shows the local interface; Pi A routes it to the UNO Q over direct Ethernet. A small local database stores summaries and events for Ask the room, replay and reports, without images or identity. The language model can select relevant records or phrase their facts; it is not the source of those facts.
+- the decision from the Wi-Fi readings: nobody, somebody still, somebody moving;
+- the alerts: intrusion while armed, no movement, a device gone quiet;
+- the record in a small SQLite database, and the SHA-256 seal on every record;
+- the check of each Pi's signature, and the check of the whole chain;
+- a small language model that words the answer to "What happened?" from the sealed records;
+- the web server for every screen.
 
-The dead-zone advisor uses the same cross-gap Wi-Fi path, only for an object decision with nobody there. Pi A stays beside the cabled hub: the gain in this kit comes from clearing the object or moving Pi B, not a large router move.
+Neither Pi runs a model: Pi A makes the Wi-Fi signal, Pi B measures it, and each signs the record. Echo needs no internet connection and calls no cloud service.
+
+### The path of one reading
+
+1. **Reading.** Pi A is a 5 GHz Wi-Fi hotspot. Pi B, a metre away at desk height, measures how strong that signal is, continuously, and sends the readings to the board.
+2. **Decision.** The board compares the readings with the level of the empty spot. A drop that holds is a person; how steady it is says still or moving; how long it lasts says how long they stayed. There is no trained model in this step: after a baseline with the spot empty, the line alone gives the decision.
+3. **Record.** The board writes a running summary, plus one record for every event, to a small database on the board.
+4. **Seal.** Each record carries the SHA-256 hash of the record before it.
+5. **Signature.** Each Pi keeps signing the newest hash with its own key. The private keys are made on each Pi and never leave it.
+6. **Answer.** "What happened?" is answered from the sealed records in the stretch asked about, with clock times and record numbers.
+
+The screens are browsers on the kit's own Wi-Fi: the judge's page with a 3D room and a faceless figure, the engine room, and the alarm page on a phone.
+
+In this demo our own boards stand in for what a building already has. Pi A stands in for an access point, Pi B for a device across the room, and the UNO Q for the chip that would run this inside the access point. One desk stands in for a room.
 
 ## Challenges
 
-Radio readings change with people, furniture, interference and device placement. We had to keep still presence separate from movement, distinguish learned person and object patterns, and prevent missing data from becoming an empty-room claim.
+We started with a bigger design: several radio links, a model taught from labels, and areas along a desk. The real kit taught us otherwise. Measured on the hardware, only the Wi-Fi line across the gap separated a person from an empty spot; the other radio lines moved as much with nobody there. We cut everything else and rebuilt around the one line that worked.
 
-The physical kit changed the design. The Wi-Fi path across the gap became the primary sensor, Bluetooth became supporting evidence, and the short path between the desk devices stopped being a useful sensing line. A layout file now defines which links cross the spot.
+A build that passed every simulated test failed on the board in its first minute, because no test had started the real programs cold. After that, every build had to pass a cold start with real recordings before it went on the board.
 
-Coordinating learning, alerts, records and a local interface required one frozen message contract. Clock changes, dropped links and interrupted recordings also had to leave clear evidence instead of confident but unsupported answers.
+Placement matters more than we expected. With the second device low on a chair seat the system found nobody, so the device has to sit at about desk height. A person crossing the line quickly is too brief to rely on, so we do not claim it.
 
 ## Accomplishments
 
-We built the local pipeline from radio readings and temporary labels to presence, movement, alerts and recorded explanations on an Arduino UNO Q. The unplugged camera makes the teaching boundary visible, and the live trace lets a judge change the input.
+Echo makes its whole decision from one ordinary Wi-Fi signal, with no camera, no microphone and no trained model, on a single Arduino UNO Q.
 
-We also built local replay, incident reports, a no-movement alert with lean-aside check-in, and an object-blockage demonstration on the same Wi-Fi path. We keep the distinction between implemented features, the deployed preflight and measured accuracy explicit.
+The record is hard to fake: to change one entry, someone would have to redo every seal after it and forge signatures from two keys that live on two other machines.
+
+We only say what we measured. Every number above has a method, a count and a range behind it, and the limits are written next to the results.
 
 ## What we learned
 
-A temporary camera can teach a radio model without becoming the deployed sensor. Keeping a person present while still requires a presence decision separate from movement, and a blocked path is not automatically a person or a dead zone.
+One good signal beats several weak ones. Measuring each radio line on the real kit, before building on it, changed the whole design.
 
-We also learned that failure behavior is part of the product. Sensor blind, No data and unknown history are useful answers when the evidence is missing.
+A record is only worth trusting if it can show it has not been edited. Sealing and signing turned a sensing demo into something that can act as a witness.
+
+Honest limits are part of the product. "It senses one spot and does not know who" is a more useful sentence than a claim we could not defend.
 
 ## What's next
 
-We will record repeatable held-out trials with people absent from training, varied objects, passers-by and interference. Every result will carry its method and limits in the proof record.
+More people, more nights and more rooms, so the ranges on our numbers get narrower. Then live measurements on the board itself for every result, not replays of recordings, including a measured count of the bytes the board sends outside its own network.
 
-After that, we want to test more room layouts and compatible building radios, including hidden placements and additional sensing paths. The desk line is one strand of that direction; broader coverage and reuse of existing infrastructure require evidence.
+After that, running the same idea on the Wi-Fi a building already has: an access point and the devices already connected to it, with no extra hardware in the room.
 
 ## Images
 
-This is the capture and caption plan for the submission lead. Take every demo view from the live desk, never the simulated demo. Include no recognisable face and no camera frame, ever. Keep photos, clips, and the exported diagram outside the repository; commit only this plan and the Mermaid source. Hide proof tiles until real results are available.
+This is the capture and caption plan for the submission lead. Take every view from the live desk, never the simulated demo. Include no recognisable face. Keep photos, clips, and the exported diagram outside the repository; commit only this plan.
 
 | Demo order | Image to capture | Caption |
 |---|---|---|
-| 1. Cover | A hand holding the unplugged USB plug in front of the screen with its found figure; optionally use a short continuous unplug clip if Devpost accepts it | The Arduino UNO Q keeps sensing the spot after the teaching camera is unplugged. |
-| 2. Found you | Arrival words over the live room view, with the source visible | The Arduino UNO Q detects someone entering the spot from the Wi-Fi path between Pi A and Pi B. |
-| 3. The lesson | Camera teaching status and progress, never the camera's image | The Arduino UNO Q learns locally from temporary camera labels. |
-| 4. After the unplug | Radio only status, disconnected cable, and the figure remaining present when the person stops | The Arduino UNO Q continues presence and movement sensing from radio alone. |
-| 5. Armed | The live phone intrusion card beside the screen | The Arduino UNO Q raises a local intrusion event when someone stays in the armed spot. |
-| 6. The dead zone | Blocked-link advice and the verified before-and-after gain, only after the object is cleared or Pi B is moved | The Arduino UNO Q measures the blocked Wi-Fi path and the result of clearing the object or moving Pi B. |
-| 7. The hardware | Label the Arduino UNO Q and Pi A together on the desk; label Pi B across the gap at desk height | The Arduino UNO Q runs the models; Pi A provides the hotspot and cable route, and Pi B supplies the far radio endpoint. |
-| 8. Architecture | Export the current Mermaid diagram once for Devpost, outside the repository | The Arduino UNO Q runs sensing, local records, Ask the room, replay, reports, and alerts without a cloud service. |
+| 1. Cover | The main laptop with the figure on the spot, and the three devices in the same view | The Arduino UNO Q knows someone is on the spot from one Wi-Fi line, with nothing watching. |
+| 2. Found you | The headline and the still or moving word on the main laptop | The Arduino UNO Q finds a person standing between Pi A and Pi B. |
+| 3. Intrusion alert | The alarm page showing the live intrusion beside the main laptop | The Arduino UNO Q raises an intrusion alert when someone stays on the armed spot. |
+| 4. Tamper alert | Pi B's cable in a hand, with the tamper alert on screen | The Arduino UNO Q names the device that went quiet and records the gap. |
+| 5. What happened | The answer with its steps and cited records | The Arduino UNO Q answers "What happened?" from its sealed record only. |
+| 6. Engine room | The second laptop: the record counting, the signatures, the Prove it result | The Arduino UNO Q's record is sealed, signed by both Pis and checked on screen. |
+| 7. The hardware | Label the Arduino UNO Q and Pi A together on the desk; label Pi B across the gap at desk height | The Arduino UNO Q does all the work; Pi A makes the Wi-Fi signal and Pi B measures it. |
+| 8. Architecture | The two pictures from docs/architecture.md, "Architecture" and "Data path", exported once outside the repository | The Arduino UNO Q senses, seals, checks and answers with no cloud service. |
 
-Use the [current architecture source](https://github.com/alebarojas2026/echo/blob/main/docs/architecture.md). The layout has one spot and three devices. Wi-Fi across the gap is the primary sensor and dead-zone link; Bluetooth to the board is a second opinion. The capture lead must verify that each caption matches the deployed build before uploading.
-
+Use the pictures as they are, with their plain titles and nothing added. The layout has one spot and three devices. The capture lead must check that each caption matches the deployed build before uploading.
 
 ## Built with
 
 - Arduino UNO Q and Qualcomm Dragonwing
-- Python, NumPy, scikit-learn, OpenCV, and WebSockets
-- JSON Schema and referencing
+- Raspberry Pi 5
+- Python, SQLite, and WebSockets
+- SHA-256 and Ed25519 signatures with OpenSSL
+- llama.cpp for the small on-board language model
 - Three.js, TypeScript, Vite, Vitest, and Playwright
-- glTF Transform and meshoptimizer
-- Arduino App Bricks
-
-The complete versions, licenses, research, and project links are in the [credits](https://github.com/alebarojas2026/echo/blob/main/docs/credits.md).
 
 ## Team
 
-- **Alexander:** hardware, radio links, board services, and bring-up
-- **Izet:** on-board sensing model, router advisor, and proof
-- **Ivan:** contracts, room display, HUD, and web shell
-- **Alejandro:** simulation, setup teacher, narrator, docs, and demo story
+- **Ivan:** team lead; message contracts, the screens, the sealed record and the witnesses
+- **Alexander:** hardware, radio links, the Pis and board bring-up
+- **Izet:** the on-board decision and the proof measurements
+- **Alejandro:** simulation and rehearsal tools, the first on-board record store and question answering, docs

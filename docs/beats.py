@@ -2,10 +2,10 @@
 
 BEATS = (
     "Found you",
-    "Teach the room",
-    "Camera unplug",
     "Intrusion alert",
-    "Dead zone",
-    "Ask the room and Proof",
+    "Tamper alert",
+    "What happened",
+    "Engine room",
+    "Proof",
 )
-CORE = ("Found you", "Camera unplug", "Intrusion alert", "Dead zone")
+CORE = ("Found you", "Intrusion alert", "What happened", "Proof")
