@@ -127,6 +127,23 @@ def test_proof_security_takes_the_armed_hold_and_the_passed_by_rate():
     assert "$.security.false_alarms.passed_by_events" in check.check_lines([json.dumps(proof)], "proof")[1][0][1]
 
 
+def test_proof_security_trials_are_optional_block_by_block():
+    proof = json.loads(read("valid_proof.json"))
+    assert "security_trials" not in proof
+    passers = dict.fromkeys(["trials", "false_intrusions", "ci95", "intrusion_events", "duration_s", "intrusions_per_hour",
+                             "still_trials", "still_alerts", "still_ci95"])
+    tamper = {"unplugs": 5, "detected": 5, "ci95": [0.57, 1.0], "within_s": 5, "false_events": 0, "duration_s": 900, "false_per_hour": 0}
+    lesson = {"sessions": [{"session": "s31", "ready_s": 34.2}, {"session": "s32", "ready_s": None}], "shortest_s": 34.2,
+              "longest_s": 34.2, "median_s": 34.2, "unplugged_walk": {"correct": None, "total": None, "ci95": None}}
+    for trials in ({}, {"passers_by": passers}, {"tamper": tamper, "lesson": lesson}):
+        assert check.check_lines([json.dumps({**proof, "security_trials": trials})], "proof")[1] == []
+    del tamper["within_s"]
+    bad = check.check_lines([json.dumps({**proof, "security_trials": {"tamper": tamper}})], "proof")[1]
+    assert "'within_s' is a required property" in bad[0][1]
+    bad = check.check_lines([json.dumps({**proof, "security_trials": {"crowd": {}}})], "proof")[1]
+    assert "'crowd' was unexpected" in bad[0][1]
+
+
 def test_proof_security_is_optional_and_names_real_links():
     proof = json.loads(read("valid_proof.json"))
     assert proof["security"]["detection"]["within_s"] == 2

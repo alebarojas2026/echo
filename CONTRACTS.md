@@ -423,6 +423,17 @@ The values below show the format only; they are not results.
                    "passed_by_events":null,"passed_by_duration_s":null,"passed_by_per_hour":null},
    "fewer_devices":[{"name":"...","nodes":["unoq","pi5"],"links":["pi5>unoq:wifi"],
                      "zone":{"correct":null,"total":null},"presence":{"entries":null,"detected":null,"ci95":null}}]}}
+   // security_trials is optional too (a second object beside security, same rules; not shown in the example):
+   //   passers_by {trials, false_intrusions, ci95, intrusion_events, duration_s, intrusions_per_hour, still_trials,
+   //     still_alerts, still_ci95}: a trial is an operator-confirmed pass outside the strip with continuous armed,
+   //     healthy capture. false_intrusions counts trials, intrusion_events counts events. A still trial is a
+   //     confirmed still person in an alert zone for its limit plus 5 s. Nobody is identified or counted.
+   //   tamper {unplugs, detected, ci95, within_s: 5, false_events, duration_s, false_per_hour}: each confirmed unplug
+   //     names a node; a tamper event for that node within 5 s is a hit. Blind states are captured, not skipped.
+   //   lesson {sessions: [{session, ready_s}], shortest_s, longest_s, median_s, unplugged_walk {correct, total, ci95}}:
+   //     ready_s = from the recording's start to the first trained model with lesson fits >= 1, of 10 and agree >= 8,
+   //     on the board's receive time. unplugged_walk is a separate heldout walk with cam off throughout.
+   //   Every block is optional and every unmeasured value in it is null. Simulated input never fills them.
    // A number not yet measured is null. Never invent one. PROOF.md, the docs and the operator's view show it as "__".
    // The judge-facing screen leaves its tile out (section 8). A measured 0 is a number and is shown.
    // security is optional (the whole object may be missing). Every unmeasured value in it is null.

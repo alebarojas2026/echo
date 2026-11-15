@@ -61,7 +61,34 @@
                                       "required": ["entries", "detected", "ci95"], "additionalProperties": false}},
           "required": ["name", "nodes", "links", "zone", "presence"], "additionalProperties": false}}
       },
-      "required": ["detection", "false_alarms", "fewer_devices"], "additionalProperties": false}
+      "required": ["detection", "false_alarms", "fewer_devices"], "additionalProperties": false},
+    "security_trials": {
+      "$comment": "Optional, and so is each of its blocks. Inside a block every field is there, null until measured.",
+      "type": "object",
+      "properties": {
+        "passers_by": {
+          "type": "object",
+          "properties": {"trials": {"$ref": "#/$defs/count"}, "false_intrusions": {"$ref": "#/$defs/count"}, "ci95": {"$ref": "#/$defs/ci95"},
+                         "intrusion_events": {"$ref": "#/$defs/count"}, "duration_s": {"$ref": "#/$defs/num"}, "intrusions_per_hour": {"$ref": "#/$defs/num"},
+                         "still_trials": {"$ref": "#/$defs/count"}, "still_alerts": {"$ref": "#/$defs/count"}, "still_ci95": {"$ref": "#/$defs/ci95"}},
+          "required": ["trials", "false_intrusions", "ci95", "intrusion_events", "duration_s", "intrusions_per_hour", "still_trials", "still_alerts", "still_ci95"],
+          "additionalProperties": false},
+        "tamper": {
+          "type": "object",
+          "properties": {"unplugs": {"$ref": "#/$defs/count"}, "detected": {"$ref": "#/$defs/count"}, "ci95": {"$ref": "#/$defs/ci95"},
+                         "within_s": {"type": "number", "exclusiveMinimum": 0}, "false_events": {"$ref": "#/$defs/count"},
+                         "duration_s": {"$ref": "#/$defs/num"}, "false_per_hour": {"$ref": "#/$defs/num"}},
+          "required": ["unplugs", "detected", "ci95", "within_s", "false_events", "duration_s", "false_per_hour"], "additionalProperties": false},
+        "lesson": {
+          "type": "object",
+          "properties": {"sessions": {"type": "array", "items": {"type": "object",
+                                      "properties": {"session": {"type": "string"}, "ready_s": {"$ref": "#/$defs/num"}},
+                                      "required": ["session", "ready_s"], "additionalProperties": false}},
+                         "shortest_s": {"$ref": "#/$defs/num"}, "longest_s": {"$ref": "#/$defs/num"}, "median_s": {"$ref": "#/$defs/num"},
+                         "unplugged_walk": {"$ref": "#/$defs/score", "properties": {"ci95": {"$ref": "#/$defs/ci95"}}, "required": ["ci95"], "unevaluatedProperties": false}},
+          "required": ["sessions", "shortest_s", "longest_s", "median_s", "unplugged_walk"], "additionalProperties": false}
+      },
+      "additionalProperties": false}
   },
   "required": ["zone", "threshold_zone", "person_vs_object", "false_alarms_per_min", "train_s", "ms_per_decision", "watts",
                "bytes_out", "images_stored", "models_on_board", "measured_at", "commit"],
