@@ -1,0 +1,5 @@
+.lesson-progress { color:var(--text); font-variant-numeric:tabular-nums; }
+.lesson-signal { margin-top:12px; min-height:48px; color:var(--text-2); }
+.lesson-bar { height:4px; margin-top:8px; background:var(--edge); }
+.lesson-bar span { display:block; height:100%; background:var(--person); transform-origin:left; }
+.judge-extra:has(.lesson-progress:not([hidden])) > section:has(> [data-testid="cam-status"]) { display:none; }
