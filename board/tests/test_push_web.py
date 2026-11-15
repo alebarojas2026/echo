@@ -60,6 +60,8 @@ def setup(tmp_path):
     board = tmp_path / "board-clone"
     (board / "web" / "dist").mkdir(parents=True)
     (board / "web" / "dist" / "old.js").write_text("stale\n")
+    (board / "web" / "dist" / "index.html").write_text("previous screen\n")
+    (board / "web" / "dist" / "build.txt").write_text("previous-build\n")
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -77,12 +79,12 @@ def write_env(laptop, **values):
     (laptop / ".env").write_text("# local settings\r\n" + "\r\n".join(lines) + "\r\n", newline="")
 
 
-def push(s, ok=True, **env_extra):
+def push(s, *args, ok=True, **env_extra):
     env = {k: v for k, v in os.environ.items()
            if k not in ("BOARD_USER", "BOARD_REPO", "BOARD_HOST", "PI_USER", "PI_HOST")}
     env.update(FAKE_BIN=posix(s["bin"]), FAKE_LOG=posix(s["log"]), **env_extra)
     # Prepend inside bash: Git's bash.exe puts its own /usr/bin first on startup.
-    r = subprocess.run([BASH, "-c", 'PATH="$FAKE_BIN:$PATH" exec bash board/push-web.sh'],
+    r = subprocess.run([BASH, "-c", 'PATH="$FAKE_BIN:$PATH" exec bash board/push-web.sh "$@"', 'push-web', *args],
                        cwd=s["laptop"], env=env, capture_output=True, text=True)
     assert (r.returncode == 0) == ok, r.stdout + r.stderr
     log = s["log"].read_text().splitlines() if s["log"].exists() else []
@@ -97,7 +99,8 @@ def test_copies_the_build_through_the_pi_and_swaps_it_in(setup):
     assert (dist / "assets" / "app.js").exists()
     assert (dist / "build.txt").read_text().strip() == sha
     assert not (dist / "old.js").exists()
-    assert sorted(p.name for p in (setup["board"] / "web").iterdir()) == ["dist"]
+    assert sorted(p.name for p in (setup["board"] / "web").iterdir()) == ["dist", "dist.prev"]
+    assert (setup["board"] / "web" / "dist.prev" / "old.js").exists()
     assert any(line.startswith("ssh jump=pi@pi-host host=me@192.168.77.2 ") for line in log)
     assert f"board is serving build {sha}" in out
 
@@ -167,3 +170,37 @@ def test_failed_copy_leaves_the_old_build(setup):
     out, _ = push(setup, ok=False, FAKE_SSH_FAIL="1")
     assert "copy failed" in out
     assert (setup["board"] / "web" / "dist" / "old.js").exists()
+
+
+def test_back_swaps_builds_without_building_or_copying(setup):
+    push(setup)
+    sha = git(setup['laptop'],'rev-parse','HEAD')
+    setup['log'].unlink()
+    out,log = push(setup,'--back',FAKE_BUILD_FAIL='1')
+    web = setup['board']/'web'
+    assert (web/'dist/build.txt').read_text().strip() == 'previous-build'
+    assert (web/'dist.prev/build.txt').read_text().strip() == sha
+    assert 'board is serving build previous-build' in out
+    assert not any(line.startswith('npm') for line in log)
+    assert not any('tar -xf' in line for line in log)
+    push(setup,'--back')
+    assert (web/'dist/build.txt').read_text().strip() == sha
+
+
+def test_back_without_previous_build_leaves_live_untouched(setup):
+    out,log = push(setup,'--back',ok=False)
+    assert 'no previous screen build' in out
+    assert (setup['board']/'web/dist/old.js').read_text() == 'stale\n'
+    assert not any(line.startswith('npm') for line in log)
+
+
+def test_push_keeps_only_the_immediately_previous_build(setup):
+    push(setup)
+    old = git(setup['laptop'],'rev-parse','HEAD')
+    (setup['laptop']/'web/src/main.ts').write_text('// next\n')
+    git(setup['laptop'],'add','-A')
+    git(setup['laptop'],'commit','-q','-m','next')
+    push(setup)
+    web = setup['board']/'web'
+    assert (web/'dist.prev/build.txt').read_text().strip() == old
+    assert sorted(p.name for p in web.iterdir()) == ['dist','dist.prev']
