@@ -1,18 +1,21 @@
 import { changingText } from './changing-text'
-import { zoneName } from './judge-moment'
+import { zonePlace } from './layout'
 import type { StateMsg } from '../room/contract'
 export function cameraLine(state: StateMsg | null) {
   if (!state) return ''
   if (state.cam === 'off') return 'Camera unplugged · radio only'
   if (state.cam === 'stalled') return 'Camera stalled · radio only'
   const teacher = state.teacher
-  return 'Camera on · teaching the radio' + (teacher?.present ? ` · the camera sees them in ${zoneName(teacher.zone)}${state.pred?.zone === teacher.zone ? ' · agrees' : ''}` : '')
+  // Two short lines: what the camera is doing, then what it sees, in the same words as the headline ("on the right").
+  return 'Camera on · teaching the radio' + (teacher?.present ? `
+It sees them ${zonePlace(teacher.zone)}${state.pred?.zone === teacher.zone ? ' · the radio agrees' : ''}` : '')
 }
 export function mountPanel(root: HTMLElement) {
-  root.innerHTML = '<p data-testid="cam-status"></p><p data-testid="camera-unplug" hidden>Camera unplugged · Radio alone is tracking the room</p>'
+  root.innerHTML = '<p data-testid="cam-status" style="white-space:pre-line"></p><p data-testid="camera-unplug" hidden>The radio alone is following the room now</p>'
   const line = root.firstElementChild as HTMLElement
   const text = changingText(line)
   const unplug = root.lastElementChild as HTMLElement
+  unplug.style.color = 'var(--text-2)'
   let previous: StateMsg['cam'] | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   return {
