@@ -159,3 +159,18 @@ def test_time_span_on_its_own():
     with pytest.raises(serve.ApiError) as e:
         serve.time_span({"from_t": "0", "to_t": str(31 * MIN)})
     assert e.value.status == 400
+
+
+def test_ask_still_answers_beside_the_mounted_endpoints(tmp_path):
+    (tmp_path / "n.json").write_text("{}")
+    server = serve.make_server("127.0.0.1", 0, dist=tmp_path, nodes=tmp_path / "n.json",
+                               ask=lambda q: {"answer": q}, routes={("GET", "/history"): history})
+    threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        assert answer(base + "/ask", "POST", b'{"question": "x"}') == (200, {"answer": "x"})
+        assert answer(base + "/ask", "POST", b"x" * 3000)[0] == 400       # read once, answered, no hang
+        assert answer(f"{base}/history?from_t={T0}&to_t={T0}")[0] == 200
+    finally:
+        server.shutdown()
+        server.server_close()
