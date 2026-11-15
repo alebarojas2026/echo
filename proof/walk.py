@@ -15,6 +15,7 @@ from proof import layout
 # Today's square: one pass over four zones is enough to train on.
 SQUARE_ORDERS = {"train": (1, 3, 2, 4), "heldout": (4, 2, 3, 1), "crowd": (3, 4, 1, 2)}
 MIDDLE = "middle"   # a visit to the split line between two zones (the strip layout)
+OFF = "off"         # a step back off the spot, in the camera's view (a layout with one zone)
 
 
 def orders(doc):
@@ -24,6 +25,10 @@ def orders(doc):
     and end on the middle mark; crowd is one pass.
     """
     ids = sorted(layout.zones(doc))
+    if len(ids) == 1:
+        # One spot: on it and off it, so the recording holds both answers more than once.
+        a = ids[0]
+        return {"train": (a, OFF, a, OFF, a), "heldout": (a, OFF, a, OFF, a), "crowd": (a,)}
     if set(ids) == {1, 2, 3, 4}:
         return SQUARE_ORDERS
     if len(ids) == 2:
@@ -37,11 +42,11 @@ def script(purpose, doc=None):
     if purpose not in {"train", "heldout", "object", "crowd"}:
         raise ValueError("purpose must be train, heldout, object or crowd")
     doc = doc or layout.load()
-    strip = layout.is_strip(doc)
-    area = "the strip" if strip else "the square"
+    strip, spot = layout.is_strip(doc), layout.is_spot(doc)
+    area = "the spot" if spot else "the strip" if strip else "the square"
     steps = [(f"Nobody inside {area}. Step out completely.", 20, "off", None)]
     if purpose == "object":
-        place = ("Place the tray at T1 on the desk, then step back out of the strip." if strip
+        place = (f"Place the tray at T1 on the desk, then step back out of {area}." if strip
                  else "Place the tray at T1, then step outside the square.")
         return steps + [(place, 8, "off", None),
                         ("Nobody inside. Leave the tray still at T1.", 15, "object", None),
@@ -54,7 +59,14 @@ def script(purpose, doc=None):
             steps.append((f"Walk to the middle mark, on the line between the zones (x={split} m).", 5, "person", None))
             steps.append(("Stand still on the middle mark.", 8, "person", None))
             continue
+        if zone == OFF:
+            steps.append(("Step back off the spot, well clear of it, and stay where the camera sees you.", 6, "person", None))
+            continue
         x, y, name = centres[zone]
+        if spot:
+            steps.append((f"Step onto the spot ({name.lower()}): x={x} m, y={y} m.", 5, "person", None))
+            steps.append(("Stand still on the spot.", 10, "person", zone if purpose == "crowd" else None))
+            continue
         if strip:
             walk = f"Walk to the centre of zone {zone} ({name}), one step from the desk: x={x} m, y={y} m."
         else:
