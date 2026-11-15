@@ -14,7 +14,7 @@ import {
 import { HOME_SPOT, NODES, SIZE_M, STRIP_M, ZONES, ZONE_SPLIT_X_M, floorSize, nodeLabelSide, nodePosition, routerId, toScene, zoneRect, zoneSide, type NodeId, type Vec3 } from './frame'
 import type { Hearing } from './heard'
 import { fade, Glide3 } from './motion'
-import { EDGE, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
+import { EDGE, FAULT, FLOOR, SQUARE, TEXT, WALL_SHADE } from './palette'
 import { at, mix, shadedGeometry, type Part } from './shade'
 import type { RoomView } from './view'
 
@@ -159,6 +159,8 @@ export class Stage {
   private readonly nodes: NodeMesh[] = []
   private readonly zoneLabels = new Map<number, HTMLElement>()
   private readonly routerGlide = new Glide3(nodePosition(routerId(), HOME_SPOT))
+  private hearing: ReadonlyMap<string, Hearing> = new Map()
+  private tamper = new Set<string>()
 
   constructor(private readonly view: RoomView) {
     const { room, square } = buildShell()
@@ -227,17 +229,33 @@ export class Stage {
   /** Shows each device as the board hears it: in full while heard, faint with "not heard" once it goes quiet,
    *  and not at all before it has ever been heard. */
   setHearing(hearing: ReadonlyMap<string, Hearing>) {
+    this.hearing = hearing
     for (const n of this.nodes) {
       const h = hearing.get(n.id) ?? 'never'
-      n.alphaTo = h === 'heard' ? 1 : h === 'lost' ? LOST_ALPHA : 0
+      // Tamper (contract #533): a device that went silent while armed is drawn in full, in the fault colour,
+      // with its "not heard" label, however long it has been quiet.
+      const tampered = this.tamper.has(n.id)
+      const quiet = tampered || h === 'lost'
+      n.alphaTo = tampered || h === 'heard' ? 1 : h === 'lost' ? LOST_ALPHA : 0
       const name = NODES[n.id]?.name ?? n.id
-      const text = h === 'lost' ? `${name}\nnot heard` : name // a second line: as wide as the name alone
+      const text = quiet ? `${name}\nnot heard` : name // a second line: as wide as the name alone
       if (n.label.textContent !== text) n.label.textContent = text
-      n.label.classList.toggle('room-label--node-lost', h === 'lost')
+      n.label.classList.toggle('room-label--node-lost', quiet && !tampered)
+      n.label.classList.toggle('room-label--node-tamper', tampered)
+      n.head.material.color.setHex(tampered ? FAULT : TEXT)
     }
+    this.view.host.dataset.tamper = [...this.tamper].join(',')
     this.view.host.dataset.devices = this.nodes.filter((n) => n.alphaTo === 1).map((n) => n.id).join(',')
     this.view.host.dataset.devicesLost = this.nodes.filter((n) => n.alphaTo === LOST_ALPHA).map((n) => n.id).join(',')
     this.view.requestRender()
+  }
+
+  /** The devices state.tamper lists (silent while armed), or a replayed second's. */
+  setTamper(nodes: readonly string[]) {
+    const next = new Set(nodes)
+    if (next.size === this.tamper.size && [...next].every((id) => this.tamper.has(id))) return
+    this.tamper = next
+    this.setHearing(this.hearing)
   }
 
   /** Fades each device toward how it is heard (140 ms in, 100 ms out). Returns true while any is still fading. */
