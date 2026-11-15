@@ -11,7 +11,8 @@ import { v3 } from './stage'
 import type { RoomView } from './view'
 
 // One thin neutral line per radio link (contract section 3), drawn between the node heads.
-// It dims as drop_db rises, turns amber (the person's colour) when the link is in pred.why, and breaks into dashes when blind.
+// It dims as drop_db rises, turns amber (the person's colour) when the link is in pred.why and is itself dropping
+// (explains, below), and breaks into dashes when blind.
 // A link whose straight path never passes over the floor a person stands on (on the desk layout, one between two
 // devices on the desk) is drawn faint while nothing is happening on it: the links a person can cut read first.
 
@@ -40,6 +41,18 @@ export function overFloor(a: Vec3, b: Vec3): boolean {
   return false
 }
 
+/** A link is dropping at this much under its baseline: the contract's own number (section 6, the router advice). */
+export const DROPPING_DB = 3
+
+/**
+ * Whether a link is one the person's body is cutting right now: listed in pred.why, and its own drop_db at 3 dB or
+ * more. pred.why names the brain's top links whether or not they moved, so on its own it would light a line that
+ * sits at its baseline. A null drop (before the baseline) is not a drop.
+ */
+export function explains(link: LinkState | undefined, inWhy: boolean): boolean {
+  return inWhy && (link?.drop_db ?? 0) >= DROPPING_DB
+}
+
 export function beamLook(link: LinkState | undefined, why: boolean, blind: ReadonlySet<string>, onFloor = true): BeamLook {
   const status = !link ? 'missing' : blind.has(link.id) ? 'blind' : link.status
   const broken = status === 'blind' || status === 'missing'
@@ -55,6 +68,9 @@ export function beamLook(link: LinkState | undefined, why: boolean, blind: Reado
   }
 }
 
+export const WHY_ON_MS = 300
+export const WHY_OFF_MS = 500
+
 const LINK_C = new Color(LINK)
 const BROKEN_C = new Color(FAULT)
 const WHY_C = new Color(PERSON)
@@ -68,7 +84,8 @@ interface Beam {
   look: BeamLook
   amber: number // 0..1, eased toward the person colour
   green: number // 0..1, eased toward the check-in colour
-  /** In pred.why, as shown: lights after 300 ms in the list, lets go after 800 ms out of it. */
+  /** Explains the prediction, as shown: lights after 300 ms of it, lets go after 500 ms without. A real Bluetooth
+   *  link wobbles a few dB with nobody there, so one at the 3 dB line would otherwise flicker. */
   why: Held<boolean>
   /** Its straight path passes over the floor a person stands on (overFloor). */
   onFloor: boolean
@@ -125,7 +142,7 @@ export class Beams {
         this.pairLabels.set(pair, label)
       }
       this.beams.push({ id, pair, line, mat, look: beamLook(undefined, false, new Set()), amber: 0, green: 0,
-        why: new Held<boolean>(false, (on) => (on ? 300 : 800)), onFloor: true })
+        why: new Held<boolean>(false, (on) => (on ? WHY_ON_MS : WHY_OFF_MS)), onFloor: true })
     }
     const [fw, fh] = floorSize()
     this.waiting = view.addLabel('Waiting for radio readings', v3([fw / 2, fh / 2, 0]), 'room-label--caption')
@@ -156,7 +173,7 @@ export class Beams {
     const brokenPairs = new Set<string>()
     for (const b of this.beams) {
       const link = state.links.find((l) => l.id === b.id)
-      b.look = beamLook(link, b.why.update(why.has(b.id), nowMs), blind, b.onFloor)
+      b.look = beamLook(link, b.why.update(explains(link, why.has(b.id)), nowMs), blind, b.onFloor)
       if (b.mat.dashed !== b.look.broken) b.mat.dashed = b.look.broken
       if (b.look.broken) brokenPairs.add(b.pair)
       const drop = link?.drop_db
