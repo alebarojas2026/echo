@@ -86,6 +86,8 @@ class DemoRunbookTest(unittest.TestCase):
             "object marker and static change to clear",
             "return the pi to its home spot",
             "send `router_home`",
+            "everyone steps away from the sensing area and its edge",
+            "stays out until a prediction returns or `baseline_done` appears",
             "send `reset`",
         )
         positions = [self.lower.index(step) for step in steps]
