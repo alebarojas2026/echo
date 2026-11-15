@@ -41,7 +41,7 @@ export const DESK_LAYOUT = {
 export const GATE_LAYOUT = {
   v: 2,
   layout: 'gate',
-  frame: { units: 'm', size_m: [0.8, 1.2], strip_m: [0.8, 0.6] },
+  frame: { units: 'm', size_m: [0.85, 1.35], strip_m: [0.8, 0.6] },
   nodes: [
     { id: 'unoq', name: 'Board', xyz_m: [0.44, 0.8, 0.75], roles: ['receiver'] },
     { id: 'pi5', name: 'Pi A', xyz_m: [0.36, 0.8, 0.75], roles: ['router', 'beacon', 'receiver'] },
@@ -57,5 +57,5 @@ export const GATE_LAYOUT = {
     { id: 'S-W30', xyz_m: [0.06, 0.8, 0.75] },
     { id: 'S-E30', xyz_m: [0.66, 0.8, 0.75] },
   ],
-  tray_spots: [{ id: 'T1', xyz_m: [0.4, 0.8, 0.75] }],
+  tray_spots: [{ id: 'T1', xyz_m: [0.48, 0.8, 0.75] }],
 }
