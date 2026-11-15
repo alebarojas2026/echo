@@ -3,13 +3,18 @@
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import tempfile
 
 try:
-    from .labels import Projection
+    from .labels import DeskView, Projection
 except ImportError:
-    from labels import Projection
+    from labels import DeskView, Projection
+
+# The desk view's numbers can be tuned on the board without a new file: set one of these and restart the app.
+DESK_ENV = {"TEACHER_DESK_SPLIT": "split", "TEACHER_DESK_DEAD_BAND": "dead_band",
+            "TEACHER_DESK_MIRROR": "mirror", "TEACHER_DESK_SIDE_EDGE": "side_edge"}
 
 
 def box_size(text):
@@ -22,7 +27,30 @@ def box_size(text):
     return [width, height]
 
 
+def desk_view(config, detector_size, env=None):
+    """The desk view (left / right from the box alone) for a config with "view": "desk"."""
+    config = dict(config)
+    for name, key in DESK_ENV.items():
+        text = (os.environ if env is None else env).get(name, "").strip()
+        if not text:
+            continue
+        if key == "side_edge":
+            config[key] = text
+        elif key == "mirror":
+            if text not in ("0", "1"):
+                raise ValueError(f"{name} must be 1 (the camera faces the person) or 0")
+            config[key] = text == "1"
+        else:
+            try:
+                config[key] = float(text)
+            except ValueError:
+                raise ValueError(f"{name} must be a number") from None
+    return DeskView(config, detector_size)
+
+
 def validate(config, detector_size):
+    if config.get("view") == "desk":
+        return desk_view(config, detector_size)
     size = config.get("image_size", [])
     dims = [config.get("side_m", 2.0), *config.get("area_m", [])]
     if len(size) != 2 or not all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in size):

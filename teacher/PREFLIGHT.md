@@ -23,3 +23,6 @@ leaves no file behind. It does not claim the camera or UDP bus is working.
 Use measured loose markers during the build. Alexander tapes the presentation
 layout during the presentation hour, then repeats calibration, the 20 s baseline
 and training in that room. Do not reuse a different room's calibration.
+
+With the desk view (teacher/DESK.md) the calibration file holds the split line, dead band and
+mirroring instead of corners; the same command checks it.
