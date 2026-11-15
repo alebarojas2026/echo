@@ -27,3 +27,18 @@ calibration as a fixture.
 `fixtures/boxes.json` is synthetic box geometry, with no images. Tests cover zone
 boundaries, perspective and a scaled floor. Run `python -m pytest
 teacher/tests/test_calibrate.py` without OpenCV, a camera or a board.
+
+## Desk mode (the desk layout)
+
+With the webcam on the desk facing the strip, the teacher only needs left or right. No clicks and no
+floor projection: run
+
+```
+python -m teacher.calibrate --desk --image-size 640x480 --split-u <column> --u-range <west-or-east end> <other end> --left-zone 2
+```
+
+with the detector's box frame size, the pixel column where the zone split line falls, the columns of
+the strip's two ends, and the zone on the image's left (2 when the camera looks out at the aisle:
+east is on its left). It needs the strip in `radio/nodes.json`. A person counts by the centre of
+their box, so feet don't need to be in view; a box cut by the image's left or right side is
+clipped. `foot_m` is null in desk mode. Tests: `python -m pytest teacher/tests/test_desk.py`.

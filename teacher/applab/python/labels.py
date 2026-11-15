@@ -29,6 +29,8 @@ def zone_in(area, x, y):
 
 
 class Projection:
+    sends_point = True   # the foot point on the floor goes out as foot_m
+
     def __init__(self, config):
         self.matrix = config["homography"]
         self.width, self.height = config["image_size"]
@@ -56,6 +58,53 @@ class Projection:
 
     def zone(self, point):
         return zone_in(self.area, *point)
+
+
+class DeskView:
+    """Desk mode: the webcam sits on the desk facing the sensing strip and only tells left from right.
+
+    config: {"mode": "desk", "image_size": [w, h], "split_u": the pixel column of the zone split,
+    "u_range": [u_min, u_max] (the strip's ends in the image), "left_zone": the zone on the image's
+    left (a desk camera looking out at the aisle sees east on its left), "area_m": [width, depth],
+    "zone_split_m": [split_x, null]}, optional "box_h_range": [min, max] pixels for a person at the
+    strip's distance. A person counts by the centre of their box (no feet needed). Their x along the
+    strip is estimated from the column, only to tell moving from still; no floor point is sent.
+    """
+    sends_point = False
+
+    def __init__(self, config):
+        self.width, self.height = config["image_size"]
+        self.split_u = float(config["split_u"])
+        self.u_min, self.u_max = (float(v) for v in config["u_range"])
+        self.left_zone = int(config["left_zone"])
+        self.area = area_of(config)
+        self.box_h = config.get("box_h_range")
+        if self.width <= 0 or self.height <= 0 or not (0 <= self.u_min < self.split_u < self.u_max <= self.width):
+            raise ValueError("desk view needs 0 <= u_min < split_u < u_max <= image width")
+        if self.left_zone not in (1, 2) or self.area[3] is not None:
+            raise ValueError("desk view is for the two-zone strip: left_zone 1 or 2, no split along y")
+
+    def point(self, u, v, box_h=None):
+        """Estimated (x, middle of the strip) for a box centred on column u, or None off the strip."""
+        if not (self.u_min <= u <= self.u_max):
+            return None
+        if self.box_h and box_h is not None and not (self.box_h[0] <= box_h <= self.box_h[1]):
+            return None
+        w, h, sx, _ = self.area
+        # piecewise: [u_min, split_u] and [split_u, u_max] each cover one zone's width
+        f = (u - self.u_min) / (self.split_u - self.u_min) if u < self.split_u else 1 + (u - self.split_u) / (self.u_max - self.split_u)
+        west_to_east = self.left_zone == 1        # the image's left is the strip's west
+        g = f if west_to_east else 2 - f          # 0..2 from the west end to the east end
+        x = g * sx if g <= 1 else sx + (g - 1) * (w - sx)
+        return [round(x, 4), round(h / 2, 4)]
+
+    def zone(self, point):
+        return 0 if point is None else zone_in(self.area, *point)
+
+
+def view_for(config):
+    """The camera's view of the layout: desk mode, or the floor projection."""
+    return DeskView(config) if config.get("mode") == "desk" else Projection(config)
 
 
 class Motion:
@@ -101,10 +150,14 @@ class Teacher:
             x, y, w, h = (float(b[k]) for k in ("x", "y", "width", "height"))
             if not all(math.isfinite(v) for v in (x, y, w, h)) or w <= 0 or h <= 0:
                 raise ValueError("invalid person box")
-            edge = x <= 0 or y <= 0 or x + w >= self.projection.width or y + h >= self.projection.height
-            clipped |= edge
-            foot = self.projection.point(x + w / 2, y + h)
-            if self.projection.zone(foot):
+            view = self.projection
+            if view.sends_point:   # the floor: the foot point, and a box cut by any edge is clipped
+                clipped |= x <= 0 or y <= 0 or x + w >= view.width or y + h >= view.height
+                foot = view.point(x + w / 2, y + h)
+            else:                  # the desk: the box centre; a close person fills the height, so only the sides clip
+                clipped |= x <= 0 or x + w >= view.width
+                foot = view.point(x + w / 2, y + h / 2, h)
+            if foot is not None and view.zone(foot):
                 candidates.append((foot, float(b["value"])))
         # Multiple people cannot be represented by the single-person label contract.
         clipped |= len(candidates) > 1
@@ -117,7 +170,8 @@ class Teacher:
         self.frame += 1
         label = dict(v=2, type="label", t=t, seq=self.frame, src="live", frame=self.frame,
                      mode=mode, persons_in_frame=len(people), present=bool(candidates),
-                     zone=None if clipped else zone, foot_m=None if clipped else point,
+                     zone=None if clipped else zone,
+                     foot_m=None if clipped or not self.projection.sends_point else point,
                      motion=moving if point is not None and not clipped else None, conf=conf, clipped=clipped)
         self.send(label)
         return label

@@ -9,7 +9,7 @@ import json
 import math
 from pathlib import Path
 
-from teacher.applab.python.labels import area_of, zone_in
+from teacher.applab.python.labels import DeskView, area_of, zone_in
 
 NODES = Path(__file__).resolve().parents[1] / "radio" / "nodes.json"
 
@@ -39,6 +39,20 @@ def solve(matrix, rhs):
                 scale = rows[i][col]
                 rows[i] = [v - scale * p for v, p in zip(rows[i], rows[col])]
     return [row[-1] for row in rows]
+
+
+def desk_calibration(image_size, split_u, u_range, left_zone, nodes, box_h_range=None):
+    """Desk mode (a webcam on the desk facing the strip): which pixel column splits the zones and
+    where the strip's ends are in the image. Numbers only; the layout comes from nodes.json."""
+    area_m, split = area_from_nodes(nodes)
+    if split[1] is not None:
+        raise ValueError("desk mode needs the desk layout's strip in nodes.json")
+    config = {"mode": "desk", "image_size": list(image_size), "split_u": split_u, "u_range": list(u_range),
+              "left_zone": left_zone, "area_m": area_m, "zone_split_m": split}
+    if box_h_range:
+        config["box_h_range"] = list(box_h_range)
+    DeskView(config)   # raises if the numbers don't make sense
+    return config
 
 
 def calibration(corners, image_size, side_m=2.0, area_m=None, zone_split_m=None):
@@ -130,7 +144,20 @@ def main():
     parser.add_argument("--nodes", type=Path, default=NODES, help="radio/nodes.json, for the area's size and zones")
     parser.add_argument("--side-m", type=float, default=None, help="a square of this side instead of nodes.json")
     parser.add_argument("--output", type=Path, default=Path(__file__).with_name("calib.json"))
+    parser.add_argument("--desk", action="store_true",
+                        help="desk mode: no clicks, give --image-size, --split-u, --u-range and --left-zone")
+    parser.add_argument("--image-size", help="detector box frame, WIDTHxHEIGHT (desk mode)")
+    parser.add_argument("--split-u", type=float, help="pixel column of the zone split (desk mode)")
+    parser.add_argument("--u-range", type=float, nargs=2, help="pixel columns of the strip's two ends (desk mode)")
+    parser.add_argument("--left-zone", type=int, choices=(1, 2), help="zone on the image's left (desk mode)")
     args = parser.parse_args()
+    if args.desk:
+        size = [int(v) for v in args.image_size.lower().split("x")]
+        config = desk_calibration(size, args.split_u, args.u_range, args.left_zone,
+                                  json.loads(args.nodes.read_text(encoding="utf-8")))
+        args.output.write_text(json.dumps(config, indent=2, allow_nan=False) + "\n")
+        print(f"Saved the desk view to {args.output}")
+        return
     if args.side_m:
         area_m, split = None, None
     else:

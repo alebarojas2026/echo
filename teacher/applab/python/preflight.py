@@ -7,9 +7,9 @@ from pathlib import Path
 import tempfile
 
 try:
-    from .labels import Projection
+    from .labels import DeskView, Projection
 except ImportError:
-    from labels import Projection
+    from labels import DeskView, Projection
 
 
 def box_size(text):
@@ -23,6 +23,11 @@ def box_size(text):
 
 
 def validate(config, detector_size):
+    if config.get("mode") == "desk":
+        size = config.get("image_size", [])
+        if list(size) != list(detector_size):
+            raise ValueError("calibration image_size differs from detector box coordinates; recalibrate in that frame")
+        return DeskView(config)
     size = config.get("image_size", [])
     dims = [config.get("side_m", 2.0), *config.get("area_m", [])]
     if len(size) != 2 or not all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in size):
