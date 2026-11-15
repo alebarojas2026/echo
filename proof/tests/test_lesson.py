@@ -2,7 +2,9 @@ import pytest
 
 import json
 
-from proof.lesson import Coach, label_summary
+from pathlib import Path
+
+from proof.lesson import Coach, label_summary, one_spot
 
 T0 = 1_763_149_500_000
 
@@ -15,6 +17,7 @@ def state(s, pred=None, teacher=None, lesson=None, cam="on"):
 
 
 def run(messages, **kw):
+    kw.setdefault("one_zone", False)   # the two-zone words, whatever layout radio/nodes.json holds
     sent, said = [], []
     coach = Coach("lesson-01", "w1", sent.append, said.append, **kw)
     coach.start()
@@ -104,3 +107,38 @@ def test_label_summary_counts_what_the_camera_said():
     assert "one person, usable: 3   zone 1: 2   zone 2: 1" in text
     assert "dropped (dead band or side edge): 1" in text and "more than one person: 1" in text
     assert label_summary(['{"type":"rssi"}']) == "no camera labels in this recording"
+
+
+GATE = Path(__file__).resolve().parents[2] / "radio" / "layouts" / "gate.json"
+SIDE_WORDS = ("left", "right", "LEFT", "RIGHT", "zone 1")
+
+
+def test_on_one_spot_the_coach_says_on_and_off_the_spot_and_never_a_side():
+    coach, sent, said = run([state(s / 10, teacher=0 if s < 100 else 1) for s in range(0, 315)], one_zone=True)
+    assert [m["cmd"] for m in sent] == ["label_mode", "record_start", "train"]
+    steps = [line.strip() for line in said if line.startswith("\n")]
+    assert steps[:6] == ["Stay off the spot and out of the camera's view: the lesson starts with the space empty.",
+                         "Step onto the spot and stand still.",
+                         "Stay on the spot: shift your weight and move your arms.",
+                         "Step off the spot, out of the camera's view, for 5 seconds.",
+                         "Step back onto the spot and stand still.",
+                         "Stay on the spot: shift your weight and move your arms."]
+    assert "train sent. Keep stepping on and off the spot; unplug the camera when you like." in steps
+    assert not any(word in line for line in said for word in SIDE_WORDS)
+    assert any("camera: someone" in line for line in said)
+
+
+def test_on_one_spot_a_lesson_with_no_empty_time_names_no_side():
+    coach, sent, said = run([state(s, teacher=1) for s in range(0, 40)], one_zone=True)
+    assert "train" not in [m["cmd"] for m in sent]
+    assert sum("has no empty time yet" in line for line in said) == 1
+    assert not any(word in line for line in said for word in SIDE_WORDS)
+
+
+def test_the_layout_file_decides_one_spot(monkeypatch):
+    monkeypatch.setenv("RADIO_SIGHT_NODES", str(GATE))
+    assert one_spot()
+    coach = Coach("lesson-02", "w1", lambda m: None, lambda m: None)
+    assert coach.one_zone and "Step onto the spot" in coach.steps[1][2]
+    monkeypatch.setenv("RADIO_SIGHT_NODES", str(GATE.parent / "desk.json"))
+    assert not one_spot() and "LEFT" in Coach("lesson-03", "w1", lambda m: None, lambda m: None).steps[1][2]
