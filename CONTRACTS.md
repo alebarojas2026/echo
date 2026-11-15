@@ -463,6 +463,8 @@ Router: take the tray off and put Pi A back on S-home BEFORE sending router_home
   for 3 s (a pi5 link has pi5 as its tx or rx: links 1, 2, 5, 6, 8, 9 and 12; pi5b is a different node); otherwise the board runs an automatic 20 s baseline ("recalibrating").
 Narration:
 - At most one narration every 8 s, a recap included: the sentence after a recap waits 8 s.
+- An event's template sentence is sent at once, always. If the on-board model's wording of it is back within 2 s, it is sent
+  as a second narration with the same event_id and replaces the first; that second one does not count towards the 8 s.
 - Only for an event <= 3 s old.
 - At most 16 words (a recap: at most 3 sentences and 45 words). A banned word -> use the template sentence instead.
 Screen: NO DATA (grey) when the last state is > 1 s old (the feed is stale). SENSOR BLIND when health is blind

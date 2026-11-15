@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import concurrent.futures
 import json
+import os
 import re
 import socket
 import sys
@@ -29,7 +30,9 @@ BUS = "127.0.0.1:5600"
 
 GAP_MS = 8000         # at most one sentence every 8 s
 MAX_AGE_MS = 3000     # only for events up to 3 s old
-LLM_TIMEOUT_S = 8.0   # slower than this -> template
+# The template line for an event is sent at once, always. The model's wording may replace it only if it
+# is back within this long (NARRATE_MODEL_S, 2 s unless set); otherwise the template stands.
+LLM_TIMEOUT_S = float(os.environ.get("NARRATE_MODEL_S") or 2.0)
 WARM_TIMEOUT_S = 120.0  # the warm-up writes the whole prompt into the cache; it may take longer
 MAX_WORDS = 16
 
@@ -507,13 +510,18 @@ class Narrator:
         self.last_start_ms = now
         return event
 
-    def sentence(self, event: dict) -> tuple[str, str, str | None, str]:
-        """(text, source, model, why) for one event."""
+    def facts(self, event: dict) -> str:
+        """The template sentence for one event: what is sent at once, and what the model may reword."""
         facts = template(event["kind"], event.get("info") or {})
         if spot() and event["kind"] in ("enter", "zone_change") and self._current_person(self.clock()):
             motion = {"still": "standing still", "moving": "moving"}.get(self.state["pred"].get("motion"))
             if motion:
                 facts = f"Someone is {_spot_words()}, {motion}."
+        return facts
+
+    def sentence(self, event: dict, facts: str | None = None) -> tuple[str, str, str | None, str]:
+        """(text, source, model, why) for one event."""
+        facts = self.facts(event) if facts is None else facts
         try:
             raw, model = within(self.timeout_s, self.llm, prompt(event["kind"], facts))
         except TimeoutError:
@@ -533,14 +541,29 @@ class Narrator:
             self.warm()
 
     def narrate(self, event: dict) -> dict:
-        """Build, send and return the narration for one event."""
+        """Send the narration for one event and return the last message sent for it. The template line
+        goes out at once, always: nothing a judge reads waits on the model. Then the model gets
+        timeout_s (2 s) to word it better; if its sentence is back by then and passes the checks, it is
+        sent as the same event's line (same event_id) and replaces the template on the screen."""
+        facts = self.facts(event)
+        common = {"event_id": event.get("id"), "event_kind": event["kind"], "src": event.get("src", "live")}
+        msg = self.send_spaced(text=facts, gen_ms=0, source="template", model=None, **common)
         start = self.monotonic()
-        text, source, model, why = self.sentence(event)
+        text, source, model, why = self.sentence(event, facts)
         gen_ms = round((self.monotonic() - start) * 1000)
-        msg = self.send_spaced(text=text, event_id=event.get("id"), event_kind=event["kind"],
-                               gen_ms=gen_ms, source=source, model=model, src=event.get("src", "live"))
+        if source == "llm" and text != facts:
+            msg = self.send_again(text=text, gen_ms=gen_ms, source=source, model=model, **common)
         log(f"{event.get('id')} {event['kind']} -> {source} {gen_ms} ms ({why}): {text}")
         return msg
+
+    def send_again(self, src: str, **fields) -> dict:
+        """The same event's line in the model's words, right after its template: no gap is waited (it is
+        not a new narration) and the 8 s to the next one still run from the template."""
+        with self.lock:
+            self.seq += 1
+            msg = {"v": 2, "type": "narration", "t": self.clock(), "seq": self.seq, "src": src, **fields}
+            self.send(msg)
+            return msg
 
     def send_spaced(self, src: str, **fields) -> dict:
         """Send one narration no sooner than gap_ms after the last one, and return it.
