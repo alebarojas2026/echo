@@ -25,12 +25,12 @@ describe('advice arrow', () => {
 })
 
 describe('spot rings', () => {
-  it('show only the router\'s own spot until advice points somewhere, then both ends of the arrow', () => {
+  it('show only while advice points somewhere, and then both ends of the arrow', () => {
     const shown = (router: string, a: Advice | null) =>
-      ['S-home', 'S-W30', 'S-E30'].filter((id) => spotShown(id, router, adviceArrow(a, router)))
-    expect(shown('S-home', null)).toEqual(['S-home'])
+      ['S-home', 'S-W30', 'S-E30'].filter((id) => spotShown(id, adviceArrow(a, router)))
+    expect(shown('S-home', null)).toEqual([])
     expect(shown('S-home', advice('S-W30'))).toEqual(['S-home', 'S-W30'])
     expect(shown('S-W30', advice('S-W30'))).toEqual(['S-home', 'S-W30'])
-    expect(shown('S-W30', null)).toEqual(['S-W30'])
+    expect(shown('S-W30', null)).toEqual([])
   })
 })

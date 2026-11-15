@@ -42,10 +42,11 @@ export function adviceShown(arrow: ReturnType<typeof adviceArrow>): boolean {
   return !!arrow && !(arrow.done && spotWords(arrow.to).side !== 'centre')
 }
 
-/** Whether a spot's ring is drawn: the router's own spot always; the others only while advice runs between them,
- *  so spare marks never sit unexplained under the devices. */
-export function spotShown(id: string, router: string, arrow: ReturnType<typeof adviceArrow>): boolean {
-  return id === router || (!!arrow && (id === arrow.to || id === arrow.from))
+/** Whether a spot's ring is drawn: only while advice runs between two spots, and then only those two. With no
+ *  advice a ring is a circle nobody can read (it sat under the router, or alone on the floor when the router
+ *  stands somewhere the room has no desk for). */
+export function spotShown(id: string, arrow: ReturnType<typeof adviceArrow>): boolean {
+  return !!arrow && (id === arrow.to || id === arrow.from)
 }
 
 /** A flat arrow along +x, `len` metres long, lying in the shape's XY plane. */
@@ -84,7 +85,7 @@ export class RouterSpots {
       mesh.rotation.x = -Math.PI / 2
       mesh.position.copy(v3([x, y, standBase([x, y, 0])[2] + 0.003])) // on the floor, or on the desk top
       view.scene.add(mesh)
-      mesh.visible = id === HOME_SPOT
+      mesh.visible = false
       this.rings.set(id, mat)
       this.meshes.set(id, mesh)
       const words = spotWords(id)
@@ -108,7 +109,7 @@ export class RouterSpots {
     const arrow = adviceArrow(advice, router)
     for (const [id, mat] of this.rings) {
       mat.color.setHex(id === router ? TEXT : EDGE)
-      this.meshes.get(id)!.visible = spotShown(id, router, arrow)
+      this.meshes.get(id)!.visible = spotShown(id, arrow)
     }
     this.view.host.dataset.adviceArrow = arrow ? arrow.to : ''
     for (const [id, tag] of this.tags) {
