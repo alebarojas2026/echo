@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test')
 const path = require('node:path')
-require('./layout-fixture.cjs')
+const { layout } = require('./layout-fixture.cjs')
 const shots = process.env.HUD_SCREENSHOTS
 async function capture(page, name) {
   await expect(page.getByTestId('arrival-title')).toHaveCSS('opacity', '1')
@@ -198,6 +198,11 @@ test('a 1 s presence is not greeted, a 2 s presence is', async ({ page }) => {
   }
   await page.evaluate(() => window.arrival.update('empty'))
   await page.clock.runFor(2000)
+  // On the one spot a visit this short is a walk through: said for 3 s, then the card is back to nobody.
+  if (layout.zones.length === 1) {
+    await expect(title).toHaveText('Someone walked through.')
+    await page.clock.runFor(1500)
+  }
   await expect(title).toHaveText('Nobody is here.')
   expect(await phase(page)).toBe('waiting')
   await page.evaluate(() => window.arrival.update('still'))
