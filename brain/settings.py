@@ -16,6 +16,9 @@ in brain/ carries its own copy.
                           exit or zone_change is said
     motion_links          which links' features decide moving / still         null = every link
                           (takes effect at the next train)
+    tamper_silent_ms      Tamper: a node is silent when none of its links     3000
+                          has had a reading for this long
+    tamper_clear_ms       ... and back when they all have for this long       2000
 
 One number of these rules is not here because the contract puts it in radio/nodes.json: how
 long an armed space waits before an appearance is an intrusion, armed.hold_s (3 s when the file
@@ -48,6 +51,8 @@ class Settings:
     intrusion_majority: int = 6
     zone_hold: int = 5
     motion_links: Optional[Tuple[str, ...]] = None
+    tamper_silent_ms: int = 3000
+    tamper_clear_ms: int = 2000
 
     def __post_init__(self):
         for f in fields(self):

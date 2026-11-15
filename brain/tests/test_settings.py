@@ -25,8 +25,11 @@ def test_the_defaults_are_the_contract_values():
         "smooth_decisions": 10, "smooth_majority": 6,          # section 6, Alert: the majority of the last 10
         "moving_run": 5,                                       # ... 5 moving decisions in a row (0.5 s)
         "intrusion_decisions": 10, "intrusion_majority": 6,    # section 6, Armed: the majority of the last 10
-        "zone_hold": 5, "motion_links": None}
+        "zone_hold": 5, "motion_links": None,
+        "tamper_silent_ms": 3000, "tamper_clear_ms": 2000}     # section 6, Tamper
     assert Brain().settings == S.DEFAULT
+    quick = Brain(settings=S.DEFAULT.with_(tamper_silent_ms=1000, tamper_clear_ms=500)).tamper
+    assert (quick.silent_ms, quick.clear_ms) == (1000, 500) and Brain().tamper.silent_ms == 3000
 
 
 def test_a_wrong_name_or_value_is_an_error_not_a_silent_default(tmp_path, monkeypatch):

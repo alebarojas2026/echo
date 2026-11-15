@@ -153,7 +153,8 @@ class Brain:
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led, self.settings)
         # after hours: a person who appears and is still there armed.hold_s later is an intrusion
         self.armed = Armed(self.settings, S.hold_s(nodes))
-        self.tamper = Tamper.from_nodes(nodes)   # ... and a device going silent is tampering
+        self.tamper = Tamper.from_nodes(nodes, silent_ms=self.settings.tamper_silent_ms,
+                                        clear_ms=self.settings.tamper_clear_ms)   # ... and a device going silent is tampering
         # The optional hall beacons (nodes.json "hall"): not core links, but tamper counts them.
         self._hall_nodes = {b.get("node") for b in (nodes.get("hall") or {}).get("beacons") or []}
         self._hall_seen: Dict[str, Dict[str, int]] = {}   # hall beacon -> {its link: recv_t of the last reading}

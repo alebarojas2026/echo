@@ -169,8 +169,8 @@ class CheckIn:
         return True
 
 
-TAMPER_SILENT_MS = 3000   # a node is silent when none of its links has had a reading for this long
-TAMPER_CLEAR_MS = 2000    # a node is back when every link of its has gone this long without such a gap
+TAMPER_SILENT_MS = S.DEFAULT.tamper_silent_ms   # a node is silent when none of its links has had a reading for this long
+TAMPER_CLEAR_MS = S.DEFAULT.tamper_clear_ms     # a node is back when every link of its has gone this long without such a gap
 
 
 class Tamper:

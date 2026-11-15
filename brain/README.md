@@ -113,6 +113,7 @@ The numbers of the people rules are in one place, `brain/settings.py`, with the 
 | `moving_run` | Alert: "moving" decisions in a row before the still timer resets | 5 (0.5 s) |
 | `intrusion_decisions`, `intrusion_majority` | Armed: a person appears when present for the majority of the last decisions | 10, 6 |
 | `zone_hold` | Decisions in a row before `enter`, `exit` or `zone_change` is said (the brain's own) | 5 (0.5 s) |
+| `tamper_silent_ms`, `tamper_clear_ms` | Tamper: how long without a reading on any of its links makes a node silent, and how long with them back clears it | 3000, 2000 |
 | `motion_links` | The links whose features decide moving or still; takes effect at the next `train` | null = every link |
 
 One number of these rules is in `radio/nodes.json`, where the contract puts it: `armed.hold_s`, how long somebody must stay after appearing in an armed space to be an `intrusion` (3 s when the file has none; 4 for a very busy aisle). Gone sooner, they are a `passed_by` with the zone. One event per appearance, nothing while pred is null, and blind time doesn't count as time spent there.
