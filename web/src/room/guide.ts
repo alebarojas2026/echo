@@ -7,12 +7,28 @@ import type { RoomView } from './view'
 
 // The placement guide in the 3D view (align mode only, never on a judge's screen): where each device should go at
 // the chosen desk (desks.ts, placementGuide), as a faint outlined box with "<name> here". One can be picked (Tab)
-// and moved by hand; S saves the positions, and from then on the devices are drawn there.
+// and moved by hand; S saves the positions of the ones that were moved, and from then on they are drawn there. A
+// place nobody moved is only the guide's suggestion and is never saved: stepping to a desk and pressing S saves the
+// alignment alone, as it always did.
 
 const BOX_M = 0.1
 const CLOSE_M = 0.25
 const STEP_M = 0.05
 const BIG_STEP_M = 0.2
+/** A guide box this near where its device is already drawn gets no words: the box and the device's own name say
+ *  it, and "<name> here" would lie across that name. */
+const NEAR_M = 0.2
+
+/** What S saves: the places of the devices that were moved by hand, and nothing for the rest. */
+export function placesToSave(marks: readonly { id: string; xyz: Vec3; moved: boolean }[]): { id: string; xyz_m: Vec3 }[] {
+  return marks.filter((m) => m.moved).map((m) => ({ id: m.id, xyz_m: m.xyz }))
+}
+
+/** Whether a guide box's words ("<name> here") are shown: not while the box is on or right beside where its
+ *  device is drawn now (`drawn`, null for a device the layout doesn't have). */
+export function guideWordsShown(xyz: Vec3, drawn: Vec3 | null): boolean {
+  return !drawn || Math.hypot(xyz[0] - drawn[0], xyz[1] - drawn[1], xyz[2] - drawn[2]) > NEAR_M
+}
 
 interface Mark {
   id: string
@@ -115,9 +131,14 @@ export class PlacementGuide {
     return true
   }
 
-  /** Every device's position as shown, for saving. */
+  /** Every device's position as shown (the guide's suggestion, or where it was put by hand). */
   positions(): { id: string; xyz_m: Vec3 }[] {
     return this.marks.map((m) => ({ id: m.id, xyz_m: m.xyz }))
+  }
+
+  /** The positions to save: only the devices moved by hand (placesToSave). */
+  moved(): { id: string; xyz_m: Vec3 }[] {
+    return placesToSave(this.marks)
   }
 
   /** One line per device: the guide's words, or where it was put by hand. The picked one is marked. */
@@ -132,7 +153,7 @@ export class PlacementGuide {
       m.box.visible = on
       m.box.position.copy(v3(m.xyz))
       m.box.material.opacity = picked ? 1 : 0.6
-      m.label.hidden = !on
+      m.label.hidden = !on || !guideWordsShown(m.xyz, NODES[m.id]?.xyz ?? null)
       m.label.classList.toggle('room-label--guide-picked', picked)
       // Two places side by side (the board and the router): their words read outward from each other.
       const beside = this.marks.find((o) => o !== m && Math.abs(o.xyz[0] - m.xyz[0]) < CLOSE_M && Math.abs(o.xyz[1] - m.xyz[1]) < CLOSE_M)

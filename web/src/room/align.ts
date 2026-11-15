@@ -237,7 +237,8 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
       pre.textContent = json
       pre.hidden = false
       status.textContent = 'Saving…'
-      void saveAll(scan.fit, beacons, marks.shown ? marks.positions() : undefined).then((said) => (status.textContent = said))
+      // Only the devices moved by hand: the guide's own suggestions are never saved as anyone's place.
+      void saveAll(scan.fit, beacons, marks.shown ? marks.moved() : undefined).then((said) => (status.textContent = said))
     } else if (key === 'Tab' && marks.shown) {
       marks.cycle()
       sayGuide()
