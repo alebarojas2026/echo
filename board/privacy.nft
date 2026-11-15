@@ -1,0 +1,21 @@
+#!/usr/sbin/nft -f
+# The privacy meter's counter (board/privacy.py). The radio-sight-privacy unit loads this as root
+# just before it starts. Loading it again keeps the count: the named counter stays, only the
+# chain's rules are replaced. A reboot clears it.
+#
+# Counted: every packet leaving the board (its own processes and App Lab's containers, which pass
+# postrouting too) to an address outside our own networks. Not counted: the cable
+# (192.168.77.0/24), the sensing hotspot (10.42.0.0/24), loopback, link-local, multicast,
+# broadcast, and traffic between the board and its own containers (docker*, br-* and veth*
+# never leave the board). board/egress.sh, the proof run's counter, is a separate table.
+add table inet radio_sight_privacy
+add counter inet radio_sight_privacy out
+add chain inet radio_sight_privacy postrouting { type filter hook postrouting priority 0; policy accept; }
+flush chain inet radio_sight_privacy postrouting
+add rule inet radio_sight_privacy postrouting oifname "lo" return
+add rule inet radio_sight_privacy postrouting oifname "docker*" return
+add rule inet radio_sight_privacy postrouting oifname "br-*" return
+add rule inet radio_sight_privacy postrouting oifname "veth*" return
+add rule inet radio_sight_privacy postrouting ip daddr { 127.0.0.0/8, 192.168.77.0/24, 10.42.0.0/24, 169.254.0.0/16, 224.0.0.0/4, 255.255.255.255 } return
+add rule inet radio_sight_privacy postrouting ip6 daddr { ::1, fe80::/10, ff00::/8 } return
+add rule inet radio_sight_privacy postrouting counter name "out"

@@ -11,7 +11,7 @@ from board.tests.shell import BASH
 REPO = Path(__file__).resolve().parents[2]
 BOARD_UNITS = {"radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan",
                "radio-sight-camwatch", "radio-sight-brain", "radio-sight-serve",
-               "radio-sight-llm", "radio-sight-narrate", "radio-sight-store"}
+               "radio-sight-llm", "radio-sight-narrate", "radio-sight-store", "radio-sight-privacy"}
 NEEDS_PI = {"radio-sight-wifi-rssi", "radio-sight-hci-scan"}
 
 
@@ -41,7 +41,7 @@ def repo(tmp_path):
     (r / "board").mkdir(parents=True)
     shutil.copy(REPO / "board" / "deploy.sh", r / "board" / "deploy.sh")
     shutil.copytree(REPO / "board" / "units", r / "board" / "units")
-    for path in ("board/serve.py", "store/__init__.py", "agent/endpoints.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
+    for path in ("board/serve.py", "board/privacy.py", "board/privacy.nft", "store/__init__.py", "agent/endpoints.py", "bus/core.py", "radio/wifi_rssi.py", "radio/hci_scan.py",
                  "teacher/camwatch.py", "brain/main.py", "advisor/advice.py", "narrator/narrate.py",
                  "pi/radio_node.py", "web/src/main.ts", "docs/notes.md"):
         write(r, path, "# v1\n")
@@ -105,6 +105,17 @@ def test_the_store_follows_the_brain_as_the_clone_owner(repo):
     assert any(l.startswith("User=") and l != "User=root" for l in lines)
 
 
+def test_privacy_meter_gets_only_the_counter_privilege(repo):
+    deploy(repo, "v1")
+    lines = (repo.parent / "units" / "radio-sight-privacy.service").read_text().splitlines()
+    assert any(l.startswith("User=") and l != "User=root" for l in lines)
+    assert "AmbientCapabilities=CAP_NET_ADMIN" in lines and "CapabilityBoundingSet=CAP_NET_ADMIN" in lines
+    assert "NoNewPrivileges=yes" in lines
+    pre = [l for l in lines if l.startswith("ExecStartPre=")]
+    assert len(pre) == 1 and pre[0].startswith("ExecStartPre=-+/usr/sbin/nft -f /")
+    assert pre[0].endswith("/repo/board/privacy.nft")
+
+
 def test_same_ref_restarts_nothing(repo):
     deploy(repo, "v1")
     restarted, out = deploy(repo, "v1")
@@ -119,6 +130,8 @@ def test_same_ref_restarts_nothing(repo):
     ("board/serve.py", {"radio-sight-serve"}),
     ("store/__init__.py", {"radio-sight-store", "radio-sight-serve"}),
     ("agent/endpoints.py", {"radio-sight-serve"}),
+    ("board/privacy.py", {"radio-sight-serve", "radio-sight-privacy"}),
+    ("board/privacy.nft", {"radio-sight-privacy"}),
     ("narrator/narrate.py", {"radio-sight-narrate"}),
     ("narrator/llm.service", {"radio-sight-llm", "radio-sight-narrate"}),
     ("teacher/camwatch.py", {"radio-sight-camwatch"}),
