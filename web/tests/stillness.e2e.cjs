@@ -1,0 +1,24 @@
+const { test, expect } = require('@playwright/test')
+test('counts, alerts, expires waves and respects reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/src/hud/index.html')
+  await page.evaluate(async () => {
+    const { mountPanel } = await import('/src/hud/judge-stillness-panel.ts')
+    const { mockState } = await import('/src/room/mock.ts')
+    document.body.innerHTML = '<section id="test-panel"></section>'
+    window.panel = mountPanel(document.querySelector('#test-panel'))
+    window.mock = mockState
+    window.panel.update(mockState('still', 0, 7200), false)
+  })
+  await expect(page.getByTestId('alert-banner')).toHaveText('Still for 7 s of 10')
+  await expect(page.getByTestId('alert-banner')).toHaveCSS('color', 'rgb(255, 159, 67)')
+  await expect(page.locator('.stillness-track span')).toHaveCSS('transform', 'matrix(0.7, 0, 0, 1, 0, 0)')
+  await page.evaluate(() => window.panel.update(window.mock('still', 0, 11000), false))
+  await expect(page.getByTestId('alert-banner')).toHaveText('No movement')
+  await expect(page.getByTestId('alert-zone')).toHaveText('Bathroom')
+  await expect(page.getByTestId('alert-seconds')).toHaveText('Still for 11 s')
+  await page.evaluate(() => window.panel.update(window.mock('checkin', 0, 7000), false))
+  await expect(page.getByTestId('checkin-toast')).toHaveText('Wave seen')
+  await page.evaluate(() => { const state = window.mock('checkin', 0, 7000); state.t += 7000; window.panel.update(state, false) })
+  await expect(page.locator('#test-panel')).toBeHidden()
+})
