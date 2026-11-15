@@ -163,7 +163,7 @@ def main(argv=None):
     versions = next((" ".join(r["versions"]) for r in raws.values() if isinstance(r, dict) and r.get("versions")), "")
     parts = [
         f"## CI run {stamp}",
-        f"origin/main `{main_sha[:7]}`; Debian 13 (trixie) {versions}; {len(jobs)} containers, {wall:.0f} s wall, about ${spent:.2f}.",
+        f"origin/main `{main_sha[:7]}`; Debian 13 (trixie) {versions}; {len(jobs)} containers, {wall:.0f} s wall, test time about ${spent:.2f} (Modal also bills container start-up; `modal billing report --for today` has the real figure).",
         "",
         report.render_summary(tree_list, rows),
         "",

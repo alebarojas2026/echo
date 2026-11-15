@@ -9,6 +9,7 @@ import io
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import tarfile
 import time
@@ -79,7 +80,9 @@ def _clip(text: str) -> str:
     return text[:OUTPUT_HEAD] + "\n[... cut ...]\n" + text[-OUTPUT_TAIL:]
 
 
-@app.function(image=_image(), cpu=2, memory=4096, timeout=LANE_TIMEOUT_S, max_containers=100)
+# single_use_containers: every (tree, lane) gets a fresh container, so no files, /tmp or home
+# folder are left over from another tree.
+@app.function(image=_image(), cpu=2, memory=4096, timeout=LANE_TIMEOUT_S, max_containers=100, single_use_containers=True)
 def run_lane(trees: modal.Dict, key: str, lane: str, steps: list) -> dict:
     """Unpack tree `key`, run the lane's steps in order, return each step's exit code and output.
 
@@ -87,12 +90,18 @@ def run_lane(trees: modal.Dict, key: str, lane: str, steps: list) -> dict:
     """
     started = time.monotonic()
     root = Path("/work/repo")
-    root.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(root, ignore_errors=True)
+    root.mkdir(parents=True)
     with tarfile.open(fileobj=io.BytesIO(trees[key]), mode="r:gz") as tar:
         tar.extractall(root, filter="data")
     subprocess.run(["chown", "-R", f"{TEST_USER}:{TEST_USER}", "/work"], check=True)
+    # A fresh login's environment: nothing of modal's own (its PYTHONPATH points at files the
+    # test user can't read), only what the image sets.
+    keep = ("PATH", "CI", "NO_COLOR", "NPM_CONFIG_CACHE")
     env = dict(
-        os.environ,
+        {k: os.environ[k] for k in keep if k in os.environ},
+        LANG="C.UTF-8",
+        TERM="dumb",
         HOME=f"/home/{TEST_USER}",
         USER=TEST_USER,
         LOGNAME=TEST_USER,
