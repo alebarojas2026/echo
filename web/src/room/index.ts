@@ -6,6 +6,8 @@ import { AlertMarks, WaveClock } from './alert'
 import { startAlign } from './align'
 import { Fly, HallMarks, hallShot, pinnedFraming } from './fly'
 import { Presence } from './ghost'
+import { HeardNodes } from './heard'
+import { NODES } from './frame'
 import { DEFAULT_CUT_M, loadScan } from './scan'
 import { Mirror } from './mirror'
 import { RouterSpots } from './spots'
@@ -67,6 +69,7 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   }
 
   let router: string | null = null
+  const heard = new HeardNodes()
   feed.subscribe(({ state, stale }) => {
     // NO DATA: the last state is more than 1 s old. The room greys out and holds still.
     host.classList.toggle('room--stale', stale)
@@ -75,6 +78,8 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     else say('', '')
     host.dataset.feed = stale ? 'stale' : 'live'
     if (stale || !state) return
+    // Devices are drawn only while the board hears them (heard.ts).
+    stage.setHearing(heard.update(Object.keys(NODES), state.links, performance.now()))
     if (state.router !== router) {
       router = state.router
       stage.placeNodes(router)
