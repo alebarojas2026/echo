@@ -143,36 +143,37 @@ export function standBase([x, y]: Vec3): Vec3 {
   return edge !== null && y >= edge - 0.01 ? [x, y, DESK_TOP_M] : [x, y, 0]
 }
 
-const CHAIR_SEAT_M = 0.45
-const CHAIR_BACK_M = 0.85
-const CHAIR_W_M = 0.42
-/** Higher off the ground than this, a device is on a stand (a post), not on something put on a chair. */
-const CHAIR_MAX_M = 1.1
+/** The table drawn under a device across the spot: its top's size, and the heights it is drawn for. */
+const TABLE_W_M = 0.7
+const TABLE_D_M = 0.45
+const TABLE_MIN_M = 0.25
+const TABLE_MAX_M = 1.3
 
 /**
- * Whether a device stands on a chair: across the spot from the desk (south of the floor a person stands on,
- * where nobody stands), and as far above what is under it (`base`, from standBase or standOn) as a chair with
- * something on its seat holds a device. A device on a desk, or on a post at the strip's end, is not.
+ * Whether a device stands on a table of its own: across the spot from the desk (south of the floor a person
+ * stands on, where nobody stands), with room under it for one (`base` is what is under it, from standBase or
+ * standOn). Its height is whatever the file says: the two ends of the gate are each on the edge of their own
+ * table and need not be level. A device on our desk, on the next row's desk in the hall, or on a post at the
+ * strip's end, is not.
  */
-export function onChair(p: Vec3, base: Vec3): boolean {
+export function onTable(p: Vec3, base: Vec3): boolean {
   const up = p[2] - base[2]
-  return STRIP_M !== null && p[1] < -0.01 && up >= CHAIR_SEAT_M && up <= CHAIR_MAX_M
+  return STRIP_M !== null && p[1] < -0.01 && up >= TABLE_MIN_M && up <= TABLE_MAX_M
 }
 
-/** A plain chair facing the desk, its back to the south, with a box on its seat that raises the device to `up`
- *  metres above the ground. Scene units, the ground under the device at the origin. */
-export function chairGeometry(up: number): BufferGeometry {
+/** A plain table with the device on the middle of its near edge (the spot's side), its top just under the
+ *  device `up` metres above the ground. Scene units, the ground under the device at the origin. */
+export function tableGeometry(up: number): BufferGeometry {
   const light = mix(EDGE, SQUARE, 0.35)
   const dark = mix(FLOOR, EDGE, 0.7)
-  const leg = CHAIR_W_M / 2 - 0.02
-  const parts: Part[] = [
-    { geom: new BoxGeometry(CHAIR_W_M, 0.04, CHAIR_W_M), light, dark, at: at(0, CHAIR_SEAT_M - 0.02, 0) },
-    { geom: new BoxGeometry(CHAIR_W_M, CHAIR_BACK_M - CHAIR_SEAT_M, 0.04), light, dark, at: at(0, (CHAIR_BACK_M + CHAIR_SEAT_M) / 2, leg) },
-    ...[[-leg, -leg], [leg, -leg], [-leg, leg], [leg, leg]].map(([x, z]) => ({ geom: new BoxGeometry(0.03, CHAIR_SEAT_M - 0.04, 0.03), light, dark, at: at(x, (CHAIR_SEAT_M - 0.04) / 2, z) })),
-  ]
-  const rise = up - HEAD_M / 2 - CHAIR_SEAT_M
-  if (rise > 0.01) parts.push({ geom: new BoxGeometry(0.24, rise, 0.24), light, dark, at: at(0, CHAIR_SEAT_M + rise / 2, 0) })
-  return shadedGeometry(parts)
+  const top = up - HEAD_M / 2
+  const back = TABLE_D_M / 2 - 0.05 // the table reaches away from the spot (south, +z in the scene)
+  const x = TABLE_W_M / 2 - 0.03
+  const z = TABLE_D_M / 2 - 0.03
+  return shadedGeometry([
+    { geom: new BoxGeometry(TABLE_W_M, 0.04, TABLE_D_M), light, dark, at: at(0, top - 0.02, back) },
+    ...[[-x, -z], [x, -z], [-x, z], [x, z]].map(([lx, lz]) => ({ geom: new BoxGeometry(0.03, top - 0.04, 0.03), light, dark, at: at(lx, (top - 0.04) / 2, back + lz) })),
+  ])
 }
 
 /** How far around its middle a device rests on things: its stand runs to the highest surface within this of it,
@@ -206,9 +207,9 @@ interface NodeMesh {
   /** 0..1 as drawn, and where it is heading: 1 heard, LOST_ALPHA heard before but quiet now, 0 never heard. */
   alpha: number
   alphaTo: number
-  /** The chair under it, when it stands on one (onChair), and how high above the ground that chair holds it. */
-  chair: Mesh<BufferGeometry, MeshBasicMaterial> | null
-  chairUp: number
+  /** The table under it, when it stands on one of its own (onTable), and how high above the ground it is. */
+  table: Mesh<BufferGeometry, MeshBasicMaterial> | null
+  tableUp: number
 }
 
 /** How faint a device that has gone quiet is drawn, beside its name and "not heard". */
@@ -254,7 +255,7 @@ export class Stage {
       this.group.add(head, post)
       const label = view.addLabel(info.name, new Vector3(), `room-label--node room-label--${nodeLabelSide(info.id)}`)
       label.hidden = true
-      this.nodes.push({ id: info.id, head, post, label, alpha: 0, alphaTo: 0, chair: null, chairUp: 0 })
+      this.nodes.push({ id: info.id, head, post, label, alpha: 0, alphaTo: 0, table: null, tableUp: 0 })
     }
     this.putNodes()
     view.addAnimator((dt) => this.fadeNodes(dt))
@@ -307,20 +308,20 @@ export class Stage {
       // The stand: a post up to the head from what is under it in the room's model, else from the drawn desk top
       // or the floor.
       const base = this.standFor(n.id, p)
-      // A device across the spot at about desk height is on a chair, with a box on the seat under it.
-      const up = onChair(p, base) ? Math.round((p[2] - base[2]) * 100) / 100 : 0
-      if (up !== n.chairUp) {
-        if (n.chair) {
-          this.group.remove(n.chair)
-          n.chair.geometry.dispose()
+      // A device across the spot is on the edge of a table of its own, at whatever height it stands.
+      const up = onTable(p, base) ? Math.round((p[2] - base[2]) * 100) / 100 : 0
+      if (up !== n.tableUp) {
+        if (n.table) {
+          this.group.remove(n.table)
+          n.table.geometry.dispose()
         }
-        n.chair = up ? new Mesh(chairGeometry(up), new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: n.alpha })) : null
-        if (n.chair) this.group.add(n.chair)
-        n.chairUp = up
+        n.table = up ? new Mesh(tableGeometry(up), new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: n.alpha })) : null
+        if (n.table) this.group.add(n.table)
+        n.tableUp = up
       }
-      if (n.chair) {
-        n.chair.position.copy(v3(base))
-        n.chair.visible = n.alpha > 0
+      if (n.table) {
+        n.table.position.copy(v3(base))
+        n.table.visible = n.alpha > 0
       }
       n.post.geometry.setPositions([...v3(up ? [p[0], p[1], p[2] - HEAD_M / 2] : base).toArray(), ...top.toArray()])
       // Each label hangs off the cube's face on its side, so the cube never sits on its own label.
@@ -371,9 +372,9 @@ export class Stage {
       n.head.material.opacity = n.alpha
       n.post.material.opacity = n.alpha * STAND_ALPHA
       n.head.visible = n.post.visible = n.alpha > 0
-      if (n.chair) {
-        n.chair.material.opacity = n.alpha
-        n.chair.visible = n.alpha > 0
+      if (n.table) {
+        n.table.material.opacity = n.alpha
+        n.table.visible = n.alpha > 0
       }
       // The name stays readable on a quiet device: "not heard" is the point of showing it at all.
       n.label.style.opacity = String(n.alphaTo === LOST_ALPHA ? Math.min(1, n.alpha / LOST_ALPHA) : n.alpha)
