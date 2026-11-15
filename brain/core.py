@@ -273,7 +273,7 @@ class Brain:
         beacon): only the baseline is new. The model was taught on drops from a baseline, so
         it carries over, and the recordings keep the baseline they were made on."""
         self._cmd_label_mode({"mode": "off"})
-        self._start_capture(new_place=args.get("keep_model") is not True)
+        self._start_capture(new_place=args.get("keep_model") is not True, by_hand=True)
 
     def _cmd_train(self, args):
         if self.training or not self.base:
@@ -503,7 +503,7 @@ class Brain:
                 if m is None or abs(m - self.base[link]) > SETTLE_DB:
                     self.recalibrating, self._old_base = True, dict(self.base)
                     self._cmd_label_mode({"mode": "off"})
-                    self._start_capture(new_place=False)
+                    self._start_capture(new_place=False, by_hand=False)
                     self.emit("recalibrating", {"link": link})
                     return
 
@@ -617,12 +617,16 @@ class Brain:
         for kind, info in self.watch.pop_events():
             self.emit(kind, info)
 
-    def _start_capture(self, new_place: Optional[bool] = None):
-        """new_place None = keep what the running capture was asked for (a restart of its 20 s)."""
+    def _start_capture(self, new_place: Optional[bool] = None, by_hand: Optional[bool] = None):
+        """new_place None = keep what the running capture was asked for (a restart of its 20 s).
+        by_hand = asked for with the baseline cmd (with or without keep_model), not the automatic one."""
+        if by_hand is None:
+            by_hand = bool(self.capture and self.capture.get("by_hand"))
         asked = self.capture["asked"] if self.capture else None   # set on the first tick: the clock may not have started
         if new_place is None:
             new_place = bool(self.capture and self.capture["new_place"])
-        self.capture = {"start": None, "messages": [], "new_place": new_place, "asked": asked}
+        self.capture = {"start": None, "messages": [], "new_place": new_place, "asked": asked,
+                        "by_hand": by_hand}
 
     def _new_place(self, now) -> None:
         """The operator's baseline finished: nothing learned before it is used from here on.
@@ -672,8 +676,7 @@ class Brain:
                 self._wait_said = wait
                 log = logging.getLogger("brain")
                 log.warning("baseline is waiting: %s", wait) if wait else log.info("baseline: capturing 20 s")
-            if wait and self.capture["new_place"] and not self.recalibrating \
-                    and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS:
+            if wait and self.capture["by_hand"] and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS:
                 # Pressed by mistake in front of an audience, or the room never cleared: without
                 # this pred stays hidden for ever. The old baseline and the model are untouched.
                 logging.getLogger("brain").warning(
