@@ -255,7 +255,7 @@ class Handler(SimpleHTTPRequestHandler):
                     raise ApiError(HTTPStatus.BAD_REQUEST, f"{name} is given more than once")
                 query[name] = values[0]
             reply = self.server.routes[(method, path)](Request(query, body, self.client_address[0]))
-            if not isinstance(reply, dict):
+            if reply is not None and not isinstance(reply, dict):   # None is JSON null (GET /ask/last)
                 raise TypeError(f"the handler returned {type(reply).__name__}, not a dict")
         except ApiError as e:
             return self._json({"error": e.message}, head, e.status)

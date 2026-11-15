@@ -26,6 +26,7 @@ import difflib
 import json
 import math
 import re
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -61,6 +62,16 @@ STORY = re.compile(r"\bwhat(?:'s| has| had)?\b(?:\s+\w+){0,2}\s+happened\b|\bwha
 # "Who was here?" is a story question: the story says what happened and never who it was.
 WHO_HERE = re.compile(r"\bwho (was|were|came|has been|had been) (here|there|in|by|around)\b", re.I)
 NOT_WHO = "I can't tell who anyone is, only what happened. "
+# The most recent story answer, for GET /ask/last (a second screen shows what someone else asked).
+# Kept in this process's memory only: never written to the store, gone at restart.
+_LAST = {"reply": None}
+_LAST_LOCK = threading.Lock()
+
+
+def last_story():
+    """The most recent story answer exactly as ask() returned it, with "question" and "asked_t", or None."""
+    with _LAST_LOCK:
+        return _LAST["reply"] and json.loads(json.dumps(_LAST["reply"]))
 
 RULES = [  # (tool, keywords): first match wins, so the order matters
     ("intrusions", r"intru|\barmed\b|\barm(ed)? mode|break.?ins?\b|broke in|trespass|after.?hours|sneak|security (alarm|mode|system)"),
@@ -315,7 +326,10 @@ def ask(question: str, store: Store, llm=None, now_ms=None, zones=None, links=No
     if story_question(read) and not any(cant_answer(WHO_HERE.sub(" ", q), zones) for q in (question, read)):
         out = tell(read, store, now_ms, zones, nodes_path, writer)
         latest = store.latest()
-        return {**out, "picked_by": "rules", "src": latest and latest["src"], "ms": round((timer() - start) * 1000)}
+        reply = {**out, "picked_by": "rules", "src": latest and latest["src"], "ms": round((timer() - start) * 1000)}
+        with _LAST_LOCK:
+            _LAST["reply"] = json.loads(json.dumps({**reply, "question": question, "asked_t": now_ms}))
+        return reply
     refused = cant_answer(question, zones) or cant_answer(read, zones)
     pick, picked_by = {"tool": "none"}, "rules"
     if not refused:
