@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from brain import layout
+from brain import settings as S
 
 CHECKIN_LINK = "pi5>unoq:wifi"
 CROSS_DB = 1.5          # a crossing is this far above or below the rolling median
@@ -40,9 +41,8 @@ SMOOTH_N = 3            # at least this many readings are averaged before compar
 SMOOTH_MS = 200         # ... and all of the last 0.2 s (still 3 readings at 10 or 15 a second, 10 at 50 a second)
 OTHER_LINK_DB = 3.0     # no other link may change by more than this
 OTHER_BIN_MS = 500      # ... comparing 0.5 s means
-SMOOTH_DECISIONS = 10   # zone and kind are the majority of this many decisions (1 s)
-SMOOTH_MAJORITY = 6     # ... and a value needs this many of them to take over
-MOVING_RUN = 5          # "moving" decisions in a row (0.5 s) before the still timer resets
+# The people rules' numbers (how many decisions make a majority, how many "moving" in a row reset
+# the still timer, how long a person must be there to be an intrusion) live in brain/settings.py.
 LED_RETRY_S = 30.0      # after a failed LED call, leave the grid alone this long
 NODES_JSON = layout.NODES_JSON   # radio/nodes.json
 
@@ -267,9 +267,10 @@ class Armed:
     decisions: the count starts again when pred is back, and whoever was already in stays "in".
     """
 
-    def __init__(self):
+    def __init__(self, settings: Optional[S.Settings] = None):
+        self.settings = settings or S.DEFAULT
         self.on = False
-        self._recent: deque = deque(maxlen=SMOOTH_DECISIONS)   # per decision: (a person is present, zone)
+        self._recent: deque = deque(maxlen=self.settings.intrusion_decisions)   # per decision: (a person is present, zone)
         self._inside = False
 
     def arm(self, on: bool) -> bool:
@@ -289,20 +290,20 @@ class Armed:
         person = bool(pred.get("present")) and pred.get("kind") == "person"
         self._recent.append((person, pred.get("zone") or 0))
         inside = sum(1 for p, _ in self._recent if p)
-        if not self._inside and inside >= SMOOTH_MAJORITY:
+        if not self._inside and inside >= self.settings.intrusion_majority:
             self._inside = True
             if self.on:
                 zones = [z for p, z in self._recent if p]
                 return max(set(zones), key=zones.count)
-        elif self._inside and len(self._recent) - inside >= SMOOTH_MAJORITY:
+        elif self._inside and len(self._recent) - inside >= self.settings.intrusion_majority:
             self._inside = False
         return None
 
 
-def _majority(values: list, current):
+def _majority(values: list, current, majority: int = S.DEFAULT.smooth_majority):
     """The value that holds a real majority of the decisions (6 of 10 once there are 10),
     otherwise the current one stays."""
-    need = min(SMOOTH_MAJORITY, len(values) // 2 + 1)
+    need = min(majority, len(values) // 2 + 1)
     for v in set(values):
         if values.count(v) >= need:
             return v
@@ -312,7 +313,9 @@ def _majority(values: list, current):
 class Watch:
     """The check-in and alert rules together, driving the LED grid."""
 
-    def __init__(self, limits: Optional[Dict[int, Optional[float]]] = None, led=None):
+    def __init__(self, limits: Optional[Dict[int, Optional[float]]] = None, led=None,
+                 settings: Optional[S.Settings] = None):
+        self.settings = settings or S.DEFAULT
         self.limits = zone_limits() if limits is None else limits
         self.led = led or NoLed()
         self.checkin_rule = CheckIn()
@@ -325,7 +328,10 @@ class Watch:
         self._events: List[tuple] = []
         self._person = False
         self._shown: Optional[int] = None   # what the LED grid shows now (-1 = "?")
-        self._recent: deque = deque(maxlen=SMOOTH_DECISIONS)   # (zone, kind) per decision
+        self._recent: deque = deque(maxlen=self.settings.smooth_decisions)   # (zone, kind) per decision
+        # How often a still timer that had started was put back to zero, and by what. For counting
+        # on a recording (brain/replay.py); nothing on the screen reads it.
+        self.resets = {"moving": 0, "zone": 0, "gone": 0}
         self._kind = "none"                                    # person | object | none, smoothed
         self._raw_zone = 0                                     # the zone of the last single decision
         self._moving_run = 0
@@ -352,16 +358,18 @@ class Watch:
             self._raw_zone = raw_zone
             self.checkin_rule.zone_changed(t)
         self._recent.append((raw_zone, pred.get("kind") or "none"))
-        zone = _majority([z for z, _ in self._recent], self.zone)
-        self._kind = _majority([k for _, k in self._recent], self._kind)
+        zone = _majority([z for z, _ in self._recent], self.zone, self.settings.smooth_majority)
+        self._kind = _majority([k for _, k in self._recent], self._kind, self.settings.smooth_majority)
         self._person = self._kind == "person"
         moving = raw_person and pred.get("motion") == "moving"
         self._moving_run = self._moving_run + 1 if moving else 0
         if zone != self.zone:                      # a change that held for most of the last second
+            self._reset_timer("zone" if zone else "gone")
             self.zone = zone
-            self.still_ms = 0
-        elif not self._person or self._moving_run >= MOVING_RUN:
-            self.still_ms = 0                      # nobody, or real walking
+        elif not self._person:
+            self._reset_timer("gone")              # nobody
+        elif self._moving_run >= self.settings.moving_run:
+            self._reset_timer("moving")            # real walking
         else:
             self.still_ms += dt                    # still, give or take a blip
         limit = self.limits.get(zone) if self._person else None
@@ -369,6 +377,11 @@ class Watch:
             self.alerting, self.alert_zone = True, zone
             self._events.append(("alert_on", {"zone": zone}))
             self.led.alert(True)
+
+    def _reset_timer(self, why: str) -> None:
+        if self.still_ms > 0:
+            self.resets[why] += 1
+        self.still_ms = 0
 
     def _show(self, n: int) -> None:
         if n != self._shown:

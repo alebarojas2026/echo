@@ -68,9 +68,15 @@ def dataset(sessions: List[dict], base: Dict[str, float], links=F.LINKS) -> dict
 
 
 class Model:
-    def __init__(self, base: Dict[str, float], ver: str = "m1", links=F.LINKS, zones=ZONES[1:]):
+    def __init__(self, base: Dict[str, float], ver: str = "m1", links=F.LINKS, zones=ZONES[1:], motion_links=None):
         """links and zones come from radio/nodes.json (the brain passes them); the defaults are
-        the 2 x 2 m square's. probs has one entry for empty, then one per zone, in that order."""
+        the 2 x 2 m square's. probs has one entry for empty, then one per zone, in that order.
+        motion_links: the links whose features decide moving / still (brain/settings.py);
+        None = every link. Zone and kind always use every link."""
+        unknown = [k for k in motion_links or () if k not in links]
+        if unknown:
+            raise ValueError(f"motion_links names links this layout doesn't have: {', '.join(unknown)}")
+        self.motion_links = None if motion_links is None else tuple(k for k in links if k in motion_links)
         self.base = dict(base)
         self.ver = ver
         self.links = tuple(links)
@@ -94,7 +100,7 @@ class Model:
             raise ValueError("no labeled windows to train on")
         self.zone = _forest(d["X"], d["zone"])
         moving = d["zone"] != 0
-        self.motion = _forest(d["X"][moving], d["motion"][moving]) if moving.any() else None
+        self.motion = _forest(d["X"][moving][:, self._motion_cols()], d["motion"][moving]) if moving.any() else None
         self.kind = _forest(d["X"], d["kind"])
         # How much each link matters to the zone forest, for the "why" list.
         imp = self.zone.feature_importances_.reshape(len(self.links), len(F.STATS))
@@ -118,7 +124,7 @@ class Model:
             kind = "none"  # the zone forest says empty; never report a person nowhere
         motion = None
         if present and self.motion is not None:
-            motion = str(_pick(self.motion, x)) or None
+            motion = str(_pick(self.motion, x[:, self._motion_cols()])) or None
         zone_set = ([z for i, z in enumerate(self.classes) if z and probs[i] >= ZONE_SET_MIN_P] or [zone]) \
             if present else []
         if present and not self.familiar(x[0]):
@@ -130,6 +136,14 @@ class Model:
             "zone_set": zone_set, "probs": [round(float(p), 3) for p in probs],
             "motion": motion, "still_s": None, "why": self.why(window),
         }
+
+    def _motion_cols(self):
+        """The feature columns the motion forest sees: every one, or those of motion_links."""
+        chosen = getattr(self, "motion_links", None)   # a model file from before this setting has none
+        if chosen is None:
+            return slice(None)
+        n = len(F.STATS)
+        return [i * n + j for i, link in enumerate(self.links) if link in chosen for j in range(n)]
 
     def familiar(self, x) -> bool:
         """False when some feature lies more than UNSEEN_DB outside the range seen in training."""

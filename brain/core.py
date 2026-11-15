@@ -24,6 +24,7 @@ from typing import Callable, Dict, List, Optional
 from advisor.advise import advise
 from brain import features as F
 from brain import layout
+from brain import settings as S
 from brain.alert import Armed, Tamper, Watch
 from brain.health import Health
 from brain.lesson import Lesson
@@ -44,7 +45,6 @@ ADVICE_MEDIAN_MS = 3_000 # before_dbm and after_dbm are medians over this long
 AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
 HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable (Pi B): their readings ride the sensing Wi-Fi
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
-ZONE_HOLD = 5            # decisions in a row (0.5 s) before enter, exit or zone_change is said
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
 LABEL_MODES = ("person", "object", "off")
@@ -125,13 +125,17 @@ def now_ms() -> int:
 
 class Brain:
     def __init__(self, clock: Optional[Callable[[], int]] = None, to_bus=None, mode_file=None,
-                 spawn=None, board_stats=None, links=None, nodes=None, led=None, sessions_dir=None):
+                 spawn=None, board_stats=None, links=None, nodes=None, led=None, sessions_dir=None,
+                 settings: Optional[S.Settings] = None):
         """clock None = follow the feed (latest recv_t), for recorded files played fast.
         to_bus(msg) forwards a command to the bus.
         spawn(fit, done) runs fit() off the loop, then done(model) back on it.
         nodes is radio/nodes.json, already parsed (default: the repo's copy).
         led is the LED grid (brain/alert.py); None = no lights.
-        sessions_dir is data/sessions: baseline.json is written there and read back at start."""
+        sessions_dir is data/sessions: baseline.json is written there and read back at start.
+        settings: the people rules' numbers (brain/settings.py); None = its defaults, or the
+        file named in RADIO_SIGHT_SETTINGS."""
+        self.settings = settings or S.load()
         nodes = nodes or json.loads(NODES_JSON.read_text(encoding="utf-8"))
         # The layout is whatever radio/nodes.json says: links (in its order), zones, the router.
         links = tuple(links or [link["id"] for link in nodes["links"]])
@@ -145,8 +149,8 @@ class Brain:
         over_hotspot = [k for k in links if ends.get(k, _ends(k))[1] in HOTSPOT_RECEIVERS]
         self.health = Health.from_nodes(nodes, classifier_links=[k for k in links if k not in over_hotspot])
         self.xray = Xray.from_nodes(nodes)
-        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
-        self.armed = Armed()                  # after hours: a person appearing is an intrusion
+        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led, self.settings)
+        self.armed = Armed(self.settings)     # after hours: a person appearing is an intrusion
         self.tamper = Tamper.from_nodes(nodes)   # ... and a device going silent is tampering
         # The optional hall beacons (nodes.json "hall"): not core links, but tamper counts them.
         self._hall_nodes = {b.get("node") for b in (nodes.get("hall") or {}).get("beacons") or []}
@@ -311,6 +315,7 @@ class Brain:
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
         history, links, zones = self._baselines(), self.links, self.zone_ids
+        motion_links = self.settings.motion_links
 
         def fit():   # may run on another thread: touches nothing of ours
             for s in sessions:   # read back from the bus's files; nothing is kept after the fit
@@ -318,7 +323,7 @@ class Brain:
                     s["messages"] = read_session(s["path"], s["meta"].get("recv_t"))
                 if not s.get("base"):
                     s["base"] = base_at(history, s["meta"].get("recv_t"))
-            return Model(base, ver=ver, links=links, zones=zones).fit(sessions)
+            return Model(base, ver=ver, links=links, zones=zones, motion_links=motion_links).fit(sessions)
 
         def done(model):   # back on the loop; model None = the fit failed
             self.training = None
@@ -762,7 +767,7 @@ class Brain:
             self.emit("intrusion", {"zone": intruder})
 
     def _announce(self, zone: int) -> None:
-        """enter, exit and zone_change, once the new zone has held for ZONE_HOLD decisions.
+        """enter, exit and zone_change, once the new zone has held for settings.zone_hold decisions.
 
         One flickering decision is not somebody walking in. Hidden spans (pred null) are skipped:
         whatever holds once pred is back gets announced then.
@@ -772,7 +777,7 @@ class Brain:
             return
         n = self._next_zone[1] + 1 if self._next_zone[0] == zone else 1
         self._next_zone = (zone, n)
-        if n < ZONE_HOLD:
+        if n < self.settings.zone_hold:
             return
         if self._said_zone == 0:
             self.emit("enter", {"zone": zone})
