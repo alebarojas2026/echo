@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain_tail.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/chain_tail.json",
   "$comment": "Section 13: the answer of GET /chain/tail. Not a bus message. The last records, oldest first, without their bodies. node is there on a witness's records only, for_seq (the record the signature vouches for) on a witness record only.",
   "type": "object",
   "properties": {

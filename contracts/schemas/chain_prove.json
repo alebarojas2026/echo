@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain_prove.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/chain_prove.json",
   "$comment": "Section 13: the answer of POST /chain/prove. Not a bus message. A copy with one record altered never verifies, so ok is false and first_bad_seq is the altered record. checked, kind and t (of the altered record) are optional.",
   "type": "object",
   "properties": {

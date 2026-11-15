@@ -21,7 +21,7 @@ PROOF = {"zone": {"correct": 47, "total": 52}, "bytes_out": 0}
 def site(tmp_path):
     dist = tmp_path / "dist"
     (dist / "assets").mkdir(parents=True)
-    (dist / "index.html").write_text("<!doctype html><title>Radio Sight</title>")
+    (dist / "index.html").write_text("<!doctype html><title>Echo</title>")
     (dist / "assets" / "app.js").write_text("console.log(1)")
     (tmp_path / "secret.txt").write_text("outside dist")
     paths = {"dist": dist, "nodes": tmp_path / "nodes.json", "proof": tmp_path / "proof.json"}
@@ -58,7 +58,7 @@ def leaves(obj):
 
 def test_serves_the_screen(url):
     status, headers, body = get(url + "/")
-    assert status == 200 and b"Radio Sight" in body
+    assert status == 200 and b"Echo" in body
     assert headers["Content-Type"].startswith("text/html")
     assert headers["Cache-Control"] == "no-cache"
 

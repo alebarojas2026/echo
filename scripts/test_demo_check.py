@@ -24,7 +24,7 @@ async def run_checker(http_port, ws_port):
 
 
 def test_reachable_board(tmp_path):
-    (tmp_path / "index.html").write_text("<html><body>Radio Sight</body></html>", encoding="utf-8")
+    (tmp_path / "index.html").write_text("<html><body>Echo</body></html>", encoding="utf-8")
     nodes = tmp_path / "nodes.json"
     nodes.write_bytes((CHECKER.parent.parent / "radio" / "nodes.json").read_bytes())
 

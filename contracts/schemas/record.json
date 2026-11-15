@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/record.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/record.json",
   "$comment": "Section 13: one sealed record of the store. Not a bus message. kind is second (the once-a-second summary), an event kind of section 5, or one of the witness kinds. hash = SHA-256 of the canonical JSON of {seq, t, kind, body, prev}; prev is 64 zeros for seq 1.",
   "type": "object",
   "properties": {

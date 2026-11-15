@@ -1,4 +1,4 @@
-# Radio Sight: Spoken Pitch
+# Echo: Spoken Pitch
 
 Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras during live sensing. This script is a three-minute rehearsal plan, not a measured performance claim; every result awaits PROOF.md. A beat is shown only after it passes preflight.
 

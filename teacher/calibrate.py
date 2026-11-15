@@ -190,7 +190,7 @@ def click_corners(device):
 
     cap = cv2.VideoCapture(device)
     points = []
-    window = "Radio Sight: click SW, SE, NE, NW; Enter accepts; R resets; Esc cancels"
+    window = "Echo: click SW, SE, NE, NW; Enter accepts; R resets; Esc cancels"
 
     def click(event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN and len(points) < 4:

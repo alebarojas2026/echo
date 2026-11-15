@@ -1,4 +1,4 @@
-"""Fake Radio Sight data: RSSI for every link plus matching camera messages.
+"""Fake Echo data: RSSI for every link plus matching camera messages.
 
     python -m sim.fake zone_tour            # real time, JSON lines on stdout
     python -m sim.fake zone_tour --fast > data/sessions/tour.jsonl

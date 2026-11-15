@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain_witness.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/chain_witness.json",
   "$comment": "Section 13: a signature by one witness over the bytes node|seq|hash|t of a chain head it was given. seq, hash and t are that head's, not the sender's own counter or clock.",
   "$ref": "common.json#/$defs/envelope",
   "properties": {

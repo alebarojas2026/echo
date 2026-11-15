@@ -1,6 +1,6 @@
 # Credits
 
-Radio Sight was built at MadHacks 2026 for the Qualcomm / N+1 track, following the theme "Let's Dig In."
+Echo was built at MadHacks 2026 for the Qualcomm / N+1 track, following the theme "Let's Dig In."
 
 ## Libraries
 
@@ -27,15 +27,15 @@ The project currently uses these third-party packages. An entry marked `Not pinn
 | meshoptimizer | `^1.3.0` | MIT | 3D asset preparation | `web/` | [meshoptimizer](https://github.com/zeux/meshoptimizer) |
 | Arduino App Bricks | Not pinned in this repository | MPL-2.0 | Runtime | `teacher/applab/` | [app-bricks-py](https://github.com/arduino/app-bricks-py) |
 
-As implementation dependencies land, this table should list every direct third-party library with its declared version, license, project link, and the Radio Sight module that uses it. The checked-in manifest in each module remains the source of truth.
+As implementation dependencies land, this table should list every direct third-party library with its declared version, license, project link, and the Echo module that uses it. The checked-in manifest in each module remains the source of truth.
 
 ## Research
 
-Radio Sight draws on radio tomographic imaging: using changes in received signal strength across multiple wireless links to estimate attenuation within an area.
+Echo draws on radio tomographic imaging: using changes in received signal strength across multiple wireless links to estimate attenuation within an area.
 
 Joey Wilson and Neal Patwari, ["Radio Tomographic Imaging with Wireless Networks"](https://span.ece.utah.edu/uploads/RTI_version_3.pdf), *IEEE Transactions on Mobile Computing*, vol. 9, no. 5, pp. 621–632, 2010.
 
-The paper establishes the core idea of combining signal-strength changes from many links into a spatial estimate. Radio Sight applies that foundation to local dead-zone mapping, presence and movement sensing, and on-device room feedback.
+The paper establishes the core idea of combining signal-strength changes from many links into a spatial estimate. Echo applies that foundation to local dead-zone mapping, presence and movement sensing, and on-device room feedback.
 
 ## Platform
 
@@ -44,4 +44,4 @@ The paper establishes the core idea of combining signal-strength changes from ma
 
 ## Project
 
-Radio Sight is released under the repository's MIT License. Contributions and dependencies retain their own copyright and license terms.
+Echo is released under the repository's MIT License. Contributions and dependencies retain their own copyright and license terms.

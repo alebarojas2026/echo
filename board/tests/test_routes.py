@@ -45,7 +45,7 @@ ROUTES = {("GET", "/history"): history, ("GET", "/report"): report, ("POST", "/a
 @pytest.fixture
 def url(tmp_path):
     (tmp_path / "dist").mkdir()
-    (tmp_path / "dist" / "index.html").write_text("<!doctype html><title>Radio Sight</title>")
+    (tmp_path / "dist" / "index.html").write_text("<!doctype html><title>Echo</title>")
     (tmp_path / "nodes.json").write_text("{}")
     server = serve.make_server("127.0.0.1", 0, dist=tmp_path / "dist", nodes=tmp_path / "nodes.json",
                                proof=tmp_path / "proof.json", layout_path=tmp_path / "layout.json",
@@ -141,7 +141,7 @@ def test_only_on_the_boards_own_networks(monkeypatch, url):
 
 def test_the_screen_and_its_files_are_unchanged(url):
     status, _, raw = call(url + "/")
-    assert status == 200 and b"Radio Sight" in raw
+    assert status == 200 and b"Echo" in raw
     assert call(url + "/nodes.json")[0] == 200
 
 

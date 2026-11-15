@@ -1,5 +1,5 @@
 [Unit]
-Description=Radio Sight narrator
+Description=Echo narrator
 After=network-online.target radio-sight-brain.service radio-sight-llm.service
 Wants=network-online.target
 StartLimitIntervalSec=0

@@ -1,4 +1,4 @@
-# Radio Sight: Twenty Hard Judge Questions
+# Echo: Twenty Hard Judge Questions
 
 Each answer is two sentences. Speak the answer; offer source records or proof when asked.
 

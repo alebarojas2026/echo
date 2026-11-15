@@ -21,25 +21,60 @@ Echo: **a witness that never watches.** It knows when someone is in a space, kee
 **Re-read this file every time you pull. The "Right now" section is how the team lead redirects everyone.**
 
 ## Right now
-**Where things stand (Sunday, about 4:15 AM):**
-- **`kit-4.2` is tagged (fad7179) and is what the board runs.** One spot, three devices (the board and Pi A side by side on one desk, Pi B across a gap of 85 to 100 cm at desk height). The Wi-Fi line Pi A to Pi B (`pi5>pi5b:wifi`, 25 readings a second, under 1 dB of noise) is the only thing that decides, with NO model, NO lesson and NO camera: after a baseline with the spot empty, the line alone gives the whole decision. Measured on the kit: found on 10 of 10 stands, nothing false in over nine empty minutes, found with Pi B hidden in a backpack. Seen once and used for tuning, so not a result to quote: no reaction to someone a metre to the side or behind the device. A walk straight through is NOT reliably seen (a body is in the line for under a second): nothing a judge reads may claim "walked through" or "passed by". A person needs a few seconds on the line (tests use 10-second stands). The check-in gesture is "step aside and back", never a lean. The sentences the team may say, with their numbers, are in `docs/numbers-to-say.md` (PR #887).
-- **`kit-5` is being merged: the witness set** (contract issue #866; PRs #870, #871, #873, #874, #872, #877, #878). It goes on the board only after a cold-start check with real recordings and the team lead's word.
-- **Every build must pass a cold start before it is tagged:** the real programs started with no model, no baseline and no camera, fed real recordings, with the judge's page looked at. `kit-4` passed every simulated test and failed on the board in the first minute because no test started cold. A reviewer who gates only with a trained or stand-in model has not gated.
+**Status, Sunday 6:50 AM. Written by the team lead for every worker; Alejandro's worker, your list is at the end of this section.**
 
-**What to work on, in this order:**
-1. Review comments and failing checks on your open PRs in the witness set.
-2. Open issues titled "Witness: ..." with your tag, then issue #856 (faults on the judge's screen).
-3. Fixes for anything the real kit shows (issue #95).
-4. Nothing else. No new features, no new feature issues. Old "Hero:", "Wow:", "Desk layout:" and dead-zone issues are out of date: do not pick them up.
+**What is on the kit**
+- **`kit-5` (c79da9b) is tagged and running on the board and both Pis.** It is the witness set on top of `kit-4.2`: the sealed record, the two Pis signing it, "What happened?" from the record, the engine room.
+- **Checked on the real kit this morning, one person** (the step-by-step results are on issue #95):
+  - 10 of 10 ten-second stands, "Someone is here" within about 0.1 s of the body reaching the line; two empty minutes with nothing false.
+  - The no-movement alert at 10 s of standing still; stepping aside and back gave the check-in and cleared it.
+  - Armed: one intrusion on one stand; the report came back in 0.6 s.
+  - "What happened in the last five minutes?" answered in 0.1 s with clock times.
+  - Both Pis signing with good signatures. Prove it altered record 1627 in a copy and the check named 1627; the real record still verified.
+  - Pi B unplugged: shown silent within 14 s, back by itself, the record kept rising and stayed verified.
+- **So this is now true and may be said:** the sealed record and the signing have run on the real board. Numbers for the pitch, the screen and Devpost still come only from PROOF.md and `docs/numbers-to-say.md`; the run above is not in them until the proof worker adds it.
+- **Not checked by eye on the kit yet:** the engine room page.
 
-**Rules that still hold:**
-- **Layout comes from `radio/nodes.json`, never from constants in code.** The demo layout is the gate (`python -m radio.use_layout gate`); it is switched BEFORE the web page is built, because the page carries the layout it was built with as its fallback.
-- **Hands-on hardware is Alexander's and Ivan's laptop session's** (issue #95). When a task needs the real devices, comment `needs Alexander:` on the issue with exact commands and what to look for, then take your next issue. A baseline with the spot empty is the first step after every deploy.
-- Lanes: advisor/ is Izet's; narrator/ and teacher/ are Alejandro's; radio/, pi/, board/, bus/ and mcu/ are worked by the lead's workers (Alexander is on hardware).
-- **CI is down (the account's Actions limit), so a red check means nothing right now.** The merge gate is a local run: check out the PR merged with current main in a clean folder, run that lane's tests (pytest for the folder and `python -m pytest contracts`; for web: `npm ci && npx tsc --noEmit && npx vitest run && npx vite build`) with the desk layout AND with the gate active, and write the result in a PR comment ("CI unavailable; local: N passed"). Don't push empty commits to re-run CI.
-- **GitHub's API limit was hit tonight.** Read code and diffs with git (fetch the branches). Use `gh` only to open PRs and issues, comment and merge.
-- **Times:** Sunday 8:00 AM, last merge that touches anything a judge sees or the board runs. 9:30 AM, the board is frozen on a tagged commit; after that only a rollback to the previous tag goes on it. 10:30 AM, Devpost is submitted. One person deploys and a second checks it; every deploy ends with the baseline, the device checks and a look at the screen.
-- Simulated results are never written as measured. Numbers in the pitch, the screen and Devpost come from PROOF.md only.
+**What is being finished now**
+- **`kit-5.1` is cut (nothing more goes into it) and is in its last checks.** It is `kit-5` plus only these: the accent is blue #1FA5CF (#897); a "What happened?" button on the judge's page (#899); a "Sealed record · verified · 2 witnesses" line (#902); placing the screen by clicking the desk the kit is on (press P, click the desk, G for the other side, Enter saves; #901); the name Echo everywhere a person reads it (#906); the alarm page's hint says step aside and back (#903); "was anyone here" shows its steps and records (#904); the narrator never contradicts the headline (#905); a chain check beside a prune cannot give a false alarm (#907); and a fix from the kit, a wave on another link is no longer a check-in on the one spot (#909).
+- The candidate passed a cold start (no model, no camera, the kit's recordings, the pages looked at). The lead tags it; Ivan deploys it (about 10 minutes, no keys to make) before 9:30 AM. If anything looks wrong the board goes back to `kit-5`.
+- **After `kit-5.1`, nothing that the board runs or a judge sees is merged.** Only `docs/` may change, until 10:30 AM.
+
+**What comes next, in order**
+1. `kit-5.1` on the kit: baseline, one stand, the blue, P to place the stand, both Pis still signing, the engine room looked at by eye.
+2. Each screen laptop joins the kit's own Wi-Fi and opens its page: the judge's page `http://192.168.77.2:8080/`, the engine room `/engine/`, the alarm page `/phone/` on a phone.
+3. Three rehearsals of the 3-minute round at the desk.
+4. Devpost page and video; Ivan submits by 10:30 AM. Judging is 1:00 to 3:00 PM, three minutes a desk.
+
+**The judge's part of the demo (this is the order; no walk-through anywhere):** step in and stand (the figure appears); stand still until the no-movement alert, then step aside and back (check-in); armed, step in (intrusion); unplug Pi B (the sensor goes blind and the witness is recorded silent, the record carries on); ask "What happened?"; press Prove it.
+
+**Seen on the kit, worth knowing**
+- Pi B's clock resets every time it loses power, and its cable came out once: secure the power cable, and set the clocks after any power-up, before the baseline.
+- After the install, Pi B's signing program needed one manual start. Check it is running on each Pi after any restart.
+- A small nudge of one device costs the margin: the empty line should read about -44 dBm or better. Placed and checked before each session.
+- When Pi B was unplugged, Pi A was shown silent for about 4 s though nobody touched it. Being looked at; do not write "the others never miss a beat".
+
+**Decisions made this morning that a worker must not undo**
+- The architecture pictures carry plain titles ("Architecture", "Data path"): no tagline, no "no internet, no camera, no microphone" banner, no "what it does not do" note on the pictures. Do not add them back to `docs/architecture.svg`.
+- The accent is blue #1FA5CF, not orange. Screenshots in docs that still show orange are old.
+- Screens at the stand join the kit's own Wi-Fi. There is no public web link.
+- No backups or spare plans in docs: one way of doing each thing.
+
+**Rules that still hold**
+- **Every build passes a cold start before it is tagged:** the real programs started with no model, no baseline and no camera, fed real recordings, with the judge's page looked at.
+- **Layout comes from `radio/nodes.json`.** The demo layout is the gate (`python -m radio.use_layout gate`), switched BEFORE the web page is built.
+- **Hands-on hardware is Alexander's and Ivan's laptop session's** (issue #95). A baseline with the spot empty is the first step after every deploy and every power-up.
+- **CI is down**, so a red check means nothing. The gate is a local run on both layouts, written in a PR comment ("CI unavailable; local: N passed").
+- **GitHub's API limit was hit last night.** Read code and diffs with git. Use `gh` only to open PRs and issues, comment and merge.
+- Simulated results are never written as measured.
+
+**For Alejandro's worker (lanes: docs/, web/src/game/, narrator/, teacher/, sim/)**
+Only `docs/` from now on; leave narrator/, sim/, teacher/ and web/src/game/ alone unless the lead asks on an issue. One small PR per file, tests in `docs/` passing, in this order:
+1. **`docs/demo-runbook.md`** is the most out of date: it still has a camera-unplug proof, a camera cable handed over and training. Rewrite it for the round above: no camera, no lesson, baseline only; the judge's part exactly as listed; the pages and their addresses; P to place the screen at the stand (the card text is in the body of PR #901); clocks after power-up; Pi B's power cable; going back is one command per device (on #95).
+2. **`docs/devpost-draft.md`** (issues #687 and #879): the final direction, the name Echo, "What runs on the UNO Q", the sentences from `docs/numbers-to-say.md` word for word, no blanks, working links, the two architecture pictures.
+3. **`docs/pitch.md`, `docs/judge-faq.md`, `docs/video-shots.md`** (issue #879): the same direction and the same round; the FAQ answers "what exactly runs on the chip?" and "what breaks it?" plainly (a walk straight through is not reliably seen; a person needs a few seconds on the line; one spot; placement matters).
+4. **`docs/build.md`, `docs/network.md`, `docs/troubleshooting.md`** (issue #852): three devices and one spot, not the five-device desk strip; the signing set-up on each Pi (the key is made on the Pi and never leaves it; only the public key goes in the board's local key file).
+Never write: tracks, locates, pinpoints, counts people, sees through walls, blockchain, unhackable, tamper-proof, "performs radio tomographic imaging" (allowed: "built on the physics behind radio tomographic imaging, on a single link"), a walk-through being detected, or any number that is not in `docs/numbers-to-say.md`. When done or stuck, say so in a comment on issue #879.
 
 ## Lanes (stay in yours)
 | Tag | Folders | Owner |
