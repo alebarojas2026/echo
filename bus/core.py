@@ -26,11 +26,12 @@ Losses are logged at most once per LOSS_LOG_S per producer, with the total since
 in a crowded hall a reader can lose every other advert, and a log line per gap would cost more
 than the messages themselves.
 
-The witness path (#866): a chain_sub from a socket means "send me the chain's news" for the next
-SUB_KEEP_S seconds. Every chain_head (the board's store) and chain_witness (a Pi's signature) is
-sent on, from the bus's own port, to every such socket but the one it came from, which is how a Pi
-behind the other Pi's hotspot hears the board at all. These three kinds go no further: not to the
-brain, not into a recording, and not into the seq counts (their seq is the chain's own).
+The witnesses (CONTRACTS.md section 13, #866): each chain_head, the board's "this is where the
+sealed record stands", is also sent on, from the bus's own port, to every socket that sent a
+chain_witness or a chain_sub in the last SUB_KEEP_S seconds, which is how a Pi behind the other
+Pi's hotspot hears the board at all. A chain_sub is only a witness saying it is there: it goes no
+further. chain_head and chain_witness go on to the brain like any message, but their seq is the
+chain's record number, so no gaps are counted on them.
 
 A producer is one sending socket (address and port). Each process should send
 from a single socket for its whole life, or its seq gaps can't be counted.
@@ -57,7 +58,7 @@ STALE_FRAC = 0.4
 OPEN_MARK = ".open"
 BASELINE_MARK = ".baseline"
 CHAIN_KINDS = ("chain_sub", "chain_head", "chain_witness")
-SUB_KEEP_S = 30
+SUB_KEEP_S = 60
 MAX_SUBS = 16
 RESUME_WITHIN_S = 600
 
@@ -218,7 +219,7 @@ class Recorder:
 class Bus:
     def __init__(self, sessions=SESSIONS_DIR, send=None, clock=now_ms, reply=None):
         self.reply = reply or (lambda data, addr: None)   # sends from the listening socket
-        self.chain_subs: dict = {}                        # (host, port) -> recv_t of its last chain_sub
+        self.chain_subs: dict = {}                        # a witness's (host, port) -> recv_t of its last message
         self.recorder = Recorder(sessions)
         resumed = self.recorder.resume(time.time())  # file times are wall-clock
         if resumed:
@@ -256,8 +257,8 @@ class Bus:
             self.command(msg, recv_t)
             return msg
 
-        if msg["type"] in CHAIN_KINDS:
-            self.chain(msg, tuple(addr[:2]), recv_t)
+        chain = msg["type"] in CHAIN_KINDS
+        if chain and self.chain(msg, tuple(addr[:2]), recv_t):
             return msg
 
         producer = self.producers.get(key)
@@ -270,7 +271,11 @@ class Bus:
                 self.link_quiet.discard(link)
                 log.info("%s back after %.0f s", link, (recv_t - self.link_last[link]) / 1000)
             self.link_last[link] = recv_t
-        gap = producer.see(msg.get("seq"))
+        if chain:
+            producer.received += 1   # seq is the chain's record number: nothing to count gaps on
+            gap = 0
+        else:
+            gap = producer.see(msg.get("seq"))
         if gap:
             lost = producer.loss_line(gap, recv_t)
             if lost:
@@ -285,21 +290,23 @@ class Bus:
         self.recorder.write(msg)
         return msg
 
-    def chain(self, msg: dict, addr: tuple, recv_t: int) -> None:
-        """The witness path: remember who asked, and pass heads and signatures on to them."""
+    def chain(self, msg: dict, addr: tuple, recv_t: int) -> bool:
+        """The witnesses' part of a chain message: remember a witness's socket, send a head on to
+        each of them. True when the message goes no further (chain_sub)."""
         for sub in [s for s, seen in self.chain_subs.items() if recv_t - seen > SUB_KEEP_S * 1000]:
             del self.chain_subs[sub]
-        if msg["type"] == "chain_sub":
+        if msg["type"] != "chain_head":
             if addr in self.chain_subs or len(self.chain_subs) < MAX_SUBS:
                 self.chain_subs[addr] = recv_t
-            return
+            return msg["type"] == "chain_sub"
         data = encode(msg)
         for sub in self.chain_subs:
             if sub != addr:
                 try:
                     self.reply(data, sub)
                 except OSError as e:
-                    log.warning("%s not passed on to %s:%s: %s", msg["type"], sub[0], sub[1], e)
+                    log.warning("chain_head not sent on to %s:%s: %s", sub[0], sub[1], e)
+        return False
 
     def command(self, msg: dict, recv_t: int) -> None:
         cmd = msg.get("cmd")

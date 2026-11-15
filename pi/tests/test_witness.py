@@ -43,7 +43,7 @@ def lines(wit):
 def test_signs_the_head_it_is_sent(wit):
     answer = json.loads(wit.head(head(12)))
     assert answer == {"v": 2, "type": "chain_witness", "node": "pi5", "seq": 12, "hash": H1, "t": T,
-                      "sig": fake_sign(f"pi5|12|{H1}|{T}".encode()).hex(), "src": "live"}
+                      "sig": base64.b64encode(fake_sign(f"pi5|12|{H1}|{T}".encode())).decode(), "src": "live"}
     assert lines(wit) == [{"seq": 12, "hash": H1, "t": T, "sig": answer["sig"]}]
     assert "last seq signed 12, 1 signatures a minute" in wit.status_line()
 
@@ -138,15 +138,16 @@ def enrolled(tmp_path, monkeypatch):
 @needs_openssl
 def test_openssl_signature_verifies_with_the_public_line(enrolled, tmp_path):
     where, line = enrolled
-    node, body = json.loads("{" + line + "}").popitem()
-    assert node == "pi5" and len(base64.b64decode(body)) == 44      # the DER public key: 12 + 32 bytes
+    assert len(line.splitlines()) == 1                              # one line, ready for the board's JSON file
+    node, pem = json.loads("{" + line + "}").popitem()              # {"pi5": "<the PEM text>"}
+    assert node == "pi5" and pem.splitlines()[0] == "-----BEGIN PUBLIC KEY-----" and pem.endswith("KEY-----" + chr(10))
     pub = tmp_path / "pub.pem"
-    pub.write_text(f"-----BEGIN PUBLIC KEY-----\n{body}\n-----END PUBLIC KEY-----\n")
+    pub.write_bytes(pem.encode())
     one = w.Witness("pi5", w.Signer(where), w.SignedLog(where / w.LOG_NAME), say=lambda line: None)
     answer = json.loads(one.head(head(12)))
-    assert len(answer["sig"]) == 128 and answer["sig"] == answer["sig"].lower()
+    assert len(answer["sig"]) == 88 and len(base64.b64decode(answer["sig"], validate=True)) == 64
     msg, sig = tmp_path / "msg.bin", tmp_path / "sig.bin"
-    sig.write_bytes(bytes.fromhex(answer["sig"]))
+    sig.write_bytes(base64.b64decode(answer["sig"]))
 
     def verifies(data: bytes) -> bool:
         msg.write_bytes(data)
@@ -168,7 +169,7 @@ def test_init_prints_only_the_public_line_and_keeps_the_key_private(enrolled, ca
     out = capsys.readouterr()
     assert out.out.strip() == line and "PRIVATE" not in out.out + out.err
     assert w.main(["--node", "pi5b", "--pubkey"]) == 0
-    assert capsys.readouterr().out.startswith('"pi5b": "MCowBQYDK2VwAyEA')
+    assert capsys.readouterr().out.startswith('"pi5b": "-----BEGIN PUBLIC KEY-----' + chr(92) + 'nMCowBQYDK2VwAyEA')
 
 
 @needs_openssl

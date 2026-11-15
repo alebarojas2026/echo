@@ -5,10 +5,11 @@
     python3 -m pi.witness             # what the unit radio-sight-witness runs
 
 The board seals its records in a hash chain and says where the chain stands every 5 s:
-chain_head {seq, hash, t}. This program asks the bus for those (a chain_sub every 5 s, from the one
-UDP socket the answers come back on, so it also works from Pi B behind Pi A's hotspot), signs the
-bytes "node|seq|hash|t" with this Pi's Ed25519 private key and answers
-chain_witness {node, seq, hash, t, sig}; sig is the 64-byte signature in lowercase hex.
+chain_head {seq, hash, t} (CONTRACTS.md section 13). The bus sends each head on to the witnesses it
+has heard from, on the socket they send from, so this program says it is there (a chain_sub every
+5 s, which also keeps the path open from Pi B behind Pi A's hotspot), signs the bytes
+"node|seq|hash|t" with this Pi's Ed25519 private key and answers
+chain_witness {node, seq, hash, t, sig}; sig is the 64-byte signature in base64.
 
 Signing is the `openssl` already on the Pi (OpenSSL 3), nothing else:
     openssl genpkey -algorithm ed25519 -out witness_ed25519.pem                 # --init
@@ -49,7 +50,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 KEY_NAME = "witness_ed25519.pem"
 LOG_NAME = "signed.jsonl"
-SUB_S = 5.0        # ask the bus again this often (it forgets a witness after 30 s)
+SUB_S = 5.0        # tell the bus we are here this often (it forgets a witness after 60 s)
 STATUS_S = 10.0    # one status line this often
 QUIET_S = 15.0     # no head for this long: the status line says so
 HASH = re.compile(r"^[0-9a-f]{64}$")
@@ -90,11 +91,14 @@ def openssl(*args: str, data_out: bool = False):
 
 
 def public_line(node: str, where: Path) -> str:
-    """This Pi's line for the board's key file: "node": "<the public key PEM's base64 body>"."""
-    pem = openssl("pkey", "-in", str(where / KEY_NAME), "-pubout").decode("ascii")
-    body = "".join(line for line in pem.splitlines() if line and not line.startswith("-----"))
-    base64.b64decode(body, validate=True)
-    return f'"{node}": "{body}"'
+    """This Pi's line for the board's key file (data/witness_keys.local.json there):
+    "node": "<the public key's PEM text>", written as one line of JSON."""
+    lines = openssl("pkey", "-in", str(where / KEY_NAME), "-pubout").decode("ascii").splitlines()
+    body = "".join(line.strip() for line in lines if line.strip() and not line.startswith("-----"))
+    if len(base64.b64decode(body, validate=True)) != 44:
+        raise RuntimeError("openssl did not give an Ed25519 public key")
+    pem = f"-----BEGIN PUBLIC KEY-----\n{body}\n-----END PUBLIC KEY-----\n"
+    return f'"{node}": {json.dumps(pem)}'
 
 
 def init(node: str, where: Path, force: bool = False) -> str:
@@ -209,7 +213,7 @@ class Witness:
             self.say(f"[pi.witness] the chain stepped back: head seq {seq} after signing seq {self.last[0]}; "
                      "noted in this Pi's log, then signed")
         try:
-            entry["sig"] = self.sign(message(self.node, seq, hash_, t)).hex()
+            entry["sig"] = base64.b64encode(self.sign(message(self.node, seq, hash_, t))).decode("ascii")
             self.log.append(entry)   # logged first: nothing is sent that this Pi has no record of
         except (OSError, RuntimeError) as e:
             self.failed += 1

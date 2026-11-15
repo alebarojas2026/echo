@@ -355,10 +355,14 @@ def test_a_baseline_cmd_is_marked_with_its_time_for_the_clock_check(bus, tmp_pat
     assert bus.sent == []   # still not forwarded
 
 
-# --- the witness path (#866): chain_sub, chain_head, chain_witness ---
+# --- the witnesses (CONTRACTS.md section 13, #866): chain_head, chain_witness, chain_sub ---
+
+STORE = ("127.0.0.1", 40010)
+SIG = "A" * 86 + "=="
+
 
 def chain(type_, **body):
-    return json.dumps({"v": 2, "type": type_, **body}).encode()
+    return json.dumps({"v": 2, "type": type_, "src": "live", **body}).encode()
 
 
 @pytest.fixture
@@ -368,30 +372,37 @@ def chain_bus(bus):
     return bus
 
 
-def test_a_head_goes_to_every_socket_that_asked_and_a_signature_comes_back(chain_bus):
-    store, pi_a, pi_b = ("127.0.0.1", 40010), A, B
-    for who in (store, pi_a, pi_b):
-        chain_bus.handle(chain("chain_sub"), who)
-    chain_bus.handle(chain("chain_head", seq=4012, hash="a" * 64, t=5), store)
-    assert [addr for _, addr in chain_bus.replies] == [pi_a, pi_b]          # not back to the sender
-    assert chain_bus.replies[0][0]["seq"] == 4012 and "recv_t" in chain_bus.replies[0][0]
-    chain_bus.replies.clear()
-    chain_bus.handle(chain("chain_witness", node="pi5", seq=4012, hash="a" * 64, t=5, sig="00" * 64), pi_a)
-    assert [(m["type"], addr) for m, addr in chain_bus.replies] == [("chain_witness", store), ("chain_witness", pi_b)]
+def test_a_head_is_sent_on_to_each_witness_and_still_reaches_the_brain(chain_bus):
+    chain_bus.handle(chain("chain_sub", node="pi5"), A)                      # a witness that has signed nothing yet
+    chain_bus.handle(chain("chain_witness", node="pi5b", seq=4000, hash="a" * 64, t=4, sig=SIG), B)
+    chain_bus.handle(msg(1), ("127.0.0.1", 40003))                           # a radio reader: not a witness
+    chain_bus.sent.clear()
+    chain_bus.handle(chain("chain_head", seq=4012, hash="b" * 64, t=5, verified=True), STORE)
+    assert [addr for _, addr in chain_bus.replies] == [A, B]
+    assert chain_bus.replies[0][0]["seq"] == 4012 and chain_bus.replies[0][0]["hash"] == "b" * 64
+    assert [json.loads(m)["type"] for m in chain_bus.sent] == ["chain_head"]  # the brain copies it into state
 
 
-def test_chain_messages_stay_out_of_the_brain_the_recording_and_the_seq_counts(chain_bus, tmp_path):
+def test_a_signature_goes_to_the_brain_and_a_chain_sub_goes_nowhere(chain_bus, tmp_path):
     chain_bus.handle(cmd("record_start", session="s1", purpose="demo"), A)
     chain_bus.sent.clear()
     chain_bus.handle(chain("chain_sub", node="pi5"), A)
+    assert chain_bus.sent == [] and chain_bus.producers == {}
+    chain_bus.handle(chain("chain_witness", node="pi5", seq=4012, hash="b" * 64, t=5, sig=SIG), A)
+    assert [json.loads(m)["type"] for m in chain_bus.sent] == ["chain_witness"]
+    assert chain_bus.replies == []                                           # a signature is not sent to the witnesses
+    assert len((tmp_path / "s1.jsonl").read_text().splitlines()) == 2        # the meta line and the signature
+
+
+def test_no_gaps_are_counted_on_the_chains_record_numbers(chain_bus):
     for seq in (10, 500, 3):
-        chain_bus.handle(chain("chain_head", seq=seq, hash="a" * 64, t=5), B)
-    assert chain_bus.sent == [] and chain_bus.producers == {} and chain_bus.lost() == 0
-    assert len((tmp_path / "s1.jsonl").read_text().splitlines()) == 1       # the meta line only
-    assert len(chain_bus.replies) == 3
+        chain_bus.handle(chain("chain_head", seq=seq, hash="a" * 64, t=5), STORE)
+        chain_bus.handle(chain("chain_witness", node="pi5", seq=seq, hash="a" * 64, t=5, sig=SIG), A)
+    assert chain_bus.lost() == 0
+    assert [(p.received, p.restarts) for p in chain_bus.producers.values()] == [(3, 0), (3, 0)]
 
 
-def test_a_socket_that_stopped_asking_is_forgotten_and_one_that_fails_does_not_stop_the_rest(chain_bus):
+def test_a_witness_that_went_quiet_is_forgotten_and_one_that_cannot_be_reached_stops_nothing(chain_bus):
     from bus.core import SUB_KEEP_S
     t = [1000]
     chain_bus.clock = lambda: t[0]
@@ -399,16 +410,18 @@ def test_a_socket_that_stopped_asking_is_forgotten_and_one_that_fails_does_not_s
     t[0] += SUB_KEEP_S * 1000 - 1
     chain_bus.handle(chain("chain_sub"), B)
     t[0] += 2
-    chain_bus.handle(chain("chain_head", seq=1, hash="a" * 64, t=5), ("127.0.0.1", 40010))
+    chain_bus.handle(chain("chain_head", seq=1, hash="a" * 64, t=5), STORE)
     assert [addr for _, addr in chain_bus.replies] == [B] and A not in chain_bus.chain_subs
 
     def unreachable(data, addr):
         raise OSError("Network is unreachable")
     chain_bus.reply = unreachable
-    assert chain_bus.handle(chain("chain_head", seq=2, hash="a" * 64, t=5), ("127.0.0.1", 40010)) is not None
+    chain_bus.sent.clear()
+    assert chain_bus.handle(chain("chain_head", seq=2, hash="a" * 64, t=5), STORE) is not None
+    assert len(chain_bus.sent) == 1
 
 
-def test_over_real_sockets_the_answer_comes_from_the_bus_port(tmp_path):
+def test_over_real_sockets_the_head_comes_from_the_bus_port(tmp_path):
     rx, tx, send = open_sockets("127.0.0.1", 0, ("127.0.0.1", 9))
     b = Bus(sessions=tmp_path, send=send, reply=rx.sendto)
     stop = threading.Event()
