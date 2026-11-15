@@ -70,6 +70,8 @@ INVALID = [
     "$.key",                       # an empty key is no key
     "$.args",                      # the key sits beside args, never in them
     "$.locked",                    # locked is true or false
+    "$.state",                     # the camera watcher reports what it reads; unknown is the brain's word
+    "$.cam",                       # on, off, stalled or unknown
     "bad JSON",
 ]
 

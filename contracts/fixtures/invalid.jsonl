@@ -59,4 +59,6 @@
 {"v":2,"type":"cmd","cmd":"arm","args":{"on":false},"key":""}
 {"v":2,"type":"cmd","cmd":"reset","args":{"key":"a-key"}}
 {"v":2,"type":"state","t":1763149533100,"seq":5027,"src":"live","cam":"off","router":"S-home","links":[],"health":{"status":"ok","blind":[],"reason":null},"pred":null,"objects":[],"xray":null,"alert":{"state":"none","zone":null,"still_s":0,"limit_s":null},"checkin":null,"advice":null,"narration":null,"teacher":null,"model":{"trained":false,"ver":null,"train_s":null,"ms_per_decision":null,"windows":0,"train_sessions":[],"training":null},"board":{"cpu_temp_c":null,"cpu_mhz":null,"cpu_pct":null},"locked":"yes"}
+{"v":2,"type":"cam","t":1763149512200,"seq":77,"src":"live","state":"unknown","fps":0}
+{"v":2,"type":"state","t":1763149533300,"seq":5029,"src":"live","cam":"unplugged","router":"S-home","links":[],"health":{"status":"ok","blind":[],"reason":null},"pred":null,"objects":[],"xray":null,"alert":{"state":"none","zone":null,"still_s":0,"limit_s":null},"checkin":null,"advice":null,"narration":null,"teacher":null,"model":{"trained":false,"ver":null,"train_s":null,"ms_per_decision":null,"windows":0,"train_sessions":[],"training":null},"board":{"cpu_temp_c":null,"cpu_mhz":null,"cpu_pct":null}}
 {"v":2,"type":"rssi",

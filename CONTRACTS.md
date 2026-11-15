@@ -163,6 +163,11 @@ The positions above are the last ones measured and written into nodes.json, and 
 ## 5. Brain -> screen (WebSocket, about 10 state messages a second)
 ```jsonc
 {"v":2,"type":"state","t":1763149512200,"seq":5012,"src":"live","cam":"on","router":"S-home",
+        // cam = on | off | stalled | unknown.
+        // off = the camera watcher's own reading that no camera is connected (it reports once a second).
+        // unknown = no cam message in the last 3 s, or none yet: the board can't say. The screen never shows
+        // "0 cameras" or "Camera unplugged" for unknown; it says "Camera status unknown". A cam message (section 4)
+        // is never unknown: that is the brain's word for a watcher it cannot hear.
  "links":[{"id":"east>pi5:ble","dbm":-63.0,"base_dbm":-58.1,"drop_db":4.9,"rate_hz":9.2,"expected_hz":9.5,"status":"ok","why":0.42}],
  "health":{"status":"ok","blind":[],"reason":null},                         // status ok|degraded|blind; reason rate|jump
  "pred":{"present":true,"kind":"person","zone":2,"zone_set":[2],"probs":[0.04,0.11,0.85],
@@ -186,7 +191,7 @@ The positions above are the last ones measured and written into nodes.json, and 
            "move_m":[-0.3,0.0],"dist_change_m":0.2,"text":"An obstruction next to the router is blocking its link to the receiver. Move the router 30 cm west.",
            "before_dbm":-71.2,"after_dbm":null,"why":["pi5>unoq:wifi","east>pi5:ble"]},   // or null
  "narration":{"text":"...","event_id":"e123","t":1763149513000,"source":"llm","gen_ms":6120},
- "teacher":{"present":true,"zone":1,"motion":"still"},                       // null when the camera is off
+ "teacher":{"present":true,"zone":1,"motion":"still"},                       // null when the camera is off or unknown
  "hall":[{"id":"h>unoq:ble","tx":"h","rx":"unoq","xy_m":[14.0,9.5],"activity":0.62,"moving":true,"rate_hz":6.5,"stale":false,
           "busy":false}],
         // Optional: may be missing, and a screen reads a missing hall as []. One row per hall link once it has a reading,
@@ -221,6 +226,7 @@ The positions above are the last ones measured and written into nodes.json, and 
    // armed, disarmed, intrusion (info: {zone} or {link} for a hall link), passed_by (info: {zone}),
    // tamper, tamper_cleared (info: {node}, e.g. {"node":"east"}; a hall beacon is h or j).
    // info carries what the narrator needs: zone, link, node, before_dbm, after_dbm.
+   // cam_off is sent only on a real off reading from the camera watcher. There is no event for cam unknown.
 ```
 Before readings, a baseline or training exists, the brain still sends state at about 10/s with these values:
 - links: [] until readings arrive (never null). A link is listed once it has at least one reading (dbm is then a number);
@@ -256,7 +262,7 @@ Moving: foot speed > 0.25 m/s over 1 s, after a 0.5 s median filter. In the desk
   box centre along the strip.
 Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, and label_mode off.
   With the camera off (unplugged at the judging desk) there is no camera to ask: the capture runs on health ok and
-  label_mode off alone, and the operator keeps the strip empty.
+  label_mode off alone, and the operator keeps the strip empty. cam unknown counts as off here.
   A baseline started by the `baseline` cmd means a new place. On its baseline_done the brain drops the model (pred is
   null and model.trained is false until the next train), and train and relearn use only sessions recorded after it.
   Older session files stay in data/sessions and are never trained on again. The brain writes data/sessions/place.json:

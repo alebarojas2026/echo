@@ -5,7 +5,8 @@
   "$ref": "common.json#/$defs/envelope",
   "properties": {
     "type": {"const": "state"},
-    "cam": {"$ref": "common.json#/$defs/cam_state"},
+    "cam": {"$comment": "unknown = no cam message in the last 3 s, or none yet. Only state says it; a cam message never does.",
+            "anyOf": [{"$ref": "common.json#/$defs/cam_state"}, {"const": "unknown"}]},
     "router": {"$ref": "common.json#/$defs/router_spot"},
     "links": {"type": "array", "items": {
       "$comment": "Listed once it has a reading. Before the baseline base_dbm, drop_db and expected_hz are null and status is ok or stale.",
