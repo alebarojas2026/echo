@@ -212,6 +212,7 @@ class Brain:
         self._seq = 0       # one counter for everything we send to the screens (section 4)
         self._cmd_seq = 0   # and one for the commands we pass to the bus, a separate socket
         self._event_n = 0
+        self._scanned: Dict[str, tuple] = {}   # session files read and not taken: name -> (mtime, size, place)
         self._load_baseline()
         self._load_model()
 
@@ -422,14 +423,24 @@ class Brain:
             if name in self.sessions or name == self.want_session or "." in name:   # x.states.jsonl, x.events.jsonl
                 continue
             try:
-                if path.stat().st_mtime * 1000 < self.place_t:
+                stat = path.stat()
+                if stat.st_mtime * 1000 < self.place_t:
                     continue
             except OSError:
+                continue
+            # A file that was read and isn't a train or object recording of this place (demo
+            # recordings pile up all afternoon) is not read again until it changes. This runs on
+            # the live loop at every fit, every 15 s during a lesson (#648).
+            stamp = (stat.st_mtime_ns, stat.st_size, self.place_t)
+            if self._scanned.get(name) == stamp:
                 continue
             meta = last_meta(path)
             if meta and meta.get("session") == name and meta.get("purpose") in TRAIN_PURPOSES \
                     and isinstance(meta.get("recv_t"), (int, float)) and meta["recv_t"] >= self.place_t:
                 self.sessions[name] = {"meta": meta, "messages": None, "path": path}
+                self._scanned.pop(name, None)
+            else:
+                self._scanned[name] = stamp
 
     def _save_model(self) -> None:
         """data/sessions/model.pkl, so a restarted brain predicts without a new walk."""
