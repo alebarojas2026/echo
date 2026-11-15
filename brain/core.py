@@ -591,7 +591,10 @@ class Brain:
         lb = self.label
         cam_on = bool(self.cam and self.cam[1] == "on" and now - self.cam[0] <= CAM_SILENT_MS)
         if not cam_on:
-            if not self.recalibrating:
+            # A new place needs the camera to say the area is empty. The same layout set down
+            # again (keep_model, or the automatic baseline) may have no camera at all: at the
+            # judging desk it is unplugged, and the operator keeps the area empty.
+            if not self.capture or self.capture["new_place"]:
                 return "the camera is not on"
         elif lb is None or now - lb["recv_t"] > TEACHER_FRESH_MS:
             return "no camera labels in the last second"

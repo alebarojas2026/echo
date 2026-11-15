@@ -117,3 +117,26 @@ def test_links_that_read_like_nothing_in_training_give_every_zone_not_one():
     if unsure["present"]:
         assert unsure["zone_set"] == [1, 2, 3, 4]                   # "somebody, not sure where"
     assert unsure["zone"] in (0, 1, 2, 3, 4) and len(unsure["probs"]) == 5
+
+
+def test_keep_model_baseline_runs_with_the_camera_unplugged_but_a_new_place_still_needs_it():
+    brain, feed = taught()
+    model = brain.model
+
+    def no_camera(m):
+        return None if m["type"] in ("cam", "label") else shifted(m)
+
+    def play(seed):
+        for m in sim_to_v2("empty_room", seed=seed, t0=feed.t):
+            m = no_camera(m)
+            if m:
+                brain.on_message(m)
+        feed.t = brain.feed_t + 100
+
+    play(84)                                           # the camera has been unplugged for a while
+    brain.on_cmd(cmd("baseline", keep_model=True))
+    play(85)
+    assert brain.capture is None and brain.model is model          # done, with nobody watching
+    brain.on_cmd(cmd("baseline"))                      # a new place: the camera has to see it empty
+    play(86)
+    assert brain.capture is not None and brain.model is model
