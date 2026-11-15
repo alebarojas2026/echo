@@ -17,12 +17,13 @@ test("the repo's nodes.json: every zone in the file is listed, with the file's n
   const nodes = JSON.parse(readFileSync(new URL('../../../radio/nodes.json', import.meta.url), 'utf8'))
   assert.ok(nodes.zones.length >= 1)   // one spot, or a row or a square of zones
   assert.equal(useZones(nodes), true)
-  const want = nodes.zones.map((z) => ({ id: z.id, name: z.name, hint: WHERE[z.corner ?? z.side] ? `Zone ${z.id}, ${WHERE[z.corner ?? z.side]}` : `Zone ${z.id}` }))
+  const one = nodes.zones.length === 1   // one spot: no line under its name
+  const want = nodes.zones.map((z) => ({ id: z.id, name: z.name, hint: one ? '' : WHERE[z.corner ?? z.side] ? `Zone ${z.id}, ${WHERE[z.corner ?? z.side]}` : `Zone ${z.id}` }))
   const byId = (a, b) => a.id - b.id
   assert.deepEqual([...zoneList()].sort(byId), want.sort(byId))
   assert.ok(zoneList().every((z) => !z.hint.includes('undefined')))
   const strip = nodes.zones.every((z) => z.side === 'W' || z.side === 'E')   // a spot with no side is not a row
-  assert.deepEqual(compass(), strip ? ['West', 'East'] : ['South: the router', 'North is up'])
+  assert.deepEqual(compass(), one ? [] : strip ? ['West', 'East'] : ['South: the router', 'North is up'])
   restore(before)
 })
 
