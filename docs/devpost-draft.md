@@ -4,7 +4,7 @@
 
 ## Inspiration
 
-Some places need a record of who was there and when, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. A camera is too much in those places, and a log that someone can quietly edit is not enough.
+Some places need a record of when someone was there, and cannot have cameras: server rooms and network cabinets, evidence rooms, labs after hours, restrooms, hotel rooms. A camera is too much in those places, and a log that someone can quietly edit is not enough.
 
 We wanted a witness that can't see you, can't be edited, and still tells you exactly what happened. We built Echo at MadHacks 2026 for the Qualcomm / N+1 Institute track and the theme "Let's Dig In": we dug into what an ordinary Wi-Fi signal already knows about the space it crosses.
 
