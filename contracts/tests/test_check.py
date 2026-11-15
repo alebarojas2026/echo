@@ -84,6 +84,15 @@ def test_proof():
     assert "$.zone.correct" in check.check_lines([read("invalid_proof.json")], "proof")[1][0][1]
 
 
+def test_proof_security_is_optional_and_names_real_links():
+    proof = json.loads(read("valid_proof.json"))
+    assert proof["security"]["detection"]["within_s"] == 2
+    del proof["security"]                                       # the whole object may be missing
+    assert check.check_lines([json.dumps(proof)], "proof")[1] == []
+    errors = check.check_lines([read("invalid_proof_security.json")], "proof")[1]
+    assert "$.security.fewer_devices[0].links[0]" in errors[0][1]   # not a link in nodes.json
+
+
 def rssi(seq, rx="pi5"):
     link = "east>pi5:ble" if rx == "pi5" else "east>unoq:ble"
     return json.dumps({"v": 2, "type": "rssi", "t": 1763149512120 + seq, "seq": seq, "src": "live",

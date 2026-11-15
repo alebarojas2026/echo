@@ -104,7 +104,8 @@ Code takes ids, positions, links, zones and spots from nodes.json, not from cons
 {"v":2,"type":"narration","t":1763149513000,"seq":9,"src":"live","text":"Someone just walked into zone 2.",
  "event_id":"e123","event_kind":"enter","gen_ms":6120,"source":"llm","model":"<model name>"}
    // source = llm | template. model is null when source is template.
-   // event_kind "recap" = the end-of-demo recap, sent just before a reset clears things (up to 45 words, see section 6).
+   // event_kind "recap" = the end-of-demo recap, sent when the brain's reset event arrives. The reset has already
+   // cleared narration, so the recap is the first narration after it (up to 45 words, see section 6).
 {"v":2,"type":"meta","t":1763149500000,"seq":1,"src":"live","session":"s12","purpose":"heldout","walker":"w3"}
    // Sent on record_start. purpose = train | heldout | object | crowd | demo
 ```
@@ -164,8 +165,8 @@ Before readings, a baseline or training exists, the brain still sends state at a
    // record_start {session, purpose, walker}; label_mode {mode: person|object|off}; router_moved {spot}; truth {zone} (crowd game).
    // reset = between judges: clears the alert, still timer, check-in, advice and narration.
    // arm {on: true|false} = "this space should be empty now" (after hours). See Armed in section 6.
-   // baseline {} = a new place or layout. baseline {keep_model: true} = the same layout set down again (another desk,
-   // a knocked arm): only the baseline is new, see section 6.
+   // baseline {} = a new place: the model and the older recordings are no longer used. baseline {keep_model: true} =
+   // the same place set down again (the same layout at another desk, a knocked arm): only the baseline is new. Section 6.
 ```
 
 ## 6. Shared rules (every part computes the same thing)
@@ -176,8 +177,18 @@ Moving: foot speed > 0.25 m/s over 1 s, after a 0.5 s median filter.
 Baseline: a 20 s capture with health ok, persons_in_frame == 0 from the camera, and label_mode off.
   With the camera off (unplugged at the judging desk) there is no camera to ask: the capture runs on health ok and
   label_mode off alone, and the operator keeps the strip empty.
-  baseline {keep_model: true} keeps the model and the recordings: the model was taught on drops from a baseline, so
-  it carries over to a new baseline of the same layout. Features are taken relative to the baseline for this reason.
+  A baseline started by the `baseline` cmd means a new place. On its baseline_done the brain drops the model (pred is
+  null and model.trained is false until the next train), and train and relearn use only sessions recorded after it.
+  Older session files stay in data/sessions and are never trained on again. The brain writes data/sessions/place.json:
+  {"t": epoch ms of that baseline_done}. The automatic baseline after router_home ("recalibrating") keeps the place:
+  the model, the recordings and place.json stay as they were. proof/ scores only sessions whose meta recv_t is at or
+  after place.json's t.
+  While a baseline started by the `baseline` cmd runs, no link is stale by rate; the capture sets expected_hz again.
+  A link with no reading for 1 s restarts the capture.
+  baseline {keep_model: true} is the exception to "a new place": it is the same place set down again, so, like the
+  automatic baseline, it keeps the model, the recordings and place.json and only the baseline is new. The model was
+  taught on drops from a baseline, so it carries over to a new baseline of the same layout; features are taken
+  relative to the baseline for this reason.
   On baseline_done the brain writes data/sessions/baseline.json: {"t": epoch ms, "session": id or null,
   "links": {link id: {"base_dbm": n, "expected_hz": n}}}. proof/ and a brain restart read it from there.
 Link health:
@@ -233,13 +244,17 @@ Advice:
 - Fires when an object persists >= 5 s and its static_db peak lies within 0.5 m of pi5>unoq:wifi.
 - Only while pi5>unoq:wifi is dropping now: its drop_db in state.links is at least 3 dB. No row, or a null drop, means no advice.
 - Picks the router spot (not S-home) whose new link has the lowest summed static_db along its ellipse.
+- The pick is made when the advice first fires. While advice keeps coming for an object within 0.5 m of it,
+  its id, spot and text stay as they were; only before_dbm is kept current. It's picked again only after
+  the advice goes away or is about another object. A reset dismisses the advice for that object until it goes away.
 - The text is built from the result, never a fixed string.
 - before_dbm = median of pi5>unoq:wifi over the last 3 s: kept current while the advice shows, frozen at router_moved, never null.
 - after_dbm = median over 3 s, starting 2 s after router_moved.
 Router: take the tray off and put Pi A back on S-home BEFORE sending router_home. While the router is off S-home, pred is null. On router_home, every pi5 link must sit within 1 dB of base
   for 3 s (a pi5 link has pi5 as its tx or rx: links 1, 2, 5, 6, 8, 9 and 12; pi5b is a different node); otherwise the board runs an automatic 20 s baseline ("recalibrating").
 Narration:
-- At most one sentence every 8 s. Only for an event <= 3 s old.
+- At most one narration every 8 s, a recap included: the sentence after a recap waits 8 s.
+- Only for an event <= 3 s old.
 - At most 16 words (a recap: at most 3 sentences and 45 words). A banned word -> use the template sentence instead.
 Screen: NO DATA (grey) when the last state is > 1 s old (the feed is stale). SENSOR BLIND when health is blind
   (the radio failed). These are different states.
@@ -253,8 +268,21 @@ The values below show the format only; they are not results.
  "person_vs_object":{"correct":null,"total":null,"tray_placements":null},
  "false_alarms_per_min":null, "train_s":8.4, "ms_per_decision":{"p50":3.1,"p95":4.0},
  "watts":{"idle":null,"teaching":null,"radio_only":null,"source":null},
- "bytes_out":0, "images_stored":0, "models_on_board":3, "measured_at":"...", "commit":"..."}
+ "bytes_out":0, "images_stored":0, "models_on_board":3, "measured_at":"...", "commit":"...",
+ "security":{
+   "detection":{"entries":null,"detected":null,"ci95":null,"armed_entries":null,"intrusions":null,"intrusion_ci95":null,"within_s":2},
+   "false_alarms":{"presence_events":null,"intrusions":null,"duration_s":null,"armed_duration_s":null,
+                   "presence_per_hour":null,"intrusions_per_hour":null},
+   "fewer_devices":[{"name":"...","nodes":["unoq","pi5"],"links":["pi5>unoq:wifi"],
+                     "zone":{"correct":null,"total":null},"presence":{"entries":null,"detected":null,"ci95":null}}]}}
    // A number not yet measured is null and shows as "__". Never invent one.
+   // security is optional (the whole object may be missing). Every unmeasured value in it is null.
+   // detection: entries are independently labeled empty -> present transitions; a trial counts only with continuous
+   //   truth and captured predictions through the deadline (within_s). Intrusion trials also need captured armed coverage.
+   // false_alarms: the denominators cover independently labeled-empty time overlapping captured healthy states;
+   //   no capture or no exposure stays null.
+   // fewer_devices: one row per subset of nodes and links (ids from radio/nodes.json). Each has its own model, trained
+   //   on the training sessions with the other links masked, and is scored only on separate heldout sessions.
 ```
 
 ## 8. Screen test ids
