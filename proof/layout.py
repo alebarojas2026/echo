@@ -42,11 +42,8 @@ def zones(doc):
 def zone_at(doc, x, y):
     """The zone a floor point lies in, or 0 when it lies in none.
 
-    Split strips exclude the back edge. A single area includes its declared boundary.
+    A point on the strip's back edge (the desk edge) counts as outside: nobody stands on it.
     """
-    if len(doc["zones"]) == 1:
-        width, depth = doc["frame"].get("strip_m") or doc["frame"]["size_m"]
-        return int(doc["zones"][0]["id"]) if 0<=x<=width and 0<=y<=depth else 0
     if is_strip(doc):
         width, depth = doc["frame"]["strip_m"]
         if not (0 <= x <= width and 0 <= y < depth):

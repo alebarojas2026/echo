@@ -14,9 +14,9 @@ def single_area():
                      {"id":"disabled","tx":"b","rx":"a","classifier":False}]}
 
 
-@pytest.mark.parametrize('point,inside',[((0,0),True),((2,1),True),((1,0.5),True),
+@pytest.mark.parametrize('point,inside',[((0,0),True),((2,0.5),True),((1,0.5),True),((2,1),False),
                                        ((-0.01,0),False),((2.01,0),False),((1,1.01),False)])
-def test_single_zone_uses_its_actual_id_and_closed_bounds(point,inside):
+def test_single_zone_uses_its_actual_id_and_the_strips_bounds(point,inside):
     assert layout.zone_at(single_area(),*point) == (7 if inside else 0)
 
 
@@ -31,8 +31,8 @@ def test_baseline_uses_enabled_crossing_link_without_a_split():
     assert threshold_zone(readings,doc=doc) is None
 
 
-def test_one_area_walk_uses_only_the_declared_location():
+def test_one_area_walk_steps_on_and_off_the_spot_and_has_no_middle_mark():
     steps = script('train',single_area())
-    visits = [text for text,_,_,_ in steps if text.startswith('Stand still at')]
-    assert len(visits) == 2 and all('zone 7 (Sensing area)' in text for text in visits)
+    visits = [text for text,_,_,_ in steps if text.startswith('Stand still on the spot')]
+    assert len(visits) == 3
     assert not any('middle mark' in text for text,_,_,_ in steps)
