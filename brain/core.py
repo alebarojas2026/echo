@@ -162,6 +162,7 @@ class Brain:
         self._last_seen: Dict[str, int] = {}  # link -> recv_t of its last reading
         self._last_dbm: Dict[str, float] = {} # link -> the last dbm we sent (or its last reading)
         self._health_ok = True
+        self._quiet: List[str] = []           # links that can blind the sensor and are stale right now
         self.nodes = nodes
         self._recent: Dict[str, deque] = {link: deque() for link in links}   # (recv_t, dbm), last 10 s
         self.advice: Optional[dict] = None
@@ -768,6 +769,15 @@ class Brain:
             return
         if not self._fresh:
             return
+        if not self._raw["present"] and self._unheard(now):
+            # "Nobody" from a window in which a link the sensor needs has no reading says nothing:
+            # a link with no readings counts as sitting on its baseline, which is what an empty
+            # area looks like (#650). A decision that somebody is there still goes out.
+            if self._quiet and self.pred is not None:
+                self.pred = None                 # stale by now: unknown, as for blind, until it is back
+                self.watch.on_pred(now, None)
+                self.armed.on_pred(None)
+            return                               # not stale yet (under 2 s): the last decision stands
         self._fresh = False
         pred = dict(self._raw)
         self.watch.on_pred(self.window["end"], pred)
@@ -780,6 +790,12 @@ class Brain:
             self.emit("intrusion", {"zone": intruder})
         for zone in self.armed.pop_passed():   # appeared while armed and gone before the hold was over
             self.emit("passed_by", {"zone": zone})
+
+    def _unheard(self, now) -> List[str]:
+        """The links that can blind the sensor and are stale, or have no reading in the last
+        window (1 s) though the baseline heard them."""
+        return self._quiet or [k for k in self.health.classifier_links
+                               if self.expected_hz.get(k) and now - self._last_seen.get(k, -10**15) > F.WINDOW_MS]
 
     def _announce(self, zone: int) -> None:
         """enter, exit and zone_change, once the new zone has held for settings.zone_hold decisions.
@@ -845,6 +861,12 @@ class Brain:
         health = self.health.update(now, self.raw_kind, self.router == HOME, self.capture is not None,
                                     rates_known=not (self.capture and self.capture["new_place"]))
         self._health_ok = health["health"]["status"] == "ok"
+        self._quiet = [row["id"] for row in health["links"]
+                       if row["status"] != "ok" and row["id"] in self.health.classifier_links]
+        if self._quiet and self.pred is not None and not self.pred["present"]:
+            self.pred = None                     # a link the sensor needs has gone quiet: not "nobody"
+            self.watch.on_pred(now, None)
+            self.armed.on_pred(None)
         if self.health.blind and self.pred is not None:
             self.pred = None
             self.watch.on_pred(now, None)
