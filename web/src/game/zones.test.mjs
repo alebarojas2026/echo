@@ -15,13 +15,13 @@ const WHERE = { NW: 'north-west', NE: 'north-east', SW: 'south-west', SE: 'south
 test("the repo's nodes.json: every zone in the file is listed, with the file's name and place", () => {
   const before = saved()
   const nodes = JSON.parse(readFileSync(new URL('../../../radio/nodes.json', import.meta.url), 'utf8'))
-  assert.ok(nodes.zones.length >= 2)
+  assert.ok(nodes.zones.length >= 1)   // one spot, or a row or a square of zones
   assert.equal(useZones(nodes), true)
-  const want = nodes.zones.map((z) => ({ id: z.id, name: z.name, hint: `Zone ${z.id}, ${WHERE[z.corner ?? z.side]}` }))
+  const want = nodes.zones.map((z) => ({ id: z.id, name: z.name, hint: WHERE[z.corner ?? z.side] ? `Zone ${z.id}, ${WHERE[z.corner ?? z.side]}` : `Zone ${z.id}` }))
   const byId = (a, b) => a.id - b.id
   assert.deepEqual([...zoneList()].sort(byId), want.sort(byId))
   assert.ok(zoneList().every((z) => !z.hint.includes('undefined')))
-  const strip = nodes.zones.every((z) => z.side === 'W' || z.side === 'E')
+  const strip = nodes.zones.every((z) => z.side === 'W' || z.side === 'E')   // a spot with no side is not a row
   assert.deepEqual(compass(), strip ? ['West', 'East'] : ['South: the router', 'North is up'])
   restore(before)
 })

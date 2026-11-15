@@ -1,7 +1,7 @@
 // Rules for the "Can you hide from Wi-Fi?" crowd game. No DOM in here, so it can be tested with node.
 // Message shapes come from CONTRACTS.md v2, section 5.
 
-import { ZONES } from './zones.js'
+import { placeName, ZONES } from './zones.js'
 
 export { ZONES }
 export const STALE_MS = 1000 // contract section 6: NO DATA when the last state is older than 1 s
@@ -67,15 +67,15 @@ export function tallyText(tally) {
 }
 
 export function resultText(result) {
-  const name = (z) => `the ${ZONES[z]} zone`
+  const where = (z) => placeName(z) ?? `in the ${ZONES[z]} zone`   // "at the desk" for a zone named as a place
   const practice = result.counted ? '' : ' Practice round, not counted.'
   if (result.outcome === 'no_data') return 'No data from the board, so this round does not count.'
   if (result.outcome === 'not_ready') {
     return result.blind ? 'The sensor is blind right now, so this round does not count.' : 'The radio is not ready yet, so this round does not count.'
   }
-  if (result.outcome === 'found') return `Found you in ${name(result.truth)}.${practice}`
-  const looked = result.guess ? `Wi-Fi looked in ${name(result.guess)}` : 'Wi-Fi saw nobody'
-  return `You hid! ${looked}, you were in ${name(result.truth)}.${practice}`
+  if (result.outcome === 'found') return `Found you ${where(result.truth)}.${practice}`
+  const looked = result.guess ? `Wi-Fi looked ${where(result.guess)}` : 'Wi-Fi saw nobody'
+  return `You hid! ${looked}, you were ${where(result.truth)}.${practice}`
 }
 
 export function truthCmd(zone) {
