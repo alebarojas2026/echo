@@ -2,7 +2,7 @@
 # Installed as radio-sight-llm.service by `sudo board/deploy.sh --install` (board/units/README.md).
 [Unit]
 StartLimitIntervalSec=0
-Description=Radio Sight narrator model (llama-server on 127.0.0.1:8091)
+Description=Echo narrator model (llama-server on 127.0.0.1:8091)
 After=network.target
 
 [Service]

@@ -1,4 +1,4 @@
-# Radio Sight Live-Demo Troubleshooting
+# Echo Live-Demo Troubleshooting
 
 Use this guide when the live demo is not ready. Fix the first failed check, then start again at the top. Do not interpret a missing prediction as an empty room.
 
@@ -30,7 +30,7 @@ There are no separate beacon devices in the current demo kit.
 1. Confirm the laptop is joined to the Pi hotspot, then open `http://192.168.77.2:8080/proof.json`. If it loads, reopen the browser page at the URL ending in `?src=ws`.
 2. If it does not load, confirm the direct Ethernet path between the Pi and the UNO Q hub is connected. Ask Alexander to rerun `sudo bash pi/eth.sh` on the Pi and `sudo bash board/eth.sh` on the UNO Q if either cable address is missing.
 3. On the board, confirm `radio-sight-serve.service` is active.
-4. Do not move the Pi onto venue Wi-Fi. Radio Sight uses its own local network.
+4. Do not move the Pi onto venue Wi-Fi. Echo uses its own local network.
 
 If a cable, powered hub, board, Pi, or laptop must be handled, stop and send a note in this form: `needs Alexander: check the direct Ethernet cable and confirm /proof.json loads in the laptop browser`. Alexander owns every physical hardware action.
 
@@ -69,7 +69,7 @@ The camera supplies setup labels only. It saves no image or video.
 - After successful training, camera `off` is expected for the radio-only demo. Continue if the radio feed is live and healthy.
 - If the camera moved, redo the camera calibration before collecting labels again.
 
-The public proof is that sensing continues after the camera is unplugged. Radio Sight works behind a curtain because it measures radio change; the camera is not part of live inference.
+The public proof is that sensing continues after the camera is unplugged. Echo works behind a curtain because it measures radio change; the camera is not part of live inference.
 
 ## Baseline or training will not complete
 

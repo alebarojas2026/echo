@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/state.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/state.json",
   "$comment": "Section 5, brain -> screen, including what it sends before readings, a baseline or training. xray arrays must hold w*h cells (checked in check.py).",
   "$ref": "common.json#/$defs/envelope",
   "properties": {

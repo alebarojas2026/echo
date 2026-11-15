@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/rssi.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/rssi.json",
   "$comment": "Section 4. Link id = <tx>><rx>:<kind>, so tx, rx and kind must agree with link. A hall link (section 3) is sent the same way.",
   "$ref": "common.json#/$defs/envelope",
   "properties": {

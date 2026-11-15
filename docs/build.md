@@ -1,6 +1,6 @@
-# Build Radio Sight
+# Build Echo
 
-Radio Sight uses radio links around one room to map signal change, locate real dead zones, and classify presence, movement, and objects. All learned work runs locally on the Arduino UNO Q's Dragonwing CPU; Pi A provides the sensing network, and Pi B adds a second listener. Neither Pi runs a model. A laptop browser shows the local interface.
+Echo uses radio links around one room to map signal change, locate real dead zones, and classify presence, movement, and objects. All learned work runs locally on the Arduino UNO Q's Dragonwing CPU; Pi A provides the sensing network, and Pi B adds a second listener. Neither Pi runs a model. A laptop browser shows the local interface.
 
 ## Parts
 

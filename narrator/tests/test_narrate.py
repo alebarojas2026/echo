@@ -217,7 +217,7 @@ def test_templates_use_zone_names_and_no_movement_wording():
 
 @pytest.mark.parametrize("reply", [
     "Someone fell down in zone 2.", "Someone may have fallen in zone 2.",
-    "Someone could fall in zone 2.", "Radio Sight sees through walls in zone 2.",
+    "Someone could fall in zone 2.", "Echo sees through walls in zone 2.",
     "Great home security for zone 2.", "The NPU spotted someone in zone 2.",
     "She just walked into zone 2.", "A man just walked into zone 2.",
     "Someone looks unwell in zone 2.", "Someone is sleeping in zone 2.",

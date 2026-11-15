@@ -1,4 +1,4 @@
-# Radio Sight Demo Runbook
+# Echo Demo Runbook
 
 Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras. This checklist follows `CONTRACTS.md` v2. The desk round is the primary path; the finalist extension comes second. A result missing from `PROOF.md` stays `__`.
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/history.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/history.json",
   "$comment": "Section 10: the 200 answer of GET /history. Not a bus message: no envelope. check.py checks from_t <= to_t, at most 30 minutes, and rows oldest first inside the stretch.",
   "type": "object",
   "properties": {

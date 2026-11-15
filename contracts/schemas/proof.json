@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/proof.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/proof.json",
   "$comment": "Section 7, served as /proof.json. A number not yet measured is null.",
   "$defs": {
     "count": {"type": ["integer", "null"], "minimum": 0},

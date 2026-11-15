@@ -1,4 +1,4 @@
-// Radio Sight LED matrix (8 x 13) on the UNO Q's microcontroller.
+// Echo LED matrix (8 x 13) on the UNO Q's microcontroller.
 //
 // Bridge functions, called from Linux:
 //   show_zone(n)  0 = empty (a small dot), 1-4 = a big digit, -1 = "?" (no prediction)

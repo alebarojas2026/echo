@@ -1,1 +1,1 @@
-"""Temporary camera supervision for Radio Sight."""
+"""Temporary camera supervision for Echo."""

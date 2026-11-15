@@ -1,5 +1,5 @@
 [Unit]
-Description=Radio Sight message bus and session recorder
+Description=Echo message bus and session recorder
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0

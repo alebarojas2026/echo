@@ -1,5 +1,5 @@
 [Unit]
-Description=Radio Sight brain (features, training, live predictions)
+Description=Echo brain (features, training, live predictions)
 After=network-online.target radio-sight-bus.service
 Wants=network-online.target
 StartLimitIntervalSec=0

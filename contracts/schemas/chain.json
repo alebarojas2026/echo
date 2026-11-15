@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/chain.json",
   "$comment": "Section 13: the answer of GET /chain. Not a bus message: no envelope. An empty chain has head.seq 0, head.hash 64 zeros, records 0 and since_t null. head.t, first_seq, anchor and unsealed are optional.",
   "type": "object",
   "properties": {

@@ -1,5 +1,5 @@
 /*
-  Radio Sight screen tokens (AGENTS.md, Style). The same values as web/src/room/palette.ts, as CSS variables,
+  Echo screen tokens (AGENTS.md, Style). The same values as web/src/room/palette.ts, as CSS variables,
   so the panels, the room's labels and the game page take colours from one place.
   Each colour means one thing, and a status colour always comes with a word.
 */

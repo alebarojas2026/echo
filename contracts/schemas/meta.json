@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/meta.json",
+  "$id": "https://github.com/alebarojas2026/echo/contracts/schemas/meta.json",
   "$comment": "Section 4. Sent on record_start.",
   "$ref": "common.json#/$defs/envelope",
   "properties": {
