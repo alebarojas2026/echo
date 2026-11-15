@@ -17,6 +17,8 @@ export interface Scan {
   apply(fit: ScanFit): void
   /** The scan's box in the scene, as placed now. */
   bounds(): Box3
+  /** The model's own box, in its own metres, before any alignment. */
+  box: { min: number[]; max: number[] }
 }
 
 export type ScanSource = {
@@ -218,6 +220,7 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
         view.requestRender()
       },
       bounds: () => new Box3().setFromObject(holder),
+      box: { min: box.min.toArray(), max: box.max.toArray() },
     }
     handle.apply(source.fit)
     drawnRoom.visible = false

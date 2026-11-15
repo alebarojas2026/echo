@@ -1,5 +1,7 @@
 import type { Material, Object3D } from 'three'
+import { deskFit, deskName, loadDesks, modelPoint, nearestSpot, slideDesk, stepDesk, type DeskSpot, type DeskStep, type HallDesks } from './desks'
 import type { HallBeacons } from './devices'
+import { SIZE_M, STRIP_M, toScene } from './frame'
 import { DEFAULT_CUT_M, type Scan, type ScanFit } from './scan'
 import type { Stage } from './stage'
 import { roomShot, topShot, type RoomView } from './view'
@@ -14,6 +16,12 @@ import { roomShot, topShot, type RoomView } from './view'
 //   PgUp / PgDn  raise / lower the model: 2 cm (Shift: one 0.156 m riser), for a square on a tier
 //   V       straight-down view, or back to the normal one
 //   S       save room.json
+// On the desk layout, when the build has the hall's desks (desks.ts), the strip snaps to a real desk, on that
+// desk's tier, so nothing is lined up by eye:
+//   D       stand at the nearest desk
+//   I / K   the next row toward the front / up the tiers
+//   J / L   the next block west / east
+//   U / O   along the desk, west / east: 10 cm (Shift: 50 cm)
 // Hall beacons (devices.ts): Tab picks the next heard one (or a click on it); while one is picked the arrows move
 // it on the floor (10 cm, Shift 1 m) and it can be dragged, from the "new beacon" tray too; Esc lets go. S saves
 // their positions into radio/nodes.json as well.
@@ -137,6 +145,39 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
   keys.innerHTML = 'Arrows move · Q E turn · + − scale<br>[ ] cut height · PgUp PgDn floor<br>Shift for big steps<br>Tab picks a beacon · Esc lets go<br>V view from above · S save'
   fitLine.textContent = describeFit(scan.fit)
   beacons?.startEditing(() => (beaconLine.textContent = beacons.describe()))
+  // Desk snapping: only on the desk layout, and only when the build knows the hall's desks.
+  let hall: HallDesks | null = null
+  let spot: DeskSpot | null = null
+  if (STRIP_M) {
+    void loadDesks().then((h) => {
+      hall = h
+      if (h) keys.innerHTML += '<br>D nearest desk · I K rows · J L blocks · U O along it'
+    })
+  }
+  const here = (h: HallDesks): DeskSpot => {
+    const [sw, sh] = STRIP_M ?? SIZE_M
+    const [x, , z] = toScene([sw / 2, sh, 0]) // the middle of the strip's desk edge
+    return spot ?? nearestSpot(h, modelPoint([x, z], scan.fit, scan.box))
+  }
+  /** Stands the strip at a desk spot. Returns false when there is none (no desk that way). */
+  const standAt = (next: DeskSpot | null): boolean => {
+    if (!hall || !next) return false
+    spot = next
+    const fit = deskFit(hall, next, scan.box, tidyFit(scan.fit).cut_m)
+    scan.apply(fit)
+    fitLine.textContent = `${describeFit(fit)}\n${deskName(next.desk)}`
+    status.textContent = ''
+    return true
+  }
+  const deskKey = (key: string, shift: boolean): boolean => {
+    if (!hall) return false
+    const k = key.toLowerCase()
+    const step: Record<string, DeskStep> = { i: 'north', k: 'south', j: 'west', l: 'east' }
+    if (k === 'd') return standAt(here(hall))
+    if (step[k]) return standAt(stepDesk(hall, here(hall), step[k])) || true // no desk that way: stay
+    if (k === 'u' || k === 'o') return standAt(slideDesk(here(hall), (k === 'o' ? 1 : -1) * (shift ? 0.5 : 0.1)))
+    return false
+  }
   drawOnTop(stage.group, stage.drawnRoom)
   view.requestRender()
   let top = false
@@ -162,9 +203,12 @@ export function startAlign(view: RoomView, stage: Stage, scan: Scan | null, beac
       const step = event.shiftKey ? 1 : 0.1
       const [dx, dy] = { ArrowRight: [step, 0], ArrowLeft: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[key] ?? [0, 0]
       beacons.nudge(dx, dy)
+    } else if (deskKey(key, event.shiftKey)) {
+      // handled: the strip stands at a desk
     } else {
       const fit = nudge(scan.fit, key, event.shiftKey)
       if (!fit) return
+      spot = null // moved by hand: no longer at a desk
       scan.apply(fit)
       fitLine.textContent = describeFit(fit)
       status.textContent = ''
