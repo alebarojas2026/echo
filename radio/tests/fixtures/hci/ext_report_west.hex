@@ -1,4 +1,4 @@
-# LE Extended Advertising Report (7.7.65.13): a legacy ADV_NONCONN_IND from the west phone, RSSI -56
+# LE Extended Advertising Report (7.7.65.13): a legacy ADV_NONCONN_IND from the west beacon, RSSI -56
 04 3e 21          # event packet, LE Meta, 33 parameter bytes
 0d 01             # subevent 0x0D, Num_Reports 1
 10 00             # Event_Type: legacy PDU, non-connectable, data complete
