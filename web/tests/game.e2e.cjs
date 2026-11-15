@@ -54,6 +54,17 @@ for (const [mock, label, title] of [
   })
 }
 
+test('phone on the one spot: the calm card names the place, not the room', async ({ page }) => {
+  const gate = require('../../radio/layouts/gate.json')
+  await page.route('**/nodes.json', (route) => route.fulfill({ json: gate }))
+  const errors = await open(page, '/src/game/phone/index.html?mock=empty', 390, 844)
+  await expect(page.getByTestId('phone-label')).toHaveText('ALL GOOD')
+  await expect(page.getByTestId('phone-title')).toHaveText('Nobody is at the desk.')
+  expect(await smallText(page, '#label, #title, #detail, #passed, #tamper, #checkin, #sound')).toEqual([])
+  expect(errors).toEqual([])
+  await shot(page, 'phone-empty-one-spot')
+})
+
 test('phone with no board says NO DATA, never an empty room', async ({ page }) => {
   await open(page, '/src/game/phone/index.html?ws=ws://127.0.0.1:9/ws', 390, 844)
   await expect(page.getByTestId('phone-label')).toHaveText('NO DATA')
