@@ -6,8 +6,8 @@ for (const [width, height] of [[1920,1080], [1440,900], [768,900], [320,700]]) {
     await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') })
     await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'))
     await page.goto('/?mock=still')
-    // The arrival card holds the panels until it has gone: 1.5 s of presence, 1.2 s of "Found you.", a 1.8 s fade.
-    await page.clock.runFor(5200)
+    // The greeting takes 4.5 s now (1.5 s before "Found you.", then the hold and the fade); the rail is free after it.
+    await page.clock.runFor(5000)
     await expect(page.locator('.hud-arrival')).toBeHidden()
     await page.getByRole('button', { name: 'Ask the room', exact: true }).click()
     const input = page.getByLabel('Your question')
