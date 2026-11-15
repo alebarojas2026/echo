@@ -40,6 +40,10 @@ running or its reading is more than 3 s old. Never zeros in place of an unknown.
 GET /clock and POST /clock {"t": epoch ms} let the operator's laptop set the board's clock
 (board/clock.py, contract issue #632). Both answer only on the same networks.
 
+GET /chain, GET /chain/verify?from=&to= and POST /chain/prove are the sealed record (board/chain.py,
+CONTRACTS.md section 13), mounted the same way. With them the server also checks the chain every
+30 s, sends its head to the bus every 5 s and stores the witnesses' signatures.
+
 Standard library only.
 """
 import argparse
@@ -452,6 +456,20 @@ def agent_routes(db=None, llm=None) -> dict:
         return {}
 
 
+def chain_routes(db=None, keys=None, bus=None, witness_port=None) -> dict:
+    """GET /chain, GET /chain/verify and POST /chain/prove from board/chain.py, with its two background
+    loops started, or {} if store/ is missing. witness_port 0: no listening for signatures."""
+    try:
+        from board import chain
+        from store import DB, Store
+    except ImportError as e:
+        print(f"serve: /chain is off ({e})", file=sys.stderr, flush=True)
+        return {}
+    listen = None if witness_port == 0 else (chain.LISTEN[0], witness_port or chain.LISTEN[1])
+    keeper, _ = chain.start(Store(db or DB), keys, bus or chain.BUS, listen)
+    return chain.routes(keeper)
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="Serve the screen, /nodes.json and /proof.json")
     ap.add_argument("--host", default="0.0.0.0")
@@ -463,10 +481,18 @@ def main(argv=None) -> None:
     ap.add_argument("--privacy", default=str(privacy.STATUS), help="the privacy meter's status file")
     ap.add_argument("--store", default=None, help="the store's SQLite file, for /ask, /history and /report")
     ap.add_argument("--llm", default=None, help="llama-server base URL, for /ask and /report")
+    ap.add_argument("--witness-keys", default=None,
+                    help="the witnesses' public keys (default: WITNESS_KEYS, else data/witness_keys.local.json)")
+    ap.add_argument("--bus", default="127.0.0.1:5600", help="where the chain head is sent every 5 s")
+    ap.add_argument("--witness-port", type=int, default=None,
+                    help="UDP port on 127.0.0.1 where the bus passes signatures on (default 5602; 0 = none)")
     args = ap.parse_args(argv)
 
+    bus_host, _, bus_port = args.bus.rpartition(":")
+    routes = {**agent_routes(args.store, args.llm),
+              **chain_routes(args.store, args.witness_keys, (bus_host or "127.0.0.1", int(bus_port)), args.witness_port)}
     server = make_server(args.host, args.port, args.dist, args.nodes, args.proof, args.layout,
-                         ask=room_ask(args.store, args.llm), routes=agent_routes(args.store, args.llm),
+                         ask=room_ask(args.store, args.llm), routes=routes,
                          privacy_path=args.privacy)
     host, port = server.server_address[:2]
     print(f"serve: http://{host}:{port} from {args.dist}", file=sys.stderr, flush=True)

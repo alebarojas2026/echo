@@ -15,6 +15,7 @@ import logging
 import math
 import os
 import pickle
+import re
 import statistics
 import time
 from collections import deque
@@ -142,6 +143,10 @@ def _is_label(msg: dict) -> bool:
 
 def now_ms() -> int:
     return int(time.time() * 1000)
+
+
+CHAIN_HASH = re.compile(r"^[0-9a-f]{64}$")
+CHAIN_FRESH_S = 15.0   # state.chain is left out once no chain head has been heard for this long
 
 
 class Brain:
@@ -291,6 +296,7 @@ class Brain:
         self.cam = None        # (recv_t, state)
         self.label = None      # the latest camera label
         self.narration = None
+        self.chain = None            # (when heard, state.chain): the board's last chain head
         self.events: List[dict] = []
         self._seq = 0       # one counter for everything we send to the screens (section 4)
         self._cmd_seq = 0   # and one for the commands we pass to the bus, a separate socket
@@ -303,10 +309,28 @@ class Brain:
     def now(self) -> int:
         return self._clock() if self._clock else self.feed_t
 
+    def _chain_heard(self, msg: dict) -> None:
+        """Keep the board's chain head as state.chain: {seq, hash8, verified, witnesses_ok, witnesses}.
+        A head that is not one (no record number, no hash) is dropped. verified is true only once
+        the board has said so."""
+        seq, digest = msg.get("seq"), msg.get("hash")
+        counts = [msg.get("witnesses_ok", 0), msg.get("witnesses", 0)]
+        if type(seq) is not int or seq < 0 or not isinstance(digest, str) or not CHAIN_HASH.match(digest) \
+                or any(type(n) is not int or n < 0 for n in counts):
+            return
+        self.chain = (time.monotonic(), {"seq": seq, "hash8": digest[:8], "verified": msg.get("verified") is True,
+                                         "witnesses_ok": counts[0], "witnesses": counts[1]})
+
     # ---- inputs ----
 
     def on_message(self, msg: dict) -> None:
         """One message forwarded by the bus (it carries recv_t)."""
+        if msg.get("type") in ("chain_head", "chain_witness"):
+            # The sealed record (section 13). Its head is only copied into state; it is not a
+            # reading, so it moves no clock and reaches no rule.
+            if msg["type"] == "chain_head":
+                self._chain_heard(msg)
+            return
         if self.hall.take(msg):
             self._hall_heard(msg)   # tamper counts a hall beacon once it has been heard since arming
             return   # a hall link's reading: nothing below ever sees it
@@ -1371,4 +1395,6 @@ class Brain:
             # Section 5: a missing "armed" means false. Sent only while armed until state.json
             # knows the field (#440); a state that never arms is byte for byte what it was.
             state["armed"] = True
+        if self.chain and time.monotonic() - self.chain[0] <= CHAIN_FRESH_S:
+            state["chain"] = dict(self.chain[1])   # optional: absent when no head was heard lately
         return self.hall.add_to(state, now)
