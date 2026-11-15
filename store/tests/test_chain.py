@@ -136,27 +136,113 @@ def test_a_clock_stepped_backwards_does_not_break_the_chain():
 
 
 def test_pruning_drops_the_oldest_links_only_and_keeps_an_anchor():
-    s = filled(Store(":memory:", keep_h=1), 5)
+    s = filled(Store(":memory:", keep_records=3), 5)
     old = s.records()
     filled(s, 3, T0 + 2 * 3_600_000)
     with s.db:
-        s.prune(T0 + 2 * 3_600_000 + 5000)
+        s.prune()
     info = s.chain_info()
     assert info["anchor"] == {"seq": 5, "hash": old[-1]["hash"]} and info["first_seq"] == 6 and info["records"] == 3
     assert s.records()[0]["prev"] == old[-1]["hash"]
     assert checked(s.verify()) == {"ok": True, "checked": 3, "first_bad_seq": None, "from": 6, "to": 8}
     assert s.verify(1, 8)["from"] == 6                   # a range that starts in what was pruned starts at what is kept
+    assert [r["seq"] for r in s.seconds()] == [6, 7, 8]  # the rows go with the links that sealed them
     s.add(state(T0 + 2 * 3_600_000 + 9000))
     assert s.head()["seq"] == 9 and s.verify()["ok"]
 
 
-def test_a_prune_that_finds_everything_old_keeps_the_head():
-    s = filled(Store(":memory:", keep_h=1), 4)
+def kept(s: Store) -> tuple:
+    return s.chain_info()["records"], len(s.seconds()), s.db.execute("select count(*) from chain").fetchone()[0]
+
+
+@pytest.mark.parametrize("step_ms", [2 * 86_400_000, -2 * 86_400_000, -3_600_000])
+def test_a_clock_stepped_two_days_forward_or_back_loses_no_record(step_ms):
+    # The board has no clock battery and its clock is set by hand. Pruning by the clock dropped almost a
+    # whole day's record at the first prune after a step forward; by count, a step loses nothing.
+    s = filled(Store(":memory:", keep_h=24), 1500)
+    s.add(event(T0 + 700_000, "enter", id="before"))
+    filled(s, 1300, T0 + 1_500_000 + step_ms)             # 1,300 more saved seconds: two prunes have run
+    assert kept(s) == (2801, 2800, 2801) and len(s.events()) == 1
+    assert s.chain_info()["anchor"] is None and s.chain_info()["first_seq"] == 1
+    assert s.verify(1, None)["ok"] and s.verify(1, None)["checked"] == 2801
+
+
+def test_a_long_run_stays_bounded_and_verifies_from_its_anchor_after_a_restart(tmp_path):
+    path = tmp_path / "store.db"
+    s = Store(path, keep_records=2000)
+    for i in range(9000):
+        s.add(state(T0 + i * 1000))
+        if i % 50 == 0:
+            s.add(event(T0 + i * 1000 + 7, "enter", id=f"e{i}"))
+        assert i % 1000 or s.chain_info()["records"] <= 2000 + 2 * 612   # never far over what is kept
+    info = s.chain_info()
+    assert 2000 <= info["records"] <= 2000 + 612 and info["anchor"]["seq"] == info["first_seq"] - 1
+    assert info["records"] == s.db.execute("select count(*) from chain").fetchone()[0] == info["head"]["seq"] - info["anchor"]["seq"]
+    oldest = s.records(limit=1)[0]["seq"]
+    assert s.seconds()[0]["seq"] >= oldest and s.events()[0]["seq"] >= oldest   # no row outlives its link
+    assert s.verify(1, None)["ok"]
+    head = s.head()
+    s.db.close()
+    again = Store(path, keep_records=2000)
+    assert again.head() == head and again.chain_info()["anchor"] == info["anchor"]
+    assert again.verify(1, None)["ok"] and again.verify(1, None)["checked"] == info["records"]
+    again.add(state(T0 + 9_000_000))
+    assert again.head()["seq"] == head["seq"] + 1 and again.verify()["ok"]
+
+
+def test_one_prune_never_drops_more_than_a_small_share():
+    from store import PRUNE_EVERY, PRUNE_SHARE
+    s = Store(":memory:", keep_records=100_000)
     with s.db:
-        s.prune(T0 + 10 * 3_600_000)                     # the clock jumped far ahead
-    assert s.chain_info()["records"] == 1 and s.head()["seq"] == 4 and s.chain_info()["anchor"]["seq"] == 3
-    s.add(state(T0 + 10 * 3_600_000))
-    assert s.head()["seq"] == 5 and s.verify()["ok"] and s.verify()["checked"] == 2
+        s.db.executemany("insert into chain(seq, t, kind, body, prev, hash) values (?, ?, 'second', '{}', 'p', 'h')",
+                         ((i, T0 + i) for i in range(1, 130_001)))
+        s.prune()
+    assert s.chain_info()["records"] == 130_000 - int(100_000 * PRUNE_SHARE)   # 5,000 at most, not the 30,000 over
+    assert int(100_000 * PRUNE_SHARE) > 3 * PRUNE_EVERY                       # and more than comes in between two prunes
+    small = Store(":memory:", keep_records=10)
+    filled(small, 5000)
+    assert small.chain_info()["records"] <= 10 + PRUNE_EVERY                  # a small store is still bounded
+
+
+def test_rows_from_before_the_record_was_sealed_go_once_the_chain_has_passed_them(tmp_path):
+    path = tmp_path / "store.db"
+    db = sqlite3.connect(path)
+    db.executescript(OLD_SCHEMA)
+    for i in (9, 8):
+        db.execute("insert into seconds(t, blind, armed, links) values (?, '[]', 0, '{}')", (T0 - i * 1000,))
+    db.execute("insert into events(t, kind, id, src, info) values (?, 'enter', 'old1', 'live', '{}')", (T0 - 9000,))
+    db.commit()
+    db.close()
+    s = filled(Store(path, keep_records=4), 4)
+    with s.db:
+        s.prune()
+    assert s.chain_info()["unsealed"] == 3                # nothing is over yet: the old rows stay
+    filled(s, 2, T0 + 60_000)
+    with s.db:
+        s.prune()
+    assert [r["seq"] for r in s.seconds()] == [3, 4, 5, 6] and s.verify()["ok"]
+    assert s.chain_info()["unsealed"] == 1                # the old event stays until a sealed event has passed it
+    s.add(event(T0 + 70_000, "exit", id="new1"))
+    filled(s, 4, T0 + 80_000)
+    with s.db:
+        s.prune()
+    assert s.chain_info()["unsealed"] == 0 and s.events() == []   # new1's link has gone too, and old1 with it
+
+
+def test_two_programs_opening_a_new_file_at_the_same_moment_both_start(tmp_path):
+    # The store and the web server after a deploy: one found the file taken while the other turned on
+    # WAL ("database is locked") and ended, about 1 time in 10. Fifty new files, opened by two at once.
+    import subprocess
+    import sys
+    code = ("import sys, time\nfrom store import Store\nstart = float(sys.argv[2])\n"
+            "for i in range(50):\n"
+            "    while time.time() < start + i * 0.08: pass\n"
+            "    Store(sys.argv[1] + '/s%d.db' % i).db.close()\n")
+    start = str(time.time() + 1.5)
+    both = [subprocess.Popen([sys.executable, "-c", code, str(tmp_path), start], stderr=subprocess.PIPE) for _ in range(2)]
+    errors = [p.communicate(timeout=120)[1].decode() for p in both]
+    assert [p.returncode for p in both] == [0, 0], errors
+    assert len(list(tmp_path.glob("s*.db"))) == 50 and Store(tmp_path / "s49.db").verify()["ok"]
 
 
 def test_an_edited_record_is_named():
