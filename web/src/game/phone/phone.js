@@ -1,6 +1,6 @@
 // Page wiring for the caregiver's phone: the brain's state socket in, one big card out, a chime on the alert.
 import { swap } from '../fade.js'
-import { card, checkinText, isState, MOCKS, shouldChime, wsUrl } from './card.js'
+import { card, checkinText, HOLD_OF, isState, MOCKS, personHeld, shouldChime, wsUrl } from './card.js'
 import { loadZones } from '../zones.js'
 
 const $ = (id) => document.getElementById(id)
@@ -10,6 +10,7 @@ let state = mock ?? null
 let stateAt = performance.now()
 let mode
 let audio = null
+const people = [] // was a person in each of the last states? (the intrusion waits for a majority)
 
 // Two soft tones, made in the browser: no sound file to load or store.
 function chime() {
@@ -29,7 +30,7 @@ function chime() {
 }
 
 function show() {
-  const c = card(state, mock ? 0 : performance.now() - stateAt)
+  const c = card(state, mock ? 0 : performance.now() - stateAt, mock ? true : personHeld(people))
   if (shouldChime(mode, c.mode)) {
     chime()
     // Browsers only vibrate after a tap on the page, and iPhone never does.
@@ -65,6 +66,8 @@ function connect() {
       return
     }
     if (!isState(msg)) return
+    people.push(Boolean(msg.pred?.present && msg.pred.kind === 'person'))   // one per state, the last 10 kept
+    if (people.length > HOLD_OF) people.shift()
     state = msg
     stateAt = performance.now()
     show()

@@ -16,7 +16,10 @@ function zoneName(z) {
 
 // card(state, age of that state in ms) -> { mode, label, title, detail, zone, checkinT }
 // mode: 'intrusion' | 'alert' | 'armed' | 'calm' | 'waiting' | 'blind' | 'nodata'. label is the word that goes with the colour.
-export function card(state, ageMs) {
+// held: whether a person has held the majority of the last 10 states (personHeld below). The intrusion
+// card waits for it, like the brain's intrusion event (section 6), so one flickering decision in an
+// armed, empty space never chimes.
+export function card(state, ageMs, held = true) {
   const checkinT = state?.checkin?.t ?? null
   if (!isState(state) || ageMs > STALE_MS) {
     return { mode: 'nodata', label: 'NO DATA', title: 'No data from the board.', detail: 'Waiting for the radio feed.', zone: null, checkinT: null }
@@ -29,7 +32,7 @@ export function card(state, ageMs) {
   if (state.armed === true) {
     const pred = state.pred
     if (!pred) return { mode: 'waiting', label: 'ARMED', title: 'The radio is not ready yet.', detail: 'It cannot say the space is empty.', zone: null, checkinT }
-    if (pred.present && pred.kind === 'person') {
+    if (pred.present && pred.kind === 'person' && held) {
       return { mode: 'intrusion', label: 'INTRUSION', title: `Someone is in ${zoneName(pred.zone)}.`, detail: 'This space should be empty.', zone: ZONES[pred.zone] ?? null, checkinT }
     }
     return { mode: 'armed', label: 'ARMED', title: 'Nobody is here.', detail: 'This space should be empty.', zone: null, checkinT }
@@ -56,6 +59,13 @@ export function card(state, ageMs) {
     zone: ZONES[pred.zone] ?? null,
     checkinT,
   }
+}
+
+// Section 6: a person counts once they hold the majority of the last 10 decisions.
+export const HOLD_OF = 10
+export function personHeld(history) {
+  const recent = history.slice(-HOLD_OF)
+  return recent.filter(Boolean).length > recent.length / 2
 }
 
 // The chime plays once, when the card turns into the alert or an intrusion. Staying there does not repeat it.
