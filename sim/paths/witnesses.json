@@ -1,0 +1,7 @@
+{
+  "name": "witnesses",
+  "about": "The sealed record with both witnesses signing: nobody is here, at 6 s someone steps in and stands for 14 s. A chain head goes out every 5 s and Pi A and Pi B each sign it; state.chain counts the records and says 2 of 2 witnesses. Simulated: the signatures are not real ones.",
+  "duration_s": 30,
+  "person": [{"t": 0, "x": null}, {"t": 6, "zone": "tour1", "edge": "west"}, {"t": 6.5, "zone": "tour1"}, {"t": 20, "zone": "tour1"}, {"t": 20.5, "zone": "tour1", "edge": "west"}, {"t": 20.6, "x": null}],
+  "chain": {"witnesses": ["pi5", "pi5b"]}
+}

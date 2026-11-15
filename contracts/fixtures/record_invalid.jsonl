@@ -1,0 +1,6 @@
+{"seq":2,"t":1763149510002,"kind":"enter","body":{"id":"e1","src":"live","info":{}},"prev":"9f2c4e0a7b1d3c5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6"}
+{"seq":0,"t":1763149510002,"kind":"second","body":{},"prev":"9f2c4e0a7b1d3c5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6","hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"}
+{"seq":2,"t":1763149510002,"kind":"second","body":{},"prev":"none","hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"}
+{"seq":3,"t":1763149510003,"kind":"witness","body":{"node":"pi5","seq":2,"hash":"9f2c4e0a7b1d3c5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6","t":1763149510000},"prev":"9f2c4e0a7b1d3c5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6","hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"}
+{"seq":4,"t":1763149510004,"kind":"witness_silent","body":{},"prev":"9f2c4e0a7b1d3c5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6","hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"}
+{"seq":5,"t":1763149510005,"kind":"witness_back","body":{"node":"the laptop"},"prev":"9f2c4e0a7b1d3c5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6","hash":"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"}

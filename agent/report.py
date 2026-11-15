@@ -48,12 +48,12 @@ def facts(store: Store, from_t: int, to_t, now_ms: int) -> dict:
     """The report's fields, each one counted from the store."""
     end = now_ms if to_t is None else to_t
     seconds = [r for r in store.seconds(from_t) if r["t"] <= end]
-    events = [e for e in store.events(from_t, ("intrusion", "tamper")) if e["t"] <= end]
+    events = [e for e in store.events(from_t, ("intrusion", "tamper", "passed_by")) if e["t"] <= end]
     intrusions = [{"t": e["t"], **({"zone": e["info"]["zone"]} if "zone" in e["info"] else {"link": e["info"].get("link")})}
                   for e in events if e["kind"] == "intrusion"]
     return {"armed_from_t": from_t, "armed_to_t": to_t, "intrusions": intrusions,
             "present_s": sum(r["present"] == 1 and r["kind"] == "person" for r in seconds),
-            "passed_by": None,   # the brain has no passed-by rule
+            "passed_by": sum(e["kind"] == "passed_by" for e in events),
             "tamper": [{"t": e["t"], "node": e["info"].get("node")} for e in events if e["kind"] == "tamper"],
             "blind_s": sum(r["health"] == "blind" for r in seconds), "rows": len(seconds)}
 

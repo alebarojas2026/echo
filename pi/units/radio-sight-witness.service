@@ -1,0 +1,24 @@
+[Unit]
+Description=Radio Sight witness (signs the board's chain head with this Pi's own key; optional)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO@
+EnvironmentFile=-@REPO@/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+# With no key it says "not enrolled" and ends with exit 0, which is not a failure and is not
+# restarted. Enrol with `python3 -m pi.witness --init`, then restart this unit.
+ExecStart=@PYTHON@ -m pi.witness
+Restart=on-failure
+RestartSec=10
+# Its own small process, kept out of the radio readers' way: one openssl call every 5 s.
+Nice=10
+CPUQuota=20%
+
+[Install]
+WantedBy=multi-user.target

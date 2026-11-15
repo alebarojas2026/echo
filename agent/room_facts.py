@@ -4,6 +4,8 @@ import math
 import re
 from pathlib import Path
 
+from narrator.story import hm
+
 NODES = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 INTENTS = [
     ("privacy", "model_card", r"recording me|record (me|us)|anything leaving|data.*(leav|sent|upload)|privacy|private|images? stored|cloud|internet"),
@@ -124,6 +126,8 @@ def privacy(store, now_ms, reader=None):
     meter = reader(now_ms=now_ms)
     latest = store.latest()
     row = {"row": "privacy", "record_interval_s": 1, "cam": latest and latest["cam"], "meter": meter}
+    if isinstance(meter, dict) and _number(meter.get("since_t")):
+        row["since"] = hm(meter["since_t"])
     text = ("The board saves what the radio decided once a second, plus events, locally in SQLite. "
             "Those records contain no camera images or identities. The system is designed to run without storing images "
             "or sending data to the internet; the laptop and phone read it on our local network.")
@@ -132,7 +136,7 @@ def privacy(store, now_ms, reader=None):
     if (meter.get("ok") is True and all(_number(meter.get(k)) and meter[k] >= 0 for k in ("images", "bytes_out", "t", "since_t"))
             and 0 <= now_ms - meter["t"] <= 10_000 and meter["since_t"] <= meter["t"]):
         text += (f" The live meter reports {meter['images']} images stored and {meter['bytes_out']} internet bytes out "
-                 f"since epoch {meter['since_t']} ms.")
+                 f"since {hm(meter['since_t'])}.")
     else:
         text += " The live privacy count is unavailable; I can't verify the counts right now."
     return {"answer": text, "rows": [row]}

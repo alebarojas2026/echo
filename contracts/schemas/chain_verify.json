@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/chain_verify.json",
+  "$comment": "Section 13: the answer of GET /chain/verify. Not a bus message. ok false names the first bad record; ok true names none.",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "checked": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "first_bad_seq": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "from": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "to": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    }
+  },
+  "required": [
+    "ok",
+    "checked",
+    "first_bad_seq",
+    "ms"
+  ],
+  "additionalProperties": false,
+  "if": {
+    "properties": {
+      "ok": {
+        "const": true
+      }
+    },
+    "required": [
+      "ok"
+    ]
+  },
+  "then": {
+    "properties": {
+      "first_bad_seq": {
+        "type": "null"
+      }
+    }
+  },
+  "else": {
+    "properties": {
+      "first_bad_seq": {
+        "type": "integer"
+      }
+    }
+  }
+}

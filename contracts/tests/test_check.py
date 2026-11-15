@@ -79,7 +79,7 @@ def read(name):
 
 
 def test_every_message_type_has_a_schema():
-    assert check.TYPES == ["cam", "cmd", "event", "label", "meta", "narration", "rssi", "state"]
+    assert check.TYPES == ["cam", "chain_head", "chain_witness", "cmd", "event", "label", "meta", "narration", "rssi", "state"]
     assert "proof" in check.VALIDATORS
 
 
