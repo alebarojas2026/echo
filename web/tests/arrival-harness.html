@@ -7,14 +7,14 @@ import { mountRoom } from '../src/room'
 import { mountHud } from '../src/hud'
 import { mockState } from '../src/room/mock'
 import { loadLayout } from '../src/room/layout'
-await loadLayout()
+await loadLayout(new URLSearchParams(location.search).get('layout') === 'desk' ? '/tests/fixtures/desk-layout.json' : '/nodes.json')
 let state = { ...mockState('empty', 0, 0), armed: false }
 let stale = false
 const listeners = new Set(), events = new Set()
 const commands = []
 const current = () => ({ state, stale, source: 'mock', connected: true, receivedAt: performance.now() })
 const feed = { source: 'mock', current, subscribe(fn) { listeners.add(fn); fn(current()); return () => listeners.delete(fn) }, onEvent(fn) { events.add(fn); return () => events.delete(fn) }, send(cmd, args) { commands.push({ cmd, args }) } }
-mountRoom(document.querySelector('#room'), feed)
+window.room = mountRoom(document.querySelector('#room'), feed)
 const dispose = mountHud(document.querySelector('#hud'), feed)
 let seq = 0
 window.arrival = {

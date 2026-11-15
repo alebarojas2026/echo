@@ -9,6 +9,7 @@ import {
   deviceMaterials,
   devicesLoaded,
   setDeviceHeight,
+  setDeviceAppearance,
   type DeviceKind,
 } from './devices'
 
@@ -290,5 +291,37 @@ describe('hall beacons', () => {
     expect([...hallHeard(mockState('power', 1, 1000).hall)]).toEqual(['h'])
     expect([...hallHeard(mockState('power', 1, 5000).hall)]).toEqual(['h', 'j'])
     expect(mockState('power', 1, 5000).hall!.every((r) => r.xy_m === null)).toBe(true)
+  })
+})
+
+
+describe('desk devices', () => {
+  it('keeps the antenna at its node while an arm reaches from the desk edge', async () => {
+    const { device } = await ready('beacon')
+    device.position.set(1, 1, 2)
+    setDeviceHeight(device, 0, new Vector3(0, 0, .35))
+    device.updateMatrixWorld(true)
+    expect(device.getObjectByName('anchor')!.getWorldPosition(new Vector3()).toArray()).toEqual([1,1,2.35])
+    const pole = device.getObjectByName('pole')!
+    expect(pole.scale.y).toBeCloseTo(Math.hypot(.35, DEVICE_BOUNDS.beacon.min[1] * DISPLAY_SCALE))
+    expect(triangles(device.getObjectByName('head')!)).toBeLessThan(200)
+    expect(deviceLabelPoint(device, 'right').z).toBe(2.35)
+  })
+
+  it('fades and colours one node without changing another copy', async () => {
+    const [a, b] = await Promise.all([ready('pi5'), ready('pi5')])
+    setDeviceAppearance(a.device, .2, true)
+    const material = meshes(a.device)[0].material as import('three').ShaderMaterial
+    expect(material.uniforms.uAlpha.value).toBe(.2)
+    expect(material.uniforms.uFault.value).toBe(1)
+    expect(material.transparent).toBe(true)
+    expect(material.depthWrite).toBe(false)
+    const other = meshes(b.device)[0].material as import('three').ShaderMaterial
+    expect(other.uniforms.uAlpha.value).toBe(1)
+    expect(other.uniforms.uFault.value).toBe(0)
+    expect(meshes(a.device)[0].geometry).toBe(meshes(b.device)[0].geometry)
+    setDeviceAppearance(a.device, 1, false)
+    expect(material.uniforms.uFault.value).toBe(0)
+    expect(material.depthWrite).toBe(true)
   })
 })

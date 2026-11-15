@@ -236,16 +236,16 @@ import pi5Url from './assets/pi5.glb?url'
 import standUrl from './assets/stand.glb?url'
 import unoqUrl from './assets/unoq.glb?url'
 
-// The radio nodes as small scale models: the UNO Q board, the Pi 5 router in its case and the two
-// beacon phones, each on a slim pole with a round foot. The models are web/src/room/assets/*.glb, built by
+// The radio nodes as small scale models: the UNO Q, Pi cases, phones on the square, and schematic
+// ESP32 beacons on the desk. Each sits on a slim stand or arm. The models are web/src/room/assets/*.glb, built by
 // tools/devices/build.py: real-size meshes with ambient occlusion baked into vertex colours, no textures.
 //
-// createDevice() returns an Object3D whose origin is the floor under its stand. It faces +z, so the caller
+// createDevice() returns an Object3D whose origin is the foot of its stand or arm. It faces +z, so the caller
 // turns it (rotation.y) to face the square's centre. Its child "anchor" is the node's radio centre: it sits
 // at the node's height (1 m, or whatever setDeviceHeight says), straight above the origin, so the links,
 // which end at the node's position, end on the device.
 //
-// Every device shares two materials and every copy of a model shares its geometry. They are unlit like the
+// Geometry and base materials are shared; a node gets its own material pair when fading or showing tamper. They are unlit like the
 // rest of the room: each surface takes a tone between a dark and a light grey from one fixed light up and to
 // the north-west (the same light as the room's baked shading), times its baked occlusion.
 
