@@ -122,9 +122,11 @@
   font-weight: 600;
 }
 
-/* A device that has gone quiet: its name in the secondary colour, with "not heard". */
+/* A device that has gone quiet: its name in the secondary colour, "not heard" on a second line under it. */
 .room-label--node-lost {
   color: var(--text-2);
+  white-space: pre;
+  line-height: 1.15;
 }
 
 .room-label--above {

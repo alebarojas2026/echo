@@ -7,7 +7,7 @@ import { HOME_SPOT, LINK_IDS, SIZE_M, STRIP_M, TRAY_SPOTS, ZONES, floorSize, nod
 // src is "sim" so nothing here can pass for live, and measured numbers (train time, ms per decision,
 // before/after dBm) stay null so the panels show "__".
 //
-// ?mock= tour (default) | demo | still | checkin | camera | between | object | blind | empty | waiting | stall
+// ?mock= tour (default) | demo | still | checkin | camera | between | object | blind | empty | waiting | stall | power
 //   tour    someone walks a loop through the four zones, pausing in each
 //   still   someone stays still in zone 4, the no-movement alert counts up to 10 s and fires, and after
 //           14 s a wave check-in clears it; this repeats
@@ -19,10 +19,18 @@ import { HOME_SPOT, LINK_IDS, SIZE_M, STRIP_M, TRAY_SPOTS, ZONES, floorSize, nod
 //   empty   nobody in the room
 //   waiting the brain is up but no link has a reading yet: links [], pred and xray null
 //   stall   states for 1 s, then nothing (NO DATA)
+//   power   the tour, with the East beacon switched off for 6 s in every 16 (see powerOff)
 //   demo    the whole demo on a 90 s loop, in the planned running order (see demo.ts)
 
 export type MockScenario =
-  | 'tour' | 'still' | 'checkin' | 'camera' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall' | 'demo'
+  | 'tour' | 'still' | 'checkin' | 'camera' | 'between' | 'object' | 'blind' | 'empty' | 'waiting' | 'stall' | 'demo' | 'power'
+
+/** ?mock=power: someone walks the tour while the East beacon is switched off for 6 s in every 16. Its links go
+ *  stale, then blind after 3 s (SENSOR BLIND), and the beacon fades to "not heard" until it is back. */
+export function powerOff(tMs: number): { nodes: string[]; forS: number } | undefined {
+  const cycle = tMs % 16000
+  return cycle >= 6000 && cycle < 12000 ? { nodes: ['east'], forS: (cycle - 6000) / 1000 } : undefined
+}
 
 // Everything below is built from the layout in use (nodes.json): its zones, links, tray spot and size.
 const SEG_MS = 5000 // tour: 3 s walking, 2 s still, per zone
@@ -150,6 +158,8 @@ export interface Scene {
   checkin: Checkin | null
   stillS: number
   cam: 'on' | 'off'
+  /** Devices switched off, and for how long: their links read nothing (stale, then blind after 3 s). */
+  off?: { nodes: string[]; forS: number }
   /** Advice about the object by the router. It only reaches the state while the Wi-Fi link is dropping. */
   advice: boolean
   narration: Narration | null
@@ -164,7 +174,7 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
   const prev = zoneCenter(ZONES[ZONES.length - 2].id)!
   const between: [number, number] = [(middle[0] + prev[0]) / 2 + 0.06, (middle[1] + prev[1]) / 2 + 0.05]
   const standing: Partial<Record<MockScenario, [number, number]>> = { still: middle, checkin: middle, between }
-  const walking = scenario === 'tour' || scenario === 'camera'
+  const walking = scenario === 'tour' || scenario === 'camera' || scenario === 'power'
   const person = walking ? tourAt(tMs) : standing[scenario] ? { xy: standing[scenario]!, moving: false } : null
   const { alert, checkin, stillS } = stillTimeline(scenario, tMs, start)
   const object = scenario === 'object' ? trayXy() : null
@@ -174,6 +184,7 @@ export function mockState(scenario: MockScenario, seq: number, tMs: number, rout
     cam: scenario === 'camera' && tMs % 16000 < 8000 ? 'on' : 'off',
     advice: !!object,
     narration: null,
+    off: scenario === 'power' ? powerOff(tMs) : undefined,
   })
 }
 
@@ -184,16 +195,25 @@ function linkDrop(id: string, i: number, person: [number, number] | null, object
 }
 
 export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
-  const { person, object, router, blind } = scene
+  const { person, object, router } = scene
+  const off = new Set(scene.off?.nodes ?? [])
+  const offIds = LINK_IDS.filter((id) => {
+    const p = parseLinkId(id)
+    return !!p && (off.has(p.tx) || off.has(p.rx))
+  })
+  const offBlind = (scene.off?.forS ?? 0) >= 3
+  const blind = scene.blind || (offBlind && offIds.length > 0)
+  const blindIds = scene.blind ? ['east>unoq:ble'] : offBlind ? offIds : []
   const links: LinkState[] = LINK_IDS.map((id, i) => {
     const drop = linkDrop(id, i, person?.xy ?? null, object, router, tMs)
-    const status = blind && id === 'east>unoq:ble' ? 'blind' : 'ok'
+    const quiet = offIds.includes(id)
+    const status = blindIds.includes(id) ? 'blind' : quiet ? 'stale' : 'ok'
     return {
       id,
       dbm: Number((-58 - i - drop).toFixed(1)),
       base_dbm: -58 - i,
       drop_db: Number(drop.toFixed(1)),
-      rate_hz: status === 'blind' ? 0 : 9.4,
+      rate_hz: status === 'blind' || quiet ? 0 : 9.4,
       expected_hz: 9.5,
       status,
       why: 0,
@@ -258,7 +278,7 @@ export function buildState(seq: number, tMs: number, scene: Scene): StateMsg {
 
   return {
     v: 2, type: 'state', t: Date.now(), seq, src: 'sim', cam: scene.cam, router, links,
-    health: blind ? { status: 'blind', blind: ['east>unoq:ble'], reason: 'rate' } : { status: 'ok', blind: [], reason: null },
+    health: blind ? { status: 'blind', blind: blindIds, reason: 'rate' } : { status: 'ok', blind: [], reason: null },
     pred, objects, xray,
     alert: scene.alert, checkin: scene.checkin, advice, narration: scene.narration, teacher,
     model: MOCK_MODEL,

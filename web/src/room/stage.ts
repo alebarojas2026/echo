@@ -231,7 +231,7 @@ export class Stage {
       const h = hearing.get(n.id) ?? 'never'
       n.alphaTo = h === 'heard' ? 1 : h === 'lost' ? LOST_ALPHA : 0
       const name = NODES[n.id]?.name ?? n.id
-      const text = h === 'lost' ? `${name} · not heard` : name
+      const text = h === 'lost' ? `${name}\nnot heard` : name // a second line: as wide as the name alone
       if (n.label.textContent !== text) n.label.textContent = text
       n.label.classList.toggle('room-label--node-lost', h === 'lost')
     }
