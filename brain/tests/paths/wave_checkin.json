@@ -1,0 +1,13 @@
+{
+  "name": "wave_checkin",
+  "about": "Walk into zone 4, stand still past the 10 s alert limit, wave for 2.5 s (a check-in on pi5>unoq:wifi), walk out.",
+  "duration_s": 25,
+  "person": [
+    {"t": 0, "x": 2.0, "y": 0.5},
+    {"t": 1, "x": 1.5, "y": 0.5},
+    {"t": 22, "x": 1.5, "y": 0.5},
+    {"t": 23, "x": 2.0, "y": 0.5},
+    {"t": 23.1, "x": null}
+  ],
+  "waves": [{"t_on": 14, "t_off": 16.5, "link": "pi5>unoq:wifi", "amp_db": 4, "hz": 2}]
+}

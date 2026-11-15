@@ -5,9 +5,13 @@ file. The modules below take these as their defaults; the brain itself passes th
 file down, so a test can run it on another layout.
 """
 import json
+import os
 from pathlib import Path
 
-NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
+# RADIO_SIGHT_NODES names another layout file (the brain's own tests pin one, so they don't
+# change with the room). Unset, it is the repo's radio/nodes.json.
+NODES_JSON = Path(os.environ.get("RADIO_SIGHT_NODES")
+                  or Path(__file__).resolve().parent.parent / "radio" / "nodes.json")
 DOC = json.loads(NODES_JSON.read_text(encoding="utf-8"))
 
 

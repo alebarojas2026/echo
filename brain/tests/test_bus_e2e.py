@@ -31,7 +31,8 @@ def test_record_and_train_through_the_real_bus(tmp_path):
     def start_brain(log):
         return start(tmp_path / log, "brain.main", "--bus-port", str(brain_port),
                      "--bus", f"127.0.0.1:{bus_port}", "--ws-port", str(ws_port), "--ws-host", "127.0.0.1",
-                     "--sessions", str(tmp_path), "--mode-file", str(tmp_path / "label_mode"))
+                     "--sessions", str(tmp_path), "--mode-file", str(tmp_path / "label_mode"),
+                     "--nodes", str(REPO / "radio" / "nodes.json"))   # the sim it is fed by follows this file
 
     procs = [start(tmp_path / "bus.log", "bus", "--host", "127.0.0.1", "--port", str(bus_port),
                    "--forward", f"127.0.0.1:{brain_port}", "--sessions", str(tmp_path)),
@@ -63,7 +64,8 @@ def test_record_and_train_through_the_real_bus(tmp_path):
 
         empty = feed("empty_room", "--loop")
         procs.append(empty)
-        await until(lambda m: m["type"] == "state" and len(m["links"]) == 6 and m["cam"] == "on", 10)
+        n_links = len(json.loads((REPO / "radio" / "nodes.json").read_text())["links"])
+        await until(lambda m: m["type"] == "state" and len(m["links"]) == n_links and m["cam"] == "on", 10)
         await send("baseline")
         await until(lambda m: m["type"] == "event" and m["kind"] == "baseline_done", 30)
         empty.terminate()

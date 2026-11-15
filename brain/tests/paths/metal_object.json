@@ -1,0 +1,17 @@
+{
+  "name": "metal_object",
+  "about": "Empty room with a metal object next to the east beacon. A steady drop on east's links that never moves.",
+  "duration_s": 30,
+  "person": null,
+  "objects": [
+    {
+      "x": 1.85,
+      "y": 1.0,
+      "drop_db": 6
+    }
+  ],
+  "label_mode": "object",
+  "meta": {
+    "purpose": "object"
+  }
+}

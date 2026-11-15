@@ -23,6 +23,7 @@ from typing import Callable, Dict, List, Optional
 
 from advisor.advise import advise
 from brain import features as F
+from brain import layout
 from brain.alert import Watch
 from brain.health import Health
 from brain.train import Model
@@ -30,7 +31,7 @@ from brain.xray import Xray
 
 BASELINE_MS = 20_000
 HOME = "S-home"
-NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
+NODES_JSON = layout.NODES_JSON   # radio/nodes.json
 CAM_SILENT_MS = 3_000
 TEACHER_FRESH_MS = 1_000
 LINK_FRESH_MS = 1_000

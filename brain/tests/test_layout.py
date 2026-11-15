@@ -145,3 +145,67 @@ def test_links_heard_over_the_hotspot_go_quiet_without_blinding_the_sensor():
     assert state["health"]["status"] == "degraded" and state["pred"] is not None and state["pred"]["zone"] == 1
     play([(8, 1)], 31, silent=["east>unoq:ble"])   # a link on the cable side still blinds it
     assert brain.state()["health"]["status"] == "blind" and brain.state()["pred"] is None
+
+
+def file_feed(doc, plan, t0, seed=0):
+    """A made-up feed for whatever layout a nodes.json describes: a person in zone k shadows every
+    link whose place in the file, modulo the number of zones, is k - 1."""
+    ids, n = [link["id"] for link in doc["links"]], len(doc["zones"])
+    zones = [int(z["id"]) for z in doc["zones"]]
+    rng, t, out = random.Random(seed), t0, []
+    for seconds, zone in plan:
+        for i in range(int(seconds * 15)):
+            for k, link in enumerate(ids):
+                drop = 8 if zone and k % n == zones.index(zone) else 0
+                out.append({"v": 2, "type": "rssi", "recv_t": t, "t": t, "src": "sim", "link": link,
+                            "dbm": round(-50 - drop + rng.gauss(0, 1.0))})
+            if i % 2 == 0:
+                out.append({"v": 2, "type": "label", "recv_t": t, "t": t, "src": "sim", "mode": "person",
+                            "persons_in_frame": int(zone > 0), "present": zone > 0, "zone": zone,
+                            "foot_m": None, "motion": "still" if zone else None, "conf": 0.9, "clipped": False})
+            if i % 15 == 0:
+                out.append({"v": 2, "type": "cam", "recv_t": t, "t": t, "src": "sim", "state": "on", "fps": 7.5})
+            t += 1000 // 15
+    return out, t
+
+
+def test_on_the_repos_own_nodes_json_every_state_and_event_passes_the_contract():
+    """Whatever layout radio/nodes.json holds today (the square, or the desk strip once the contract
+    moves), the loop runs on it and what it sends passes contracts/schemas as they are today."""
+    from contracts.check import errors
+
+    repo = NODES_JSON.parent.parent.parent / "radio" / "nodes.json"      # not this folder's pinned square
+    doc = json.loads(repo.read_text(encoding="utf-8"))
+    zones = [int(z["id"]) for z in doc["zones"]]
+    brain, t, bad = Brain(nodes=doc), T0_MS, []
+
+    def play(plan, seed, session=None):
+        nonlocal t
+        msgs, t = file_feed(doc, plan, t, seed)
+        if session:
+            brain.on_cmd(cmd("record_start", session=session, purpose="train", walker="w"))
+            brain.on_message({"v": 2, "type": "meta", "recv_t": msgs[0]["recv_t"], "session": session, "purpose": "train"})
+        for m in msgs:
+            brain.on_message(m)
+            if m["type"] == "label":
+                state = brain.state()
+                bad.extend(errors(state))
+                for event in brain.pop_events():
+                    bad.extend(errors(event))
+        if session:
+            brain.on_cmd(cmd("record_stop"))
+        return state
+
+    brain.on_cmd(cmd("baseline"))
+    play([(25, 0)], 1)
+    play([(8, 0)] + [(8, z) for z in zones] + [(4, 0)] + [(8, z) for z in reversed(zones)], 2, session="f1")
+    brain.on_cmd(cmd("train"))
+    for zone in zones:
+        state = play([(5, zone)], 20 + zone)
+        assert state["pred"]["zone"] == zone and len(state["pred"]["probs"]) == 1 + len(zones)
+    state = play([(5, 0)], 30)
+    assert state["pred"]["present"] is False
+    assert len(state["links"]) == len(doc["links"]) and state["xray"]["n_links"] == len(doc["links"])
+    w, h = grid_shape(doc["frame"])
+    assert (state["xray"]["w"], state["xray"]["h"]) == (w, h) and len(state["xray"]["static_db"]) == w * h
+    assert not bad, bad[:5]
