@@ -110,9 +110,17 @@ def _zone(z) -> str | None:
     return f"on the {ZONES[z][0].lower()}" if desk() else f"zone {z} ({ZONES[z][0]})"
 
 
+RADIO = {"wifi": "Wi-Fi", "ble": "Bluetooth"}
+
+
 def _link(link) -> str | None:
-    m = re.fullmatch(r"(\w+)>(\w+):\w+", str(link or ""))
-    return f"{NODES.get(m[1], m[1])} to {NODES.get(m[2], m[2])}" if m else None
+    m = re.fullmatch(r"(\w+)>(\w+):(\w+)", str(link or ""))
+    if not m:
+        return None
+    if spot():   # the devices as the file names them, and which radio: Pi A and Pi B share a Wi-Fi and a Bluetooth line
+        name = lambda node: DEVICES.get(node) or NODES.get(node, node)   # noqa: E731
+        return f"{name(m[1])} to {name(m[2])} {RADIO.get(m[3], m[3])}"
+    return f"{NODES.get(m[1], m[1])} to {NODES.get(m[2], m[2])}"
 
 
 def _device(node) -> str | None:
@@ -154,6 +162,15 @@ def template(kind: str, info: dict) -> str | None:
             "intrusion": f"Someone is here while armed, {zone}." if zone else "Someone is here while armed.",
             "router_moved": "The router left its home spot, so tracking pauses.",
         }
+        if spot():   # the dead zone is something left standing in the Wi-Fi line across the gap; the router stays put
+            sentences.update({
+                "object_on": "Something is in the Wi-Fi line, weakening the signal.",
+                "object_off": "The Wi-Fi line is clear again.",
+                "advice": "Something is in the Wi-Fi line.",
+                "advice_result": (f"Once it was cleared, the Wi-Fi went from {before} to {after} dBm."
+                                  if before is not None and after is not None
+                                  else "The Wi-Fi line is clear; the new signal is being measured."),
+            })
         if kind in sentences:
             return sentences[kind]
     sentences = {

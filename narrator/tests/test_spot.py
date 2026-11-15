@@ -53,7 +53,7 @@ def test_the_spot_says_at_the_desk():
     assert n.template("alert_off", {"zone": 1}) == "The alert at the desk is cleared."
     assert n.template("intrusion", {"zone": 1}) == "Someone is here while armed, at the desk."
     assert n.template("checkin", {"zone": 1}) == "Check-in received at the desk."
-    assert n.template("object_on", {"zone": 0}) == "A new object on the desk is weakening the signal."
+    assert n.template("object_on", {"zone": 0}) == "Something is in the Wi-Fi line, weakening the signal."
     assert n.template("recalibrating", {}) == "Recalibrating: please keep the space in front of the desk clear for 20 seconds."
 
 
@@ -61,7 +61,7 @@ def test_tamper_names_the_device_that_went_quiet():
     assert n.template("tamper", {"node": "pi5b"}) == "Pi B went quiet while the space was armed."
     assert n.template("tamper_cleared", {"node": "pi5b"}) == "Pi B is back."
     assert n.template("tamper", {"node": "pi5"}) == "Pi A went quiet while the space was armed."
-    assert n.template("blind_on", {"link": "pi5b>unoq:ble"}) == "Sensor blind on the second Pi to receiver link; predictions pause."
+    assert n.template("blind_on", {"link": "pi5b>unoq:ble"}) == "Sensor blind on the Pi B to Board Bluetooth link; predictions pause."
 
 
 def test_a_zone_name_that_is_not_a_place_reads_as_here():
@@ -91,3 +91,29 @@ def test_the_recap_of_a_visit_to_the_spot():
     assert text == ("Someone stepped up to the desk. A no-movement alert fired at the desk and a wave check-in "
                     "answered it. While it was armed, someone came in.")
     assert not SIDES.search(text) and r.problem(text, lines, camera_off=True) is None
+
+
+MOVE = re.compile(r"\b(mov\w*|tip for placing)\b[^.]*\brouter\b|\bafter the move\b", re.I)
+
+
+def test_the_wifi_line_across_the_gap_is_named_as_wifi_and_the_router_is_never_moved():
+    """The Wi-Fi line Pi A to Pi B is the main sensor (#789): it is named with its radio, and a dead zone is
+    something left standing in it, cured by clearing it. No sentence tells anyone to move the router."""
+    assert n.template("blind_on", {"link": "pi5>pi5b:wifi"}) == "Sensor blind on the Pi A to Pi B Wi-Fi link; predictions pause."
+    assert n.template("drift", {"link": "pi5>pi5b:ble"}) == "The Pi A to Pi B Bluetooth link is drifting from its baseline."
+    assert n.template("object_off", {"node": "pi5b"}) == "The Wi-Fi line is clear again."
+    assert n.template("advice_result", {"before_dbm": -71.2, "after_dbm": -63.4}) == (
+        "Once it was cleared, the Wi-Fi went from -71 to -63 dBm.")
+    for kind, text in every_sentence():
+        assert not MOVE.search(text), (kind, text)
+
+
+def test_the_recap_says_the_wifi_line_was_cleared_not_that_the_router_moved():
+    events = [{"kind": k, "t": 1000 * i, "info": info} for i, (k, info) in enumerate([
+        ("object_on", {"node": "pi5b"}), ("advice", {"link": "pi5>pi5b:wifi"}), ("object_off", {}),
+        ("advice_result", {"before_dbm": -71.2, "after_dbm": -63.4})])]
+    assert r.facts(events) == ["0:00 something was left in the Wi-Fi line", "0:01 the board found something in the Wi-Fi line",
+                               "0:02 the Wi-Fi line was cleared", "0:03 once it was cleared the Wi-Fi went from -71 to -63 dBm"]
+    assert r.template(events) == "Clearing the Wi-Fi line took it from -71 to -63 dBm."
+    assert r.template(events[:1]) == "Something was left in the Wi-Fi line."
+    assert not any(MOVE.search(line) for line in r.facts(events))

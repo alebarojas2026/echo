@@ -50,6 +50,14 @@ def _fact(kind: str, info: dict) -> str | None:
             "alert_on": f"no-movement alert {side}" if side else "no-movement alert",
             "intrusion": f"someone came in while armed, {side}" if side else "someone came in while armed",
         }
+        if n.spot():   # the dead zone is something in the Wi-Fi line across the gap; the router is never moved
+            desk_facts.update({
+                "object_on": "something was left in the Wi-Fi line",
+                "object_off": "the Wi-Fi line was cleared",
+                "advice": "the board found something in the Wi-Fi line",
+                "advice_result": (f"once it was cleared the Wi-Fi went from {before} to {after} dBm"
+                                  if before is not None and after is not None else None),
+            })
         if kind in desk_facts:
             return desk_facts[kind]
     return {
@@ -119,9 +127,10 @@ def template(events: list) -> str | None:
         out.append("While it was armed, someone came in.")
     before, after = n._dbm(info.get("advice_result", {}).get("before_dbm")), n._dbm(info.get("advice_result", {}).get("after_dbm"))
     if before is not None and after is not None:
-        out.append(f"Moving the router took its Wi-Fi from {before} to {after} dBm.")
+        out.append(f"Clearing the Wi-Fi line took it from {before} to {after} dBm." if n.spot() else
+                   f"Moving the router took its Wi-Fi from {before} to {after} dBm.")
     elif "object_on" in kinds:
-        out.append("A new object showed up in the radio picture.")
+        out.append("Something was left in the Wi-Fi line." if n.spot() else "A new object showed up in the radio picture.")
     elif "cam_off" in kinds:
         out.append("Setup ended and sensing carried on by radio alone.")
     return " ".join(out[:MAX_SENTENCES]) or None
