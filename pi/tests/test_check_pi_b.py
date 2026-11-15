@@ -15,6 +15,7 @@ PI_B = {
     JOURNAL: (0, LINE.format(s="30.1", e="21.0", w="20.2", f="0", why="")),
     "systemctl is-active radio-sight-wifi-rssi": (0, "active\n"),
     "ip -4 -o addr show dev wlan0": (0, "3: wlan0    inet 10.42.0.57/24 brd 10.42.0.255 scope global wlan0\n"),
+    "ip -4 route get 192.168.77.2": (0, "192.168.77.2 via 10.42.0.1 dev wlan0 src 10.42.0.57 uid 0\n"),
     "ping -c 1 -W 1 192.168.77.2": (0, ""),
 }
 
@@ -43,6 +44,9 @@ def test_pi_b_all_ok_without_cable_hotspot_or_forwarding(capsys):
     ({"ip -4 -o addr show dev wlan0": (0, "3: wlan0    inet 10.42.0.1/24 scope global wlan0\n")},
      "isn't joined to Pi A's hotspot", "radio/wifi_join.sh"),
     ({"ping -c 1 -W 1 192.168.77.2": (1, "")}, "doesn't answer through Pi A", "on Pi A: python3 -m pi.check"),
+    # wlan0 never takes the default route: without wifi_join.sh's route the readings have no way out
+    ({"ip -4 route get 192.168.77.2": (2, "RTNETLINK answers: Network is unreachable\n")},
+     "no route to the board", "RADIO_NODE=pi5b"),
 ])
 def test_pi_b_failures_name_their_fix(capsys, changes, line, fix):
     code, out = report(capsys, changes)
