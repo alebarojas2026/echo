@@ -21,9 +21,10 @@ def repo_layout():
 
 
 def strip_nodes():
-    """radio/nodes.json when it is the desk layout, else a stand-in with the same frame keys."""
+    """radio/nodes.json when it is the two-zone desk layout, else a stand-in with the same frame keys
+    (the square, or the one spot, which test_one_zone.py covers)."""
     nodes = repo_layout()
-    if (nodes.get("frame") or {}).get("strip_m"):
+    if (nodes.get("frame") or {}).get("strip_m") == [1.6, 0.6] and nodes["frame"].get("zone_split_x_m") == 0.8:
         return nodes
     return {"frame": {"size_m": [1.6, 1.1], "strip_m": [1.6, 0.6], "zone_split_x_m": 0.8}}
 
@@ -114,14 +115,15 @@ def test_strip_calibration_refused_for_the_square(tmp_path):
 
 
 def test_repo_layout_decides_which_calibration_passes(tmp_path):
-    """On main's square the old calibration passes; once nodes.json is the strip it is refused."""
+    """On the square the old calibration passes; once nodes.json is a strip (two zones or one spot) it is
+    refused, and a calibration made for that strip passes."""
     area_m, split = area_from_nodes(repo_layout())
     expected = area_size(area_text(area_m))
     square = calibration(SQUARE_CORNERS, [400, 400])
     if split[1] is None:
         with pytest.raises(ValueError, match="recalibrate"):
             check_files(*files(tmp_path, square), [400, 400], expected)
-        strip = strip_config(FIXTURE["strip"]["corners_px"])
+        strip = calibration(FIXTURE["strip"]["corners_px"], [400, 400], area_m=area_m, zone_split_m=split)
         assert check_files(*files(tmp_path, strip), [400, 400], expected)
     else:
         assert check_files(*files(tmp_path, square), [400, 400], expected)
