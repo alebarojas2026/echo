@@ -26,7 +26,12 @@ def _spans(rows: list, zones: dict) -> list:
         else:
             out.append({"zone": r["zone"], "name": zones.get(r["zone"]), "_start": r["t"], "_end": r["t"], "seconds": 1})
     return [{"zone": s["zone"], "name": s["name"], "from": clock(s["_start"]), "to": clock(s["_end"]),
-             "seconds": s["seconds"]} for s in out]
+             "seconds": s["seconds"], "from_t": s["_start"], "to_t": s["_end"]} for s in out]
+
+
+def _span(from_t: int, to_t: int, now_ms: int, before_ms: int = 0, after_ms: int = 0) -> dict:
+    """The stretch an answer is about (section 10), for the screen's Replay button: never past now."""
+    return {"from_t": from_t - before_ms, "to_t": min(to_t + after_ms, max(now_ms, to_t))}
 
 
 def _window(store, now_ms, minutes):
@@ -57,7 +62,8 @@ def presence(store, now_ms, zones, minutes=10, zone=None, **_):
     last = spans[-1]
     return {"answer": f"Yes. Someone was {_where(zone, zones)} for {summary['seconds_with_someone']} s of the last "
                       f"{minutes} minutes, most recently {_where(last['zone'], zones)} from {last['from']} to "
-                      f"{last['to']}.{note}", "rows": [summary] + spans}
+                      f"{last['to']}.{note}", "rows": [summary] + spans,
+            "span": _span(last["from_t"], last["to_t"], now_ms, 5000, 5000)}
 
 
 def still_spans(store, now_ms, zones, minutes=10, **_):
@@ -68,11 +74,12 @@ def still_spans(store, now_ms, zones, minutes=10, **_):
         return {"answer": f"I have no record of someone staying still in the last {minutes} minutes.", "rows": []}
     longest = max(spans, key=lambda s: s["seconds"])
     return {"answer": f"The longest time without movement was {longest['seconds']} s {_where(longest['zone'], zones)}, "
-                      f"from {longest['from']} to {longest['to']}.", "rows": spans}
+                      f"from {longest['from']} to {longest['to']}.", "rows": spans,
+            "span": _span(longest["from_t"], longest["to_t"], now_ms, 5000, 5000)}
 
 
 def _event_rows(store, now_ms, minutes, kinds, zones):
-    return [{"at": clock(e["t"]), "kind": e["kind"], **e["info"],
+    return [{"at": clock(e["t"]), "t": e["t"], "kind": e["kind"], **e["info"],
              **({"name": zones[e["info"]["zone"]]} if e["info"].get("zone") in zones else {})}
             for e in store.events(now_ms - minutes * 60_000, kinds)]
 
@@ -88,7 +95,8 @@ def alerts(store, now_ms, zones, minutes=10, **_):
     cleared = f" and it cleared at {after[0]['at']}" if after else " and it has not cleared"
     summary = {"row": "summary", "alerts": len(on)}
     return {"answer": f"No-movement alerts in the last {minutes} minutes: {len(on)}. The last one was "
-                      f"{_where(last.get('zone'), zones)} at {last['at']}{cleared}.", "rows": [summary] + rows}
+                      f"{_where(last.get('zone'), zones)} at {last['at']}{cleared}.", "rows": [summary] + rows,
+            "span": _span(last["t"], after[0]["t"] if after else last["t"], now_ms, 20_000, 10_000)}
 
 
 def intrusions(store, now_ms, zones, minutes=10, **_):
@@ -103,7 +111,8 @@ def intrusions(store, now_ms, zones, minutes=10, **_):
     place = _where(last.get("zone"), zones) if "zone" in last else f"on the path {last.get('link')}"
     summary = {"row": "summary", "intrusion_alerts": len(hits)}
     return {"answer": f"Intrusion alerts in the last {minutes} minutes: {len(hits)}. The last one was {place} at "
-                      f"{last['at']}. The space is {armed} now.", "rows": [summary] + rows}
+                      f"{last['at']}. The space is {armed} now.", "rows": [summary] + rows,
+            "span": _span(last["t"], last["t"], now_ms, 10_000, 30_000)}
 
 
 def link_history(store, now_ms, zones, minutes=10, link=None, **_):
