@@ -57,7 +57,8 @@ python -m brain.main --sessions data/sessions  # where baseline.json is written 
 | `router_moved` | Sets `router`, moves the x-ray's geometry and freezes the advice's `before_dbm`. `pred` is null while the router is off S-home. 5 s later `after_dbm` is filled (the median over 3 s, starting 2 s after the move) and `advice_result` goes out. |
 | `router_home` | Back on S-home: clears the advice and the x-ray, then checks for 3 s that every pi5 link sits within 1 dB of its base (`pred` stays null meanwhile). If one doesn't, it sends `recalibrating` and runs an automatic 20 s baseline; if that baseline moved a link by more than 1 dB it sends `drift`, which is the cue for `relearn`. |
 | `reset_alert` | Clears the alert and restarts the still timer. |
-| `reset` | Between judges: clears the alert, still timer, check-in and narration. Then `reset`. |
+| `reset` | Between judges: clears the alert, still timer, check-in and narration, and disarms. Then `reset`. |
+| `arm` | `{on: true}` arms ("this space should be empty now"): `state.armed` is true and `armed` goes out. `{on: false}` (or `reset`) disarms and sends `disarmed`. While armed, one `intrusion` event with the zone each time a person appears: present with kind person in 6 of the last 10 decisions, after not being so. Arming with somebody already there raises it within 6 decisions. Objects never raise it, and nothing is raised from a decision that is hidden (blind, recalibrating, router away). `state.armed` is sent only while true until state.json has the field (#440). |
 | `truth` | Kept for the crowd game. |
 
 `brain/core.py` holds the rules with no sockets, so tests drive it with a fake clock.

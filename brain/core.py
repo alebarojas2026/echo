@@ -23,7 +23,7 @@ from typing import Callable, Dict, List, Optional
 
 from advisor.advise import advise
 from brain import features as F
-from brain.alert import Watch
+from brain.alert import Armed, Watch
 from brain.health import Health
 from brain.train import Model
 from brain.xray import Xray
@@ -109,6 +109,7 @@ class Brain:
         self.health = Health.from_nodes(nodes)
         self.xray = Xray.from_nodes(nodes)
         self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
+        self.armed = Armed()                  # after hours: a person appearing is an intrusion
         self._heard = set()                   # links with at least one reading
         self._last_seen: Dict[str, int] = {}  # link -> recv_t of its last reading
         self._last_dbm: Dict[str, float] = {} # link -> the last dbm we sent (or its last reading)
@@ -273,6 +274,12 @@ class Brain:
         self.model = self.pred = None
         self._cmd_train(args)
 
+    def _cmd_arm(self, args):
+        """arm {on: true|false}: "this space should be empty now"."""
+        on = args.get("on")
+        if isinstance(on, bool) and self.armed.arm(on):
+            self.emit("armed" if on else "disarmed", {})
+
     def _cmd_reset_alert(self, args):
         self.watch.reset_alert()
         self._watch_events()
@@ -282,6 +289,7 @@ class Brain:
         self.watch.reset()
         self._dismissed = self.advice["xy_m"] if self.advice else None
         self.narration = self.advice = None
+        self._cmd_arm({"on": False})
         self._watch_events()
         self.emit("reset", {})
 
@@ -608,6 +616,7 @@ class Brain:
         if self.capture or self.router != HOME or self.health.blind or self.settle is not None:
             self.pred = None                 # hidden; SENSOR BLIND never reads as "empty"
             self.watch.on_pred(now, None)    # the alert timer pauses, the LED shows "?"
+            self.armed.on_pred(None)         # and nothing is raised on a decision nobody may see
             return
         if not self._fresh:
             return
@@ -617,6 +626,9 @@ class Brain:
         pred["still_s"] = round(self.watch.still_ms / 1000, 1)
         self.pred = pred
         self._announce(pred["zone"] if pred["present"] else 0)
+        intruder = self.armed.on_pred(pred)
+        if intruder is not None:
+            self.emit("intrusion", {"zone": intruder})
 
     def _announce(self, zone: int) -> None:
         """enter, exit and zone_change, once the new zone has held for ZONE_HOLD decisions.
@@ -685,6 +697,7 @@ class Brain:
         if self.health.blind and self.pred is not None:
             self.pred = None
             self.watch.on_pred(now, None)
+            self.armed.on_pred(None)
         # Section 5: xray is null before the first baseline, links are [] before any reading.
         xray = self.xray.update(now, self.pred["kind"] if self.pred else None) if self.base else \
             {"xray": None, "objects": [], "events": []}
@@ -708,9 +721,14 @@ class Brain:
                                                       "windows": 0, "train_sessions": []}
         model["ms_per_decision"] = round(statistics.median(self.decision_ms), 2) if self.decision_ms else None
         model["training"] = self.training
-        return {"v": 2, "type": "state", "t": now, "seq": self._seq, "src": self.src,
-                "cam": cam, "router": self.router, "links": links,
-                "health": health["health"],
-                "pred": self.pred, "objects": xray["objects"], "xray": xray["xray"],
-                "alert": self.watch.alert_block(), "checkin": self.watch.checkin, "advice": self.advice and dict(self.advice), "narration": self.narration, "teacher": teacher,
-                "model": model, "board": self.board_stats()}
+        state = {"v": 2, "type": "state", "t": now, "seq": self._seq, "src": self.src,
+                 "cam": cam, "router": self.router, "links": links,
+                 "health": health["health"],
+                 "pred": self.pred, "objects": xray["objects"], "xray": xray["xray"],
+                 "alert": self.watch.alert_block(), "checkin": self.watch.checkin, "advice": self.advice and dict(self.advice), "narration": self.narration, "teacher": teacher,
+                 "model": model, "board": self.board_stats()}
+        if self.armed.on:
+            # Section 5: a missing "armed" means false. Sent only while armed until state.json
+            # knows the field (#440); a state that never arms is byte for byte what it was.
+            state["armed"] = True
+        return state
