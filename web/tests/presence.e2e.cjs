@@ -8,7 +8,7 @@ test('the Presence tile shows the measured counts with the always-empty score, a
   await page.route('**/proof.json', route => route.fulfill({ json: proof }))
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.clock.install()
-  await page.goto('/?mock=still')
+  await page.goto('/?mock=still&judge=rail') // the proof tiles are the rail's; the hall-first page does not draw them
   await page.clock.runFor(6000)
   const tile = page.getByTestId('presence-score')
   const baseline = page.getByTestId('presence-baseline')

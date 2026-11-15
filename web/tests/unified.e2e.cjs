@@ -6,7 +6,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`all panels together w
  await page.route('**/proof.json',r=>r.fulfill({json:{presence:{correct:19,total:20,always_empty_correct:10},zone:{correct:19,total:20},person_vs_object:{correct:18,total:20},train_s:31,ms_per_decision:{p50:24},watts:{radio_only:6},bytes_out:0,images_stored:0,models_on_board:3}}))
  await page.route('**/report',r=>r.fulfill({json:{armed_from_t:1000,armed_to_t:121000,intrusions:[{t:20000,zone:1}],present_s:30,passed_by:0,tamper:[],blind_s:0,text:'Someone entered while the space was armed.',rows:120,ms:12}}))
  await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'})
- await page.goto('/tests/arrival-harness.html?op=1&privacy=board&records=board')
+ await page.goto('/tests/arrival-harness.html?op=1&privacy=board&records=board&judge=rail') // every panel of the rail together: asked for, since the hall-first page does not draw them
  await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000})
  await expect(page.locator('#room')).toHaveAttribute('data-scan-file',/hall-.*\.glb/)
  const shot=async name=>{if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-${name}.png`)})}}

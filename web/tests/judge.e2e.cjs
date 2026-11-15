@@ -3,10 +3,13 @@ const { test, expect } = require('@playwright/test')
 const fs = require('node:fs')
 const path = require('node:path')
 const shots = process.env.HUD_SCREENSHOTS
+// On the one spot the words are the walk-up card's while it waits and the page's own after it, one or the other.
+const oneSpot = layoutFixture.layout.zones.length === 1
+const headline = page => oneSpot ? page.locator('[data-testid="arrival-title"]:visible, [data-testid="judge-headline"]:visible') : page.getByTestId('judge-headline')
 for (const [scene, title, time] of [
   ['still', layoutFixture.still, 7200], ['alert', layoutFixture.still, 11000],
   ['object', 'Dead zone found', 1000], ['blind', 'Sensor blind', 1000],
-  ['empty', 'Nobody is here', 1000],
+  ['empty', oneSpot ? 'Nobody is here.' : 'Nobody is here', 1000],
 ]) {
   test(scene + ' judge screenshot', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 })
@@ -14,9 +17,9 @@ for (const [scene, title, time] of [
     page.on('pageerror', error => errors.push(error.message))
     await page.clock.install()
     await page.goto('/?mock=' + (scene === 'alert' ? 'still' : scene))
-    await page.getByTestId('judge-headline').waitFor()
+    await headline(page).waitFor()
     await page.clock.runFor(time)
-    await expect(page.getByTestId('judge-headline')).toHaveText(title)
+    await expect(headline(page)).toHaveText(title)
     await page.evaluate(() => document.fonts.ready)
     const rail = page.locator('#hud')
     expect(await rail.evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true)

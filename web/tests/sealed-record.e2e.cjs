@@ -12,7 +12,7 @@ for(const [width,height] of [[1920,1080],[1440,900]])test(`sealed record remains
  const shot=async name=>{if(process.env.HUD_SCREENSHOTS){fs.mkdirSync(process.env.HUD_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.HUD_SCREENSHOTS,`${width}-${name}.png`)})}}
  await send(undefined);await expect(line).toBeHidden();expect(calls).toBe(0);await shot('absent')
  await send(chain);await expect(line).toHaveText('Sealed record · verified · 2 witnesses');await expect(line).toHaveCSS('font-size','28px');await expect(line).toBeInViewport({ratio:1});expect(calls).toBe(0);await shot('verified')
- expect(await page.locator('body').innerText()).not.toMatch(/camera|lesson/i)
+ expect((await page.locator('body').innerText()).replaceAll('No camera. No microphone.','')).not.toMatch(/camera|lesson/i)
  await send({...chain,witnesses:0,witnesses_ok:0});await expect(line).toHaveText('Sealed record · verified · 0 witnesses');await expect(line).toHaveAttribute('data-tone','');await shot('no-witnesses')
  await send({...chain,verified:false});await expect(line).toContainText('verification failed');await expect.poll(()=>calls).toBe(1);release()
  await expect(line).toContainText('record 4012 failed verification');await expect(line).toHaveAttribute('data-tone','fault');await expect(line).toBeInViewport({ratio:1});await shot('fault')

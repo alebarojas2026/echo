@@ -48,12 +48,13 @@ Echo: **a witness that never watches.** It knows when someone is in a space, kee
 3. Three rehearsals of the 3-minute round at the desk.
 4. Devpost page and video; Ivan submits by 10:30 AM. Judging is 1:00 to 3:00 PM, three minutes a desk.
 
-**The judge's part of the demo (this is the order; no walk-through anywhere):** step in and stand (the figure appears); stand still until the no-movement alert, then step aside and back (check-in); armed, step in (intrusion); unplug Pi B (the sensor goes blind and the witness is recorded silent, the record carries on); ask "What happened?"; press Prove it.
+**The judge's part of the demo (this is the order; no walk-through anywhere):** step in and stand (the figure appears); stand still until the no-movement alert, then step aside and back (check-in); armed, step in (intrusion); ask "What happened?"; press Prove it on the second screen. Nobody unplugs a Pi in the round: on the kit that step moved Pi B and cost the margin (7:10 AM). The silent witness is said in one sentence, not performed.
 
 **Seen on the kit, worth knowing**
 - Pi B's clock resets every time it loses power, and its cable came out once: secure the power cable, and set the clocks after any power-up, before the baseline.
 - After the install, Pi B's signing program needed one manual start. Check it is running on each Pi after any restart.
-- A small nudge of one device costs the margin: the empty line should read about -44 dBm or better. Placed and checked before each session.
+- A small nudge of one device costs the margin: after Pi B's cable was pulled a person took 9 to 11 dB off the line where the same stand took 12 to 17 dB before. Place the kit once, tape Pi B and its cable, and check before each session: the empty line about -44 dBm or better and a person on the spot 12 dB or more.
+- **`kit-5.1.1` (8468217) is tagged: the object rule is off on the one spot** (#916). A very still person at 9 to 10 dB was being called "something left in the line", with no alert and no check-in. Nothing on the one spot is called an object now; never write that Echo tells a thing from a person. The board runs kit-5.1 with this one layout number changed, which is the same thing.
 - When Pi B was unplugged, Pi A was shown silent for about 4 s though nobody touched it, then recovered. Do not write "the others never miss a beat".
 
 **Decisions made this morning that a worker must not undo**

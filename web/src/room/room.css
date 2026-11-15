@@ -48,7 +48,7 @@
   border-bottom: 1px solid var(--edge);
   background: var(--floor);
   color: var(--text-2);
-  font: 600 28px/56px 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 28px/56px var(--sans, system-ui, sans-serif);
   text-align: center;
   pointer-events: none;
 }
@@ -100,7 +100,7 @@
   left: 0;
   white-space: nowrap;
   color: var(--text-2);
-  font: 500 28px/1.1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 500 28px/1.1 var(--sans, system-ui, sans-serif);
   will-change: transform;
 }
 
@@ -113,7 +113,7 @@
 .room-label--zone {
   translate: 0 -50%;
   /* 48 px on the 1280 px canvas; smaller with the square on a laptop's narrower canvas, never under 32 px. */
-  font: 600 max(32px, calc(48px * var(--room-k, 1)))/1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 max(32px, calc(48px * var(--room-k, 1)))/1 var(--sans, system-ui, sans-serif);
   transition: color 0.3s ease;
 }
 
@@ -159,13 +159,13 @@
 .room-notice h2 {
   margin: 0 0 16px;
   color: var(--text);
-  font: 600 72px/1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 72px/1 var(--sans, system-ui, sans-serif);
 }
 
 .room-notice p {
   margin: 0;
   color: var(--text-2);
-  font: 500 28px/1.3 'Hanken Grotesk', system-ui, sans-serif;
+  font: 500 28px/1.3 var(--sans, system-ui, sans-serif);
 }
 
 /* "Movement on this path": person blue, at node-label size, readable from the wide hall framing. */
@@ -363,7 +363,7 @@
   max-width: calc(100% - 64px);
   margin: 0;
   color: var(--text-2);
-  font: 500 28px/1.3 'Hanken Grotesk', system-ui, sans-serif;
+  font: 500 28px/1.3 var(--sans, system-ui, sans-serif);
   pointer-events: none;
   -webkit-text-stroke: 6px var(--bg);
   paint-order: stroke fill;
@@ -381,7 +381,7 @@
   gap: 24px;
   color: var(--text-2);
   /* 28 px: anything a judge reads is at least that (AGENTS.md Style). */
-  font: 500 28px/1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 500 28px/1 var(--sans, system-ui, sans-serif);
   pointer-events: none;
   /* Inside the hall a light desk top can pass behind it: the same knockout as the device names keeps it readable. */
   -webkit-text-stroke: 6px var(--bg);
@@ -410,7 +410,7 @@
   border: 1px solid var(--square);
   background: var(--floor);
   color: var(--text);
-  font: 600 20px/1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 20px/1 var(--sans, system-ui, sans-serif);
   font-variant-numeric: tabular-nums;
 }
 
@@ -439,13 +439,13 @@
   border: 1px solid var(--square);
   background: var(--floor);
   color: var(--text);
-  font: 500 22px/1.35 'Hanken Grotesk', system-ui, sans-serif;
+  font: 500 22px/1.35 var(--sans, system-ui, sans-serif);
   font-variant-numeric: tabular-nums;
 }
 
 .room-align h2 {
   margin: 0 0 8px;
-  font: 600 28px/1.2 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 28px/1.2 var(--sans, system-ui, sans-serif);
 }
 
 .room-align p {
@@ -474,7 +474,7 @@
   align-items: center;
   gap: 12px;
   color: var(--text);
-  font: 600 28px/1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 28px/1 var(--sans, system-ui, sans-serif);
 }
 
 /* "2 new beacons: H, J" is set-up talk: shown to whoever is placing the kit (align mode) or has the operator's
@@ -504,7 +504,7 @@ html[data-hud-operator='open'] .room:not([data-align='on']):not([data-op='1']) .
 
 .room-align pre {
   margin: 12px 0 0;
-  font: 500 20px/1.3 'Hanken Grotesk', system-ui, sans-serif;
+  font: 500 20px/1.3 var(--sans, system-ui, sans-serif);
   user-select: all;
 }
 
@@ -555,7 +555,7 @@ html[data-room-placing] .room-label--ourdesk {
   padding: 4px 10px;
   background: var(--floor);
   color: var(--text);
-  font: 600 24px/1.1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 24px/1.1 var(--sans, system-ui, sans-serif);
   white-space: nowrap;
   translate: -50% -50%;
 }
@@ -567,7 +567,7 @@ html[data-room-placing] .room-label--ourdesk {
   border: 1px solid var(--square);
   background: var(--floor);
   color: var(--text);
-  font: 600 22px/1 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 22px/1 var(--sans, system-ui, sans-serif);
   cursor: pointer;
 }
 
@@ -622,7 +622,7 @@ html[data-room-placing] .room-canvas {
   border: 1px solid var(--square);
   background: var(--floor);
   color: var(--text);
-  font: 600 28px/1.25 'Hanken Grotesk', system-ui, sans-serif;
+  font: 600 28px/1.25 var(--sans, system-ui, sans-serif);
   text-align: center;
   transform: translateX(-50%);
 }
@@ -642,4 +642,62 @@ html[data-room-placing] .room-canvas {
   justify-content: center;
   gap: 12px;
   margin-top: 12px;
+}
+
+/* The hall-first judge's page (the one-spot layout; web/src/hud/judge-hall.css): the hall is the whole screen. The
+   panels' words stand on two plain bands across it, the top one and the bottom one, so they read over pale desks
+   and the white screens. Solid and see-through, with a hard edge: never a gradient. */
+html[data-judge-layout='hall'] .room,
+html[data-judge-layout='hall'] .room-sim {
+  left: 0;
+}
+
+html[data-judge-layout='hall'] body > .room {
+  bottom: 0;
+}
+
+html[data-judge-layout='hall'] .room::before,
+html[data-judge-layout='hall'] .room::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  pointer-events: none;
+}
+
+html[data-judge-layout='hall'] .room::before {
+  top: 0;
+  height: 104px;
+}
+
+html[data-judge-layout='hall'] .room::after {
+  bottom: 0;
+  height: calc(clamp(56px, 4.375vw, 84px) + 1.2 * clamp(28px, 2.084vw, 40px) + 96px);
+}
+
+/* Placing the kit is the whole hall from above with its own words: no bands over it. */
+html[data-room-placing] .room::before,
+html[data-room-placing] .room::after {
+  display: none;
+}
+
+/* The hall is what is looked at: it is not dimmed under the walk-up card's words, which have their band. */
+html[data-judge-layout='hall'] .room--arrival .room-canvas,
+html[data-judge-layout='hall'] .room--arrival .room-labels {
+  opacity: 1;
+}
+
+/* For a judge the picture carries no stickers: the devices' and the spot's names, "Our desk", the hall's caption
+   and the Person / Object key are the operator's (?op=1), and "No movement" is the headline's to say. A device
+   that is not heard keeps its words, and so does "Wave seen". */
+html[data-judge-layout='hall'] .room:not([data-op='1']) :is(.room-label--node:not(.room-label--node-lost, .room-label--node-tamper), .room-label--zone, .room-label--alert, .room-label--ourdesk, .room-label--spot, .room-label--caption, .room-label--xray, .room-hall-caption, .room-legend) {
+  display: none;
+}
+
+/* From this far back a line's "no signal" and its device's name land on each other. A device named in the tamper
+   alert keeps its name and "not heard"; its line's words step out. */
+html[data-judge-layout='hall'] .room-labels:has(.room-label--node-tamper) .room-label--beam {
+  display: none;
 }

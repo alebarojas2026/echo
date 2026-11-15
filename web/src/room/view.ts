@@ -81,6 +81,8 @@ export interface Shot {
   azimDeg?: number
   target: Vector3
   radiusM: number
+  /** The lens, in degrees up and down. Absent: FOV_DEG, the narrow lens every other shot uses. */
+  fovDeg?: number
 }
 
 /** A shot that depends on the canvas size. */
@@ -291,6 +293,49 @@ export function inSituShot(width = 1280, height = 1080): Shot {
   return { ...shot, radiusM: Math.max(shot.radiusM, SITU_MIN_RADIUS_M * Math.min(1, width / 1280)) }
 }
 
+// The judge's view on the one-spot layout: the hall is the whole screen. The camera stands behind and above the
+// spot and looks past it to the front of the hall, so the walls and the screens are in view and the person stands
+// on the spot a little right of the middle, above the band the words sit on. A wider lens than the other shots:
+// from inside the hall the narrow one shows only desks.
+const JUDGE_FOV_DEG = 50
+/** Metres: how far behind the spot and how high the camera stands, how far past the spot and how high it looks,
+ *  and how far to the left both are moved so the spot sits right of the middle. */
+const JUDGE_BACK_M = 6.6
+const JUDGE_UP_M = 3.9
+const JUDGE_AHEAD_M = 6.5
+const JUDGE_LOOK_M = -0.45
+const JUDGE_LEFT_M = 1.15
+
+/**
+ * The judge's close view for a spot whose hall has its front towards `front()`: a point on the floor of the scene
+ * (x, z), read again at every size so the view follows the hall wherever the layout was last placed in it.
+ */
+export function judgeShot(front: () => readonly [number, number]): ShotFor {
+  return (width, height) => {
+    const [sw, sh] = STRIP_M ?? SIZE_M
+    const spot = new Vector3(...toScene([sw / 2, sh / 2, 0]))
+    const [px, pz] = front()
+    const ahead = new Vector3(px - spot.x, 0, pz - spot.z)
+    if (ahead.lengthSq() < 1e-6) ahead.set(0, 0, -1)
+    ahead.normalize()
+    const left = new Vector3(ahead.z, 0, -ahead.x)
+    const eye = spot.clone().addScaledVector(ahead, -JUDGE_BACK_M).addScaledVector(left, JUDGE_LEFT_M).setY(JUDGE_UP_M)
+    const target = spot.clone().addScaledVector(ahead, JUDGE_AHEAD_M).addScaledVector(left, JUDGE_LEFT_M).setY(JUDGE_LOOK_M)
+    const away = eye.clone().sub(target)
+    const dist = away.length()
+    const vfov = (JUDGE_FOV_DEG * Math.PI) / 180
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * (width / Math.max(1, height)))
+    return {
+      elevDeg: (Math.asin(away.y / dist) * 180) / Math.PI,
+      azimDeg: (Math.atan2(away.x, away.z) * 180) / Math.PI,
+      target,
+      // fitCamera backs off by this radius: the same distance again, whatever the canvas's shape.
+      radiusM: dist * Math.sin(Math.min(vfov, hfov) / 2),
+      fovDeg: JUDGE_FOV_DEG,
+    }
+  }
+}
+
 /** Straight down on the square, north up: for lining a scan up by eye (align mode). */
 export function topShot(): Shot {
   // 89.5 rather than 90 keeps "north up" well defined for lookAt.
@@ -300,6 +345,7 @@ export function topShot(): Shot {
 /** Points the camera at the shot's target and backs off until its sphere fits the narrower field of view. */
 export function fitCamera(camera: PerspectiveCamera, width: number, height: number, shot: Shot = roomShot(width, height)) {
   camera.aspect = width / height
+  camera.fov = shot.fovDeg ?? FOV_DEG
   const vfov = (camera.fov * Math.PI) / 180
   const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect)
   const elev = (shot.elevDeg * Math.PI) / 180
