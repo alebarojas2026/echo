@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><title>Figure clearance</title>
+<style>html,body{margin:0}#room{position:absolute;inset:0}</style></head>
+<body><div id="room"></div><script type="module">
+import '../src/room/room.css'
+import { Mesh, MeshBasicMaterial, PlaneGeometry, Vector3 } from 'three'
+import { RoomView } from '../src/room/view'
+import { createFigure } from '../src/room/figure'
+import { LINK } from '../src/room/palette'
+const view = new RoomView(document.querySelector('#room'), { pixelRatio: 1, antialias: false })
+const crossing = view.addLabel('Pi A', new Vector3(0, 0.6, 0))
+const clear = view.addLabel('Board', new Vector3(-0.8, 1.1, 0))
+const stroke = new Mesh(new PlaneGeometry(1.8, 0.08), new MeshBasicMaterial({ color: LINK, depthTest: false }))
+stroke.position.set(0, 0.6, 0)
+stroke.quaternion.copy(view.camera.quaternion)
+view.scene.add(stroke)
+const figure = createFigure(loaded => { window.fixture.ready = loaded ? 'loaded' : 'capsule'; view.requestRender() })
+view.figures.add(figure.object)
+const pixels = () => new Promise(resolve => {
+  view.requestRender()
+  requestAnimationFrame(() => {
+    const gl = view.renderer.getContext()
+    const data = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4)
+    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, data)
+    resolve(data)
+  })
+})
+window.fixture = { view, figure, crossing, clear, stroke, ready: '', pixels, Vector3 }
+view.requestRender()
+</script></body></html>
