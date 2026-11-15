@@ -20,6 +20,14 @@ model and answers from the store (store/). The reply is {answer, rows, tool, arg
 src, ms}. One question at a time, because llama-server has one slot. Taken from the same
 networks as a layout save.
 
+Other lanes' JSON endpoints (GET /history and GET /report from the store, POST /ask; CONTRACTS.md
+section 10) are mounted, not written in here: make_server(routes={("GET", "/history"): fn}). A
+handler gets a Request (query, body, client) and returns a dict, sent as JSON; it raises
+ApiError(status, "plain message") for a bad request, answered {"error": message}. time_span()
+reads from_t/to_t the same way for every handler, with the 30-minute limit. Mounted endpoints
+answer only on the board's own networks, like a layout save; anything else a handler raises is
+a 500 with a JSON error, and the server keeps running.
+
 Standard library only.
 """
 import argparse
@@ -29,6 +37,7 @@ import ipaddress
 import json
 import sys
 import threading
+import urllib.parse
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -47,6 +56,55 @@ LAYOUT = REPO / "data" / "layout.local.json"
 # arrives from 192.168.77.1, Pi A forwards it) and the sensing hotspot (CONTRACTS.md section 2).
 MAX_ASK_BYTES = 2048
 SAVE_FROM = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "192.168.77.0/24", "10.42.0.0/24")]
+MAX_API_BODY = 8192
+SPAN_MAX_MS = 30 * 60 * 1000    # /history answers at most 30 minutes per call (CONTRACTS.md section 10)
+
+
+class ApiError(Exception):
+    """Raised by a mounted handler: answered as {"error": message} with this status."""
+
+    def __init__(self, status, message: str):
+        super().__init__(message)
+        self.status, self.message = HTTPStatus(status), message
+
+
+class Request:
+    """What a mounted handler gets. query: one string per name. body: the raw POST body (None on
+    GET). client: the caller's address."""
+
+    def __init__(self, query: dict, body, client: str):
+        self.query, self.body, self.client = query, body, client
+
+    def json(self):
+        try:
+            return json.loads(self.body)
+        except (TypeError, ValueError):
+            raise ApiError(HTTPStatus.BAD_REQUEST, "not JSON") from None
+
+
+def _epoch_ms(query: dict, name: str) -> int:
+    v = query[name]
+    if not (v.isascii() and v.isdigit()) or len(v) > 16:
+        raise ApiError(HTTPStatus.BAD_REQUEST, f"{name} must be a time in epoch milliseconds, like 1763149300000")
+    return int(v)
+
+
+def time_span(query: dict, max_ms=SPAN_MAX_MS, required=True):
+    """(from_t, to_t) in epoch ms from ?from_t=&to_t=, or (None, None) when both are left out and
+    required is False. to_t - from_t may be at most max_ms (None: no limit)."""
+    given = [k for k in ("from_t", "to_t") if k in query]
+    if not given and not required:
+        return None, None
+    if len(given) < 2:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "give both from_t and to_t" + ("" if required else ", or neither"))
+    from_t, to_t = _epoch_ms(query, "from_t"), _epoch_ms(query, "to_t")
+    if to_t < from_t:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "to_t is before from_t")
+    if max_ms is not None and to_t - from_t > max_ms:
+        raise ApiError(HTTPStatus.BAD_REQUEST,
+                       f"at most {max_ms // 60000} minutes per call; this asks for "
+                       f"{(to_t - from_t) / 60000:.1f} minutes")
+    return from_t, to_t
 
 # CONTRACTS.md section 7 with nothing measured yet.
 EMPTY_PROOF = {
@@ -93,7 +151,11 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?", 1)[0].split("#", 1)[0]
+        if ("POST", path) in self.server.routes:
+            return self._api("POST", path, head=False)
         if path not in ("/layout", "/ask"):
+            if ("GET", path) in self.server.routes:
+                return self._json({"error": "use GET"}, False, HTTPStatus.METHOD_NOT_ALLOWED)
             return self._json({"error": "not found"}, False, HTTPStatus.NOT_FOUND)
         if not self._ours():
             return self._json({"error": "taken only from the board's own networks"}, False,
@@ -157,6 +219,37 @@ class Handler(SimpleHTTPRequestHandler):
                               HTTPStatus.INTERNAL_SERVER_ERROR)
         self._json(reply, False)
 
+    def _api(self, method: str, path: str, head: bool):
+        """Answer a mounted endpoint: always JSON, whatever the handler does."""
+        if not self._ours():
+            return self._json({"error": "answered only on the board's own networks"}, head, HTTPStatus.FORBIDDEN)
+        try:
+            body = self._body() if method == "POST" else None
+            query = {}
+            for name, values in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query,
+                                                      keep_blank_values=True).items():
+                if len(values) > 1:
+                    raise ApiError(HTTPStatus.BAD_REQUEST, f"{name} is given more than once")
+                query[name] = values[0]
+            reply = self.server.routes[(method, path)](Request(query, body, self.client_address[0]))
+            if not isinstance(reply, dict):
+                raise TypeError(f"the handler returned {type(reply).__name__}, not a dict")
+        except ApiError as e:
+            return self._json({"error": e.message}, head, e.status)
+        except Exception as e:  # a bad handler must not take the screen's server down
+            self.log_error("%s %s failed: %r", method, path, e)
+            return self._json({"error": "the board could not answer"}, head, HTTPStatus.INTERNAL_SERVER_ERROR)
+        self._json(reply, head)
+
+    def _body(self) -> bytes:
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            raise ApiError(HTTPStatus.LENGTH_REQUIRED, "Content-Length needed") from None
+        if not 0 <= length <= MAX_API_BODY:
+            raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "too big")
+        return self.rfile.read(length)
+
     def _nodes_doc(self):
         return json.loads(self.server.nodes_path.read_bytes())
 
@@ -166,6 +259,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._nodes(head)
         if path == "/proof.json":
             return self._proof(head)
+        if ("GET", path) in self.server.routes:
+            return self._api("GET", path, head)
         if path == "/layout":
             try:
                 return self._json(self.server.layout.view(self._nodes_doc()), head)
@@ -231,14 +326,17 @@ class Handler(SimpleHTTPRequestHandler):
             super().log_request(code, size)
 
 
-def make_server(host="0.0.0.0", port=8080, dist=DIST, nodes=NODES, proof=PROOF, layout_path=LAYOUT, ask=None):
-    """ask: a function question -> reply dict for POST /ask, or None to answer 503."""
+def make_server(host="0.0.0.0", port=8080, dist=DIST, nodes=NODES, proof=PROOF, layout_path=LAYOUT, ask=None,
+                routes=None):
+    """ask: a function question -> reply dict for POST /ask, or None to answer 503.
+    routes: {(method, path): handler} for the mounted JSON endpoints (see the top of this file)."""
     handler = functools.partial(Handler, directory=str(dist))
     server = ThreadingHTTPServer((host, port), handler)
     server.nodes_path = Path(nodes)
     server.proof_path = Path(proof)
     server.layout = layout.Store(layout_path)
     server.ask, server.ask_lock = ask, threading.Lock()
+    server.routes = dict(routes or {})
     return server
 
 
