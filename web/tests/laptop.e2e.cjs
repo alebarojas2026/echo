@@ -10,9 +10,11 @@ for (const [scene, time] of [['still', 7200], ['object', 1000], ['blind', 1000],
     await page.setViewportSize({ width: 1366, height: 768 })
     await page.clock.install()
     await page.goto('/?mock=' + scene)
-    await page.getByTestId('judge-headline').waitFor()
+    await page.getByTestId('judge-headline').waitFor({ state: 'attached' })
     await page.clock.runFor(time)
     await page.evaluate(() => document.fonts.ready)
+    // On the one spot there is no column: the hall is the whole screen and the words sit on it.
+    const hall = await page.evaluate(() => document.documentElement.dataset.judgeLayout === 'hall')
     const rail = await page.locator('#hud').evaluate(hud => {
       const shown = el => el.getClientRects().length > 0 && !el.closest('.hud-operator')
       const words = [...hud.querySelectorAll('*')].filter(el => shown(el) && [...el.childNodes].some(node => node.nodeType === 3 && node.textContent.trim()))
@@ -27,7 +29,7 @@ for (const [scene, time] of [['still', 7200], ['object', 1000], ['blind', 1000],
       }
     })
     expect(rail.transform).toBe('none')
-    expect(rail.width).toBe(640)
+    expect(rail.width).toBe(hall ? 1366 : 640)
     expect(rail.fits).toBe(true)
     expect(rail.lowest).toBeLessThanOrEqual(768)
     expect(rail.smallest).toBeGreaterThanOrEqual(28)

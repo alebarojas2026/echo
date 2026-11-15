@@ -1,9 +1,10 @@
 const {test,expect}=require('@playwright/test'),fs=require('node:fs'),path=require('node:path')
 const layout=require('../../radio/layouts/gate-3.json')
+// The rail's panels on the one spot: asked for with ?judge=rail, since the hall-first page does not draw them.
 for(const [width,height] of [[1920,1080],[1440,900]])test(`every crossing trace, Wi-Fi foremost at ${width}`,async({page})=>{
  await page.route('**/nodes.json',r=>r.fulfill({json:layout}));await page.setViewportSize({width,height});await page.emulateMedia({reducedMotion:'reduce'})
  await page.addInitScript(()=>{window.strokeWidths=[];const stroke=CanvasRenderingContext2D.prototype.stroke;CanvasRenderingContext2D.prototype.stroke=function(...args){if(this.canvas.closest('.signal'))window.strokeWidths.push(this.lineWidth);return stroke.apply(this,args)}})
- await page.goto('/tests/arrival-harness.html?op=1');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000});await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
+ await page.goto('/tests/arrival-harness.html?op=1&judge=rail');await expect(page.locator('#room')).toHaveAttribute('data-scan','loaded',{timeout:20000});await page.getByTestId('skip-arrival').click();await page.keyboard.press('Escape')
  const primary=layout.links.find(l=>l.kind==='wifi'&&l.crosses_spot).id
  for(let i=0;i<16;i++){
   await page.evaluate(({i,layout})=>{const s=window.arrival.peek('still');window.arrival.update('still',{seq:i,t:10000+i*100,links:layout.links.map((l,j)=>({id:l.id,base_dbm:-45,dbm:-45-(i<6?0.2:j?5+j:16),drop_db:i<6?0.2:j?5+j:16,rate_hz:l.kind==='wifi'?25:5,status:'ok',why:0}))})},{i,layout});await page.waitForTimeout(100)
