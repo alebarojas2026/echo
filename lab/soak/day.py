@@ -487,12 +487,12 @@ class Day:
     def check_reset(self, why):
         """After reset: alert none, no check-in, no narration, not armed."""
         def clean(s):
-            return s["alert"]["state"] == "none" and s["checkin"] is None and not s.get("armed")
+            return s["alert"]["state"] != "check_on" and s["checkin"] is None and not s.get("armed")   # counting may restart at once
         took = self.mon.wait(clean, 5)
         if took is None and self.mon.state is not None:
             s = self.mon.state
             left = {k: v for k, v in (("alert", s["alert"]), ("checkin", s["checkin"]), ("armed", s.get("armed")))
-                    if (k == "alert" and v["state"] != "none") or (k != "alert" and v)}
+                    if (k == "alert" and v["state"] == "check_on") or (k != "alert" and v)}
             if left:
                 self.problem("reset_left_state", key=",".join(sorted(left)), once_per=600, left=left, after=why)
         return took
@@ -796,7 +796,7 @@ class Day:
                                  health=s["health"], model={k: s["model"].get(k) for k in ("trained", "ver", "training")})
             else:
                 null_since = None
-            if s["alert"]["state"] != "none":
+            if s["alert"]["state"] == "check_on":
                 alert_since = alert_since or t
                 if self.reset_t and self.reset_t > alert_since and t - self.reset_t > 3:   # a reset came and went
                     self.problem("alert_survives_reset", key="alert", once_per=600, alert=s["alert"])
