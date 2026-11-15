@@ -1,13 +1,13 @@
 {
   "name": "arrival",
-  "about": "The hero arrival: nobody, then someone steps in on the left (zone 3), crosses to the right (zone 4) and stands still. Arm the fake brain before 5 s to see the intrusion.",
+  "about": "The hero arrival: nobody, then someone steps in past the near end of the first tour stop (the square: zone 3; the strip: the left), crosses to the next stop (zone 4; the right) and stands still. Arm the fake brain before 5 s to see the intrusion.",
   "duration_s": 30,
   "person": [
     {"t": 0, "x": null},
-    {"t": 5, "x": 0.0, "y": 0.5},
-    {"t": 6, "x": 0.5, "y": 0.5},
-    {"t": 9, "x": 0.5, "y": 0.5},
-    {"t": 11, "x": 1.5, "y": 0.5},
-    {"t": 30, "x": 1.5, "y": 0.5}
+    {"t": 5, "zone": "tour1", "outside": "near"},
+    {"t": 6, "zone": "tour1"},
+    {"t": 9, "zone": "tour1"},
+    {"t": 11, "zone": "tour2"},
+    {"t": 30, "zone": "tour2"}
   ]
 }

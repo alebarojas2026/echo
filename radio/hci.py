@@ -17,6 +17,7 @@ AD_MANUFACTURER = 0xFF
 RSSI_UNAVAILABLE = 127
 
 # Opcodes = OGF << 10 | OCF
+HCI_RESET = 0x0C03
 READ_LOCAL_SUPPORTED_COMMANDS = 0x1002
 LE_SET_SCAN_PARAMS, LE_SET_SCAN_ENABLE = 0x200B, 0x200C              # legacy
 LE_SET_EXT_SCAN_PARAMS, LE_SET_EXT_SCAN_ENABLE = 0x2041, 0x2042      # extended
@@ -64,6 +65,13 @@ def command_result(packet: bytes, opcode: int):
         return bytes(body[3:])
     if packet[1] == EV_CMD_STATUS and len(body) >= 4 and struct.unpack_from("<H", body, 2)[0] == opcode:
         return bytes(body[:1])
+    return None
+
+
+def completed_opcode(packet: bytes):
+    """The opcode a Command Complete event answers, or None for any other packet."""
+    if len(packet) >= 6 and packet[0] == EVENT_PKT and packet[1] == EV_CMD_COMPLETE:
+        return struct.unpack_from("<H", packet, 4)[0]
     return None
 
 

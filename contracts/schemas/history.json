@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/history.json",
+  "$comment": "Section 10: the 200 answer of GET /history. Not a bus message: no envelope. check.py checks from_t <= to_t, at most 30 minutes, and rows oldest first inside the stretch.",
+  "type": "object",
+  "properties": {
+    "from_t": {"type": "integer", "minimum": 0},
+    "to_t": {"type": "integer", "minimum": 0},
+    "step_s": {"const": 1},
+    "rows": {"type": "array", "items": {
+      "$comment": "One saved second. present null = the brain did not know: never false. Then zone and motion are null and zone_set is [].",
+      "type": "object",
+      "properties": {"t": {"type": "integer", "minimum": 0}, "present": {"type": ["boolean", "null"]},
+                     "zone": {"anyOf": [{"$ref": "common.json#/$defs/zone"}, {"type": "null"}]},
+                     "zone_set": {"type": "array", "items": {"$ref": "common.json#/$defs/zone"}},
+                     "motion": {"enum": ["moving", "still", null]}, "armed": {"type": "boolean"}, "alert": {"type": "boolean"},
+                     "health": {"enum": ["ok", "degraded", "blind"]},
+                     "tamper": {"type": "array", "items": {"$ref": "common.json#/$defs/any_node"}, "uniqueItems": true}},
+      "required": ["t", "present", "zone", "zone_set", "motion", "armed", "alert", "health", "tamper"], "additionalProperties": false,
+      "allOf": [
+        {"if": {"properties": {"present": {"type": "null"}}, "required": ["present"]},
+         "then": {"properties": {"zone": {"type": "null"}, "zone_set": {"maxItems": 0}, "motion": {"type": "null"}}}},
+        {"if": {"properties": {"present": {"const": false}}, "required": ["present"]},
+         "then": {"properties": {"zone": {"const": 0}, "zone_set": {"maxItems": 0}, "motion": {"type": "null"}}}},
+        {"if": {"properties": {"present": {"const": true}}, "required": ["present"]},
+         "then": {"properties": {"zone": {"type": "integer", "minimum": 1}}}}
+      ]}}
+  },
+  "required": ["from_t", "to_t", "step_s", "rows"],
+  "additionalProperties": false
+}

@@ -215,7 +215,7 @@ export function createFigure(onReady?: (loaded: boolean) => void): Figure {
       // While see-through, a depth-only twin draws first so only the nearest surface takes colour.
       twin.visible = alpha < 0.999
     }
-    for (const m of fallback) m.opacity = 0.85 * alpha
+    for (const m of fallback) m.opacity = alpha
   }
 
   /** Puts the mixer's weights, rate and idle time in step with `motion`, then poses the skeleton. */

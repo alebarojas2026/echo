@@ -10,12 +10,12 @@ import { Fly, HallMarks, hallShot, pinnedFraming } from './fly'
 import { Presence } from './ghost'
 import { HeardNodes } from './heard'
 import { Replay, rowAlert, rowPred, secondKind, type HistoryRow, type ReplayFrame } from './replay'
-import { NODES } from './frame'
-import { DEFAULT_CUT_M, loadScan } from './scan'
+import { NODES, STRIP_M } from './frame'
+import { DEFAULT_CUT_M, loadScan, type Scan } from './scan'
 import { Mirror } from './mirror'
 import { RouterSpots } from './spots'
 import { Stage } from './stage'
-import { RoomView, viewOptions } from './view'
+import { RoomView, inSituShot, viewOptions } from './view'
 import { XrayLayer } from './xray'
 
 export interface Room {
@@ -40,16 +40,44 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
   const hallPaths = new HallPaths(view)
 
   // The hall and the square (fly.ts). While the camera is wide the labels fade out; the hall marks take over.
+  // The desk inside the hall model, once it has loaded: the close view is in situ there (below).
+  let situ: Scan | null = null
   const fly = new Fly(view, pinnedFraming(params), (wide) => {
     view.labelLayer.style.opacity = String(Math.max(0, 1 - wide * 4))
+    // In situ, the desk run between the camera and the strip turns see-through as the camera comes in, and solid
+    // again on the way out, so the whole hall never shows a gap.
+    situ?.ghost(1 - Math.min(1, wide * 2))
   })
   new HallMarks(view, fly, () => presence.standing())
   if (params.get('align') === '1') {
     // ?align=1: line the scan up with the square by eye and save room.json (align.ts). The camera stays put.
     void scan.then((s) => startAlign(view, stage, s, hallBeacons))
   } else {
-    void scan.then((s) => s && fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M)))
+    void scan.then((s) => {
+      if (!s) return
+      // The desk inside the hall model: one world, one scale. The person is drawn at true size and the close view
+      // is in situ, at our desk among the real rows.
+      if (STRIP_M) {
+        situ = s
+        presence.setTrueSize(true)
+        fly.setClose(inSituShot)
+      }
+      fly.setHall(hallShot(s.bounds(), s.fit.cut_m ?? DEFAULT_CUT_M))
+    })
     feed.onEvent((event) => event.kind === 'reset' && fly.reset())
+    // The arrival screen (#552): while the HUD says "Nobody is here." the live hall shows under its words, dimmed
+    // and drifting; "found" (or "closed") lifts the dim and flies down to the floor. The HUD sends window event
+    // 'hud:arrival' {state: 'waiting' | 'found' | 'closed'} and keeps the latest on <html data-hud-arrival>, so a
+    // state set before the room was ready still counts. With neither, the room flies down on load as before.
+    const arrival = (state: unknown) => {
+      if (state !== 'waiting' && state !== 'found' && state !== 'closed') return
+      host.classList.toggle('room--arrival', state === 'waiting')
+      host.dataset.arrival = state
+      if (state === 'waiting') fly.hold()
+      else fly.arrive()
+    }
+    window.addEventListener('hud:arrival', (e) => arrival((e as CustomEvent<{ state?: string }>).detail?.state))
+    arrival(document.documentElement.dataset.hudArrival)
     document.addEventListener('keydown', (event) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
       if ((event.target as HTMLElement | null)?.closest?.('input,select,textarea,[contenteditable]')) return
@@ -154,7 +182,8 @@ export function mountRoom(host: HTMLElement, feed: Feed, params = new URLSearchP
     presence.wave = waving
     alertMarks.update(state.alert)
     // The advice's words sit just south of the square, where the X-ray caption goes: one at a time.
-    xray.update(state.xray, state.health?.status === 'blind', spots.tagShown)
+    // In situ the aisle in front of the strip is the next row's desk: the X-ray's caption has no floor to sit on.
+    xray.update(state.xray, state.health?.status === 'blind', spots.tagShown || situ !== null)
     presence.update(state.pred, state.objects ?? [], state.xray)
     // Zone names follow the zones the figure shows (held), so one wrong decision never flashes a name.
     stage.markZones(presence.shownZones(), state.alert?.state === 'check_on' ? state.alert.zone : null)

@@ -2,7 +2,7 @@
 
 Two things, both for drawing only:
 - the room alignment (how the hall scan sits on the layout): offset_m, yaw_deg, scale, cut_m, the
-  same four numbers align mode saves as room.json;
+  same four numbers align mode saves as room.json, and floor_m when the square stands on a tier;
 - each hall beacon's xyz_m (nodes.json "hall" section), for the beacons nodes.json already has.
 
 They live in one board-local file, data/layout.local.json (gitignored), never in radio/nodes.json:
@@ -17,6 +17,10 @@ import os
 from pathlib import Path
 
 ROOM_KEYS = ("offset_m", "yaw_deg", "scale", "cut_m")
+# Optional: how far the hall model sits below our floor when the square stands on a tier (#547).
+# The screen sends it only when it isn't 0, so a front-floor save is still the four keys.
+FLOOR_KEY = "floor_m"
+FLOOR_RANGE_M = (-2.0, 10.0)
 XY_LIMIT_M = 100.0     # a hall beacon is 10-25 m from the layout; 100 m is a typo
 Z_RANGE_M = (0.0, 10.0)
 MAX_BODY = 8192
@@ -31,9 +35,9 @@ def _num(v, lo, hi) -> bool:
 
 
 def clean_room(room) -> dict:
-    """The four alignment numbers, each in range, and nothing else."""
-    if not isinstance(room, dict) or set(room) != set(ROOM_KEYS):
-        raise Invalid(f"room must have exactly {', '.join(ROOM_KEYS)}")
+    """The four alignment numbers and an optional floor_m, each in range, and nothing else."""
+    if not isinstance(room, dict) or set(room) - {FLOOR_KEY} != set(ROOM_KEYS):
+        raise Invalid(f"room must have exactly {', '.join(ROOM_KEYS)} (and optionally {FLOOR_KEY})")
     off = room["offset_m"]
     if not (isinstance(off, list) and len(off) == 2 and all(_num(v, -100, 100) for v in off)):
         raise Invalid("room.offset_m must be two numbers within 100 m")
@@ -43,8 +47,13 @@ def clean_room(room) -> dict:
         raise Invalid("room.scale must be within 0.25..4")
     if not _num(room["cut_m"], 0, 20):
         raise Invalid("room.cut_m must be within 0..20 m")
-    return {"offset_m": [float(v) for v in off], "yaw_deg": float(room["yaw_deg"]),
-            "scale": float(room["scale"]), "cut_m": float(room["cut_m"])}
+    out = {"offset_m": [float(v) for v in off], "yaw_deg": float(room["yaw_deg"]),
+           "scale": float(room["scale"]), "cut_m": float(room["cut_m"])}
+    if FLOOR_KEY in room:
+        if not _num(room[FLOOR_KEY], *FLOOR_RANGE_M):
+            raise Invalid(f"room.floor_m must be within {FLOOR_RANGE_M[0]:g}..{FLOOR_RANGE_M[1]:g} m")
+        out[FLOOR_KEY] = float(room[FLOOR_KEY])
+    return out
 
 
 def hall_ids(nodes_doc) -> list:

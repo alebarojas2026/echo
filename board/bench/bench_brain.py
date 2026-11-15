@@ -32,8 +32,9 @@ from sim import fake, wire
 
 T0_MS = 1_763_149_500_000
 STEPS = ("ingest", "predict", "health", "alert", "xray", "advisor", "state_json")
-FEED = dict(fake.load_path("zone_tour"), name="bench", duration_s=60,
-            objects=[{"x": 1.0, "y": 0.2, "drop_db": 10, "t_on": 32}])   # the tray at T1
+# The tray at T1, wherever radio/nodes.json puts that spot (sim/layout.py turns the spot into metres).
+FEED = fake.LAYOUT.resolve(dict(fake.load_path("zone_tour"), name="bench", duration_s=60,
+                                objects=[{"spot": "T1", "drop_db": 10, "t_on": 32}]))
 
 
 def sim(path, seed, mode=None):

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { placeScan, scanUrl } from './scan'
+import { hallLift, placeScan, scanUrl } from './scan'
 
 describe('scan placement', () => {
   it('puts the scan floor under the square, centred, by default', () => {
@@ -22,6 +22,11 @@ describe('scan placement', () => {
     expect(p.cut).toBe(1.2)
     expect(placeScan([0, 0, 0], [1, 1, 1], { scale: -2 }).scale).toBe(1)
   })
+
+  it('lowers the model by floor_m, so a tier can be our floor', () => {
+    expect(placeScan([0, 0, 0], [2, 2, 2]).outer[1]).toBeCloseTo(-0.03)
+    expect(placeScan([0, 0, 0], [2, 2, 2], { floor_m: 0.312 }).outer[1]).toBeCloseTo(-0.342)
+  })
 })
 
 describe('which hall model to load', () => {
@@ -32,5 +37,23 @@ describe('which hall model to load', () => {
     expect(scanUrl({ lo: 'models/room.glb', fit: {} }, 'hi')).toBe('models/room.glb')
     expect(scanUrl({ hi: 'models/hall-hi.glb', fit: {} }, 'pi')).toBe('models/hall-hi.glb')
     expect(scanUrl({ fit: {} }, 'hi')).toBeUndefined()
+  })
+
+  it('picks a look to compare with ?hall=A, and the usual files for an unknown one or none', () => {
+    const src = { hi: 'models/hall-hi.glb', lo: 'models/hall-lo.glb', fit: {}, families: { A: { hi: 'models/hall-hi-A.glb', lo: 'models/hall-lo-A.glb' }, B: { hi: 'models/hall-hi-B.glb' } } }
+    expect(scanUrl(src, 'hi', 'A')).toBe('models/hall-hi-A.glb')
+    expect(scanUrl(src, 'pi', 'A')).toBe('models/hall-lo-A.glb')
+    expect(scanUrl(src, 'pi', 'B')).toBe('models/hall-hi-B.glb') // B has only the detailed file
+    expect(scanUrl(src, 'hi', 'C')).toBe('models/hall-hi.glb')
+    expect(scanUrl(src, 'hi', null)).toBe('models/hall-hi.glb')
+  })
+})
+
+describe('?lift', () => {
+  it('brightens only when asked, and only within 0.5 to 2', () => {
+    expect(hallLift(new URLSearchParams(''))).toBe(1)
+    expect(hallLift(new URLSearchParams('lift=1.4'))).toBe(1.4)
+    expect(hallLift(new URLSearchParams('lift=5'))).toBe(1)
+    expect(hallLift(new URLSearchParams('lift=nope'))).toBe(1)
   })
 })

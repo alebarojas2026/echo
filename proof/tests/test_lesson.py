@@ -24,29 +24,48 @@ def run(messages, **kw):
 
 
 def test_sends_the_screen_commands_in_order_and_train_while_recording():
-    coach, sent, said = run([state(s / 10, teacher=1) for s in range(0, 215)])
+    coach, sent, said = run([state(s / 10, teacher=0 if s < 60 else 1) for s in range(0, 315)])
     assert [m["cmd"] for m in sent] == ["label_mode", "record_start", "train"]
     assert sent[0]["args"] == {"mode": "person"}
     assert sent[1]["args"] == {"session": "lesson-01", "purpose": "train", "walker": "w1"}
     assert all(m["v"] == 2 and m["type"] == "cmd" for m in sent)
-    steps = [line for line in said if "Step to your" in line]
-    assert len(steps) == 5 and "LEFT" in steps[0] and "RIGHT" in steps[1]
+    steps = [line.strip() for line in said if "Step " in line or "Stay out" in line]
+    assert [w.split(":")[0].split(" and ")[0] for w in steps] == [
+        "Stay out of the camera's view", "Step in on your LEFT", "Step to your RIGHT",
+        "Step right out of the camera's view", "Step in on your LEFT", "Step to your RIGHT", "Step to your LEFT"]
+    assert "empty time: 1 stretch of 3 s or more" in coach.summary()
     coach.stop()
     assert [m["cmd"] for m in sent[-2:]] == ["record_stop", "label_mode"] and sent[-1]["args"] == {"mode": "off"}
 
 
 def test_times_the_first_model_the_first_right_answer_and_the_agreement():
-    messages = [state(s, teacher=1) for s in range(0, 21)]
-    messages.append({"type": "event", "kind": "trained", "t": T0 + 22_500})
-    messages += [state(23, pred=2, teacher=1, lesson=(0, 1, 1)), state(24, pred=1, teacher=1, lesson=(1, 2, 1))]
-    messages.append({"type": "event", "kind": "trained", "t": T0 + 27_000})      # a later fit is not the first
-    messages += [state(s, pred=1, teacher=1, lesson=(8, 10, 2)) for s in range(25, 32)]
-    messages += [state(33, pred=1, cam="off")]
+    messages = [state(s, teacher=0 if s < 6 else 1) for s in range(0, 31)]
+    messages.append({"type": "event", "kind": "trained", "t": T0 + 32_500})
+    messages += [state(33, pred=2, teacher=1, lesson=(0, 1, 1)), state(34, pred=1, teacher=1, lesson=(1, 2, 1))]
+    messages.append({"type": "event", "kind": "trained", "t": T0 + 37_000})      # a later fit is not the first
+    messages += [state(s, pred=1, teacher=1, lesson=(8, 10, 2)) for s in range(35, 42)]
+    messages += [state(43, pred=1, cam="off")]
     coach, sent, said = run(messages)
-    assert coach.model_s == 22.5 and coach.follows_s == 24 and coach.report == (8, 10, 2)
+    assert coach.model_s == 32.5 and coach.follows_s == 34 and coach.report == (8, 10, 2)
     text = "\n".join(said)
     assert "learning: 8 of 10" in text and "the camera is off" in text
     assert "8 of the last 10 decisions (2 fits)" in coach.summary()
+
+
+def test_a_lesson_with_no_empty_time_is_not_finished_until_the_camera_sees_nobody():
+    """Someone in view the whole time, or standing back (teacher null: the label was dropped), is not empty."""
+    busy = [state(s, teacher=1 if s % 2 else None) for s in range(0, 40)]
+    coach, sent, said = run(busy)
+    assert "train" not in [m["cmd"] for m in sent]
+    assert sum("has no empty time yet" in line for line in said) == 1          # said once, plainly
+    assert "empty time: none (the lesson was not finished: no train was sent)" in coach.summary()
+    for s in (40, 41, 42):                                                     # 2 s of nobody is not enough
+        coach.on_message(state(s, teacher=0))
+    assert "train" not in [m["cmd"] for m in sent]
+    coach.on_message(state(43, teacher=0))                                     # 3 s is: train goes at once
+    assert [m["cmd"] for m in sent][-1] == "train"
+    off, sent2, _ = run([state(s, teacher=0, cam="off") for s in range(0, 40)])
+    assert "train" not in [m["cmd"] for m in sent2]                            # the camera off is not "nobody"
 
 
 def test_a_model_trained_before_the_lesson_is_not_counted_as_its_first():
@@ -56,7 +75,7 @@ def test_a_model_trained_before_the_lesson_is_not_counted_as_its_first():
 
 
 def test_no_lesson_block_is_said_plainly():
-    coach, _, _ = run([state(0), state(31)], teach_s=5)
+    coach, _, _ = run([state(0), state(41)], teach_s=5)
     assert coach.report == () and "no lesson was running" in coach.summary()
 
 

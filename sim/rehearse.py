@@ -31,6 +31,7 @@ Z = LAYOUT.centres                                             # zone centres
 TRAY = {"x": LAYOUT.tray[0], "y": LAYOUT.tray[1], "drop_db": 10}   # the metal tray at T1
 TOUR = LAYOUT.tour()                                           # every zone once (the square: 3, 4, 2, 1)
 STILL, CALM = LAYOUT.still_zone(), LAYOUT.calm_zone()          # where the alert fires; where nothing counts
+LESSON = "desk-lesson"                                         # the session the desk visit's lesson records
 WEST_EDGE = lambda zone: {"x": 0.0, "y": Z[zone][1]}           # noqa: E731  walking in from the west
 EAST_EDGE = lambda zone: {"x": (LAYOUT.strip_m or LAYOUT.size_m)[0], "y": Z[zone][1]}   # noqa: E731
 
@@ -100,7 +101,7 @@ def recap_shown(s) -> bool:
     recap limits (section 6). With no model in the rehearsal it is the template recap."""
     n = s["narration"]
     return bool(n and n["source"] == "template" and recaps.problem(n["text"], [n["text"]], camera_off=True) is None
-                and "router" in n["text"] and "zone" in n["text"])
+                and "router" in n["text"] and any(name.lower() in n["text"].lower() for name in LAYOUT.names.values()))
 
 
 def no_model(messages):
@@ -118,42 +119,75 @@ def wander(zone: int, start: float, end: float, step_s: float = 1.5) -> list:
 
 
 def desk_script():
-    """The 3-minute desk visit in docs/desk-demo.md, at its times: the judge walks in at 0:20 and
-    around, goes to the alert zone (the one with the shortest still limit) at 0:45 and stands still until
-    the alert, waves at 1:10, moves to a zone with no alert while the camera cable is pulled, and walks
-    out at 2:10. Then armed mode: armed at 2:15 with nobody there, the judge steps back in at 2:20 (an
-    intrusion), and it's disarmed at the end."""
-    wave, cam_off, leave, arm, back, finish = 70.0, 95.0, 130.0, 135.0, 140.0, 160.0
+    """The hero path at the desk (AGENTS.md "Right now"), in one visit, with the commands the screen sends:
+    found (the judge steps up and is seen), lesson (the camera labels them stepping left and right; the
+    screen sends train while that recording is still open, as in the live lesson), unplug (the camera is
+    pulled and the radio still follows them), still (they stand still on the right until the no-movement
+    alert), then armed mode: they leave, the space is armed, stepping back in is an intrusion. They leave
+    again, and with the space still armed a beacon is unplugged for 8 s: a tamper alert while the
+    sensor is blind, cleared when the beacon is back. It is disarmed at the end.
+
+    Left and right are two zones side by side from radio/nodes.json: the desk strip's Left and Right,
+    or the square's two southern zones. Before the still beat nobody stands anywhere for long: on the
+    desk both zones alert, and an alert stays on until a check-in or a reset."""
+    left, right = sorted((CALM, STILL), key=lambda z: Z[z][0])
+    assert LAYOUT.zones[right], "the right-hand zone needs a still_alert_s for the still beat"
+    step_in, teach, train, cam_off, stop, still_from, leave, arm, back = 5, 10, 30, 38, 40, 48, 64, 68, 72
+    gone, unplug, plug, finish = 82, 85, 93, 101
+    # the beacon that is unplugged: the first node in the layout that only sends (no link ends at it)
+    beacon = next(tx for tx, _, _ in LAYOUT.links if all(rx != tx for _, rx, _ in LAYOUT.links))
     at = lambda zone, t: {"t": t, "x": Z[zone][0], "y": Z[zone][1]}   # noqa: E731
-    around = [at(z, 22.0 + 3 * i) for i, z in enumerate(TOUR)]   # walk through every zone, then keep moving
-    person = ([{"t": 0, "x": None}, {"t": 20.0, **WEST_EDGE(TOUR[0])}] + around
-              + wander(CALM, 23.0 + 3 * len(TOUR), 43.0) + [at(STILL, 47.0), at(STILL, wave + 4), at(CALM, wave + 6)]
-              + wander(CALM, wave + 7, leave - 2) + [{"t": leave, **EAST_EDGE(CALM)}, {"t": leave + 0.1, "x": None}]
-              # armed at 2:15 with nobody there; the judge steps back in at 2:20: an intrusion
-              + [{"t": back, **WEST_EDGE(TOUR[0])}, at(STILL, back + 2)] + wander(STILL, back + 3, finish - 6)
-              + [{"t": finish - 4, **EAST_EDGE(STILL)}, {"t": finish - 3.9, "x": None}])
+    person, t, side = [{"t": 0, "x": None}, {"t": step_in, **WEST_EDGE(left)}, at(left, 6)], 6, left
+    while t + 4 <= still_from - 1:      # 3 s on a side, 1 s to cross, until the still beat
+        person += [at(side, t + 3)]
+        side = right if side == left else left
+        person += [at(side, t + 4)]
+        t += 4
+    person += ([at(right, still_from), at(right, leave), {"t": leave + 1, **EAST_EDGE(right)}, {"t": leave + 1.1, "x": None},
+                {"t": back - 0.1, "x": None}, {"t": back, **WEST_EDGE(left)}, at(left, back + 1)]
+               + wander(left, back + 2, gone - 2) + [{"t": gone, **WEST_EDGE(left)}, {"t": gone + 0.1, "x": None}])
     path = {"name": "desk", "duration_s": finish, "person": person,
-            "waves": [{"t_on": wave + 1, "t_off": wave + 3.5}],
+            "outages": [{"node": beacon, "t_on": unplug, "t_off": plug}],   # a beacon unplugged while armed
             "camera": [{"t": 0, "state": "on"}, {"t": cam_off, "state": "off"}],
             "router": [{"t": 0, "spot": "S-home"}]}
+    commands = [(teach, "label_mode", {"mode": "person"}),
+                (teach, "record_start", {"session": LESSON, "purpose": "train", "walker": "judge"}),
+                (train, "train", {}), (stop, "record_stop", {}), (stop, "label_mode", {"mode": "off"}),
+                (arm, "arm", {"on": True}), (finish - 3, "arm", {"on": False})]
 
     def pred(s, **want):
         return s["pred"] is not None and all(s["pred"][k] == v for k, v in want.items())
 
+    def radio_only(zone):
+        return lambda s: s["cam"] == "off" and s["teacher"] is None and pred(s, present=True, kind="person", zone=zone)
+
+    def event(kind):
+        return lambda e: e["kind"] == kind
+
     beats = [
-        ("nobody before the judge", 0, 20, "state", lambda s: pred(s, present=False)),
-        ("judge walks in", 20, 45, "state", lambda s: pred(s, present=True, kind="person")),
-        ("still in the alert zone", 45, wave, "state", lambda s: pred(s, present=True, zone=STILL, motion="still")),
-        ("no-movement alert", 45, wave, "event", lambda e: e["kind"] == "alert_on"),
-        ("wave check-in", wave, 90, "event", lambda e: e["kind"] == "checkin"),
-        ("camera pulled, radio only", cam_off, leave, "state",
-         lambda s: s["cam"] == "off" and s["teacher"] is None and pred(s, present=True, zone=CALM)),
+        ("nobody before the judge", 0, step_in, "state", lambda s: pred(s, present=False)),
+        ("found: the judge steps up", step_in, teach, "state", lambda s: pred(s, present=True, kind="person")),
+        ("lesson: the camera labels the judge", teach, train, "state",
+         lambda s: s["cam"] == "on" and s["teacher"] is not None and s["teacher"]["present"]),
+        ("lesson: a model within 5 s of train", train, train + 5, "event", event("trained")),
+        ("lesson: the model uses the lesson", train, cam_off, "state",
+         lambda s: s["model"]["trained"] and LESSON in s["model"]["train_sessions"]),
+        (f"unplug: radio only, on the left ({LAYOUT.names[left]})", stop, still_from, "state", radio_only(left)),
+        (f"unplug: radio only, on the right ({LAYOUT.names[right]})", stop, leave, "state", radio_only(right)),
+        ("still: standing still on the right", still_from, leave, "state",
+         lambda s: pred(s, present=True, zone=right, motion="still")),
+        ("still: no-movement alert", still_from, leave, "event", event("alert_on")),
         ("walks out: nobody is here", leave, arm, "state", lambda s: pred(s, present=False)),
         ("armed, nobody here", arm, back, "state", lambda s: s.get("armed") is True and pred(s, present=False)),
-        ("intrusion while armed", back, back + 10, "event", lambda e: e["kind"] == "intrusion"),
-        ("disarmed", finish - 4, finish, "event", lambda e: e["kind"] == "disarmed"),
+        ("intrusion while armed", back, back + 10, "event", event("intrusion")),
+        ("tamper: a beacon unplugged while armed", unplug, unplug + 4, "event",
+         lambda e: e["kind"] == "tamper" and e["info"] == {"node": beacon}),
+        ("tamper: on the screen while the sensor is blind", unplug, plug, "state",
+         lambda s: s.get("tamper") == [beacon] and s["health"]["status"] == "blind" and s["pred"] is None),
+        ("tamper: cleared when the beacon is back", plug, plug + 3, "event",
+         lambda e: e["kind"] == "tamper_cleared" and e["info"] == {"node": beacon}),
+        ("disarmed", finish - 4, finish, "event", event("disarmed")),
     ]
-    commands = [(arm, "arm", {"on": True}), (finish - 3, "arm", {"on": False})]
     return path, commands, beats
 
 
@@ -253,11 +287,11 @@ class Stack:
         """Feed one path through bus and brain, taking a state every 0.1 s. Returns its start, epoch ms."""
         t0, pending, ticks = self.now, sorted(commands, key=lambda c: c[0]), 0
         for e in fake.simulate(path, seed=self.seed):
-            while pending and pending[0][0] <= e["t"]:
-                _, name, args = pending.pop(0)
-                self.cmd(name, **args)
             self.now = t0 + round(e["t"] * 1000)
             self.bus.handle(self.encode({**e, "t": t0 / 1000 + e["t"]}).encode(), FEED)
+            while pending and pending[0][0] <= e["t"]:   # after the reading, so the brain's clock has reached it
+                _, name, args = pending.pop(0)
+                self.cmd(name, **args)
             if e["t"] * 10 >= ticks:
                 ticks += 1
                 self.states.append(self.brain.state())
@@ -311,7 +345,7 @@ def main(argv=None) -> int:
     import argparse
 
     ap = argparse.ArgumentParser(description="Play the demo through the real bus and brain, beat by beat.")
-    ap.add_argument("--desk", action="store_true", help="the 3-minute desk visit (docs/desk-demo.md) instead")
+    ap.add_argument("--desk", action="store_true", help="the hero path at the desk instead: found, lesson, unplug, still, arm + intrusion")
     ap.add_argument("--lesson", action="store_true", help="the live lesson: teach left and right, then unplug")
     args = ap.parse_args(argv)
     results = rehearse(lesson=True) if args.lesson else rehearse(desk_script()) if args.desk else rehearse()

@@ -325,3 +325,46 @@ def test_timed_run_prints_the_summary(monkeypatch, capsys):
     assert list(rows) == list(radio_node.PI_LINKS)
     assert rows["east>pi5:ble"][1] == "1" and rows["east>pi5:ble"][-1] == "-61.0"
     assert rows["west>pi5:ble"][1] == "1" and rows["west>pi5:ble"][-1] == "-70.0"
+
+
+def test_status_line_says_which_beacon_and_the_interval_the_controller_took(monkeypatch):
+    monkeypatch.setattr(radio_node, "QUIET_S", 1000.0)
+    fake = FakeController(events=[fixture("legacy_report_east")] * 4)
+    lines = []
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=loops(10), clock=Clock(1.0), log=lines.append)
+    status = [line for line in lines if "/s" in line]
+    assert status and status[0].endswith("; set up again 0x since start; beacon S every 20 ms")
+
+
+def test_status_line_shows_100_ms_when_the_controller_refuses_20_ms(monkeypatch):
+    monkeypatch.setattr(radio_node, "QUIET_S", 1000.0)
+
+    class Pre50(FakeController):
+        def send(self, packet):
+            self.status[LE_SET_ADV_PARAMS] = 0x12 if packet == build_adv_params_cmd() else 0
+            super().send(packet)
+
+    fake = Pre50(events=[fixture("legacy_report_east")] * 4)
+    lines = []
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=loops(10), clock=Clock(1.0), log=lines.append)
+    assert any(line.endswith("beacon S every 100 ms") for line in lines if "/s" in line)
+
+
+def test_no_scan_advertises_only_and_never_sets_up_again_for_silence():
+    fake = FakeController()
+    lines = []
+    run(hci.Hci(fake), bus_sock=FlakySock(fail=0), stop=loops(30), clock=Clock(1.0), log=lines.append, scan=False)
+    assert fake.sent.count(ADV_ON) == 1                       # silence is expected: no setup again
+    assert hci.command_packet(*hci.scan_enable(False, True)) not in fake.sent   # the scan is never turned on
+    assert not any("no adverts" in line for line in lines)
+    assert any(line.endswith("beacon S every 20 ms, not scanning") for line in lines if "/s" in line)
+
+
+def test_no_scan_flag_reaches_the_run(monkeypatch):
+    got = {}
+    monkeypatch.setattr(radio_node, "open_controller", lambda dev: hci.Hci(FakeController()))
+    monkeypatch.setattr(radio_node, "run", lambda dev, **kw: got.update(kw))
+    radio_node.main(["--no-scan"])
+    assert got["scan"] is False
+    radio_node.main([])
+    assert got["scan"] is True

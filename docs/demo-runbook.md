@@ -80,9 +80,10 @@ Alexander handles the tray and Pi; the operator handles software controls.
 
 1. If the tray was used, ask Alexander to remove it and wait for the object marker and static change to clear.
 2. If the router moved, ask Alexander to return the Pi to its home spot, then send `router_home`.
-3. Wait until prediction resumes or the automatic baseline finishes; confirm health is `ok`.
-4. Disarm if needed, stop active recording, and send `reset`.
-5. If the recap was used, keep the screen visible until the fact-based recap appears. The narrator warms its normal sentence prompt again in the background after the recap; do not hold the next judge for that warmup.
+3. After `router_home`, everyone steps away from the sensing area and its edge, including Alexander once the Pi is home, and stays out until a prediction returns or `baseline_done` appears.
+4. Wait until prediction resumes or the automatic baseline finishes; confirm health is `ok`.
+5. Disarm if needed, stop active recording, and send `reset`.
+6. If the recap was used, keep the screen visible until the fact-based recap appears. The narrator warms its normal sentence prompt again in the background after the recap; do not hold the next judge for that warmup.
 
 ## Proof check
 

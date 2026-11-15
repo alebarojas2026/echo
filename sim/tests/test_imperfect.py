@@ -1,10 +1,18 @@
 """Things the real feed gets wrong: clipped camera labels and lost messages."""
 import json
 
+import pytest
+
 from brain import features
 from contracts.check import check_lines, errors
 from sim import fake, send
 from sim.wire import encoder
+
+
+@pytest.fixture(autouse=True)
+def _on_the_square(square):
+    """These tests check rules with the square's points and numbers, so they pin the square
+    (sim/tests/conftest.py) whichever layout radio/nodes.json holds."""
 
 
 def labels(path):

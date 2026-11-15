@@ -227,3 +227,53 @@ def test_no_advice_without_a_wifi_reading():
     no_row = [lk for lk in links() if lk["id"] != "pi5>unoq:wifi"]
     for ls in (no_drop, no_row, [], None):
         assert advise(xray([(*T1, 9.0)]), ls, NODES, [obj(*T1)]) is None
+
+
+# --- the desk layout (#461): contract PR #415's radio/nodes.json ------------
+
+import json
+from pathlib import Path
+
+DESK = json.loads((Path(__file__).parent / "fixtures" / "desk-nodes.json").read_text())
+DESK_T1 = (0.86, 1.0)
+
+
+def desk_xray(blobs=(), noise=None):
+    """The desk grid: 16 x 12 cells of 0.125 m from (-0.2, -0.2)."""
+    x = xray(blobs, w=16, h=12, cell=0.125, origin=(-0.2, -0.2), width_m=0.1)
+    if noise is not None:
+        x["static_db"] = (np.asarray(x["static_db"]) + noise).tolist()
+    return x
+
+
+def desk_links(wifi=7.0):
+    return [{"id": l["id"], "drop_db": wifi if l["id"] == "pi5>unoq:wifi" else 0.0} for l in DESK["links"]]
+
+
+def test_desk_tray_at_t1_gives_advice_near_pi_a():
+    a = advise(desk_xray([(*DESK_T1, 9.0)]), desk_links(), DESK, [obj(*DESK_T1)])
+    assert a is not None and a["near"] == "pi5" and a["link"] == "pi5>unoq:wifi"
+    assert a["to_spot"] in ("S-W30", "S-E30")
+    assert a["dist_change_m"] == {"S-W30": 0.2, "S-E30": -0.08}[a["to_spot"]]
+    assert a["text"].startswith("An obstruction next to the router (Pi A) is blocking its link")
+    assert a["to_spot"] == "S-E30" and a["move_m"] == [0.3, 0.0]   # the shorter new link clears T1
+
+
+def test_desk_pick_stays_put_over_50_noisy_ticks():
+    rng = np.random.default_rng(0)
+    picks = {advise(desk_xray([(*DESK_T1, 9.0)], noise=rng.normal(0, 0.3, 16 * 12)), desk_links(),
+                    DESK, [obj(*DESK_T1)])["to_spot"] for _ in range(50)}
+    assert len(picks) == 1
+
+
+def test_desk_object_away_from_the_line_gives_no_advice():
+    far = (0.1, 0.9)
+    assert advise(desk_xray([(*far, 9.0)]), desk_links(wifi=0.0), DESK, [obj(*far, near=None)]) is None
+    assert advise(desk_xray([(*far, 9.0)]), desk_links(), DESK, [obj(*far, near=None)]) is None
+
+
+def test_desk_text_uses_node_names():
+    a = advise(desk_xray([(1.05, 0.68, 9.0)]), desk_links(), DESK, [obj(1.05, 0.68, near="unoq")])
+    assert a is not None and "the receiver (Board)" in a["text"]
+    b = advise(desk_xray([(0.55, 0.75, 9.0)]), desk_links(), DESK, [obj(0.55, 0.75, near="pi5b")])
+    assert b is not None and "next to Pi B" in b["text"]

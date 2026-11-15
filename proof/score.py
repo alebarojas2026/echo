@@ -12,6 +12,10 @@ import random
 from statistics import mean, pstdev
 import subprocess
 
+from proof import layout
+
+LAYOUT = layout.load()
+
 
 def load_session(path):
     messages = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
@@ -71,10 +75,13 @@ def truth(messages, end):
     return {"zone": zone, "kind": kind, "labels": len(labels)}
 
 
-def threshold_zone(links, threshold=3.0):
-    """Fixed 3 dB strongest-link baseline; map the link midpoint to a zone."""
-    zones = {"pi5>unoq:wifi": 2, "pi5>unoq:ble": 2, "east>unoq:ble": 2,
-             "west>unoq:ble": 1, "east>pi5:ble": 4, "west>pi5:ble": 3}
+def threshold_zone(links, threshold=3.0, doc=None):
+    """Fixed 3 dB strongest-link baseline: the zone of that link's midpoint.
+
+    Only links whose midpoint lies in a zone take part (proof.layout.link_zones); on the desk
+    layout the links over the desk or at the strip's ends are left out.
+    """
+    zones = layout.link_zones(doc or LAYOUT)
     drops = [(v.get("drop_db"), link) for link, v in links.items()
              if link in zones and v.get("drop_db") is not None]
     if not drops:
@@ -125,12 +132,48 @@ def base_for(session, history):
     return found
 
 
+def walker_id(value, context):
+    if not isinstance(value, str) or not value.strip() or value.strip().lower() in {"none", "unknown", "__"}:
+        raise ValueError(f"{context}: a walker pseudonym is required for walker-independent scoring")
+    return value.strip()
+
+
+def walker_set(values):
+    if not isinstance(values, (list, tuple, set, frozenset)):
+        raise ValueError("training walker provenance is missing; supply the original training metadata")
+    return {walker_id(v, "training provenance") for v in values}
+
+
+def training_walkers(sessions):
+    walkers = set()
+    for session in sessions:
+        meta = session["meta"]
+        value = meta.get("walker")
+        # Empty/object recordings may explicitly have no person. Missing human provenance
+        # is allowed only when every recorded label independently confirms no person.
+        if value is None or isinstance(value,str) and value.strip().lower() == "none":
+            labels = [m for m in session["messages"] if m.get("type") == "label"]
+            if labels and all(m.get("persons_in_frame") == 0 and m.get("clipped") is False
+                              and (not m.get("present") or m.get("mode") == "object") for m in labels):
+                continue
+        walkers.add(walker_id(value, f"training session {meta['session']}"))
+    return walkers
+
+
 class BrainReplay:
     """Use the real brain state machine, with camera truth kept outside inference."""
-    def __init__(self, model, base, expected_hz, history=()):
+    def __init__(self, model, base, expected_hz, history=(), training=None):
         self.model, self.base, self.expected_hz = model, base, expected_hz
         self.history = list(history)   # a held-out session is replayed on the baseline it was recorded on
         self.train_sessions = set(model.train_sessions)
+        self.train_walkers = getattr(model, "train_walkers", None)
+        if training is not None:
+            if self.train_sessions - {s["meta"]["session"] for s in training}:
+                raise ValueError("original metadata is missing for some model training sessions")
+            supplied = training_walkers(training)
+            if self.train_walkers is not None and not walker_set(self.train_walkers) <= supplied:
+                raise ValueError("model and supplied training walker provenance disagree")
+            self.train_walkers = supplied
         self.train_s = model.train_s
 
     def replay(self, session):
@@ -159,19 +202,40 @@ class BrainReplay:
                        "ms": brain.decision_ms[-1] if brain.pred is not None and brain.decision_ms else None}
 
 
-def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
+def zone_classes(doc=None):
+    """The zone score's classes: 0 (empty) and every zone in the layout."""
+    return [0] + sorted(int(z["id"]) for z in (doc or LAYOUT)["zones"])
+
+
+def confusion_report(pairs, doc=None):
+    """Three-class (or five-class) confusion of camera zone vs radio zone, and the chance level.
+
+    proof.json's zone block has no room for these (section 7), so they go next to it.
+    """
+    classes = zone_classes(doc)
+    counts = [[pairs.get((a, p), 0) for p in classes] for a in classes]
+    return {"classes": classes, "rows_are": "camera zone", "columns_are": "radio zone",
+            "counts": counts, "chance": round(1 / len(classes), 4)}
+
+
+def score(sessions, replay, on_board=False, allow_sim=False, commit=None, details=None):
+    """details gets confusion and walker counts; the frozen proof format stays unchanged."""
     ids = [s["meta"]["session"] for s in sessions]
     if len(set(ids)) != len(ids) or set(ids) & set(replay.train_sessions):
         raise ValueError("duplicate sessions or training/held-out leakage")
+    trained_walkers = walker_set(getattr(replay, "train_walkers", None))
     for session in sessions:
         if session["meta"].get("purpose") != "heldout":
             raise ValueError("only predeclared heldout sessions may be scored")
         if not allow_sim and any(m.get("src") != "live" for m in session["messages"]):
             raise ValueError("sim/replay data is for self-tests, not measured proof")
+        walker = walker_id(session["meta"].get("walker"), f"held-out session {session['meta']['session']}")
+        if walker in trained_walkers:
+            raise ValueError(f"training/held-out walker leakage: {walker}")
     correct = total = baseline_correct = baseline_total = po_correct = po_total = 0
     false_alarms = empty_ms = 0
+    pairs = Counter()
     durations, clusters, used, walkers = [], [], [], set()
-    missing_walker = False
     for session in sessions:
         ordered = sorted(session["messages"], key=lambda m: m["recv_t"])
         times = [m["recv_t"] for m in ordered]
@@ -191,6 +255,7 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
             zone = prediction.get("zone") if prediction.get("present") else 0
             sc += int(zone == actual["zone"])
             sn += 1
+            pairs[(actual["zone"], zone)] += 1
             baseline = threshold_zone(row["links"])
             if baseline is not None:
                 baseline_correct += int(baseline == actual["zone"])
@@ -208,15 +273,16 @@ def score(sessions, replay, on_board=False, allow_sim=False, commit=None):
         if sn:
             clusters.append((sc, sn))
             used.append(session["meta"]["session"])
-            if session["meta"].get("walker"):
-                walkers.add(session["meta"]["walker"])
-            else:
-                missing_walker = True
+            walkers.add(walker_id(session["meta"].get("walker"), "held-out session"))
         correct += sc
         total += sn
+    if details is not None:
+        details["confusion"] = confusion_report(pairs)
+        details["walkers"] = {"training": len(trained_walkers), "heldout": len(walkers) if used else None,
+                              "walker_independent": True}
     return {"zone": {"correct": correct if total else None, "total": total or None,
-                     "ci95": cluster_interval(clusters), "sessions": used, "walkers": len(walkers) if used and not missing_walker else None,
-                     "method": ("SYNTHETIC SELF-TEST; " if allow_sim else "") + "held-out recv_t windows; 95% session bootstrap, 2000 draws; see proof/README.md"},
+                     "ci95": cluster_interval(clusters), "sessions": used, "walkers": len(walkers) if used else None,
+                     "method": ("SYNTHETIC SELF-TEST; " if allow_sim else "") + f"walker-independent; {len(trained_walkers)} training walkers; held-out recv_t windows; 95% session bootstrap, 2000 draws; see proof/README.md"},
             "threshold_zone": {"correct": baseline_correct if baseline_total else None, "total": baseline_total or None},
             "person_vs_object": {"correct": po_correct if po_total else None, "total": po_total or None,
                                  "tray_placements": None},
@@ -306,6 +372,10 @@ def main():
         parser.error("recorded before the current baseline (another place): " + ", ".join(sorted(old)))
     if not args.allow_sim and any(m.get("src") != "live" for s in training for m in s["messages"]):
         parser.error("synthetic training cannot produce measured proof")
+    known_walkers = training_walkers(training)
+    heldout_walkers = {walker_id(s["meta"].get("walker"), f"held-out session {s['meta']['session']}") for s in heldout}
+    if known_walkers & heldout_walkers:
+        parser.error("training/held-out walker leakage: " + ", ".join(sorted(known_walkers & heldout_walkers)))
     from brain.train import Model
 
     base, rates = read_baseline(args.baseline)
@@ -315,12 +385,20 @@ def main():
     for s in training:
         s["base"] = base_for(s, history)
     model = Model(base).fit(training)
-    adapter = BrainReplay(model, base, rates, history)
+    adapter = BrainReplay(model, base, rates, history, training=training)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    report = score(heldout, adapter, args.on_board, args.allow_sim, commit)
+    details = {}
+    report = score(heldout, adapter, args.on_board, args.allow_sim, commit, details)
     if args.output.exists():
         report = merge_scored(json.loads(args.output.read_text()), report)
     args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    # The confusion and chance level sit next to proof.json, which has no field for them.
+    side = args.output.with_name(args.output.stem + ".confusion.json")
+    side.write_text(json.dumps(dict(details["confusion"], walkers=details["walkers"], commit=commit), indent=2) + "\n")
+    c = details["confusion"]
+    print(f"zone confusion (rows camera, columns radio; classes {c['classes']}, chance {c['chance']:.2f}):")
+    for cls, row in zip(c["classes"], c["counts"]):
+        print(f"  {cls}: {row}")
 
 
 if __name__ == "__main__":

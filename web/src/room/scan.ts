@@ -1,4 +1,5 @@
-import { Box3, Color, Group, Mesh, ShaderMaterial, Texture, type Object3D } from 'three'
+import { Box3, Color, Group, Mesh, ShaderMaterial, Texture, Vector3, type Object3D } from 'three'
+import { floorSize, toScene } from './frame'
 import { FLOOR, WALL_SHADE } from './palette'
 import type { Quality, RoomView } from './view'
 
@@ -17,13 +18,23 @@ export interface Scan {
   apply(fit: ScanFit): void
   /** The scan's box in the scene, as placed now. */
   bounds(): Box3
+  /** The cutaway in front of the strip (ghostBox): 0 solid, 1 fully see-through. */
+  ghost(amount: number): void
 }
 
-export type ScanSource = { hi?: string; lo?: string; fit: ScanFit } | null
+export type ScanSource = {
+  hi?: string
+  lo?: string
+  fit: ScanFit
+  /** Other looks of the same hall to compare (hall-hi-A.glb, ...), picked with ?hall=A. */
+  families?: Record<string, { hi?: string; lo?: string }>
+} | null
 
-/** The model for this quality: hi takes the detailed one when there is one, pi the light one. */
-export function scanUrl(source: NonNullable<ScanSource>, quality: Quality): string | undefined {
-  return quality === 'hi' ? (source.hi ?? source.lo) : (source.lo ?? source.hi)
+/** The model for this quality: hi takes the detailed one when there is one, pi the light one. With `family`
+ *  (?hall=A) that look's files, when it has them. */
+export function scanUrl(source: NonNullable<ScanSource>, quality: Quality, family?: string | null): string | undefined {
+  const files = (family && source.families?.[family]) || source
+  return quality === 'hi' ? (files.hi ?? files.lo) : (files.lo ?? files.hi)
 }
 
 /** Where the scan and its alignment are: the dev server's current answer, or what the build found with the
@@ -58,6 +69,8 @@ export interface ScanFit {
   scale?: number
   /** Anything higher than this (metres) is cut away so the camera sees into the room. */
   cut_m?: number
+  /** How far the model's floor sits below ours, in metres: a tier's height when the square stands on that tier. */
+  floor_m?: number
 }
 
 /** Anything above 1.4 m is cut away unless room.json says otherwise. */
@@ -78,34 +91,93 @@ export function placeScan(min: [number, number, number], max: [number, number, n
   const scale = fit.scale && fit.scale > 0 ? fit.scale : 1
   return {
     inner: [-(min[0] + max[0]) / 2, -min[1], -(min[2] + max[2]) / 2],
-    outer: [dx, -0.03, -dy], // 3 cm under our floor marks, so a bumpy scanned floor never pokes through them
+    // 3 cm under our floor marks, so a bumpy scanned floor never pokes through them; floor_m lower on a tier.
+    outer: [dx, -0.03 - (fit.floor_m ?? 0), -dy],
     yaw: ((fit.yaw_deg ?? 0) * Math.PI) / 180,
     scale,
     cut: fit.cut_m ?? DEFAULT_CUT_M,
   }
 }
 
+/** The room-space box kept clear of the model: anything of it standing in the floor a person walks (the hall's
+ *  chairs behind our desk) is left out, so the person never stands inside furniture. The floor area from
+ *  nodes.json, a little wider east and west and toward the aisle, from just above the floor to above head
+ *  height; it stops 1 cm short of the floor's north edge, where the desk begins. */
+export function clearBox(): Box3 {
+  const [fw, fh] = floorSize()
+  const a = new Vector3(...toScene([-CLEAR_SIDE_M, fh - 0.01, CLEAR_FLOOR_M]))
+  const b = new Vector3(...toScene([fw + CLEAR_SIDE_M, -CLEAR_BACK_M, CLEAR_TOP_M]))
+  return new Box3().setFromPoints([a, b])
+}
+const CLEAR_SIDE_M = 0.3
+const CLEAR_BACK_M = 0.3
+const CLEAR_FLOOR_M = 0.0 // the model's floor is 3 cm lower (placeScan), so it stays
+const CLEAR_TOP_M = 1.35
+
+/**
+ * The span of the model between the close view's camera and the strip: on the desk, the next row's desk run and
+ * its chairs, just behind the person. In the close view it is drawn see-through (a cutaway), so the strip's
+ * floor and the person's legs show through it. South of the floor area from 1 cm off its edge back to just short
+ * of the row after; GHOST_SIDE_M past the floor's east and west ends, where it fades back to solid over
+ * GHOST_FADE_M. Above the floor only.
+ */
+export function ghostBox(): Box3 {
+  const [fw] = floorSize()
+  const a = new Vector3(...toScene([-GHOST_SIDE_M, -0.005, CLEAR_FLOOR_M]))
+  const b = new Vector3(...toScene([fw + GHOST_SIDE_M, -GHOST_BACK_M, GHOST_TOP_M]))
+  return new Box3().setFromPoints([a, b])
+}
+const GHOST_SIDE_M = 1.5
+const GHOST_FADE_M = 0.6
+const GHOST_BACK_M = 1.75
+const GHOST_TOP_M = 2.0
+/** How much of a fully see-through surface still shows. */
+const GHOST_ALPHA = 0.12
+
+/** Uniforms every material of one scan shares, so the cut, the lift and the cutaway change them all at once. */
+interface Shared {
+  cut: { value: number }
+  lift: { value: number }
+  clear: Box3
+  ghost: Box3
+  /** 0 solid, 1 the cutaway fully see-through. */
+  ghostOn: { value: number }
+}
+
 /**
  * With `colored`, the model's own vertex colours (shading baked in). Without, floors take the floor colour and
- * walls a shade lighter, darkened a little by which way they face. Both cut away everything above `cut`.
+ * walls a shade lighter, darkened a little by which way they face. Both cut away everything above `cut` and leave
+ * out the clear box. The 'solid' pass draws everything outside the cutaway; the 'ghost' pass draws only the
+ * cutaway, see-through, after everything else.
  */
-function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial {
+function scanMaterial(shared: Shared, colored: boolean, pass: 'solid' | 'ghost'): ShaderMaterial {
   return new ShaderMaterial({
     vertexColors: colored, // three defines USE_COLOR (and USE_COLOR_ALPHA for RGBA) and declares `color`
+    defines: pass === 'ghost' ? { GHOST_PASS: '' } : {},
+    transparent: pass === 'ghost',
+    depthWrite: pass === 'solid',
     uniforms: {
       uFloor: { value: new Color(FLOOR) },
       uWall: { value: new Color(0x23272d) },
       uShade: { value: new Color(WALL_SHADE) },
-      uCut: cut,
+      uCut: shared.cut,
+      uLift: shared.lift,
+      uClearMin: { value: shared.clear.min },
+      uClearMax: { value: shared.clear.max },
+      uGhostMin: { value: shared.ghost.min },
+      uGhostMax: { value: shared.ghost.max },
+      uGhostFade: { value: GHOST_FADE_M },
+      uGhostAlpha: { value: GHOST_ALPHA },
+      uGhostOn: shared.ghostOn,
     },
     vertexShader: /* glsl */ `
       #include <color_pars_vertex>
       varying vec3 vNormal;
-      varying float vHeight;
+      varying vec3 vWorld;
       void main() {
         #include <color_vertex>
         vec4 world = modelMatrix * vec4(position, 1.0);
-        vHeight = world.y;
+        vWorld = world.xyz;
         vNormal = mat3(modelMatrix) * normal;
         gl_Position = projectionMatrix * viewMatrix * world;
       }`,
@@ -115,19 +187,44 @@ function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial 
       uniform vec3 uWall;
       uniform vec3 uShade;
       uniform float uCut;
+      uniform float uLift;
+      uniform vec3 uClearMin;
+      uniform vec3 uClearMax;
+      uniform vec3 uGhostMin;
+      uniform vec3 uGhostMax;
+      uniform float uGhostFade;
+      uniform float uGhostAlpha;
+      uniform float uGhostOn;
       varying vec3 vNormal;
-      varying float vHeight;
+      varying vec3 vWorld;
+      // 0 outside the cutaway, rising to 1 over uGhostFade from its east and west ends, times how far it is on.
+      float ghostAt() {
+        if (any(lessThan(vWorld, uGhostMin)) || any(greaterThan(vWorld, uGhostMax))) return 0.0;
+        float ends = min(vWorld.x - uGhostMin.x, uGhostMax.x - vWorld.x);
+        return uGhostOn * smoothstep(0.0, uGhostFade, ends);
+      }
       void main() {
-        if (vHeight > uCut) discard;
+        if (vWorld.y > uCut) discard;
+        if (all(greaterThan(vWorld, uClearMin)) && all(lessThan(vWorld, uClearMax))) discard;
+        float ghost = ghostAt();
+        #ifdef GHOST_PASS
+          if (ghost <= 0.001) discard;
+        #else
+          if (ghost > 0.001) discard;
+        #endif
         #ifdef USE_COLOR
-          vec3 base = vColor.rgb; // glTF vertex colours are linear, like the rest of the scene
+          vec3 base = vColor.rgb * uLift; // glTF vertex colours are linear, like the rest of the scene
         #else
           vec3 n = normalize(vNormal);
           float up = abs(n.y);
           vec3 base = mix(uWall, uFloor, up);
           base = mix(base, uShade, 0.22 * (1.0 - up) * (0.4 + 0.6 * abs(n.x)));
         #endif
-        gl_FragColor = vec4(base, 1.0);
+        #ifdef GHOST_PASS
+          gl_FragColor = vec4(base, mix(1.0, uGhostAlpha, ghost));
+        #else
+          gl_FragColor = vec4(base, 1.0);
+        #endif
         #include <colorspace_fragment>
       }`,
     polygonOffset: true,
@@ -139,31 +236,47 @@ function scanMaterial(cut: { value: number }, colored: boolean): ShaderMaterial 
 /** Triangles each GPU draws comfortably: the Pi measured at 1080p, a laptop with room to spare. */
 const TRIANGLE_BUDGET: Record<Quality, number> = { pi: 150_000, hi: 400_000 }
 
-/** Puts our material on every mesh (coloured where it has vertex colours) and drops textures. Returns the triangle count. */
-function flatten(root: Object3D, cut: { value: number }): number {
-  const flat = scanMaterial(cut, false)
-  const colored = scanMaterial(cut, true)
+/** Puts our material on every mesh (coloured where it has vertex colours) and drops textures, and gives each mesh a
+ *  hidden see-through twin for the cutaway. Returns the triangle count and the twins. */
+function flatten(root: Object3D, shared: Shared): { triangles: number; twins: Mesh[] } {
+  const solid = { flat: scanMaterial(shared, false, 'solid'), colored: scanMaterial(shared, true, 'solid') }
+  const ghost = { flat: scanMaterial(shared, false, 'ghost'), colored: scanMaterial(shared, true, 'ghost') }
   let triangles = 0
-  root.traverse((obj) => {
-    if (!(obj instanceof Mesh)) return
+  const meshes: Mesh[] = []
+  root.traverse((obj) => obj instanceof Mesh && meshes.push(obj))
+  const twins = meshes.map((obj) => {
     const old = Array.isArray(obj.material) ? obj.material : [obj.material]
     for (const m of old) {
       for (const value of Object.values(m)) if (value instanceof Texture) value.dispose()
       m.dispose()
     }
     if (!obj.geometry.getAttribute('normal')) obj.geometry.computeVertexNormals()
-    obj.material = obj.geometry.getAttribute('color') ? colored : flat
+    const kind = obj.geometry.getAttribute('color') ? 'colored' : 'flat'
+    obj.material = solid[kind]
     const index = obj.geometry.getIndex()
     triangles += (index ? index.count : obj.geometry.getAttribute('position').count) / 3
+    // Drawn after everything else, so the strip, the links and the person behind it show through.
+    const twin = new Mesh(obj.geometry, ghost[kind])
+    twin.renderOrder = 40
+    twin.visible = false
+    obj.add(twin)
+    return twin
   })
-  return triangles
+  return { triangles, twins }
+}
+
+/** ?lift=1.2 brightens the hall model's own colours (a projector washes dark tones out); 1 when not set. Only
+ *  the model's baked colours change, never the room's palette, and it is kept between 0.5 and 2. */
+export function hallLift(params: URLSearchParams): number {
+  const v = Number(params.get('lift'))
+  return Number.isFinite(v) && v >= 0.5 && v <= 2 ? v : 1
 }
 
 /** Loads the scan if there is one. Resolves to it once it stands in for the drawn room, else to null. */
 export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLSearchParams, quality: Quality): Promise<Scan | null> {
   if (params.get('scan') === '0') return null
   const source = await scanSource()
-  const url = source && scanUrl(source, quality)
+  const url = source && scanUrl(source, quality, params.get('hall'))
   if (!source || !url) return null
   try {
     // Loaded only when there is a scan, so builds without one stay small.
@@ -175,7 +288,8 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
     const gltf = await loader.loadAsync(url)
     const box = new Box3().setFromObject(gltf.scene)
     const cut = { value: DEFAULT_CUT_M }
-    const triangles = flatten(gltf.scene, cut)
+    const shared: Shared = { cut, lift: { value: hallLift(params) }, clear: clearBox(), ghost: ghostBox(), ghostOn: { value: 0 } }
+    const { triangles, twins } = flatten(gltf.scene, shared)
     if (triangles > TRIANGLE_BUDGET[quality]) {
       console.warn(
         `room scan: ${Math.round(triangles)} triangles, over the ${quality} budget of ${TRIANGLE_BUDGET[quality]}. ` +
@@ -198,6 +312,13 @@ export async function loadScan(view: RoomView, drawnRoom: Object3D, params: URLS
         view.requestRender()
       },
       bounds: () => new Box3().setFromObject(holder),
+      ghost(amount) {
+        const a = Math.min(1, Math.max(0, amount))
+        if (a === shared.ghostOn.value) return
+        shared.ghostOn.value = a
+        for (const t of twins) t.visible = a > 0 // no second pass while nothing is see-through
+        view.requestRender()
+      },
     }
     handle.apply(source.fit)
     drawnRoom.visible = false

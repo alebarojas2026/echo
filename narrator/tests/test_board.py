@@ -125,24 +125,70 @@ def test_the_recap_puts_the_sentence_prompt_back_in_the_cache():
     assert [m["event_kind"] for m in sent] == ["recap"] and kicks == [1]
 
 
-def test_zones_come_from_nodes_json(tmp_path):
-    saved = dict(n.ZONES)
-    try:
-        # the square's zones give the same prompt as before
-        n.set_zones(dict(n.CONTRACT_ZONES))
-        assert n.ZONES == {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}
-        assert "The room has four zones: zone 1 (Bed), zone 2 (Chair), zone 3 (Hall) and zone 4 (Bathroom)." in n.system()
-        assert n.examples()[0][2] == "Someone just stepped into zone 2, by the chair."
-        # a new layout: its names reach the sentence, the alert limit and the prompt
-        nodes = tmp_path / "nodes.json"
-        nodes.write_text('{"zones": [{"id": 1, "name": "Desk", "still_alert_s": null},'
-                         ' {"id": 2, "name": "Sofa", "still_alert_s": 8}]}')
-        n.set_zones(n.load_zones(nodes))
-        assert n.template("enter", {"zone": 2}) == "Someone just walked into zone 2 (Sofa)."
-        assert n.template("alert_on", {"zone": 2}) == "No movement in zone 2 (Sofa) for 8 seconds; time to check in."
-        assert "The room has two zones: zone 1 (Desk) and zone 2 (Sofa)." in n.system()
-        assert r.facts([ev("enter", zone=1)]) == ["0:00 someone walked into the Desk zone"]
-        # unreadable -> the contract's zones
-        assert n.load_zones(tmp_path / "missing.json") == n.CONTRACT_ZONES
-    finally:
-        n.set_zones(saved)
+DESK = ('{"zones": [{"id": 1, "side": "W", "name": "Left", "centre_m": [0.4, 0.3], "still_alert_s": 10},'
+        ' {"id": 2, "side": "E", "name": "Right", "centre_m": [1.2, 0.3], "still_alert_s": 10}]}')
+
+
+def test_zones_are_read_from_the_repos_nodes_json_on_import():
+    import importlib
+    import json
+    fresh = importlib.reload(n)          # as the service, the recap and the rehearsal get it
+    with open(n.NODES_JSON, encoding="utf-8") as f:
+        want = {z["id"]: (z["name"], z.get("still_alert_s")) for z in json.load(f)["zones"]}
+    assert fresh.ZONES == want and want
+    assert not hasattr(fresh, "CONTRACT_ZONES")
+
+
+def test_the_square_gives_the_same_prompt_as_before():
+    assert "The room has four zones: zone 1 (Bed), zone 2 (Chair), zone 3 (Hall) and zone 4 (Bathroom)." in n.system()
+    assert n.examples()[0][2] == "Someone just stepped into zone 2, by the chair."
+
+
+def test_a_new_layout_reaches_the_sentences_the_alert_time_the_prompt_and_the_recap(tmp_path):
+    nodes = tmp_path / "nodes.json"
+    nodes.write_text('{"zones": [{"id": 1, "name": "Desk", "still_alert_s": null},'
+                     ' {"id": 2, "name": "Sofa", "still_alert_s": 8}]}')
+    n.set_zones(n.load_zones(nodes))
+    assert n.template("enter", {"zone": 2}) == "Someone just walked into zone 2 (Sofa)."
+    assert n.template("alert_on", {"zone": 2}) == "No movement in zone 2 (Sofa) for 8 seconds; time to check in."
+    assert "The room has two zones: zone 1 (Desk) and zone 2 (Sofa)." in n.system()
+    assert r.facts([ev("enter", zone=1)]) == ["0:00 someone walked into the Desk zone"]
+
+
+def test_the_desk_file_gives_the_desk_sentences_and_its_alert_time(tmp_path):
+    nodes = tmp_path / "nodes.json"
+    nodes.write_text(DESK)
+    n.set_zones(n.load_zones(nodes))
+    assert n.ZONES == {1: ("Left", 10), 2: ("Right", 10)} and n.desk()
+    assert n.template("enter", {"zone": 1}) == "Someone just stepped up on the left."
+    assert n.template("alert_on", {"zone": 2}) == "No movement on the right for 10 seconds; time to check in."
+    assert "on the left and on the right" in n.system()
+
+
+def test_live_narration_uses_the_layouts_zones(tmp_path):
+    """The path the board runs: an event in, a narration out, with a model that fails."""
+    nodes = tmp_path / "nodes.json"
+    nodes.write_text(DESK)
+    n.set_zones(n.load_zones(nodes))
+    sent, prompts = [], []
+
+    def model(messages):
+        prompts.append(messages)
+        raise OSError("no model")
+    nar = n.Narrator(model, sent.append, clock=lambda: NOW)
+    nar.warm = lambda: None
+    nar.observe(ev("alert_on", zone=1))
+    nar.narrate(nar.due(NOW))
+    assert sent[-1]["text"] == "No movement on the left for 10 seconds; time to check in."
+    assert sent[-1]["source"] == "template"
+    assert "on the left and on the right" in prompts[-1][0]["content"]
+
+
+def test_an_unreadable_layout_names_no_zone(tmp_path):
+    assert n.load_zones(tmp_path / "missing.json") == {}
+    n.set_zones({})
+    assert n.template("enter", {"zone": 2}) == "Someone just walked into the room."
+    assert n.template("alert_on", {"zone": 2}) is not None and "zone" not in n.template("exit", {"zone": 2})
+    assert "The room has" not in n.system() and "desk" not in n.system() and n.example_zone() is None
+    assert n.examples()[0][1] == "Someone just walked into the room."
+    assert n.prompt("enter", "x")[0]["content"].startswith("You write captions")

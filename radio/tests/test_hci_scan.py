@@ -238,9 +238,42 @@ def test_a_scan_someone_else_turned_off_is_started_again():
     fake = Clocked(t, events=[fixture("legacy_report_east"), other_program])
     run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: None, stop=lambda: t[0] >= 5.0,
         clock=lambda: t[0], say=said.append)
-    assert scan_enables(fake) == 3          # at the start, then after 2 s and 4 s of quiet
-    assert said == ["no beacon adverts for 2 s, restarting the scan"]
+    assert scan_enables(fake) == 4          # at the start, 1 s after the other program, then after 2 s and 4 s of quiet
+    assert said == ["something else changed the scan (HCI command 0x200C, 1x since start); setting ours up again in 1 s",
+                    "no beacon adverts for 2 s, restarting the scan"]
     assert fake.sent[-1] == hci.command_packet(*hci.scan_enable(False, False))
+
+
+def test_a_scan_someone_else_changed_is_set_up_again_without_waiting_for_quiet():
+    # bluetoothd's own scan (60 ms interval, 30 ms window, duplicates filtered) can keep some adverts
+    # coming, so the quiet check alone would never put ours back.
+    t, said = [0.0], []
+    east = fixture("legacy_report_east")
+    params_by_someone = bytes.fromhex("040e04010b2000")   # Command Complete, LE Set Scan Parameters
+    enable_by_someone = bytes.fromhex("040e04010c2000")   # Command Complete, LE Set Scan Enable
+    fake = Clocked(t, events=[east, params_by_someone, enable_by_someone, east, None, east, None, east, None, east])
+    scanner = BeaconScanner(hci.Hci(fake), "unoq")
+    run(scanner, lambda *r: None, stop=lambda: fake.drained, clock=lambda: t[0], say=said.append)
+    ours = hci.command_packet(*hci.scan_params(False))
+    assert sum(1 for p in fake.sent if p == ours) == 2   # at the start, and once 1 s after the last outside change
+    assert scan_enables(fake) == 2
+    assert said == ["something else changed the scan (HCI command 0x200B, 1x since start); setting ours up again in 1 s"]
+
+
+def test_outside_changes_are_said_at_most_once_a_minute_with_a_count():
+    t, said = [0.0], []
+    other = bytes.fromhex("040e04010c2000")
+    east = fixture("legacy_report_east")
+    events = []
+    for _ in range(130):          # an outside change every second for 130 s, adverts in between
+        events += [other, east, None, east, None]
+    fake = Clocked(t, events=events)
+    run(BeaconScanner(hci.Hci(fake), "unoq"), lambda *r: None, stop=lambda: fake.drained, clock=lambda: t[0],
+        say=said.append)
+    told = [line for line in said if line.startswith("something else")]
+    assert [line.split("(")[1].split(")")[0] for line in told] == [
+        "HCI command 0x200C, 1x since start", "HCI command 0x200C, 61x since start",
+        "HCI command 0x200C, 121x since start"]
 
 
 def test_adverts_coming_back_are_said_once():

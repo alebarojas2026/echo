@@ -1,16 +1,22 @@
 # Radio Sight
 
-**Wi-Fi that understands the room.** Your Wi-Fi can't tell a wall from a person. Radio Sight can.
+**Safety and after-hours security for buildings, using the Wi-Fi that's already there. No cameras.**
 
-It reads how bodies and objects change the radio signals already in a room, builds a live radio picture of the space, finds real dead zones, and knows whether someone is present and moving, without a camera and without the cloud. Everything runs on an Arduino UNO Q (Qualcomm Dragonwing).
+Every building has Wi-Fi. Radio Sight reads how people and objects change those radio signals, and does three things with them:
 
-Built at MadHacks 2026 for the Qualcomm / N+1 Institute track. Theme: "Let's Dig In."
+- **Safety and security.** It knows someone is in a space, on which side, and whether they've been still too long. Armed, it raises an alert when a space that should be empty isn't, and it notices when one of its own devices is unplugged.
+- **Privacy.** No camera watches anyone. A camera teaches the radio for about half a minute and is then unplugged. No image is ever stored, nothing is sent to the internet, and it can't tell who someone is. It works where cameras can't go: patient rooms, bathrooms, study rooms, offices after hours.
+- **Dead zones.** The same links that sense people show where the Wi-Fi itself is weak or blocked. When something blocks a link it says so, says where to move the router, and measures the gain.
+
+Everything runs on an Arduino UNO Q (Qualcomm Dragonwing): the sensing, the learning, the records and a small language model that answers questions about what happened. No cloud, no internet.
+
+Built at MadHacks 2026 for the Qualcomm / N+1 Institute track. In this demo our own boards stand in for the access points a building already has, and one desk stands in for a room. What is measured is in [PROOF.md](PROOF.md); anything not measured there is not claimed.
 
 ## How it works (short)
 1. Small radio nodes around a floor zone (the UNO Q, a Raspberry Pi 5 acting as the router, and beacons) measure signal strength on every link many times a second.
 2. During setup, a camera on the UNO Q labels where a person is. A small model on the board learns to predict the same thing from radio alone. Then the camera is unplugged.
 3. The board combines all links into a radio image of the room: what stays put is an obstruction or dead zone, what moves is a person.
-4. The screen shows the room, the radio links, where people are, and plain-language explanations. No image is ever saved and nothing leaves the board.
+4. The screen shows the room, the radio links, where people are, and plain-language explanations. No image is ever saved and nothing is sent to the internet.
 
 How the parts connect: [docs/network.md](docs/network.md)
 

@@ -4,7 +4,7 @@ Every number shown on screen or in the pitch has a row here: what was measured, 
 
 | Number | Value | Method | N | Date | Commit |
 |---|---|---|---|---|---|
-| Zone accuracy (radio vs camera agreement; the "localization accuracy" in the Devpost draft) | pending | Held-out sessions with the camera still recording but the model predicting from radio only. Compare predicted zone to camera zone at each timestamp. Report % agreement, confusion matrix, and chance baseline (1 ÷ number of zones). | 3+ people, 5+ held-out sessions | | |
+| Zone accuracy (radio vs camera agreement; the "localization accuracy" in the Devpost draft) | pending | Held-out sessions with the camera still recording but the model predicting from radio only. Compare predicted zone to camera zone at each timestamp. Report % agreement, the confusion matrix (`proof.confusion.json`) and the chance level, which counts empty as a class: 1 in 3 on the desk layout (empty, Left, Right), 1 in 5 on the square. | 3+ people, 5+ held-out sessions | | |
 | Presence accuracy | pending | Scripted cycles: 2 min empty room, 2 min occupied. Ground truth from the camera or a written enter/leave log. Report accuracy and false alarms while empty. | 10+ empty/occupied cycles | | |
 | Person vs object accuracy | pending | Place a still object (box, chair, water jug) in the zone, then a person. Count how often each is labeled obstruction vs person. | 10+ trials each | | |
 | Time to train on the board | pending | Wall-clock time on the UNO Q from training start to model ready. Report the median. | 3+ runs | | |

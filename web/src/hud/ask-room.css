@@ -11,6 +11,7 @@
 .ask-room :is(button,input):focus-visible,.ask-trigger:focus-visible { outline:2px solid var(--person); outline-offset:4px; }
 .ask-room .ask-submit { background:var(--text); color:var(--bg); }
 .ask-room .ask-submit:disabled { opacity:.6; }
+.ask-room .ask-replay { justify-self:start; background:var(--text); color:var(--bg); padding:8px 24px; }
 .ask-room label { display:block; margin-bottom:8px; }
 .ask-input { display:flex; gap:16px; }
 .ask-input input { min-width:0; flex:1; }

@@ -83,6 +83,37 @@ describe('the fly', () => {
     expect(view.host.dataset.view).toBe('square')
   })
 
+  it('lands exactly: on a laptop\'s canvas too, the view says square and nothing of the hall stays faded in', () => {
+    const sizes: [number, number][] = []
+    for (let w = 640; w <= 1600; w += 61) for (let h = 600; h <= 1200; h += 97) sizes.push([w, h])
+    for (const size of sizes) {
+      const view = fakeView()
+      view.size = size
+      const fly = new Fly(view as unknown as RoomView, null, () => {})
+      fly.setHall(hall)
+      view.run(1200 + FLY_MS + 100)
+      expect(fly.wide).toBe(0)
+      expect(view.host.dataset.view).toBe('square')
+    }
+  })
+
+  it('lands on the close framing it is given (in situ inside the hall) and follows the canvas from then on', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    const situ = (w: number): Shot => ({ elevDeg: 45, target: new Vector3(0, 0.8, 0.3), radiusM: 1.7 * Math.min(1, w / 1280) })
+    fly.setClose(situ)
+    fly.setHall(hall)
+    view.run(1200 + FLY_MS + 100)
+    expect(view.shot).toEqual(situ(1280))
+    expect(fly.wide).toBe(0)
+    view.size = [800, 900]
+    fly.toggle()
+    view.run(FLY_MS + 100)
+    fly.toggle()
+    view.run(FLY_MS + 100)
+    expect(view.shot.radiusM).toBeCloseTo(situ(800).radiusM)
+  })
+
   it('never jumps: every frame of the fly is a small step from the one before', () => {
     const view = fakeView()
     const fly = new Fly(view as unknown as RoomView, null, () => {})
@@ -129,6 +160,38 @@ describe('the fly', () => {
     expect(fly.wide).toBe(1)
     fly.reset()
     view.run(FLY_MS)
+    expect(fly.wide).toBe(1)
+  })
+
+  it('rests on the hall while the arrival screen waits, drifting, then flies down on found without a jump', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.hold() // "waiting" can come before the hall model has loaded
+    fly.setHall(hall)
+    view.run(1200 + FLY_MS + 500)
+    expect(fly.wide).toBe(1) // no fly down while waiting
+    const xs = view.shots.slice(-50).map((s) => s.target.x)
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.01) // drifting
+    expect(Math.max(...xs.map((x) => Math.abs(x - hall.target.x)))).toBeLessThanOrEqual(1.5)
+    const before = view.shot.target.clone()
+    fly.arrive()
+    view.run(16)
+    expect(view.shot.target.distanceTo(before)).toBeLessThan(0.2) // starts from where the drift was
+    view.run(FLY_MS + 100)
+    expect(fly.wide).toBe(0)
+    expect(view.host.dataset.view).toBe('square')
+  })
+
+  it('goes back to the hall when waiting starts again, and ignores found when nothing was waiting', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    fly.setHall(hall)
+    view.run(1200 + FLY_MS + 100)
+    fly.arrive() // nothing was waiting: stays on the square
+    view.run(500)
+    expect(fly.wide).toBe(0)
+    fly.hold() // the next visitor's arrival screen
+    view.run(16)
     expect(fly.wide).toBe(1)
   })
 })

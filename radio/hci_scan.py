@@ -8,6 +8,10 @@ Scan Parameters/Enable, reports in subevent 0x0D) if it has LE Set Extended Scan
 the legacy pair (0x200B/0x200C, subevent 0x02). The two are never mixed. Either way the scan is
 passive, interval = window = 10 ms, and Filter_Duplicates is 0 (btmon: "Filter duplicates: Disabled").
 
+Scanning is one setting for the whole controller. When something else changes it (bluetoothd or the
+kernel setting its own scan, which is half duty and filters duplicates; an HCI Reset), the scan is set
+up again with ours 1 s after the last outside change, and the journal says so.
+
 Only reports carrying manufacturer data FFFF 52 53 'S'|'E'|'W' are kept (radio/nodes.json), plus the
 optional hall beacons listed there ('H'|'J'); everything else is dropped before any JSON is built, and
 no address ever leaves the parser.
@@ -25,6 +29,13 @@ from . import hci
 from .nodes import BEACONS, HEARD, LINKS, RECEIVERS
 
 MARK = b"\xff\xff\x52\x53"  # company id FFFF + "RS": a cheap test before parsing a packet
+
+# A Command Complete for one of these that the scanner didn't send means something else changed the
+# controller's scan (our own replies are read inside Hci.command, never by poll()).
+OUTSIDE = {hci.HCI_RESET, hci.LE_SET_SCAN_PARAMS, hci.LE_SET_SCAN_ENABLE,
+           hci.LE_SET_EXT_SCAN_PARAMS, hci.LE_SET_EXT_SCAN_ENABLE}
+SETTLE_S = 1.0       # set ours up again this long after the last outside change
+SAY_EVERY_S = 60.0   # say an outside change at most this often (with a count)
 
 
 def kept(packet: bytes, rx: str):
@@ -50,6 +61,7 @@ class BeaconScanner:
         self.dev, self.rx = dev, rx
         self.ext = dev.supports_ext_scan()
         self.mode = "extended" if self.ext else "legacy"
+        self.outside = None  # the opcode of the last scan command something else sent, until run() takes it
 
     def start(self) -> None:
         self.dev.command(*hci.scan_enable(self.ext, False), check=False)  # params can't change while on
@@ -61,7 +73,12 @@ class BeaconScanner:
 
     def poll(self, timeout: float = 0.5):
         packet = self.dev.recv(timeout)
-        return kept(packet, self.rx) if packet else []
+        if not packet:
+            return []
+        if hci.completed_opcode(packet) in OUTSIDE:
+            self.outside = hci.completed_opcode(packet)
+            return []
+        return kept(packet, self.rx)
 
 
 def make_bus_emitter(sock: socket.socket, target: tuple[str, int], rx: str):
@@ -128,6 +145,10 @@ def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, se
     bus socket can fail a send. Neither ends the scan. A failed restart is said once per quiet
     stretch and tried again after quiet_s; a failed send drops that reading and is said once until
     a send works again. Only the controller itself going away (OSError from the HCI socket) ends it.
+
+    When something else changes the scan (scanner.outside), ours is set up again SETTLE_S after
+    the last such change, without waiting for the quiet: another scan can keep some adverts coming
+    at half duty, with duplicates filtered. It's said at most once every SAY_EVERY_S, with a count.
     """
     say = say or (lambda text: print(text, file=sys.stderr, flush=True))
     seen = ({} if seen is None else seen) if keep else None
@@ -135,10 +156,26 @@ def run(scanner: BeaconScanner, emit, seconds: float = 0, stop=lambda: False, se
     start_either(scanner, say)
     last = quiet_since = clock()
     restarted = restart_failed = send_failed = False
+    redo_at, changed, said_at = None, 0, None
     try:
         while not stop() and (end is None or clock() < end):
             kept_now = scanner.poll()
             now = clock()
+            outside = getattr(scanner, "outside", None)
+            if outside is not None:
+                scanner.outside = None
+                changed += 1
+                if said_at is None or now - said_at >= SAY_EVERY_S:
+                    say(f"something else changed the scan (HCI command 0x{outside:04X}, {changed}x since start); "
+                        f"setting ours up again in {SETTLE_S:g} s")
+                    said_at = now
+                redo_at = now + SETTLE_S
+            if redo_at is not None and now >= redo_at:
+                redo_at = None
+                try:
+                    scanner.start()
+                except hci.HciError as e:
+                    say(f"setting the scan up again failed ({e}); the quiet check tries again")
             if kept_now:
                 if restarted:
                     say(f"beacon adverts back after {now - quiet_since:.0f} s")

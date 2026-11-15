@@ -1,0 +1,163 @@
+"""The questions the room can answer. Each tool reads the store and returns
+{"answer": text, "rows": [...]}: the answer is a template filled from those rows, so
+every number in it is in a row (or is the number of minutes that was asked for).
+"""
+import statistics
+import time
+
+GAP_MS = 2000   # saved seconds this close together are one span
+
+
+def clock(t_ms: int) -> str:
+    return time.strftime("%H:%M:%S", time.localtime(t_ms / 1000))
+
+
+def _where(zone, zones) -> str:
+    return f"in {zones[zone]}" if zone in zones else "here"
+
+
+def _spans(rows: list, zones: dict) -> list:
+    """Runs of saved seconds in one zone, as rows: {zone, name, from, to, seconds}."""
+    out = []
+    for r in rows:
+        last = out[-1] if out else None
+        if last and last["zone"] == r["zone"] and r["t"] - last["_end"] <= GAP_MS:
+            last["_end"], last["seconds"] = r["t"], last["seconds"] + 1
+        else:
+            out.append({"zone": r["zone"], "name": zones.get(r["zone"]), "_start": r["t"], "_end": r["t"], "seconds": 1})
+    return [{"zone": s["zone"], "name": s["name"], "from": clock(s["_start"]), "to": clock(s["_end"]),
+             "seconds": s["seconds"], "from_t": s["_start"], "to_t": s["_end"]} for s in out]
+
+
+def _span(from_t: int, to_t: int, now_ms: int, before_ms: int = 0, after_ms: int = 0) -> dict:
+    """The stretch an answer is about (section 10), for the screen's Replay button: never past now."""
+    return {"from_t": from_t - before_ms, "to_t": min(to_t + after_ms, max(now_ms, to_t))}
+
+
+def _window(store, now_ms, minutes):
+    return store.seconds(now_ms - minutes * 60_000)
+
+
+def _person(r, zone=None) -> bool:
+    return r["present"] == 1 and r["kind"] == "person" and (zone is None or r["zone"] == zone)
+
+
+def _unknown(rows) -> tuple:
+    n = sum(r["present"] is None for r in rows)
+    return n, (f" For {n} s of that time there was no prediction, so I can't say." if n else "")
+
+
+def presence(store, now_ms, zones, minutes=10, zone=None, **_):
+    """was anyone here (or in one zone) in the last N minutes"""
+    rows = _window(store, now_ms, minutes)
+    if not rows:
+        return {"answer": f"I have no records for the last {minutes} minutes.", "rows": []}
+    spans = _spans([r for r in rows if _person(r, zone)], zones)
+    unknown, note = _unknown(rows)
+    summary = {"row": "summary", "seconds_with_someone": sum(s["seconds"] for s in spans),
+               "seconds_without_prediction": unknown, "seconds_saved": len(rows)}
+    if not spans:
+        return {"answer": f"No. Nobody was seen {_where(zone, zones)} in the last {minutes} minutes.{note}",
+                "rows": [summary]}
+    last = spans[-1]
+    return {"answer": f"Yes. Someone was {_where(zone, zones)} for {summary['seconds_with_someone']} s of the last "
+                      f"{minutes} minutes, most recently {_where(last['zone'], zones)} from {last['from']} to "
+                      f"{last['to']}.{note}", "rows": [summary] + spans,
+            "span": _span(last["from_t"], last["to_t"], now_ms, 5000, 5000)}
+
+
+def still_spans(store, now_ms, zones, minutes=10, **_):
+    """how long someone stayed without moving"""
+    rows = [r for r in _window(store, now_ms, minutes) if _person(r) and r["motion"] == "still"]
+    spans = _spans(rows, zones)
+    if not spans:
+        return {"answer": f"I have no record of someone staying still in the last {minutes} minutes.", "rows": []}
+    longest = max(spans, key=lambda s: s["seconds"])
+    return {"answer": f"The longest time without movement was {longest['seconds']} s {_where(longest['zone'], zones)}, "
+                      f"from {longest['from']} to {longest['to']}.", "rows": spans,
+            "span": _span(longest["from_t"], longest["to_t"], now_ms, 5000, 5000)}
+
+
+def _event_rows(store, now_ms, minutes, kinds, zones):
+    return [{"at": clock(e["t"]), "t": e["t"], "kind": e["kind"], **e["info"],
+             **({"name": zones[e["info"]["zone"]]} if e["info"].get("zone") in zones else {})}
+            for e in store.events(now_ms - minutes * 60_000, kinds)]
+
+
+def alerts(store, now_ms, zones, minutes=10, **_):
+    """no-movement alerts and check-ins"""
+    rows = _event_rows(store, now_ms, minutes, ("alert_on", "alert_off", "checkin"), zones)
+    on = [r for r in rows if r["kind"] == "alert_on"]
+    if not on:
+        return {"answer": f"No no-movement alert was raised in the last {minutes} minutes.", "rows": rows}
+    last = on[-1]
+    after = [r for r in rows[rows.index(last):] if r["kind"] == "alert_off"]
+    cleared = f" and it cleared at {after[0]['at']}" if after else " and it has not cleared"
+    summary = {"row": "summary", "alerts": len(on)}
+    return {"answer": f"No-movement alerts in the last {minutes} minutes: {len(on)}. The last one was "
+                      f"{_where(last.get('zone'), zones)} at {last['at']}{cleared}.", "rows": [summary] + rows,
+            "span": _span(last["t"], after[0]["t"] if after else last["t"], now_ms, 20_000, 10_000)}
+
+
+def intrusions(store, now_ms, zones, minutes=10, **_):
+    """intrusion alerts while the space was armed"""
+    rows = _event_rows(store, now_ms, minutes, ("armed", "disarmed", "intrusion"), zones)
+    hits = [r for r in rows if r["kind"] == "intrusion"]
+    latest = store.latest()
+    armed = "armed" if latest and latest["armed"] else "not armed"
+    if not hits:
+        return {"answer": f"No intrusion alert in the last {minutes} minutes. The space is {armed} now.", "rows": rows}
+    last = hits[-1]
+    place = _where(last.get("zone"), zones) if "zone" in last else f"on the path {last.get('link')}"
+    summary = {"row": "summary", "intrusion_alerts": len(hits)}
+    return {"answer": f"Intrusion alerts in the last {minutes} minutes: {len(hits)}. The last one was {place} at "
+                      f"{last['at']}. The space is {armed} now.", "rows": [summary] + rows,
+            "span": _span(last["t"], last["t"], now_ms, 10_000, 30_000)}
+
+
+def link_history(store, now_ms, zones, minutes=10, link=None, **_):
+    """how a radio link has been reading, and when it was blind"""
+    seconds = _window(store, now_ms, minutes)
+    ids = [link] if link else sorted({i for r in seconds for i in r["links"]})
+    rows = []
+    for i in ids:
+        dbm = [r["links"][i]["dbm"] for r in seconds if i in r["links"] and r["links"][i]["dbm"] is not None]
+        if dbm:
+            rows.append({"link": i, "min_dbm": min(dbm), "median_dbm": round(statistics.median(dbm), 1),
+                         "max_dbm": max(dbm), "seconds_blind": sum(i in r["blind"] for r in seconds)})
+    if not rows:
+        return {"answer": f"I have no readings for {link or 'any link'} in the last {minutes} minutes.", "rows": []}
+    text = " ".join(f"{r['link']} read {r['min_dbm']} to {r['max_dbm']} dBm (median {r['median_dbm']}) and was "
+                    f"blind for {r['seconds_blind']} s." for r in rows)
+    return {"answer": f"In the last {minutes} minutes: {text}", "rows": rows}
+
+
+def explain_advice(store, now_ms, zones, **_):
+    """the last router advice and what the move changed"""
+    told = [r for r in store.seconds() if r["advice"]]
+    if not told:
+        return {"answer": "No router advice has been given.", "rows": []}
+    advice = told[-1]["advice"]
+    row = {"at": clock(told[-1]["t"]), **{k: advice.get(k) for k in ("text", "link", "to_spot", "before_dbm", "after_dbm")}}
+    result = ""
+    if row["after_dbm"] is not None:
+        result = f" The link read {row['before_dbm']} dBm before the move and {row['after_dbm']} dBm after it."
+    return {"answer": f"The last advice was: {row['text']}{result}", "rows": [row]}
+
+
+def model_card(store, now_ms, zones, **_):
+    """what model runs on the board"""
+    latest = store.latest()
+    model = latest and latest["model"]
+    if not model or not model.get("trained"):
+        return {"answer": "No model is trained on this board yet.", "rows": [model] if model else []}
+    row = {"ver": model.get("ver"), "windows": model.get("windows"), "sessions": len(model.get("train_sessions") or []),
+           "train_s": model.get("train_s"), "ms_per_decision": model.get("ms_per_decision")}
+    took = "the training time was not measured" if row["train_s"] is None else f"training took {row['train_s']} s"
+    speed = ("the time per decision was not measured" if row["ms_per_decision"] is None
+             else f"one decision takes {row['ms_per_decision']} ms")
+    return {"answer": f"Model {row['ver']} runs on this board, trained on {row['windows']} windows from "
+                      f"{row['sessions']} sessions; {took}, and {speed}.", "rows": [row]}
+
+
+TOOLS = {f.__name__: f for f in (presence, still_spans, alerts, intrusions, link_history, explain_advice, model_card)}

@@ -28,6 +28,7 @@ narrate.set_zones(narrate.load_zones())   # the zone words the board's narrator 
 
 STILL_ALERT_S = dict(LAYOUT.zones)   # zone -> still_alert_s, from radio/nodes.json (section 3)
 GRID = LAYOUT.grid                   # section 6: the layout plus 0.2 m on each side
+BUMP_M = LAYOUT.bump_m               # the x-ray bump's size, scaled with the grid's cells
 BASELINE_AT_S, TRAINED_AT_S = 1.0, 2.0
 STALE_RATIO, BLIND_AFTER_S, CLEAR_AFTER_S = 0.4, 3.0, 3.0   # section 6, link health
 OBJECT_AFTER_S, STATIC_AFTER_S, CHECKIN_AFTER_S = 2.0, 5.0, 1.25
@@ -52,7 +53,10 @@ SENTENCES = {   # template narration, one short sentence per event kind
     "cam_on": "The camera is on.", "cam_stalled": "The camera has stalled.", "cam_off": "The camera is off.",
 }
 ARMED_SENTENCES = {"armed": "Armed: this space should be empty now.", "disarmed": "Disarmed.",
-                   "intrusion": "Someone is here while armed, in zone {zone}."}
+                   "intrusion": "Someone is here while armed, in zone {zone}.",
+                   "passed_by": "Someone passed by."}
+TAMPER_KINDS = ("tamper", "tamper_cleared")   # worded by the narrator's own template, with the device's name
+TAMPER_SILENT_S, TAMPER_CLEAR_S = 3.0, 2.0   # section 6, Tamper (issue #533), as in brain/alert.py
 NO_NODE = {"object_on": "Something new is sitting in the room.", "object_off": "The new object is gone."}
 
 
@@ -63,7 +67,7 @@ def blob(points) -> list:
     for iy in range(h):
         for ix in range(w):
             cx, cy = ox + (ix + 0.5) * cell, oy + (iy + 0.5) * cell
-            out.append(round(sum(p * math.exp(-((cx - x) ** 2 + (cy - y) ** 2) / (2 * 0.3 ** 2))
+            out.append(round(sum(p * math.exp(-((cx - x) ** 2 + (cy - y) ** 2) / (2 * BUMP_M ** 2))
                                  for x, y, p in points), 1))
     return out
 
@@ -95,12 +99,16 @@ class Brain:
                        "blind": set(), "objects": {}, "baseline": False, "trained": False}
         self.events, self.n_events = [], 0
         self.armed, self.intruded = False, False   # section 6, Armed: the space should be empty
+        self.appeared = None   # (decisions since, zone) while an appearance waits out armed.hold_s
+        self.heard, self.tamper, self.node_back = {}, [], {}   # link -> its last reading; nodes silent while armed
+        self.commands_done = 0   # how many of the path's own commands (path["commands"]) have run
         self.fits = 0    # fits of a scripted lesson so far (path["lesson"])
         self.demo = []   # every event since the last reset, for the recap
 
     def see(self, event: dict) -> None:
         if event["type"] == "rssi":
             self.readings[event["link"]].append((event["t"], event["dbm"]))
+            self.heard[event["link"]] = event["t"]
 
     def command(self, msg: dict) -> None:
         """A screen -> brain cmd. reset_alert and reset change things; the rest are accepted."""
@@ -126,20 +134,64 @@ class Brain:
 
     def _arm(self, t: float, on: bool) -> None:
         if on != self.armed:
-            self.armed, self.intruded = on, False
+            self.armed, self.intruded, self.appeared = on, False, None
             self._event(t, "armed" if on else "disarmed")
+            self._tamper(t)   # disarming clears every listed node; arming with one already silent raises it at once
+
+    def _tamper(self, t: float) -> None:
+        """Section 6, Tamper (issue #533), the rule in brain/alert.py: while armed, a node none of
+        whose links has had a reading for 3 s raises `tamper` once and is listed in state.tamper,
+        until all its links have had readings for 2 s without such a gap, or until disarm. Links
+        to another listed node don't count on the way back. It never looks at health or pred."""
+        if not self.armed:
+            for node in self.tamper:
+                self._event(t, "tamper_cleared", node=node)
+            self.tamper, self.node_back = [], {}
+            return
+        links_of = {}
+        for tx, rx, kind in fake.LINKS:
+            for node in (tx, rx):
+                links_of.setdefault(node, []).append(fake.link_id(tx, rx, kind))
+        quiet = lambda link: t - self.heard.get(link, 0.0) >= TAMPER_SILENT_S   # noqa: E731
+        for node, links in links_of.items():
+            if node not in self.tamper and all(quiet(k) for k in links):
+                self.tamper.append(node)
+                self.node_back.pop(node, None)
+                self._event(t, "tamper", node=node)
+        for node in list(self.tamper):
+            others = [k for k in links_of[node] if not any(k in links_of[n] for n in self.tamper if n != node)]
+            if any(quiet(k) for k in others or links_of[node]):
+                self.node_back.pop(node, None)
+            elif t - self.node_back.setdefault(node, t) >= TAMPER_CLEAR_S:
+                self.tamper.remove(node)
+                self.node_back.pop(node, None)
+                self._event(t, "tamper_cleared", node=node)
 
     def _intrusion(self, t: float, pred) -> None:
-        """Section 6: while armed, one intrusion each time a person appears (person holds the majority
-        of the last 10 decisions, after it didn't). Never while blind or with no prediction."""
+        """Section 6, Armed (wording in issue #584): a person appears when person holds the majority
+        of the last 10 decisions, after it didn't. Still there armed.hold_s later (nodes.json, 3 s):
+        one intrusion. Gone first: a passed_by instead. Never while blind or with no prediction, and
+        that time doesn't count as time spent there."""
         person = sum(k == "person" for k, _, _ in self.recent) > len(self.recent) / 2
         if not self.armed or pred is None:
             return
+        hold = round(LAYOUT.hold_s * 10)   # in decisions, 10 a second, as the real brain counts it
         if person and not self.intruded:
             self.intruded = True
-            self._event(t, "intrusion", zone=self.anchor[1] or None)
+            if hold <= 0:
+                self._event(t, "intrusion", zone=self.anchor[1] or None)
+            else:
+                self.appeared = (0, self.anchor[1] or None)
         elif not person:
-            self.intruded = False
+            if self.appeared:
+                self._event(t, "passed_by", zone=self.appeared[1])
+            self.intruded, self.appeared = False, None
+        elif self.appeared:
+            waited = self.appeared[0] + 1
+            self.appeared = (waited, self.appeared[1])
+            if waited >= hold:
+                self._event(t, "intrusion", zone=self.anchor[1] or self.appeared[1])
+                self.appeared = None
 
     def _ms(self, t: float) -> int:
         return self.start_ms + round(t * 1000)
@@ -257,6 +309,10 @@ class Brain:
         path = self.path
         dt = 0.0 if self.last_t is None else t - self.last_t
         self.last_t = t
+        todo = sorted(path.get("commands") or [], key=lambda c: c["t"])   # a path can press the screen's buttons itself
+        while self.commands_done < len(todo) and todo[self.commands_done]["t"] <= t:
+            self.commands_done += 1
+            self.command({"cmd": todo[self.commands_done - 1]["cmd"], "args": todo[self.commands_done - 1].get("args")})
         baseline, trained = t >= BASELINE_AT_S, t >= TRAINED_AT_S
         pos = fake.position(path.get("person") or [], t)
         if pos and fake.zone_of(*pos) == 0:
@@ -282,7 +338,7 @@ class Brain:
                   "reason": "rate" if stale else "jump" if blind else None}
 
         # how much of each link's drop the person explains, for "why"
-        share = {fake.link_id(*l): fake.drop(pos, nodes[l[0]], nodes[l[1]], fake.PERSON_DROP_DB, fake.PERSON_WIDTH_M)
+        share = {fake.link_id(*l): fake.person_drop(pos, nodes[l[0]], nodes[l[1]])
                  if pos else 0.0 for l in fake.LINKS}
         total = sum(share.values())
         for l in links:
@@ -323,7 +379,7 @@ class Brain:
 
         pred = None
         if trained and not blind and spot == "S-home":
-            probs = [0.03] * (len(STILL_ALERT_S) + 1)   # empty, then one per zone
+            probs = [round(0.12 / len(STILL_ALERT_S), 4)] * (len(STILL_ALERT_S) + 1)   # empty, then one per zone
             probs[zone] = 0.88
             pred = {"present": bool(pos), "kind": kind, "zone": zone, "zone_set": [zone] if pos else [],
                     "probs": probs, "motion": ("moving" if moving else "still") if pos else None,
@@ -345,6 +401,7 @@ class Brain:
                 "n_links": len(links) - len(blind)} if baseline else None
 
         self._intrusion(t, pred)
+        self._tamper(t)
         self._diff(t, {"present": bool(pos), "zone": zone, "alert": alert["state"], "cam": cam, "spot": spot,
                        "blind": set(blind), "objects": {tuple(o["xy_m"]): o["near"] for o in objects},
                        "baseline": baseline, "trained": trained}, pred is not None)
@@ -357,7 +414,8 @@ class Brain:
                           "ms_per_decision": None, "windows": 0, "train_sessions": [],
                           "training": self._lesson(t, cam)},
                 "board": {"cpu_temp_c": None, "cpu_mhz": None, "cpu_pct": None},
-                **({"armed": True} if self.armed else {})}   # section 5: missing means false
+                **({"armed": True} if self.armed else {}),   # section 5: missing means false
+                **({"tamper": list(self.tamper)} if self.tamper else {})}   # only while a node is listed
 
     def _lesson(self, t: float, cam: str):
         """model.training for a path with a scripted lesson (sim/lesson.py): null outside the lesson;
@@ -386,8 +444,10 @@ class Brain:
         self.events.append({"type": "event", "t": t, "id": f"e{self.n_events}", "kind": kind, "info": info})
         if kind == "reset":
             return   # no sentence of its own: the recap follows
-        if kind in ARMED_SENTENCES:
-            self.narration = {"text": ARMED_SENTENCES[kind].format(zone=info.get("zone", "")).replace(" in zone .", "."),
+        if kind in ARMED_SENTENCES or kind in TAMPER_KINDS:
+            text = (narrate.template(kind, info) if kind in TAMPER_KINDS
+                    else ARMED_SENTENCES[kind].format(zone=info.get("zone", "")).replace(" in zone .", "."))
+            self.narration = {"text": text,
                               "event_id": f"e{self.n_events}", "t": self._ms(t), "source": "template", "gen_ms": 0}
             self.demo.append({"kind": kind, "info": info, "t": self._ms(t)})
             return

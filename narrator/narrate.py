@@ -36,17 +36,20 @@ MAX_WORDS = 16
 EVENT_KINDS = ("enter", "exit", "zone_change", "checkin", "object_on", "object_off", "advice",
                "advice_result", "router_moved", "router_home", "recalibrating", "cam_off", "cam_on",
                "cam_stalled", "alert_on", "alert_off", "blind_on", "blind_off", "trained",
-               "baseline_done", "drift", "armed", "disarmed", "intrusion")
+               "baseline_done", "drift", "armed", "disarmed", "intrusion", "tamper", "tamper_cleared")
 # Which waiting event to keep, most important first. Kinds not listed rank below all of these.
-PRIORITY = ("intrusion", "alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
+PRIORITY = ("intrusion", "tamper", "alert_on", "checkin", "cam_off", "advice_result", "object_on", "blind_on", "enter",
             "recalibrating", "trained", "zone_change", "exit")
 NEVER = ("router_moved", "advice")   # the screen already says these itself
-# Zone id -> (name, still_alert_s), from radio/nodes.json (CONTRACTS.md section 3) when it can be read,
-# so a new layout's zones reach the sentences and the prompt. These are the contract's zones.
-CONTRACT_ZONES = {1: ("Bed", 60), 2: ("Chair", None), 3: ("Hall", None), 4: ("Bathroom", 10)}
-ZONES = dict(CONTRACT_ZONES)
+# Zone id -> (name, still_alert_s). Always read from radio/nodes.json (CONTRACTS.md section 3), at import
+# and again in main for --nodes, so the sentences, the alert time and the prompt follow the layout.
+# No zones are written here: if the file can't be read, sentences name no zone.
+ZONES: dict = {}
 NODES_JSON = Path(__file__).resolve().parent.parent / "radio" / "nodes.json"
 NODES = {"unoq": "receiver", "pi5": "router", "pi5b": "second Pi", "east": "east beacon", "west": "west beacon"}
+# Node id -> the device's name in radio/nodes.json ("East beacon"), and each hall beacon as "far beacon on path H".
+# Loaded with the zones. A node with no name there falls back to NODES above.
+DEVICES: dict = {}
 
 # Things the screen must never say. The camera is added once it is off.
 BANNED = re.compile(
@@ -99,8 +102,20 @@ def _link(link) -> str | None:
     return f"{NODES.get(m[1], m[1])} to {NODES.get(m[2], m[2])}" if m else None
 
 
+def _device(node) -> str | None:
+    """A device as a sentence says it: "the East beacon", "Pi B", "the far beacon on path H". None if unknown."""
+    name = DEVICES.get(node) or NODES.get(node)
+    if not name:
+        return None
+    return name if name.startswith("Pi ") else f"the {name}"
+
+
 def _dbm(v) -> int | None:
     return round(v) if isinstance(v, (int, float)) else None
+
+
+def _cap(text: str) -> str:
+    return text[:1].upper() + text[1:]
 
 
 def template(kind: str, info: dict) -> str | None:
@@ -110,6 +125,7 @@ def template(kind: str, info: dict) -> str | None:
     link = _link(info.get("link"))
     before, after = _dbm(info.get("before_dbm")), _dbm(info.get("after_dbm"))
     limit = info.get("limit_s") or ZONES.get(info.get("zone"), (None, None))[1]
+    device = _device(info.get("node"))
     if desk():   # the strip in front of the desk: "on the left", "stepped up", no rooms
         sentences = {
             "enter": f"Someone just stepped up {zone}." if zone else "Someone just stepped up to the desk.",
@@ -133,6 +149,9 @@ def template(kind: str, info: dict) -> str | None:
         "checkin": f"Check-in received from {zone}." if zone else "Check-in received on the router link.",
         "armed": "Armed: this space should be empty now.",
         "disarmed": "Disarmed: people are expected here again.",
+        # Tamper (section 6): what happened to the device, never why or who. The same words as the incident report.
+        "tamper": f"{_cap(device or 'a device')} went quiet while the space was armed.",
+        "tamper_cleared": f"{_cap(device or 'the quiet device')} is back.",
         "intrusion": f"Someone is here while armed, in {zone}." if zone else "Someone is here while armed.",
         "object_on": f"A new object{near or (' on the desk' if desk() else ' in the room')} is weakening the signal.",
         "object_off": f"The object{near} is gone.",
@@ -163,19 +182,42 @@ def template(kind: str, info: dict) -> str | None:
 # ---------------------------------------------------------------- the model
 
 def load_zones(path=NODES_JSON) -> dict:
-    """{zone id: (name, still_alert_s)} from nodes.json, or the contract's zones if it can't be read."""
+    """{zone id: (name, still_alert_s)} from nodes.json. {} if it can't be read: then no zone is named."""
     try:
         with open(path, encoding="utf-8") as f:
-            zones = {int(z["id"]): (str(z["name"]), z.get("still_alert_s")) for z in json.load(f)["zones"]}
-        return zones or dict(CONTRACT_ZONES)
+            return {int(z["id"]): (str(z["name"]), z.get("still_alert_s")) for z in json.load(f)["zones"]}
     except (OSError, ValueError, KeyError, TypeError) as e:
-        log(f"zones from {path} not readable ({e}); using the contract's")
-        return dict(CONTRACT_ZONES)
+        log(f"zones from {path} not readable ({e}); sentences will name no zone")
+        return {}
 
 
 def set_zones(zones: dict) -> None:
     ZONES.clear()
     ZONES.update(zones)
+
+
+def load_devices(path=NODES_JSON) -> dict:
+    """{node id: name} from nodes.json: each node that has a name, and each hall beacon as
+    "far beacon on path <its letter>". {} if the file can't be read."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+        names = {str(n["id"]): str(n["name"]) for n in doc.get("nodes") or [] if n.get("name")}
+        for b in (doc.get("hall") or {}).get("beacons") or []:
+            names[str(b["node"])] = f"far beacon on path {b['id']}"
+        return names
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        log(f"device names from {path} not readable ({e}); using the built-in ones")
+        return {}
+
+
+def set_devices(names: dict) -> None:
+    DEVICES.clear()
+    DEVICES.update(names)
+
+
+set_devices(load_devices())
+set_zones(load_zones())   # whoever imports this (the service, the recap, the rehearsal) gets the layout's zones
 
 
 def _join(words: list) -> str:
@@ -187,21 +229,25 @@ def system() -> str:
     where = (f"People stand in front of a desk, {_join([f'on the {n.lower()}' for _, (n, _) in sorted(ZONES.items())])}. "
              "Say on the left or on the right, never zone numbers. "
              if desk() else
-             f"The room has {count}: {_join([f'zone {z} ({name})' for z, (name, _) in sorted(ZONES.items())])}. ")
+             f"The room has {count}: {_join([f'zone {z} ({name})' for z, (name, _) in sorted(ZONES.items())])}. "
+             if ZONES else "")
     return ("You write captions for the screen of a Wi-Fi sensing demo. " + where +
             "Rewrite the facts as one short, friendly sentence of at most 12 words. "
             "Use only the facts given. Call a person someone. Say no movement when nobody moves. "
             "Reply with the sentence only.")
 
 
-def example_zone() -> int:
-    return 2 if 2 in ZONES else min(ZONES)
+def example_zone() -> int | None:
+    """The zone the prompt's example and the warm-up use: 2 if the layout has it, else its first. None with no zones."""
+    return (2 if 2 in ZONES else min(ZONES)) if ZONES else None
 
 
 def examples() -> tuple:
     z = example_zone()
-    name = ZONES[z][0]
-    first = (("enter", f"Someone just stepped up on the {name.lower()}.", f"Someone stepped up, on the {name.lower()} side.")
+    name = ZONES[z][0] if ZONES else ""
+    first = (("enter", "Someone just walked into the room.", "Someone just stepped into the room.")
+             if not ZONES else
+             ("enter", f"Someone just stepped up on the {name.lower()}.", f"Someone stepped up, on the {name.lower()} side.")
              if desk() else
              ("enter", f"Someone just walked into zone {z} ({name}).", f"Someone just stepped into zone {z}, by the {name.lower()}."))
     return (first,
@@ -507,6 +553,7 @@ def main(argv=None) -> int:
     p.add_argument("--nodes", default=str(NODES_JSON), help="radio/nodes.json, for the zones")
     args = p.parse_args(argv)
     set_zones(load_zones(args.nodes))
+    set_devices(load_devices(args.nodes))
     llm = LlamaServer(args.llm)
 
     if args.once:

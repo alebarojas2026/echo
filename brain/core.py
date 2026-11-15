@@ -24,6 +24,7 @@ from typing import Callable, Dict, List, Optional
 from advisor.advise import advise
 from brain import features as F
 from brain import layout
+from brain import settings as S
 from brain.alert import Armed, Tamper, Watch
 from brain.health import Health
 from brain.lesson import Lesson
@@ -44,9 +45,9 @@ ADVICE_MEDIAN_MS = 3_000 # before_dbm and after_dbm are medians over this long
 AFTER_START_MS = 2_000   # after_dbm starts this long after router_moved
 HOTSPOT_RECEIVERS = ("pi5b",)   # receivers with no cable (Pi B): their readings ride the sensing Wi-Fi
 SAME_OBJECT_M = 0.5      # an advice this close to the one showing is about the same object (the x-ray's match)
-ZONE_HOLD = 5            # decisions in a row (0.5 s) before enter, exit or zone_change is said
 TRAIN_PURPOSES = ("train", "object")
 EVENT_INFO = ("zone", "link", "node", "before_dbm", "after_dbm", "on", "session")   # contracts/schemas/event.json
+SILENT_MS = 3_000        # a baseline restarts only for a link with no reading for this long
 LABEL_MODES = ("person", "object", "off")
 CAM_STATES = ("on", "off", "stalled")
 
@@ -125,13 +126,17 @@ def now_ms() -> int:
 
 class Brain:
     def __init__(self, clock: Optional[Callable[[], int]] = None, to_bus=None, mode_file=None,
-                 spawn=None, board_stats=None, links=None, nodes=None, led=None, sessions_dir=None):
+                 spawn=None, board_stats=None, links=None, nodes=None, led=None, sessions_dir=None,
+                 settings: Optional[S.Settings] = None):
         """clock None = follow the feed (latest recv_t), for recorded files played fast.
         to_bus(msg) forwards a command to the bus.
         spawn(fit, done) runs fit() off the loop, then done(model) back on it.
         nodes is radio/nodes.json, already parsed (default: the repo's copy).
         led is the LED grid (brain/alert.py); None = no lights.
-        sessions_dir is data/sessions: baseline.json is written there and read back at start."""
+        sessions_dir is data/sessions: baseline.json is written there and read back at start.
+        settings: the people rules' numbers (brain/settings.py); None = its defaults, or the
+        file named in RADIO_SIGHT_SETTINGS."""
+        self.settings = settings or S.load()
         nodes = nodes or json.loads(NODES_JSON.read_text(encoding="utf-8"))
         # The layout is whatever radio/nodes.json says: links (in its order), zones, the router.
         links = tuple(links or [link["id"] for link in nodes["links"]])
@@ -145,9 +150,14 @@ class Brain:
         over_hotspot = [k for k in links if ends.get(k, _ends(k))[1] in HOTSPOT_RECEIVERS]
         self.health = Health.from_nodes(nodes, classifier_links=[k for k in links if k not in over_hotspot])
         self.xray = Xray.from_nodes(nodes)
-        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led)
-        self.armed = Armed()                  # after hours: a person appearing is an intrusion
-        self.tamper = Tamper.from_nodes(nodes)   # ... and a device going silent is tampering
+        self.watch = Watch({z["id"]: z.get("still_alert_s") for z in nodes["zones"]}, led, self.settings)
+        # after hours: a person who appears and is still there armed.hold_s later is an intrusion
+        self.armed = Armed(self.settings, S.hold_s(nodes))
+        self.tamper = Tamper.from_nodes(nodes, silent_ms=self.settings.tamper_silent_ms,
+                                        clear_ms=self.settings.tamper_clear_ms)   # ... and a device going silent is tampering
+        # The optional hall beacons (nodes.json "hall"): not core links, but tamper counts them.
+        self._hall_nodes = {b.get("node") for b in (nodes.get("hall") or {}).get("beacons") or []}
+        self._hall_seen: Dict[str, Dict[str, int]] = {}   # hall beacon -> {its link: recv_t of the last reading}
         self._heard = set()                   # links with at least one reading
         self._last_seen: Dict[str, int] = {}  # link -> recv_t of its last reading
         self._last_dbm: Dict[str, float] = {} # link -> the last dbm we sent (or its last reading)
@@ -220,6 +230,10 @@ class Brain:
         if kind == "label" and not _is_label(msg):
             return   # a zone or a count that isn't a number: the windows would choke on it
         self.feed_t = max(self.feed_t, int(t))
+        if kind == "rssi" and self._hall_nodes and isinstance(msg.get("link"), str):
+            tx = _ends(msg["link"])[0]
+            if tx in self._hall_nodes and msg["link"] not in self.links:
+                self._hall_seen.setdefault(tx, {})[msg["link"]] = int(t)
         if kind == "rssi":
             # state.src mirrors the radio feed. The camera and the bus's meta say "live"
             # even over a sim feed, and must not flip the screen's badge to LIVE.
@@ -304,6 +318,7 @@ class Brain:
                          "sessions": sorted(s["meta"]["session"] for s in sessions)}
         base, ver, place = dict(self.base), f"m{self.model_n + 1}", self.place_t
         history, links, zones = self._baselines(), self.links, self.zone_ids
+        motion_links = self.settings.motion_links
 
         def fit():   # may run on another thread: touches nothing of ours
             for s in sessions:   # read back from the bus's files; nothing is kept after the fit
@@ -311,7 +326,7 @@ class Brain:
                     s["messages"] = read_session(s["path"], s["meta"].get("recv_t"))
                 if not s.get("base"):
                     s["base"] = base_at(history, s["meta"].get("recv_t"))
-            return Model(base, ver=ver, links=links, zones=zones).fit(sessions)
+            return Model(base, ver=ver, links=links, zones=zones, motion_links=motion_links).fit(sessions)
 
         def done(model):   # back on the loop; model None = the fit failed
             self.training = None
@@ -430,6 +445,8 @@ class Brain:
         tmp = self.sessions_dir / "model.pkl.tmp"
         with open(tmp, "wb") as f:
             pickle.dump({"ver": self.model.ver, "base": self.model.base, "place_t": self.place_t,
+                         "train_sessions": self.model.train_sessions,
+                         "train_walkers": self.model.train_walkers,   # None = unknown
                          "model": self.model}, f)
         os.replace(tmp, self.sessions_dir / "model.pkl")   # never a half-written file
 
@@ -675,24 +692,32 @@ class Brain:
             return "the camera sees somebody"
         if self.label_mode != "off":
             return f"label mode is {self.label_mode}, not off"
-        quiet = [link for link in self.links if now - self._last_seen.get(link, -10**15) > LINK_FRESH_MS]
+        # Measured on the kit (#634): Bluetooth links give 7 to 13 readings a second, one of them 1.7,
+        # and unevenly. A link that slow goes a full second without a reading every few seconds, and
+        # reads "stale" by chance, so 1 s of silence or any not-ok health restarted the 20 s for ever.
+        # Every kind of baseline now waits only for a link silent for 3 s (the blind rule's and
+        # tamper's silence) or for health blind.
+        quiet = [link for link in self.links if now - self._last_seen.get(link, -10**15) > SILENT_MS]
         if quiet:
-            return "no readings in the last second from " + ", ".join(quiet)
-        if not self._health_ok or self.health.blind:
-            return "link health is not ok"
+            return f"no readings in the last {SILENT_MS // 1000} s from " + ", ".join(quiet)
+        if self.health.blind:
+            return "link health is blind"
         return None
 
     def _tick(self):
         now = self.now()
         if self.capture:
             wait = self._capture_wait(now)
-            if self.capture["asked"] is None:
+            if self.capture["asked"] is None and now > 0:
+                # On the feed clock time is 0 until the first reading. A state tick before it must
+                # not start the 120 s there, or the first reading (epoch ms) gives up at once (#598).
                 self.capture["asked"] = now
             if wait != self._wait_said:             # said once per reason, not on every message
                 self._wait_said = wait
                 log = logging.getLogger("brain")
                 log.warning("baseline is waiting: %s", wait) if wait else log.info("baseline: capturing 20 s")
-            if wait and self.capture["by_hand"] and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS:
+            if (wait and self.capture["by_hand"] and self.capture["asked"] is not None
+                    and now - self.capture["asked"] >= BASELINE_GIVE_UP_MS):
                 # Pressed by mistake in front of an audience, or the room never cleared: without
                 # this pred stays hidden for ever. The old baseline and the model are untouched.
                 logging.getLogger("brain").warning(
@@ -753,9 +778,11 @@ class Brain:
         intruder = self.armed.on_pred(pred)
         if intruder is not None:
             self.emit("intrusion", {"zone": intruder})
+        for zone in self.armed.pop_passed():   # appeared while armed and gone before the hold was over
+            self.emit("passed_by", {"zone": zone})
 
     def _announce(self, zone: int) -> None:
-        """enter, exit and zone_change, once the new zone has held for ZONE_HOLD decisions.
+        """enter, exit and zone_change, once the new zone has held for settings.zone_hold decisions.
 
         One flickering decision is not somebody walking in. Hidden spans (pred null) are skipped:
         whatever holds once pred is back gets announced then.
@@ -765,7 +792,7 @@ class Brain:
             return
         n = self._next_zone[1] + 1 if self._next_zone[0] == zone else 1
         self._next_zone = (zone, n)
-        if n < ZONE_HOLD:
+        if n < self.settings.zone_hold:
             return
         if self._said_zone == 0:
             self.emit("enter", {"zone": zone})
@@ -827,7 +854,7 @@ class Brain:
             {"xray": None, "objects": [], "events": []}
         for e in health["events"] + xray["events"]:
             self.emit(e["kind"], e["info"])
-        for kind, info in self.tamper.update(now, self.armed.on, self._last_seen):
+        for kind, info in self.tamper.update(now, self.armed.on, self._last_seen, self._hall_seen):
             self.emit(kind, info)   # judged whatever health says: blind is exactly when it matters
         self._watch_events()
         weights = self._why_weights()

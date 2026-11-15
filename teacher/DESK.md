@@ -7,6 +7,10 @@ torso, never feet, so there is no floor point and no corner clicking. The teache
 - One person, box centre clear of the split line: `present` true, `zone` 1 or 2, `foot_m` null,
   `motion` from how fast the box centre moves along the strip.
 - Nobody in view: `present` false, `zone` 0.
+- Someone in view but **standing back** (a box narrower than `near_width`): `present` false and
+  `clipped` true, with `persons_in_frame` 1. They are behind the line of the arm beacons, where no
+  link sees them, so the window is dropped. It is never `present` true: that would teach the radio
+  that links nobody is touching can mean a person.
 - `clipped` true (the window is left out of training) when the centre is inside the dead band
   around the split line, when the box is cut by the left or right edge of the frame, or when more
   than one person is in view. A box that runs off the top or bottom is normal here and is kept.
@@ -35,16 +39,36 @@ on the desk, none assumed:
 - `--keep-side-edge`: keep a box cut by a side edge. Only if the person cannot step far enough
   without touching the edge; their centre is then further out than the box centre says, never nearer.
 
+## How near is "in the strip": the two-step calibration
+
+The desk file is not ready for a lesson until it has `near_width`: how wide a person's box is, as
+a share of the frame width, when they stand in the strip. Without it the teacher labels nobody as
+present (it does not guess a distance) and the preflight says `NOT READY FOR A LESSON`.
+
+With the teacher app running and one person in view:
+
+```sh
+python -m teacher.calibrate --near --heartbeat <shared-directory>/heartbeat.json
+```
+
+1. The person stands at the desk edge, where a judge stands. Press Enter.
+2. The same person takes one step back. Press Enter.
+
+It reads the box width from the app's heartbeat (a number; no picture is read or kept), saves the
+halfway point as `near_width`, and refuses if the two widths are too alike to tell apart. Then copy
+the file to the app and restart it, as below. Redo it when the camera is moved or tilted.
+
 To tune on the board without a new file, set any of `TEACHER_DESK_SPLIT`, `TEACHER_DESK_DEAD_BAND`,
-`TEACHER_DESK_MIRROR` (1 or 0) or `TEACHER_DESK_SIDE_EDGE` (clipped or keep) for the app and restart it.
+`TEACHER_DESK_MIRROR` (1 or 0), `TEACHER_DESK_SIDE_EDGE` (clipped or keep) or `TEACHER_DESK_NEAR_WIDTH` for the app and restart it.
 
 ## Putting it on the board
 
-Only two files of the App Lab app changed (`python/labels.py` and `python/preflight.py`);
-`python/main.py` and `app.yaml` are as they were. `$TEACHER_APP` is the app from the board's `.env`.
+Four files of the App Lab app are ours to copy (`python/labels.py`, `python/preflight.py`,
+`python/heartbeat.py` and `python/main.py`); `app.yaml` is as it was. `$TEACHER_APP` is the app from the board's `.env`.
 
 ```sh
-cp teacher/applab/python/labels.py teacher/applab/python/preflight.py <the imported app>/python/
+cp teacher/applab/python/labels.py teacher/applab/python/preflight.py \
+   teacher/applab/python/heartbeat.py teacher/applab/python/main.py <the imported app>/python/
 cp teacher/calib.json <the imported app>/python/calib.json
 python -m teacher.preflight --calibration <the imported app>/python/calib.json \
   --mode-file <shared-directory>/label_mode --heartbeat <shared-directory>/heartbeat.json --box-size <WIDTHxHEIGHT>
@@ -55,7 +79,8 @@ To go back to the floor view, copy the clicked calibration back over `python/cal
 
 ## Check before a lesson
 
-Watch the labels on the bus while one person stands left, right, on the line and out of view. The
+Watch the labels on the bus while one person stands left, right, on the line, one step back and
+out of view. One step back must read `present` false and `clipped` true. The
 zone must read 1 on the person's own left; if it reads 2, the picture is not mirrored the way the
 file says: set `TEACHER_DESK_MIRROR=0` (or pass `--no-mirror`) and restart.
 

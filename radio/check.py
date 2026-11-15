@@ -23,16 +23,19 @@ from pathlib import Path
 from . import link_stats
 from .wifi_rssi import REPO, find_tool, iw_path, joined_elsewhere, load_env_file, settings
 from .nodes import LINKS, PIS
+from .report_hci import min_rate
 
 UNITS = ("radio-sight-bus", "radio-sight-wifi-rssi", "radio-sight-hci-scan")
 
 
 
 def gate_hz(link_id: str) -> float:
-    """The pass rate radio/GATE.md uses for a link: 20/s for Wi-Fi (Gate 1) and for a Pi's beacon,
-    7/s for the other beacons (Gate 2). Built from radio/nodes.json, so a new layout needs no edit."""
-    link = LINKS[link_id]
-    return 20.0 if link["kind"] == "wifi" or link["tx"] in PIS else 7.0
+    """The pass rate radio/GATE.md uses for a link: 20/s for Wi-Fi (Gate 1); for Bluetooth, Gate 2's
+    rate from what the beacon can give (radio.report_hci.min_rate: 12/s for a Pi's beacon, 7.5/s for
+    E and W). Built from radio/nodes.json, so a new layout needs no edit."""
+    if LINKS[link_id]["kind"] == "wifi":
+        return 20.0
+    return min_rate(link_id)
 
 
 def sh(cmd) -> tuple[int, str]:

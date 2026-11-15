@@ -25,8 +25,11 @@ create table if not exists seconds(
     t integer primary key, src text,
     present integer, kind text, zone integer, motion text, still_s real,
     health text, blind text not null, alert text, alert_zone integer, armed integer not null,
-    cam text, router text, links text not null, advice text, model text);
+    cam text, router text, links text not null, advice text, model text,
+    zone_set text, tamper text);
 """
+ADDED = ("zone_set", "tamper")   # columns newer than the first store files: added to an old file on open
+MAX_HISTORY_MS = 30 * 60_000
 
 
 def summary(state: dict) -> dict:
@@ -47,6 +50,8 @@ def summary(state: dict) -> dict:
         "links": json.dumps(links),
         "advice": json.dumps(state["advice"]) if state.get("advice") else None,
         "model": json.dumps(state["model"]) if state.get("model") else None,
+        "zone_set": json.dumps((pred and pred.get("zone_set")) or []),
+        "tamper": json.dumps(state.get("tamper") or []),
     }
 
 
@@ -60,6 +65,10 @@ class Store:
         if str(path) != ":memory:":
             self.db.execute("pragma journal_mode=wal")   # the agent reads while this writes
         self.db.executescript(SCHEMA)
+        have = {r["name"] for r in self.db.execute("pragma table_info(seconds)")}
+        for column in ADDED:
+            if column not in have:
+                self.db.execute(f"alter table seconds add column {column} text")
         self.lock, self._saved = threading.Lock(), 0
 
     def add(self, msg: dict) -> bool:
@@ -109,8 +118,29 @@ class Store:
             d = dict(r)
             for k in ("blind", "links", "advice", "model"):
                 d[k] = json.loads(d[k]) if d[k] else None
+            for k in ADDED:
+                d[k] = json.loads(d[k]) if d[k] else []
             out.append(d)
         return out
+
+    def history(self, from_t: int, to_t: int) -> dict:
+        """CONTRACTS.md section 10, GET /history: the saved seconds from from_t to to_t, exactly as
+        saved. A second with no row is missing, and present stays None where the brain did not know.
+        ValueError (with a plain message) for a stretch that is backwards or longer than 30 minutes."""
+        if to_t < from_t:
+            raise ValueError("to_t is before from_t")
+        if to_t - from_t > MAX_HISTORY_MS:
+            raise ValueError("at most 30 minutes of history per call; ask for a shorter stretch")
+        rows = []
+        for r in self.seconds(from_t):
+            if r["t"] > to_t:
+                break
+            known = r["present"] is not None
+            rows.append({"t": r["t"], "present": bool(r["present"]) if known else None,
+                         "zone": r["zone"] if known else None, "zone_set": r["zone_set"] if r["present"] else [],
+                         "motion": r["motion"] if r["present"] else None, "armed": bool(r["armed"]),
+                         "alert": r["alert"] == "check_on", "health": r["health"], "tamper": r["tamper"]})
+        return {"from_t": from_t, "to_t": to_t, "step_s": 1, "rows": rows}
 
     def latest(self):
         """The newest saved second, or None when the store is empty."""

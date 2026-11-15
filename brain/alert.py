@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from brain import layout
+from brain import settings as S
 
 CHECKIN_LINK = "pi5>unoq:wifi"
 CROSS_DB = 1.5          # a crossing is this far above or below the rolling median
@@ -40,9 +41,8 @@ SMOOTH_N = 3            # at least this many readings are averaged before compar
 SMOOTH_MS = 200         # ... and all of the last 0.2 s (still 3 readings at 10 or 15 a second, 10 at 50 a second)
 OTHER_LINK_DB = 3.0     # no other link may change by more than this
 OTHER_BIN_MS = 500      # ... comparing 0.5 s means
-SMOOTH_DECISIONS = 10   # zone and kind are the majority of this many decisions (1 s)
-SMOOTH_MAJORITY = 6     # ... and a value needs this many of them to take over
-MOVING_RUN = 5          # "moving" decisions in a row (0.5 s) before the still timer resets
+# The people rules' numbers (how many decisions make a majority, how many "moving" in a row reset
+# the still timer, how long a person must be there to be an intrusion) live in brain/settings.py.
 LED_RETRY_S = 30.0      # after a failed LED call, leave the grid alone this long
 NODES_JSON = layout.NODES_JSON   # radio/nodes.json
 
@@ -169,100 +169,127 @@ class CheckIn:
         return True
 
 
-TAMPER_SILENT_MS = 3000   # a node is silent when none of its links has had a reading for this long
-TAMPER_FRESH_MS = 1000    # a link is fresh when its last reading is at most this old
-TAMPER_CLEAR_MS = 2000    # ... and a node is back when its links have been fresh for this long
+TAMPER_SILENT_MS = S.DEFAULT.tamper_silent_ms   # a node is silent when none of its links has had a reading for this long
+TAMPER_CLEAR_MS = S.DEFAULT.tamper_clear_ms     # a node is back when every link of its has gone this long without such a gap
 
 
 class Tamper:
-    """Tamper while armed (contract proposal, issue #533): a device unplugged or silenced is noticed.
+    """Tamper while armed (section 6; proposed in issue #533): a device unplugged or silenced is noticed.
 
     A node is silent when every link it sends or receives on has had no reading for 3 s. While
-    armed, a node that goes silent raises `tamper` once and is listed until its links have been
-    fresh for 2 s, or until disarm. Arming with a node already silent raises it at once. It does
-    not look at health or pred: it works while the sensor is blind, which is the point.
+    armed, a node that goes silent raises `tamper` once and is listed until all its links have
+    had readings for 2 s without a 3 s gap, or until disarm. Arming with a node already silent
+    raises it at once. It does not look at health or pred: it works while the sensor is blind,
+    which is the point.
 
     Ordinary packet loss never gets there: at 10 readings a second and 60% loss, a link going
     3 s without a single reading would take 30 losses in a row, on every link of the node at once.
+    The way back uses the same 3 s, so the same loss can't keep a device listed once it is back.
 
-    One step past the proposal's wording, so two devices can come back one at a time: a node's
+    One step past the contract's wording, so two devices can come back one at a time: a node's
     links to another node that is itself still listed are left out when judging whether it is
     back (it can't be blamed for the other one's silence), as long as one of its links remains.
+
+    The optional hall beacons (nodes.json "hall") count as nodes too, each once it has been heard
+    since arming, on the links it has been heard on since then. One that was never switched on, or
+    was already off when the space was armed, is not a tamper.
     """
 
-    def __init__(self, links_of: Dict[str, List[str]]):
+    def __init__(self, links_of: Dict[str, List[str]], silent_ms: int = TAMPER_SILENT_MS,
+                 clear_ms: int = TAMPER_CLEAR_MS):
         """links_of: {node: [link ids it sends or receives on]}, from radio/nodes.json."""
         self.links_of = {node: list(links) for node, links in links_of.items() if links}
+        self.silent_ms, self.clear_ms = silent_ms, clear_ms
         self.silent: List[str] = []                     # listed nodes, in the order they went silent
-        self._fresh_since: Dict[str, int] = {}
+        self._back_since: Dict[str, int] = {}
         self._start: Optional[int] = None
+        self._core = dict(self.links_of)                # the layout's own nodes
+        self._armed_at: Optional[int] = None
 
     @classmethod
-    def from_nodes(cls, doc) -> "Tamper":
+    def from_nodes(cls, doc, **settings) -> "Tamper":
         links_of: Dict[str, List[str]] = {}
         for link in doc["links"]:
             for node in (link["tx"], link["rx"]):
                 links_of.setdefault(node, []).append(link["id"])
-        return cls(links_of)
+        return cls(links_of, **settings)
 
-    def update(self, now: int, armed: bool, last_seen: Dict[str, int]) -> List[tuple]:
-        """One tick. last_seen: {link: recv_t of its last reading}. Returns (kind, {"node": id}) events."""
-        events = []
+    def update(self, now: int, armed: bool, last_seen: Dict[str, int],
+               hall_seen: Optional[Dict[str, Dict[str, int]]] = None) -> List[tuple]:
+        """One tick. last_seen: {link: recv_t of its last reading}. hall_seen: the same per hall
+        beacon, {node: {link: recv_t}}. Returns (kind, {"node": id}) events."""
         if self._start is None:
             self._start = now
         if not armed:
             events = [("tamper_cleared", {"node": node}) for node in self.silent]
-            self.silent, self._fresh_since = [], {}
+            self.silent, self._back_since = [], {}
+            self.links_of, self._armed_at = dict(self._core), None   # hall beacons are counted afresh next time
             return events
+        if self._armed_at is None:
+            self._armed_at = now
+        for node, seen in (hall_seen or {}).items():
+            if node in self._core:
+                continue
+            known = self.links_of.get(node, [])
+            heard = [link for link, t in seen.items() if t >= self._armed_at and link not in known]   # since arming
+            if known or heard:
+                self.links_of[node] = known + heard
+                last_seen = {**last_seen, **{link: seen[link] for link in self.links_of[node]}}
 
-        if self._start is None:
-            self._start = now
+        def quiet(link):   # a link never heard counts from when this rule first ran, not from for ever
+            return now - last_seen.get(link, self._start) >= self.silent_ms
 
-        def age(link):   # a link never heard counts from when this rule first ran, not from for ever
-            return now - last_seen.get(link, self._start)
-
+        events = []
         for node, links in self.links_of.items():
-            if node not in self.silent:
-                if all(age(link) >= TAMPER_SILENT_MS for link in links):
-                    self.silent.append(node)
-                    self._fresh_since.pop(node, None)
-                    events.append(("tamper", {"node": node}))
+            if node not in self.silent and all(quiet(link) for link in links):
+                self.silent.append(node)
+                self._back_since.pop(node, None)
+                events.append(("tamper", {"node": node}))
         for node in list(self.silent):
             others = [k for k in self.links_of[node]
                       if not any(k in self.links_of[n] for n in self.silent if n != node)]
-            judged = others or self.links_of[node]
-            if all(age(link) <= TAMPER_FRESH_MS for link in judged):
-                since = self._fresh_since.setdefault(node, now)
-                if now - since >= TAMPER_CLEAR_MS:
-                    self.silent.remove(node)
-                    self._fresh_since.pop(node, None)
-                    events.append(("tamper_cleared", {"node": node}))
-            else:
-                self._fresh_since.pop(node, None)
+            if any(quiet(link) for link in others or self.links_of[node]):
+                self._back_since.pop(node, None)
+            elif now - self._back_since.setdefault(node, now) >= self.clear_ms:
+                self.silent.remove(node)
+                self._back_since.pop(node, None)
+                events.append(("tamper_cleared", {"node": node}))
         return events
 
 
 class Armed:
-    """Armed mode (section 6): the space should be empty, so a person appearing is an intrusion.
+    """Armed mode (section 6): the space should be empty, so a person who appears and stays is an intrusion.
 
-    One intrusion each time a person appears: present with kind person for the majority of
-    the last 10 decisions (6 of them), after that was not so. A person who stays raises
-    nothing more; they have to be gone for the majority of 10 decisions before the next one
-    counts. Objects never count. Decisions with pred null (blind, recalibrating) are not
-    decisions: the count starts again when pred is back, and whoever was already in stays "in".
+    A person appears when present with kind person for the majority of the last 10 decisions
+    (6 of them), after that was not so. Still there hold_s later (armed.hold_s in nodes.json,
+    3 s): one intrusion. Gone first (not present for the majority of the last 10): they walked
+    past, and their zone goes to pop_passed() for a passed_by event instead. One event per
+    appearance; a person who stays raises nothing more. Objects raise neither. Decisions with
+    pred null (blind, recalibrating) are not decisions: the counts and the wait pause, start
+    again when pred is back, and whoever was already in stays "in".
     """
 
-    def __init__(self):
+    def __init__(self, settings: Optional[S.Settings] = None, hold_s: float = S.HOLD_S):
+        self.settings = settings or S.DEFAULT
+        self.hold = round(hold_s * S.DECISIONS_PER_S)   # decisions somebody must stay; 0 = an intrusion at once
         self.on = False
-        self._recent: deque = deque(maxlen=SMOOTH_DECISIONS)   # per decision: (a person is present, zone)
+        self._recent: deque = deque(maxlen=self.settings.intrusion_decisions)   # per decision: (a person is present, zone)
         self._inside = False
+        self._waited: Optional[int] = None   # decisions since a person appeared, while the wait runs
+        self._zone = 0                       # where they appeared
+        self._passed: List[int] = []
+
+    def pop_passed(self) -> List[int]:
+        """Zones of people who appeared while armed and were gone before the wait was over."""
+        out, self._passed = self._passed, []
+        return out
 
     def arm(self, on: bool) -> bool:
         """Returns True when this changed anything. Arming starts from "nobody in": someone
         already standing there is an intrusion within the next 6 decisions."""
         if on == self.on:
             return False
-        self.on, self._inside = on, False
+        self.on, self._inside, self._waited = on, False, None
         self._recent.clear()
         return True
 
@@ -274,20 +301,31 @@ class Armed:
         person = bool(pred.get("present")) and pred.get("kind") == "person"
         self._recent.append((person, pred.get("zone") or 0))
         inside = sum(1 for p, _ in self._recent if p)
-        if not self._inside and inside >= SMOOTH_MAJORITY:
+        zones = [z for p, z in self._recent if p]
+        if not self._inside and inside >= self.settings.intrusion_majority:
             self._inside = True
             if self.on:
-                zones = [z for p, z in self._recent if p]
-                return max(set(zones), key=zones.count)
-        elif self._inside and len(self._recent) - inside >= SMOOTH_MAJORITY:
+                self._zone = max(set(zones), key=zones.count)
+                if self.hold <= 0:
+                    return self._zone
+                self._waited = 0
+        elif self._inside and len(self._recent) - inside >= self.settings.intrusion_majority:
             self._inside = False
+            if self._waited is not None:         # gone before the wait was over: they walked past
+                self._waited = None
+                self._passed.append(self._zone)
+        elif self._waited is not None:
+            self._waited += 1
+            if self._waited >= self.hold:
+                self._waited = None              # still there: this is the intrusion
+                return max(set(zones), key=zones.count) if zones else self._zone
         return None
 
 
-def _majority(values: list, current):
+def _majority(values: list, current, majority: int = S.DEFAULT.smooth_majority):
     """The value that holds a real majority of the decisions (6 of 10 once there are 10),
     otherwise the current one stays."""
-    need = min(SMOOTH_MAJORITY, len(values) // 2 + 1)
+    need = min(majority, len(values) // 2 + 1)
     for v in set(values):
         if values.count(v) >= need:
             return v
@@ -297,7 +335,9 @@ def _majority(values: list, current):
 class Watch:
     """The check-in and alert rules together, driving the LED grid."""
 
-    def __init__(self, limits: Optional[Dict[int, Optional[float]]] = None, led=None):
+    def __init__(self, limits: Optional[Dict[int, Optional[float]]] = None, led=None,
+                 settings: Optional[S.Settings] = None):
+        self.settings = settings or S.DEFAULT
         self.limits = zone_limits() if limits is None else limits
         self.led = led or NoLed()
         self.checkin_rule = CheckIn()
@@ -310,7 +350,10 @@ class Watch:
         self._events: List[tuple] = []
         self._person = False
         self._shown: Optional[int] = None   # what the LED grid shows now (-1 = "?")
-        self._recent: deque = deque(maxlen=SMOOTH_DECISIONS)   # (zone, kind) per decision
+        self._recent: deque = deque(maxlen=self.settings.smooth_decisions)   # (zone, kind) per decision
+        # How often a still timer that had started was put back to zero, and by what. For counting
+        # on a recording (brain/replay.py); nothing on the screen reads it.
+        self.resets = {"moving": 0, "zone": 0, "gone": 0}
         self._kind = "none"                                    # person | object | none, smoothed
         self._raw_zone = 0                                     # the zone of the last single decision
         self._moving_run = 0
@@ -337,16 +380,18 @@ class Watch:
             self._raw_zone = raw_zone
             self.checkin_rule.zone_changed(t)
         self._recent.append((raw_zone, pred.get("kind") or "none"))
-        zone = _majority([z for z, _ in self._recent], self.zone)
-        self._kind = _majority([k for _, k in self._recent], self._kind)
+        zone = _majority([z for z, _ in self._recent], self.zone, self.settings.smooth_majority)
+        self._kind = _majority([k for _, k in self._recent], self._kind, self.settings.smooth_majority)
         self._person = self._kind == "person"
         moving = raw_person and pred.get("motion") == "moving"
         self._moving_run = self._moving_run + 1 if moving else 0
         if zone != self.zone:                      # a change that held for most of the last second
+            self._reset_timer("zone" if zone else "gone")
             self.zone = zone
-            self.still_ms = 0
-        elif not self._person or self._moving_run >= MOVING_RUN:
-            self.still_ms = 0                      # nobody, or real walking
+        elif not self._person:
+            self._reset_timer("gone")              # nobody
+        elif self._moving_run >= self.settings.moving_run:
+            self._reset_timer("moving")            # real walking
         else:
             self.still_ms += dt                    # still, give or take a blip
         limit = self.limits.get(zone) if self._person else None
@@ -354,6 +399,11 @@ class Watch:
             self.alerting, self.alert_zone = True, zone
             self._events.append(("alert_on", {"zone": zone}))
             self.led.alert(True)
+
+    def _reset_timer(self, why: str) -> None:
+        if self.still_ms > 0:
+            self.resets[why] += 1
+        self.still_ms = 0
 
     def _show(self, n: int) -> None:
         if n != self._shown:

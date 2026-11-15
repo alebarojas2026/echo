@@ -9,10 +9,27 @@ const restore = ([z, c]) => {
   useZones({ zones: Object.entries(z).map(([id, name]) => ({ id: Number(id), name, corner: c[id] })) })
 }
 
-test("main's nodes.json gives the contract's four zones in floor order", () => {
+// What a zone's corner or side reads as, written out here so the test doesn't borrow the page's own table.
+const WHERE = { NW: 'north-west', NE: 'north-east', SW: 'south-west', SE: 'south-east', W: 'west', E: 'east' }
+
+test("the repo's nodes.json: every zone in the file is listed, with the file's name and place", () => {
   const before = saved()
   const nodes = JSON.parse(readFileSync(new URL('../../../radio/nodes.json', import.meta.url), 'utf8'))
+  assert.ok(nodes.zones.length >= 2)
   assert.equal(useZones(nodes), true)
+  const want = nodes.zones.map((z) => ({ id: z.id, name: z.name, hint: `Zone ${z.id}, ${WHERE[z.corner ?? z.side]}` }))
+  const byId = (a, b) => a.id - b.id
+  assert.deepEqual([...zoneList()].sort(byId), want.sort(byId))
+  assert.ok(zoneList().every((z) => !z.hint.includes('undefined')))
+  const strip = nodes.zones.every((z) => z.side === 'W' || z.side === 'E')
+  assert.deepEqual(compass(), strip ? ['West', 'East'] : ['South: the router', 'North is up'])
+  restore(before)
+})
+
+test('the square: four zones with a corner, in floor order', () => {
+  const before = saved()
+  useZones({ zones: [{ id: 4, corner: 'SE', name: 'Bathroom' }, { id: 3, corner: 'SW', name: 'Hall' },
+    { id: 1, corner: 'NW', name: 'Bed' }, { id: 2, corner: 'NE', name: 'Chair' }] })
   assert.deepEqual(zoneList(), [
     { id: 1, name: 'Bed', hint: 'Zone 1, north-west' }, { id: 2, name: 'Chair', hint: 'Zone 2, north-east' },
     { id: 3, name: 'Hall', hint: 'Zone 3, south-west' }, { id: 4, name: 'Bathroom', hint: 'Zone 4, south-east' }])

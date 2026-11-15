@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/report.json",
+  "$comment": "Section 10: the 200 answer of GET /report. Not a bus message: no envelope. armed_to_t is null while still armed. passed_by is null unless the brain has a passed-by rule.",
+  "type": "object",
+  "properties": {
+    "armed_from_t": {"type": "integer", "minimum": 0},
+    "armed_to_t": {"type": ["integer", "null"], "minimum": 0},
+    "intrusions": {"type": "array", "items": {
+      "$comment": "A zone, or the hall link it was seen on, as in the intrusion event.",
+      "type": "object",
+      "properties": {"t": {"type": "integer", "minimum": 0}, "zone": {"type": "integer", "minimum": 1, "maximum": 2}, "link": {"$ref": "common.json#/$defs/hall_link"}},
+      "required": ["t"], "additionalProperties": false,
+      "oneOf": [{"required": ["zone"]}, {"required": ["link"]}]}},
+    "present_s": {"type": "number", "minimum": 0},
+    "passed_by": {"type": ["integer", "null"], "minimum": 0},
+    "tamper": {"type": "array", "items": {
+      "type": "object",
+      "properties": {"t": {"type": "integer", "minimum": 0}, "node": {"$ref": "common.json#/$defs/any_node"}},
+      "required": ["t", "node"], "additionalProperties": false}},
+    "blind_s": {"type": "number", "minimum": 0},
+    "text": {"type": "string", "minLength": 1},
+    "rows": {"type": "integer", "minimum": 0},
+    "ms": {"type": "integer", "minimum": 0}
+  },
+  "required": ["armed_from_t", "armed_to_t", "intrusions", "present_s", "passed_by", "tamper", "blind_s", "text", "rows", "ms"],
+  "additionalProperties": false
+}

@@ -1,0 +1,7 @@
+{
+  "name": "passed_by",
+  "about": "Armed, and someone only walks through: nobody is here, the path arms at 3 s, and at 10 s someone crosses the area in 1.5 s without stopping. They are gone before armed.hold_s (3 s) is over: a passed_by event, no intrusion. Disarmed at 21 s.",
+  "duration_s": 24,
+  "person": [{"t": 0, "x": null}, {"t": 10, "zone": "tour1", "edge": "west"}, {"t": 11.5, "zone": "tour2", "edge": "east"}, {"t": 11.6, "x": null}],
+  "commands": [{"t": 3, "cmd": "arm", "args": {"on": true}}, {"t": 21, "cmd": "arm", "args": {"on": false}}]
+}
