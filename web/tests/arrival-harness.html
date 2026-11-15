@@ -7,7 +7,11 @@ import { mountRoom } from '../src/room'
 import { mountHud } from '../src/hud'
 import { mockState } from '../src/room/mock'
 import { loadLayout } from '../src/room/layout'
-await loadLayout(new URLSearchParams(location.search).get('layout') === 'desk' ? '/tests/fixtures/desk-layout.json' : '/nodes.json')
+if (new URLSearchParams(location.search).get('layout') === 'desk') {
+  const fetchPage = window.fetch.bind(window)
+  window.fetch = (input, init) => fetchPage(input === '/nodes.json' ? '/tests/fixtures/desk-layout.json' : input, init)
+}
+await loadLayout()
 let state = { ...mockState('empty', 0, 0), armed: false }
 let stale = false
 const listeners = new Set(), events = new Set()

@@ -26,6 +26,7 @@ for (const [width,height] of [[1920,1080],[1440,900]]) test(`five desk models re
   await page.evaluate(() => window.arrival.update('still'))
   await page.clock.runFor(6000)
   expect((await models()).every(o => o.visible)).toBe(true)
+  await expect(page.getByTestId('judge-headline')).toHaveText('Still on the right')
   await expect(page.locator('#room')).toHaveAttribute('data-devices', desk.nodes.map(n => n.id).join(','))
   const top = await page.evaluate(() => {
     const device = window.room.stage.group.children.find(o => o.name === 'device-pi5')
