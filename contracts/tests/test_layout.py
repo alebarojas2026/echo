@@ -99,10 +99,13 @@ def test_the_schemas_hold_every_layout_file(name):
     """The schemas list the union of the layout files, so a message of any of them passes the schema;
     what belongs to one layout (probs, near) is checked against that layout in check.py."""
     doc = LAYOUTS[name]
-    assert {n["id"] for n in doc["nodes"]} <= set(DEFS["node"]["enum"])
-    assert {link["id"] for link in doc["links"]} <= set(DEFS["link"]["enum"])
+    # the optional laptops and their lines have their own names: only rssi and a row of state.links carry them
+    laptops, laptop_links = set(DEFS["laptop_node"]["enum"]), set(DEFS["laptop_link"]["enum"])
+    assert {n["id"] for n in doc["nodes"]} <= set(DEFS["node"]["enum"]) | laptops
+    assert {link["id"] for link in doc["links"]} <= set(DEFS["link"]["enum"]) | laptop_links
+    assert {link["id"] for link in doc["links"] if link.get("optional")} ==         {link["id"] for link in doc["links"]} & laptop_links
     assert {s["id"] for s in doc["router_spots"]} <= set(DEFS["router_spot"]["enum"])
-    assert {n["id"] for n in doc["nodes"] if "receiver" in n["roles"]} <= set(DEFS["receiver"]["enum"])
+    assert {n["id"] for n in doc["nodes"] if "receiver" in n["roles"]} <= set(DEFS["receiver"]["enum"]) | laptops
     zones = [z["id"] for z in doc["zones"]]
     assert zones == list(range(1, len(zones) + 1)) and len(zones) <= DEFS["zone"]["maximum"]
     probs = SCHEMAS["state"]["properties"]["pred"]["properties"]["probs"]
