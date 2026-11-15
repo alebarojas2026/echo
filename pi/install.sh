@@ -19,9 +19,25 @@
 #   - waits for the node's first status line and ends with `python3 -m pi.check --node pi5b`,
 #     whose last line is "all ok" or how many checks failed (and the exit code says the same).
 #
+# What the node does. Roles follow from radio/nodes.json's Bluetooth links unless set here; each
+# option writes RADIO_ROLE or ADV_MODE into .env, replacing what was there, and restarts the node:
+#   --beacon-only          advertise only: no scan, nothing sent, no network needed (Pi B)
+#   --listen-only          scan and send, without this Pi's own beacon (Pi A)
+#   --role auto|both|beacon-only|listen-only    (auto removes RADIO_ROLE: back to the links)
+#   --adv auto|connectable|scannable|non-connectable   one advertising type only (auto removes ADV_MODE)
+#
+# Pi B's Wi-Fi off for a while, so Bluetooth has the antenna it shares with Wi-Fi to itself.
+# Nothing is saved: no firewall, rfkill or NetworkManager setting changes, and a reboot brings it back:
+#   --wifi-off MINUTES     in 5 s: disconnect wlan0 and take it down; after MINUTES (1-30) it comes
+#                          up and rejoins the hotspot by itself (unit radio-sight-wifi-back). The ssh
+#                          session over Wi-Fi freezes when it goes: close it and wait.
+#   --wifi-on              now: cancel both timers, bring wlan0 up and rejoin (from a keyboard,
+#                          or within the 5 s)
+# These two do only that and nothing else of the install.
+#
 # Settings, all optional: VENV (/opt/rs/venv), PYTHON3 (python3, what the venv is
 # made from), WIFI_IFACE (wlan0), NMCLI (nmcli), IP (ip), WIFI_JOIN (radio/wifi_join.sh),
-# CHECK_WAIT_S (12, Pi B only), and
+# CHECK_WAIT_S (12, Pi B only), SYSTEMD_RUN (systemd-run), JOURNALCTL (journalctl), and
 # deploy.sh's own UNIT_DIR, SYSTEMCTL and SUDO.
 set -euo pipefail
 
@@ -31,14 +47,35 @@ ENV_FILE="$REPO_DIR/.env"
 NMCLI="${NMCLI:-nmcli}"
 WIFI_IFACE="${WIFI_IFACE:-wlan0}"
 
+IP="${IP:-ip}"
+SYSTEMCTL_BIN="${SYSTEMCTL:-systemctl}"
+SYSTEMD_RUN="${SYSTEMD_RUN:-systemd-run}"
+USAGE="usage: sudo bash pi/install.sh [--node pi5|pi5b] [--beacon-only | --listen-only | --role R] [--adv A]
+       sudo bash pi/install.sh --node pi5b --wifi-off MINUTES | --wifi-on"
+
 NODE=pi5
+ROLE_SET="" ADV_SET="" WIFI="" WIFI_MIN=""
 while [ $# -gt 0 ]; do
     case $1 in
         --node) NODE=${2:-}; shift 2 || { echo "install: --node needs pi5 or pi5b" >&2; exit 2; } ;;
         --node=*) NODE=${1#--node=}; shift ;;
-        *) echo "usage: sudo bash pi/install.sh [--node pi5|pi5b]" >&2; exit 2 ;;
+        --beacon-only) ROLE_SET=beacon-only; shift ;;
+        --listen-only) ROLE_SET=listen-only; shift ;;
+        --role) ROLE_SET=${2:-}; shift 2 || { echo "install: --role needs a value" >&2; exit 2; } ;;
+        --adv) ADV_SET=${2:-}; shift 2 || { echo "install: --adv needs a value" >&2; exit 2; } ;;
+        --wifi-off) WIFI=off; WIFI_MIN=${2:-}; shift 2 || { echo "install: --wifi-off needs minutes" >&2; exit 2; } ;;
+        --wifi-on) WIFI=on; shift ;;
+        *) echo "$USAGE" >&2; exit 2 ;;
     esac
 done
+case $ROLE_SET in
+    ""|auto|both|beacon-only|listen-only) ;;
+    *) echo "install: --role is auto, both, beacon-only or listen-only, not '$ROLE_SET'" >&2; exit 2 ;;
+esac
+case $ADV_SET in
+    ""|auto|connectable|scannable|non-connectable) ;;
+    *) echo "install: --adv is auto, connectable, scannable or non-connectable, not '$ADV_SET'" >&2; exit 2 ;;
+esac
 case $NODE in
     pi5) ROLE=pi ;;
     pi5b) ROLE=pib ;;
@@ -63,6 +100,55 @@ env_default() {
     echo "install: .env: $key=$value"
 }
 
+# KEY=VALUE into .env, replacing KEY's line if it has one; with no VALUE, KEY's line is only removed.
+env_set() {
+    local key=$1 value=${2:-}
+    if [ -f "$ENV_FILE" ]; then
+        { grep -Ev "^[[:space:]]*(export[[:space:]]+)?$key=" "$ENV_FILE" || true; } > "$ENV_FILE.tmp"
+        mv "$ENV_FILE.tmp" "$ENV_FILE"
+    fi
+    if [ -n "$value" ]; then
+        printf "%s='%s'\n" "$key" "$value" >> "$ENV_FILE"
+        echo "install: .env: $key=$value"
+    else
+        echo "install: .env: no $key line (the node's default)"
+    fi
+}
+
+# Pi B's Wi-Fi off for a while, or back on now. Both steps run as transient systemd units, so they
+# carry on after the ssh session that started them drops with the Wi-Fi.
+if [ -n "$WIFI" ]; then
+    if [ "$NODE" != pi5b ]; then
+        echo "install: --wifi-off and --wifi-on are for Pi B (--node pi5b): Pi A's Wi-Fi is the hotspot" >&2
+        exit 2
+    fi
+    if [ -n "$ROLE_SET$ADV_SET" ]; then
+        echo "install: --wifi-off and --wifi-on run on their own: set the role in a run before" >&2
+        exit 2
+    fi
+    $SYSTEMCTL_BIN stop radio-sight-wifi-off.timer radio-sight-wifi-back.timer 2>/dev/null || true
+    if [ "$WIFI" = on ]; then
+        "$IP" link set "$WIFI_IFACE" up
+        "$NMCLI" device connect "$WIFI_IFACE"
+        echo "install: $WIFI_IFACE is up and rejoining Pi A's hotspot"
+        exit 0
+    fi
+    case $WIFI_MIN in
+        [1-9]|[12][0-9]|30) ;;
+        *) echo "install: --wifi-off takes 1 to 30 minutes, not '$WIFI_MIN'" >&2; exit 2 ;;
+    esac
+    $SYSTEMD_RUN --collect --unit radio-sight-wifi-back --on-active="${WIFI_MIN}min" \
+        --timer-property=AccuracySec=1s /bin/sh -c "$IP link set $WIFI_IFACE up; $NMCLI device connect $WIFI_IFACE"
+    $SYSTEMD_RUN --collect --unit radio-sight-wifi-off --on-active=5s \
+        --timer-property=AccuracySec=1s /bin/sh -c "$NMCLI device disconnect $WIFI_IFACE; $IP link set $WIFI_IFACE down"
+    echo "install: $WIFI_IFACE goes off in 5 s and comes back by itself in $WIFI_MIN min (and at any reboot)"
+    echo "install: this ssh session will freeze: close it, and ssh in again once Pi B is back on the hotspot"
+    exit 0
+fi
+
+if [ -n "$ROLE_SET" ]; then env_set RADIO_ROLE "${ROLE_SET#auto}"; fi
+if [ -n "$ADV_SET" ]; then env_set ADV_MODE "${ADV_SET#auto}"; fi
+
 if [ "$NODE" = pi5b ]; then
     env_default RADIO_NODE pi5b
     env_default WIFI_LINK 'pi5>pi5b:wifi'
@@ -82,9 +168,15 @@ fi
 
 ROLE=$ROLE PYTHON="$VENV/bin/python" "$REPO_DIR/board/deploy.sh" --install
 
+# deploy.sh restarts a unit only when its code changed; a new role or advert is only in .env.
+if [ -n "$ROLE_SET$ADV_SET" ]; then
+    $SYSTEMCTL_BIN restart radio-sight-radio-node.service
+    echo "install: restarted radio-sight-radio-node with the new .env"
+fi
+
 [ "$NODE" = pi5b ] || exit 0
 
-addr=$("${IP:-ip}" -4 -o addr show dev "$WIFI_IFACE" 2>/dev/null || true)
+addr=$("$IP" -4 -o addr show dev "$WIFI_IFACE" 2>/dev/null || true)
 if grep -q "inet 10\.42\.0\." <<< "$addr" && ! grep -q "inet 10\.42\.0\.1/" <<< "$addr"; then
     echo "install: $WIFI_IFACE is already on Pi A's hotspot"
 else
@@ -94,4 +186,10 @@ fi
 echo "install: waiting ${CHECK_WAIT_S:-12} s for the node's first status line, then checking"
 sleep "${CHECK_WAIT_S:-12}"
 cd "$REPO_DIR"
+if grep -Eq "^[[:space:]]*(export[[:space:]]+)?RADIO_ROLE=.?beacon-only" "$ENV_FILE" 2>/dev/null; then
+    # A beacon-only Pi B hears and sends nothing, so pi.check's radio line doesn't fit it: show the node's own.
+    echo "install: beacon-only: Pi B sends no readings (read its beacon's rate on the board and Pi A); the node says:"
+    ${JOURNALCTL:-journalctl} -u radio-sight-radio-node -n 3 -o cat --no-pager || true
+    exit 0
+fi
 "${PYTHON3:-python3}" -m pi.check --node pi5b
