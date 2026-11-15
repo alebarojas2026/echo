@@ -4,3 +4,6 @@
 {"v":2,"type":"event","t":1763149512200,"seq":123,"src":"live","id":"e126","kind":"intrusion","info":{"zone":1}}
 {"v":2,"type":"event","t":1763149512200,"seq":124,"src":"live","id":"e127","kind":"intrusion","info":{"link":"j>pi5:ble"}}
 {"v":2,"type":"event","t":1763149512200,"seq":125,"src":"live","id":"e128","kind":"disarmed","info":{}}
+{"v":2,"type":"event","t":1763149512200,"src":"live","seq":126,"id":"e129","kind":"tamper","info":{"node":"east"}}
+{"v":2,"type":"event","t":1763149512200,"src":"live","seq":127,"id":"e130","kind":"tamper","info":{"node":"h"}}
+{"v":2,"type":"event","t":1763149512200,"src":"live","seq":128,"id":"e131","kind":"tamper_cleared","info":{"node":"east"}}
