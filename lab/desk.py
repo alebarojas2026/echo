@@ -217,7 +217,8 @@ SCENE = {
     "train_still_s": 5.0,
     "train_empty_s": 12.0,  # tonight's empty-strip recording
     "empty_between": False, # the empty recording is split: a third of it after each walker
-    "train_back": True,     # tonight's walkers also stand 40 cm back from the desk and wander the strip's aisle side
+    "train_back": True,     # tonight's walkers also stand 40 cm back from the desk and wander the strip's aisle
+                            # side. False: they are only ever recorded on the desk side of the arm line.
     "baseline_s": 20,       # the desk baseline's length (20 = the contract's)
     "place_db": 3.0,        # how far each link's level moves when the kit is set down at the judging desk
     "loss": 0.1,            # mean share of readings lost at the judging desk
@@ -233,6 +234,7 @@ def build(seed: int, env: rf.Env, scene: dict = None):
     S = Scene(rng, env)
     tip_y = DESK_EDGE_Y - p["reach_m"]
     walkers = [rf.Person.draw(rng) for _ in range(3)]
+    front_y = float(np.clip(tip_y + 0.05, 0.2, 0.4))    # just on the desk side of the arm line
     aisle_x = lambda: float(rng.choice([-1.2, 2.8]))   # noqa: E731
 
     # ---- A: tonight, quiet room, camera on
@@ -247,13 +249,13 @@ def build(seed: int, env: rf.Env, scene: dict = None):
         S.idle(1.0)
 
         def tour(sc):
-            spots = [(0.4, 0.35), (1.2, 0.35), (0.8, 0.35), (rng.uniform(0.3, 1.3), 0.15 if p["train_back"] else 0.4),
+            spots = [(0.4, 0.35), (1.2, 0.35), (0.8, 0.35), (rng.uniform(0.3, 1.3), 0.15 if p["train_back"] else max(0.4, front_y)),
                      (rng.uniform(0.2, 0.6), 0.45), (rng.uniform(1.0, 1.4), 0.45)]
             for i in rng.permutation(len(spots)):
                 sc.walk_to(spots[i][0] + rng.uniform(-0.1, 0.1), spots[i][1] + rng.uniform(-0.06, 0.06))
                 sc.stand(p["train_still_s"] * rng.uniform(0.8, 1.2))
             for _ in range(6):
-                sc.walk_to(rng.uniform(0.1, 1.5), rng.uniform(0.08 if p["train_back"] else 0.3, 0.5))
+                sc.walk_to(rng.uniform(0.1, 1.5), rng.uniform(0.08 if p["train_back"] else front_y, 0.5))
                 sc.stand(rng.uniform(0.0, 1.2))
             sc.walk_to(rng.uniform(0.3, 1.3), -0.5)      # steps back out of the strip
             sc.stand(3.0)

@@ -20,13 +20,20 @@ STILL_TODAY = "mode=reset run_n=5 source=forest"
 
 
 def load(*names):
-    rows = []
+    """Rows of the named files. A later file's row replaces an earlier one for the same tag, seed and rate."""
+    rows, plain = {}, []
     for name in names:
         p = OUT / name
         if p.exists():
             with p.open(encoding="utf-8") as f:
-                rows += [json.loads(line) for line in f if line.strip()]
-    return rows
+                for line in f:
+                    if line.strip():
+                        r = json.loads(line)
+                        if "tag" in r:
+                            rows[(r["tag"], r["seed"], r["rate"])] = r
+                        else:
+                            plain.append(r)
+    return list(rows.values()) + plain
 
 
 def groups(rows):
@@ -142,7 +149,9 @@ def charts(rows, hall_rows, folder):
         ax.set_ylabel(ylabel)
         if ylim:
             ax.set_ylim(*ylim)
-        ax.legend(frameon=False, fontsize=8)
+        else:
+            ax.set_ylim(bottom=0)
+        ax.legend(frameon=False, fontsize=8, loc="upper left", bbox_to_anchor=(1.0, 1.0))
 
     def save(fig, name):
         fig.suptitle("SIMULATED: ranks settings, does not measure them", x=0.01, ha="left", fontsize=9, color="#b91c1c")
@@ -157,12 +166,12 @@ def charts(rows, hall_rows, folder):
     waits = [("today: fires at once", TODAY), ("wait 1 s", "1.0/10/6"), ("wait 2 s", "2.0/10/6"),
              ("wait 3 s", "3.0/10/6"), ("wait 4 s", "4.0/10/6"), ("8 of 10, wait 2 s", "2.0/10/8"),
              ("16 of 20, wait 2 s", "2.0/20/16")]
-    fig, ax = plt.subplots(2, 2, figsize=(11, 7.6))
+    fig, ax = plt.subplots(2, 2, figsize=(14, 7.6), sharey="row")
     for col, (plan, name) in enumerate((("A ref", "tonight's training plan"), ("B ref", "better training"))):
         panel(ax[0][col], [(lb, plan, arm(k, "false_per_min")) for lb, k in waits],
               f"False intrusions, {name}", "per minute of empty, armed strip")
         panel(ax[1][col], [(lb, plan, arm(k, "intruder")) for lb, k in waits],
-              f"Someone who steps in and stays 5-8 s is reported, {name}", "share of sessions", (0, 1.02))
+              f"A person who steps in for 5-8 s is reported, {name}", "share of sessions", (0, 1.02))
     save(fig, "desk-twin-armed.png")
 
     sv = [("today: reset after 0.5 s moving", STILL_TODAY), ("reset after 1 s", "mode=reset run_n=10 source=forest"),
@@ -171,14 +180,15 @@ def charts(rows, hall_rows, folder):
           ("zone's own links, 3 dB", "mode=reset run_n=5 source=zone std_db=3.0"),
           ("zone's own links, 2 dB", "mode=reset run_n=5 source=zone std_db=2.0"),
           ("own links 3 dB + pause", "mode=pause pause_reset_n=20 run_n=5 source=zone std_db=3.0")]
-    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
+    fig, ax = plt.subplots(1, 2, figsize=(15, 4.2))
     panel(ax[0], [(lb, "B ref", still(k, "hit")) for lb, k in sv], "No-movement alert fires on a 15 s stand",
           "share of sessions", (0, 1.02))
     panel(ax[1], [(lb, "B ref", still(k, "pacer")) for lb, k in sv], "... and on someone pacing (should be 0)",
           "share of sessions", (0, 1.02))
     save(fig, "desk-twin-still.png")
 
-    fig, ax = plt.subplots(2, 3, figsize=(14, 7.6))
+    fig, ax = plt.subplots(3, 2, figsize=(15, 11))
+    ax = [[ax[0][0], ax[0][1], ax[1][0]], [ax[1][1], ax[2][0], ax[2][1]]]
     w2 = "2.0/10/6"
     panel(ax[0][0], [("twelve links", "B ref", arm(w2, "false_per_min")), ("the six on main", "B links six", arm(w2, "false_per_min")),
                      ("four strip-crossing", "B links cross", arm(w2, "false_per_min")),
@@ -206,7 +216,7 @@ def charts(rows, hall_rows, folder):
 
     fv = [("today: at once", "1/3.0"), ("after 0.5 s", "5/3.0"), ("after 1 s", "10/3.0"), ("after 1.5 s", "15/3.0"),
           ("after 2 s", "20/3.0")]
-    fig, ax = plt.subplots(1, 3, figsize=(14, 4.2))
+    fig, ax = plt.subplots(1, 3, figsize=(18, 4.2))
     panel(ax[0], [(lb, "B ref", found(k, "false_shown_per_min")) for lb, k in fv],
           '"Found you." shown with nobody at the desk', "per minute of empty strip")
     panel(ax[1], [(lb, "B ref", found(k, "found_s")) for lb, k in fv],
@@ -225,7 +235,7 @@ def charts(rows, hall_rows, folder):
                 H[r["people"]].append(r)
         ns = sorted(H)
         fig, ax = plt.subplots(1, 3, figsize=(14, 4.2))
-        for k, (rule_, label) in enumerate((("own", "quiet level = the link's own last 5 min (PR #389)"),
+        for k, (rule_, label) in enumerate((("own", "quiet level: the link's own last 5 min (#389)"),
                                             ("empty", "quiet level kept from the empty hall"),
                                             ("honest", 'empty-hall level + "path busy" when it is'))):
             a = ax[k]
@@ -242,7 +252,7 @@ def charts(rows, hall_rows, folder):
             a.set_xlabel("people in the hall")
             a.set_ylabel("share")
             a.set_title(label, loc="left", fontsize=10, fontweight="bold")
-            a.legend(frameon=False, fontsize=8)
+            a.legend(frameon=False, fontsize=8, loc="center left")
         save(fig, "desk-twin-hall.png")
 
 
@@ -263,7 +273,7 @@ def hall_table(hall_rows, out=print):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Tables and charts from the desk sessions (SIMULATED).")
     ap.add_argument("--charts", help="folder for PNG charts")
-    ap.add_argument("--files", nargs="*", default=["desk_sweep.jsonl", "desk_visits.jsonl", "desk_today.jsonl"])
+    ap.add_argument("--files", nargs="*", default=["desk_sweep.jsonl", "desk_visits.jsonl", "desk_today.jsonl", "desk_reach.jsonl"])
     a = ap.parse_args(argv)
     rows = load(*a.files)
     hall_rows = load("hall.jsonl")

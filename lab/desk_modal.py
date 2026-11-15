@@ -109,6 +109,17 @@ def jobs_for(stage: str, n: int = None) -> list:
                     for reach in (0.35, 0.45):
                         add(f"B visit {v} reach {reach}", 3000 + s, r, scene=dict(BETTER, visit=v, reach_m=reach))
                     add(f"A visit {v} reach 0.35", 3000 + s, r, scene={"visit": v})
+    elif stage == "reach":                     # arm reach again, with tonight's walkers kept on the desk side of each arm line
+        for s in range(n or 80):
+            for r in RATES:
+                for reach in (0.15, 0.25, 0.45):
+                    add(f"B reach {reach}", 1000 + s, r, scene=dict(BETTER, reach_m=reach))
+                    add(f"A reach {reach}", 1000 + s, r, scene={"reach_m": reach})
+        for s in range(n or 60):
+            for r in (0, 4, 8, 12):
+                for v in ("standard", "back40", "two", "backpack", "kid", "lean"):
+                    add(f"B visit {v} reach 0.45", 3000 + s, r, scene=dict(BETTER, visit=v, reach_m=0.45))
+                    add(f"A visit {v} reach 0.45", 3000 + s, r, scene={"visit": v, "reach_m": 0.45})
     elif stage == "today":                     # the brain as it is on main: six links, tonight's place
         for s in range(n or 60):
             for r in RATES:
