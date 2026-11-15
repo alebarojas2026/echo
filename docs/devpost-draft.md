@@ -15,13 +15,13 @@ The demonstration has six beats:
 - **Found you:** two small computers sit a metre apart. A body between them weakens the Wi-Fi signal. From that one line the board knows someone arrived, how long they stayed, whether they are standing still or moving, and when they left. Stand still long enough and a no-movement alert asks for a check-in: step aside and back.
 - **Intrusion alert:** armed, the spot should be empty. Step in and stay, and the board raises an intrusion alert on a phone page.
 - **Tamper alert:** unplug one of Echo's own devices and it says which one went quiet. The record carries on, and the gap itself is recorded.
-- **What happened:** every second, and every event, is a record on the board. Ask "What happened?" and a program on the board answers in plain words from the sealed record only, showing its steps and the records it used.
+- **What happened:** everything Echo senses, and every event, is a record on the board. Ask "What happened?" and a program on the board answers in plain words from the sealed record only, showing its steps and the records it used.
 - **Engine room:** a second screen shows the three devices, the record counting up, the signatures arriving and a prove-it check. The check changes one record in a copy, verifies the copy and names the record that broke the seal. The real record is never touched.
 - **Proof:** the measured results below, each with its count and range.
 
 **It seals what it sensed.** Each record carries the SHA-256 hash of the one before it, so a changed record breaks every seal after it and the board can name the record that was changed.
 
-**Two more machines vouch for it.** Each Raspberry Pi signs the board's latest record every five seconds with its own Ed25519 key.
+**Two more machines vouch for it.** Each Raspberry Pi keeps signing the board's latest record with its own Ed25519 key.
 
 ### What it does not do
 
@@ -57,11 +57,11 @@ Neither Pi runs a model: Pi A makes the Wi-Fi signal, Pi B measures it, and each
 
 ### The path of one reading
 
-1. **Reading.** Pi A is a 5 GHz Wi-Fi hotspot. Pi B, a metre away at desk height, measures how strong that signal is 25 times a second and sends the readings to the board.
-2. **Decision.** The board compares each second with the level of the empty spot. A drop that holds is a person; how steady it is says still or moving; how long it lasts says how long they stayed. There is no trained model in this step: after a baseline with the spot empty, the line alone gives the decision.
-3. **Record.** The board writes one summary a second, plus one record for every event, to a small database on the board.
+1. **Reading.** Pi A is a 5 GHz Wi-Fi hotspot. Pi B, a metre away at desk height, measures how strong that signal is, continuously, and sends the readings to the board.
+2. **Decision.** The board compares the readings with the level of the empty spot. A drop that holds is a person; how steady it is says still or moving; how long it lasts says how long they stayed. There is no trained model in this step: after a baseline with the spot empty, the line alone gives the decision.
+3. **Record.** The board writes a running summary, plus one record for every event, to a small database on the board.
 4. **Seal.** Each record carries the SHA-256 hash of the record before it.
-5. **Signature.** Every five seconds each Pi signs the newest hash with its own key. The private keys are made on each Pi and never leave it.
+5. **Signature.** Each Pi keeps signing the newest hash with its own key. The private keys are made on each Pi and never leave it.
 6. **Answer.** "What happened?" is answered from the sealed records in the stretch asked about, with clock times and record numbers.
 
 The screens are browsers on the kit's own Wi-Fi: the judge's page with a 3D room and a faceless figure, the engine room, and the alarm page on a phone.
@@ -94,7 +94,7 @@ Honest limits are part of the product. "It senses one spot and does not know who
 
 ## What's next
 
-More people, more nights and more rooms, so the ranges on our numbers get narrower. Then live measurements on the board itself for every result, not replays, including a measured count of the bytes the board sends outside its own network.
+More people, more nights and more rooms, so the ranges on our numbers get narrower. Then live measurements on the board itself for every result, not replays of recordings, including a measured count of the bytes the board sends outside its own network.
 
 After that, running the same idea on the Wi-Fi a building already has: an access point and the devices already connected to it, with no extra hardware in the room.
 

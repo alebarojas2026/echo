@@ -29,14 +29,14 @@ Use the one-spot kit: Arduino UNO Q and Pi A on the desk, Pi B across the gap at
 
 **Source:** Screen capture of the live answer and the records it cites.
 **Picture:** Tap "What happened?". Show the answer with clock times, then its steps and the cited records.
-**Voiceover:** Every second is a record, and each one carries the fingerprint of the one before. Ask what happened, and it answers from that sealed record only.
+**Voiceover:** Everything it senses is a record, and each one carries the fingerprint of the one before. Ask what happened, and it answers from that sealed record only.
 **On screen:** `What happened?` · `From the sealed record`.
 
 ## 2:00–2:30 — Engine room
 
 **Source:** Screen capture of the engine room on the second laptop.
 **Picture:** The three devices, the record counting up and the signatures arriving. Press Prove it and hold on the line naming the altered record.
-**Voiceover:** Two other machines sign the record every few seconds. Prove it changes one record in a copy, and the board names it; the real record is never touched.
+**Voiceover:** Two other machines sign the record as it grows. Prove it changes one record in a copy, and the board names it; the real record is never touched.
 **On screen:** `Engine room` · `Prove it`.
 
 ## 2:30–3:00 — Proof
@@ -48,6 +48,6 @@ Use the one-spot kit: Arduino UNO Q and Pi A on the desk, Pi B across the gap at
 
 ## Editor's notes
 
-The text cards in the last shot are copied from numbers-to-say.md and checked against it before export: the count and its range, never a bare percentage, and "replayed" for every sentence except the one live run. Results that are not measured stay off the video: `Bytes sent outside local network: __`, `Images stored: __`.
+The text cards in the last shot are copied from numbers-to-say.md and checked against it before export: the count and its range, never a bare percentage, and "replayed from recordings taken on the kit" for every sentence except the one live run. Results that are not measured stay off the video: `Bytes sent outside local network: __`, `Images stored: __`.
 
 If shortening the edit, cut the Tamper alert first, then the Engine room. Keep Found you and at least one of Intrusion alert or What happened; never edit away a failed check to imply success.

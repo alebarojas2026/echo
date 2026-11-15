@@ -75,7 +75,7 @@ class DemoRunbookTest(unittest.TestCase):
         desk = self.lower.split("## three-minute desk round", 1)[1].split("## five-minute finalist round", 1)[0]
         for phrase in ("unplugs pi b", "that witness silent", "taps \"what happened?\"", "presses prove it",
                        "the check naming the altered record", "word for word from numbers-to-say.md",
-                       "take the empty baseline before the next judge",
+                       "set pi b's clock, then take the empty baseline before the next judge",
                        "stands still until the no-movement alert, then steps aside and back", "check-in received"):
             self.assertIn(phrase, desk)
 
@@ -92,6 +92,7 @@ class DemoRunbookTest(unittest.TestCase):
                        "no-movement alert", "json `null` must render as `__`",
                        "never a bare percentage", "private key stays on that pi",
                        "pi b's clock resets whenever it loses power", "secure pi b's power cable",
+                       "unplugging it is a power loss: ask alexander to set pi b's clock before the baseline",
                        "going back is one command on each device", "role=pib", "-44 dbm"):
             self.assertIn(phrase, self.lower)
 

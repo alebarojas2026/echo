@@ -28,13 +28,13 @@ The kit is one spot and three devices: the Arduino UNO Q and Pi A on one desk, P
 
 **1:25–2:00 (35 seconds). Speaker: Talker. Action:** Operator disarms and taps "What happened?". **Screen:** The answer in plain words with clock times, its steps and the records it used.
 
-> Every second is a record, and each one carries the fingerprint of the one before. Ask it what happened. It answers from that sealed record only, and shows its steps.
+> Everything it senses is a record, and each one carries the fingerprint of the one before. Ask it what happened. It answers from that sealed record only, and shows its steps.
 
 ### Engine room
 
 **2:00–2:30 (30 seconds). Speaker: Talker. Action:** Talker points to the second laptop; Operator presses Prove it. **Screen:** The three devices, the record counting up, the signatures arriving, and the check naming the altered record.
 
-> Two other machines sign the record every five seconds. Prove it changes one record in a copy, and the board names it. The real record is never touched.
+> Two other machines sign the record as it grows. Prove it changes one record in a copy, and the board names it. The real record is never touched.
 
 ### Proof
 

@@ -12,7 +12,7 @@ Yes, and we say so: after a baseline with the spot empty, a Wi-Fi drop that hold
 
 ## How does the real kit work?
 
-Pi A makes a Wi-Fi signal and Pi B, a metre away at desk height, measures it many times a second. The Arduino UNO Q compares that with the empty spot and decides locally.
+Pi A makes a Wi-Fi signal and Pi B, a metre away at desk height, measures it continuously. The Arduino UNO Q compares that with the empty spot and decides locally.
 
 ## Does standing still make me disappear?
 
@@ -52,7 +52,7 @@ Each record carries the hash of the one before, so one change breaks every seal 
 
 ## What stops the board from rewriting the whole record?
 
-Each Pi signs the newest record every five seconds with a key that never leaves that Pi. Rewriting history would mean forging both signatures as well.
+Each Pi keeps signing the newest record with a key that never leaves that Pi. Rewriting history would mean forging both signatures as well.
 
 ## Can I spoof it, jam it or unplug it?
 
@@ -64,7 +64,7 @@ If the Wi-Fi line stops reporting the screen says the sensor is blind, and a sta
 
 ## How accurate is it, and how do I know it isn't scripted?
 
-One person stood on the spot for ten seconds, ten times, and Echo found them 10 of 10 times; with this few trials the true rate is probably between 69% and 100%. Step in yourself, then open the records.
+One person stood on the spot for ten seconds, ten times, and Echo found them 10 of 10 times; with this few trials the true rate is probably between 69% and 100%. That was replayed from recordings on this kit.
 
 ## Can the language model invent what happened?
 

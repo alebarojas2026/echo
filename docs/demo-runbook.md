@@ -26,7 +26,7 @@ The Hardware role answers radio and hardware questions. The Operator answers rec
 
 While the Operator fixes a failure, the Talker says exactly one of these:
 
-- **Sensor blind:** “That's the honest failure. The Wi-Fi line stopped reporting, so it says blind instead of guessing the spot is empty. Give us ten seconds.”
+- **Sensor blind:** “That's the honest failure. The Wi-Fi line stopped reporting, so it says blind instead of guessing the spot is empty. Give us a moment.”
 - **No data:** “The screen lost the board's feed, so it says no data, not empty. Reconnecting.”
 - **Nobody found:** “It needs a few seconds on the line. Stand right between the two devices and hold still.”
 - **"What happened?" is slow or wrong:** “The language model on this board is tiny. The records it reads from are right; here they are.” Open the records the answer cites.
@@ -62,7 +62,7 @@ Record the operator, checker, and actual finish time beside each step. These are
 | 4 | Confirm the layout is the gate on all three devices: `python3 -m radio.use_layout gate` reports three devices | __ | __ |
 | 5 | Capture the empty baseline: nobody within 2 m of the gap, press Baseline in the operator drawer (O key), wait for "baseline done". The headline then says "Nobody is here", and the empty line reads about -44 dBm or better | __ | __ |
 | 6 | Run `python scripts/demo_check.py`; fix every FAIL using its printed instruction | __ | __ |
-| 7 | Open `http://192.168.77.2:8080/chain` twice, ten seconds apart: `head.seq` is higher, `"verified": true`, and each Pi is a witness with `"sig_ok": true` and `"silent": false` | __ | __ |
+| 7 | Open `http://192.168.77.2:8080/chain` twice, a little apart: `head.seq` is higher, `"verified": true`, and each Pi is a witness with `"sig_ok": true` and `"silent": false` | __ | __ |
 | 8 | Have someone outside the team walk the full round | __ | __ |
 | 9 | Ask "What happened?" using the real local model and open the records it cites | __ | __ |
 
@@ -112,14 +112,14 @@ Follow the exact spoken script in [pitch.md](pitch.md). These are rehearsal allo
 
 | Time | Beat | Speaker and actions | Screen and gate |
 |---|---|---|---|
-| 0:00–0:30 | **Found you** | Talker invites the judge onto the spot; judge stands still until the no-movement alert, then steps aside and back | Main laptop: the figure and the headline; the no-movement alert at about ten seconds; "Check-in received" |
+| 0:00–0:30 | **Found you** | Talker invites the judge onto the spot; judge stands still until the no-movement alert, then steps aside and back | Main laptop: the figure and the headline; the no-movement alert; "Check-in received" |
 | 0:30–1:00 | **Intrusion alert** | Judge steps out; Operator arms only while empty; judge steps in and stays | Armed state; the alarm page turns red with the live intrusion |
 | 1:00–1:25 | **Tamper alert** | Still armed, Hardware unplugs Pi B, waits for the alert, plugs it back in | The tamper alert names Pi B; the engine room shows that witness silent and the record still counting |
 | 1:25–2:00 | **What happened** | Operator disarms and taps "What happened?" | The story in plain words with clock times, its steps and the records it used |
 | 2:00–2:30 | **Engine room** | Talker points to the second laptop; Operator presses Prove it | The record counting, the signatures, and the check naming the altered record |
 | 2:30–3:00 | **Proof** | Talker reads the measured sentences from the slide and closes | The looping slide, word for word from numbers-to-say.md |
 
-While Pi B is unplugged the screen says the sensor is blind. That is right: its Wi-Fi line is the sensor. The rest of the round needs no sensing. After the judge leaves, wait for Pi B to rejoin and its witness to sign again, then take the empty baseline before the next judge.
+While Pi B is unplugged the screen says the sensor is blind. That is right: its Wi-Fi line is the sensor. The rest of the round needs no sensing. After the judge leaves, wait for Pi B to rejoin and its witness to sign again, set Pi B's clock, then take the empty baseline before the next judge.
 
 For the “I'm okay” check the judge steps fully out of the line and back within a few seconds, then waits for "Check-in received". Do not claim it before that confirmation.
 
@@ -127,7 +127,7 @@ For the “I'm okay” check the judge steps fully out of the line and back with
 
 Feature gates before admitting a judge:
 - **Found you:** a person standing in the gap for a few seconds is found; nobody is found with the gap empty; standing still raises the no-movement alert and stepping aside and back clears it.
-- **Intrusion alert:** stay until the live event arrives, about three seconds after stepping in.
+- **Intrusion alert:** stay until the live event arrives.
 - **Tamper alert:** rehearse unplugging and replugging Pi B; the alert names it, the witness comes back by itself, and the baseline is taken again.
 - **What happened:** the answer cites the board's records; show those records if the wording fails.
 - **Engine room:** Prove it reports the altered record, and `/chain/verify` still says the real record is whole.
@@ -150,11 +150,12 @@ Run the same six beats and one-spot kit. Add only what passed preflight: a secon
 Alexander handles the Pis; the Operator handles software controls.
 
 1. If Pi B was unplugged, confirm it is plugged in and back on the hotspot.
-2. Everyone steps away from the gap and stays out.
-3. Disarm if needed and send `reset`.
-4. Take the empty baseline and wait for "baseline done"; confirm health is `ok` and the headline says "Nobody is here".
-5. Confirm both witnesses are signing again on the engine room.
-6. The narrator warms its normal sentence prompt again in the background after the recap; do not hold the next judge for that warmup.
+2. Pi B's clock resets whenever it loses power, and unplugging it is a power loss: ask Alexander to set Pi B's clock before the baseline.
+3. Everyone steps away from the gap and stays out.
+4. Disarm if needed and send `reset`.
+5. Take the empty baseline and wait for "baseline done"; confirm health is `ok` and the headline says "Nobody is here".
+6. Confirm both witnesses are signing again on the engine room.
+7. The narrator warms its normal sentence prompt again in the background after the recap; do not hold the next judge for that warmup.
 
 If a device was knocked, put it back, keep everyone out of the gap, and take the empty baseline again before the next judge.
 
@@ -172,7 +173,7 @@ The last state is stale. Confirm the page loads, then check the WebSocket and th
 
 ### `SENSOR BLIND`
 
-The Wi-Fi line from Pi A to Pi B is not reporting. Check that Pi B has power and is on the hotspot. Decisions stay null, and alert and intrusion decisions pause until the line recovers. Take the baseline again afterwards.
+The Wi-Fi line from Pi A to Pi B is not reporting. Check that Pi B has power and is on the hotspot. Decisions stay null, and alert and intrusion decisions pause until the line recovers. If Pi B lost power, set its clock, then take the baseline again.
 
 ### Nobody is found
 
