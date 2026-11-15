@@ -293,6 +293,10 @@ Baseline: 20 s of capture with health ok, persons_in_frame == 0 from the camera,
   is given up: nothing changes and pred returns. The old baseline, the model and the recordings stay. There is no
   event for it; the brain logs why it never started. A capture that is running at 120 s goes on, and is given up if
   a condition then breaks. The automatic baseline after router_home keeps waiting.
+  With the camera off, a finished automatic capture is checked before it is used: if any link's 0.5 s mean sat more
+  than 3 dB from that link's median over the capture for more than a quarter of the 20 s, somebody was walking in
+  the area. The capture is not used and the 20 s start again. A baseline asked for with the `baseline` cmd is never
+  checked this way: the operator keeps the strip empty. The 3 dB and the quarter are first values (#95).
   baseline {keep_model: true} is the exception to "a new place": it is the same place set down again, so, like the
   automatic baseline, it keeps the model, the recordings and place.json and only the baseline is new. The model was
   taught on drops from a baseline, so it carries over to a new baseline of the same layout; features are taken
