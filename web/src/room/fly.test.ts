@@ -83,6 +83,37 @@ describe('the fly', () => {
     expect(view.host.dataset.view).toBe('square')
   })
 
+  it('lands exactly: on a laptop\'s canvas too, the view says square and nothing of the hall stays faded in', () => {
+    const sizes: [number, number][] = []
+    for (let w = 640; w <= 1600; w += 61) for (let h = 600; h <= 1200; h += 97) sizes.push([w, h])
+    for (const size of sizes) {
+      const view = fakeView()
+      view.size = size
+      const fly = new Fly(view as unknown as RoomView, null, () => {})
+      fly.setHall(hall)
+      view.run(1200 + FLY_MS + 100)
+      expect(fly.wide).toBe(0)
+      expect(view.host.dataset.view).toBe('square')
+    }
+  })
+
+  it('lands on the close framing it is given (in situ inside the hall) and follows the canvas from then on', () => {
+    const view = fakeView()
+    const fly = new Fly(view as unknown as RoomView, null, () => {})
+    const situ = (w: number): Shot => ({ elevDeg: 45, target: new Vector3(0, 0.8, 0.3), radiusM: 1.7 * Math.min(1, w / 1280) })
+    fly.setClose(situ)
+    fly.setHall(hall)
+    view.run(1200 + FLY_MS + 100)
+    expect(view.shot).toEqual(situ(1280))
+    expect(fly.wide).toBe(0)
+    view.size = [800, 900]
+    fly.toggle()
+    view.run(FLY_MS + 100)
+    fly.toggle()
+    view.run(FLY_MS + 100)
+    expect(view.shot.radiusM).toBeCloseTo(situ(800).radiusM)
+  })
+
   it('never jumps: every frame of the fly is a small step from the one before', () => {
     const view = fakeView()
     const fly = new Fly(view as unknown as RoomView, null, () => {})

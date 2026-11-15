@@ -1,6 +1,8 @@
 import { Box3, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
-import { NODES, SIZE_M, ZONES, alertWordAt, nodeLabelSide, toScene } from './frame'
+import { FIGURE_HEIGHT_M } from './figure'
+import { NODES, SIZE_M, STRIP_M, ZONES, alertWordAt, nodeLabelSide, toScene, type Vec3 } from './frame'
 import { BG } from './palette'
+import { DESK_TOP_M } from './stage'
 
 // Owns the renderer, the camera and the frame loop. Frames are drawn only when something changed
 // or an animation is still settling, so an idle room costs nothing on the Pi.
@@ -102,11 +104,13 @@ function layoutScale(): number {
 }
 
 /**
- * The room's normal framing, scaled to nodes.json's layout (the 2 m square, or the 1.6 x 1.1 m desk). On a narrow canvas (a laptop, beside the panels'
- * rail) it backs off just enough that the words beside the square stay on the canvas; on the 1920 x 1080
- * screen's 1280 x 1080 canvas they already fit, so it doesn't change there.
+ * The room's normal framing. The square's is scaled to nodes.json's size; on a narrow canvas (a laptop, beside
+ * the panels' rail) it backs off just enough that the words beside the square stay on the canvas, and on the
+ * 1920 x 1080 screen's 1280 x 1080 canvas they already fit, so it doesn't change there. The desk's is fitted to
+ * what is on the desk (deskShot).
  */
 export function roomShot(width = 1280, height = 1080): Shot {
+  if (STRIP_M) return deskShot(width, height)
   const scale = layoutScale()
   const shot = { elevDeg: ELEV_DEG, target: TARGET_M.clone().multiplyScalar(scale), radiusM: FIT_RADIUS_M * scale }
   const room = width / 2 - SIDE_WORDS_PX
@@ -122,6 +126,130 @@ export function roomShot(width = 1280, height = 1080): Shot {
     shot.radiusM *= over * 1.005
   }
   return shot
+}
+
+// The desk (#415) is framed on what is on it rather than scaled from the square: a little higher up, so a person
+// in the strip covers less of the desk behind them, and fitted to the strip, the desk top, a person's head anywhere
+// in the strip, the five devices with their names above them and the words in the aisle, then centred on the
+// canvas. Every point comes from nodes.json; the pixel sizes are the words' as drawn (room.css).
+const DESK_ELEV_DEG = 58
+const EDGE_PX = 24
+/** Below the layout: the legend's row in the canvas's bottom corner. */
+const BOTTOM_PX = 72
+const NAME_PX = 28 // room-label--node, and the no-movement word
+const LINE_PX = 31
+const CHAR_EM = 0.56 // Hanken Grotesk's average letter width at 600
+const XRAY_CAPTION_PX = 520
+
+/** A point that must be on the canvas, with the words around it: pixels to its left, right, above and below. */
+export interface Anchor {
+  at: Vector3
+  left: number
+  right: number
+  up: number
+  down: number
+}
+
+const wordsPx = (text: string) => text.length * CHAR_EM * NAME_PX
+
+export function deskAnchors(personM = FIGURE_HEIGHT_M): Anchor[] {
+  const [sw, sh] = STRIP_M ?? SIZE_M
+  const [fw, fh] = SIZE_M
+  const out: Anchor[] = []
+  const add = (p: Vec3, left = 0, right = 0, up = 0, down = 0) => out.push({ at: new Vector3(...toScene(p)), left, right, up, down })
+  for (const p of [[0, 0, 0], [sw, 0, 0], [0, sh, 0], [sw, sh, 0], [0, fh, DESK_TOP_M], [fw, fh, DESK_TOP_M]] as Vec3[]) add(p)
+  for (const x of [0.15, sw - 0.15]) for (const y of [0.1, sh - 0.1]) add([x, y, personM])
+  // A name sits 12 px above its device's head, centred, or just below it reading inward; two lines when it says
+  // "not heard".
+  const tall = 12 + 2 * LINE_PX
+  for (const n of Object.values(NODES)) {
+    const w = wordsPx(n.name)
+    const side = nodeLabelSide(n.id)
+    if (side === 'below-right') add(n.xyz, 8, w + 10, 8, tall)
+    else if (side === 'below-left') add(n.xyz, w + 10, 8, 8, tall)
+    else add(n.xyz, w / 2, w / 2, tall, 8)
+  }
+  for (const z of ZONES) add(alertWordAt(z.id)[0], wordsPx('No movement') / 2, wordsPx('No movement') / 2, 0, LINE_PX)
+  add([0, -0.36, 0], 0, XRAY_CAPTION_PX, LINE_PX / 2, LINE_PX / 2) // xray.ts's caption, read from the strip's west end
+  return out
+}
+
+type AxisItem = [at: number, below: number, above: number]
+
+/** Where values `at`, zoomed by `s`, reach with their words: [lowest, highest]. */
+function reach(items: readonly AxisItem[], s: number): [number, number] {
+  return [Math.min(...items.map(([u, below]) => s * u - below)), Math.max(...items.map(([u, , above]) => s * u + above))]
+}
+
+/** The largest zoom at which the values with their words fit in `span` pixels. */
+function fitAxis(items: readonly AxisItem[], span: number): number {
+  let lo = 0.01
+  let hi = 100
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2
+    const [b, t] = reach(items, mid)
+    if (t - b <= span) lo = mid
+    else hi = mid
+  }
+  return lo
+}
+
+/** The shot at `elevDeg` that shows every anchor with its words, as large as fits, centred in the canvas less
+ *  its edges (and the legend's row at the bottom). */
+export function fitShot(anchors: readonly Anchor[], width: number, height: number, elevDeg: number): Shot {
+  const box = new Box3().setFromPoints(anchors.map((a) => a.at))
+  const shot: Shot = { elevDeg, target: box.getCenter(new Vector3()), radiusM: Math.max(0.1, box.getSize(new Vector3()).length() / 2) }
+  const cam = new PerspectiveCamera(FOV_DEG, 1, 0.1, 100)
+  const p = new Vector3()
+  const right = new Vector3()
+  const up = new Vector3()
+  // The view is nearly orthographic (20 degree lens), so a few rounds of "move by the offset, zoom by the ratio"
+  // settle it.
+  for (let round = 0; round < 8; round++) {
+    fitCamera(cam, width, height, shot)
+    const px = anchors.map((a) => {
+      p.copy(a.at).project(cam)
+      return { x: (p.x * width) / 2, y: (p.y * height) / 2, a }
+    })
+    const xs = px.map((q): AxisItem => [q.x, q.a.left, q.a.right])
+    const ys = px.map((q): AxisItem => [q.y, q.a.down, q.a.up])
+    const s = Math.min(fitAxis(xs, width - 2 * EDGE_PX), fitAxis(ys, height - EDGE_PX - BOTTOM_PX))
+    // Zoomed by s about the canvas middle, the content's middle moves to the free band's middle (the band sits a
+    // little above the canvas's middle, clear of the legend's row): how far that is in today's pixels.
+    const [x0, x1] = reach(xs, s)
+    const [y0, y1] = reach(ys, s)
+    const dx = (x0 + x1) / 2 / s
+    const dy = ((y0 + y1) / 2 - (BOTTOM_PX - EDGE_PX) / 2) / s
+    const perPx = (2 * cam.position.distanceTo(shot.target) * Math.tan((cam.fov * Math.PI) / 360)) / height
+    right.setFromMatrixColumn(cam.matrixWorld, 0)
+    up.setFromMatrixColumn(cam.matrixWorld, 1)
+    shot.target.addScaledVector(right, dx * perPx).addScaledVector(up, dy * perPx)
+    shot.radiusM /= s
+    if (Math.abs(s - 1) < 1e-3 && Math.hypot(dx, dy) < 0.5) break
+  }
+  return shot
+}
+
+/** The desk's framing for this canvas. */
+export function deskShot(width = 1280, height = 1080): Shot {
+  return fitShot(deskAnchors(), width, height, DESK_ELEV_DEG)
+}
+
+// Inside the hall model, the desk's close view is in situ: the person at true size at our desk, with the real desk
+// run, its chairs and the neighbouring rows around them. Seen from behind the person (up the tiers), north up,
+// 45 degrees up. The next row's desk stands 0.75 m high a third of a metre behind the strip; from this angle it
+// would hide the strip's floor and the person's legs, so that span is drawn see-through (scan.ts, ghostBox).
+// Fitted like the desk's own view (every word on the canvas), but on the 1280 px canvas never tighter than
+// SITU_MIN_RADIUS_M, so the rows around stay in view; a narrower canvas keeps the same share of its width for them
+// (the words would crowd otherwise).
+const SITU_ELEV_DEG = 45
+const PERSON_M = 1.7
+const SITU_MIN_RADIUS_M = 1.7
+
+/** The close view inside the hall, for the desk layout. */
+export function inSituShot(width = 1280, height = 1080): Shot {
+  const shot = fitShot(deskAnchors(PERSON_M), width, height, SITU_ELEV_DEG)
+  return { ...shot, radiusM: Math.max(shot.radiusM, SITU_MIN_RADIUS_M * Math.min(1, width / 1280)) }
 }
 
 /** Straight down on the square, north up: for lining a scan up by eye (align mode). */

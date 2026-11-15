@@ -142,6 +142,9 @@
   color: var(--text);
   font-size: 28px;
   font-weight: 600;
+  /* A link that runs behind a name stops short of its letters instead of cutting through them. */
+  -webkit-text-stroke: 8px var(--bg);
+  paint-order: stroke fill;
 }
 
 /* A device that has gone quiet: its name in the secondary colour, "not heard" on a second line under it. */
@@ -160,6 +163,15 @@
 
 .room-label--above {
   translate: -50% calc(-100% - 12px);
+}
+
+/* On the desk, a beacon over the aisle: just below it, reading inward from its stand. */
+.room-label--below-right {
+  translate: 10px 12px;
+}
+
+.room-label--below-left {
+  translate: calc(-100% - 10px) 12px;
 }
 
 .room-label--right {
@@ -196,6 +208,11 @@
 
 .room-label--alert-west {
   translate: -100% -50%;
+}
+
+/* On the desk: in the aisle, centred under its zone. */
+.room-label--alert-south {
+  translate: -50% 0;
 }
 
 .room-label--caption {
@@ -245,6 +262,9 @@
   color: var(--text-2);
   font: 500 24px/1 'Hanken Grotesk', system-ui, sans-serif;
   pointer-events: none;
+  /* Inside the hall a light desk top can pass behind it: the same knockout as the device names keeps it readable. */
+  -webkit-text-stroke: 6px var(--bg);
+  paint-order: stroke fill;
 }
 
 .room-swatch--person {
