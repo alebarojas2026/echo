@@ -677,8 +677,9 @@ class Day:
             s.close()
 
     def fault_http(self):
-        paths = ["/", "/?src=ws", "/nodes.json", "/proof.json", "/index.html", "/../../etc/passwd", "/%00", "/x" * 300]
-        for p in self.rng.sample(paths, 4):
+        paths = ["/", "/?src=ws", "/nodes.json", "/proof.json", "/index.html", "/../../etc/passwd", "/%00", "/x" * 300,
+                 "/history", "/history?minutes=99999", "/history?minutes=-5", "/history?minutes=abc", "/layout"]
+        for p in self.rng.sample(paths, 6):
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{WEB}{p}", timeout=10) as resp:
                     code = resp.status
@@ -688,6 +689,9 @@ class Day:
                 code = type(e).__name__
             if p in ("/nodes.json", "/proof.json") and code != 200 and not self.killed_recently("web"):
                 self.problem("http_failed", key=p, once_per=900, path=p, code=code)
+            elif isinstance(code, int) and code >= 500 and code != 503 and not self.killed_recently("web", "store"):
+                self.problem("http_5xx", key=p.split("?")[0][:40], once_per=900, path=p[:80], code=code,
+                             log_tail=self.tail("web", 15))
         if self.feat["ask"]:
             for body in (b"", b"{", b'{"question": 5}', b'{"q": "x"}', b"[" * 3000):
                 self.ask("(malformed)", body=body)
