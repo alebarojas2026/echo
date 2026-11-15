@@ -11,6 +11,8 @@ import type { Feed } from '../room/feed'
 import { fetchProof } from '../room/hud-host'
 import type { Proof } from './state'
 import { judgeMoment } from './judge-moment'
+import { mountReplay } from './replay'
+import { recordsClient } from './records'
 
 type Panel = { update(state: StateMsg | null, stale: boolean): void; dispose?(): void }
 type PanelModule = { mountPanel(root: HTMLElement): Panel }
@@ -18,6 +20,10 @@ const extraPanels = import.meta.glob<PanelModule>('./judge-*-panel.ts', { eager:
 const controlModule = import.meta.glob<{ mountHudControls(root: HTMLElement, send: (message: { cmd: Parameters<Feed['send']>[0]; args: Record<string, string | boolean> }) => void): void }>('./controls.ts', { eager: true })
 
 export function mountHud(root: HTMLElement, feed: Feed | null) {
+  // The panels read the feed through the replay: live as it comes, or a recorded second while one plays.
+  const replay = feed ? mountReplay(feed, recordsClient(feed.source)) : null
+  const live = feed
+  feed = replay?.feed ?? feed
   root.classList.add('judge')
   root.innerHTML = `
     <header><span>Radio Sight</span><span data-testid="source-badge"></span></header>
@@ -59,8 +65,16 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
     if (event.key === 'Escape') operator.hidden = true
   }
   document.addEventListener('keydown', key)
-  const disposeAsk = mountAskRoom(root.querySelector('header')!)
-  const disposeArrival = mountArrival(root, feed, operator)
+  const disposeAsk = mountAskRoom(root.querySelector('header')!, undefined, replay ? span => void replay.start(span) : undefined)
+  const disposeArrival = mountArrival(root, live, operator)
+  if (replay) {
+    const last = document.createElement('button')
+    last.type = 'button'
+    last.dataset.testid = 'replay-last'
+    last.textContent = 'Replay the last 2 minutes'
+    last.onclick = () => { operator.hidden = true; void replay.start({ from_t: Date.now() - 120_000, to_t: Date.now() }) }
+    operator.querySelector('.operator-controls')!.before(last)
+  }
   let disposed = false
   let lastState: StateMsg | null = null
   let lastStale = true
@@ -102,7 +116,7 @@ export function mountHud(root: HTMLElement, feed: Feed | null) {
   }
   void refresh()
   const timer = setInterval(refresh, 30000)
-  return () => { disposeAsk(); disposeArrival(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
+  return () => { disposeAsk(); disposeArrival(); replay?.dispose(); disposed = true; headlineText.dispose(); clearInterval(timer); unsubscribe?.(); document.removeEventListener('keydown', key); panels.forEach(panel => panel.dispose?.()) }
 }
 import.meta.glob('./judge-layout.css', { eager: true })
 
