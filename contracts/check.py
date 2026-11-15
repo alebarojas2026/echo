@@ -3,6 +3,7 @@
     python -m contracts.check session.jsonl            # one message per line
     python -m sim.fake zone_tour --fast | python -m contracts.check -
     python -m contracts.check proof.json               # a .json file is checked as proof.json
+    python -m contracts.check --as ask_reply replies.jsonl   # the bodies of POST /ask (ask_question, ask_reply)
 
 Prints file:line and the error for every bad line and exits 1 if any line fails.
 A jump in a producer's seq (lost messages) is a warning, not a failure.
@@ -31,7 +32,8 @@ def _load():
 
 
 VALIDATORS = _load()
-TYPES = sorted(set(VALIDATORS) - {"proof"})
+NOT_MESSAGES = {"proof", "ask_question", "ask_reply"}  # proof.json (section 7) and the two bodies of POST /ask (section 10)
+TYPES = sorted(set(VALIDATORS) - NOT_MESSAGES)
 
 
 def errors(msg, schema=None):
@@ -97,12 +99,14 @@ def check_lines(lines, schema=None):
     return count, failures, warnings
 
 
-def check_file(path):
-    """Check one file ("-" is stdin), print what is wrong and return True if it passes."""
+def check_file(path, schema=None):
+    """Check one file ("-" is stdin), print what is wrong and return True if it passes.
+
+    schema None = each line by its type; a .json file is always one proof.json."""
     name = "<stdin>" if path == "-" else path
     with sys.stdin if path == "-" else open(path, encoding="utf-8") as f:
         whole = path.endswith(".json")
-        count, failures, warnings = check_lines([f.read()] if whole else f, "proof" if whole else None)
+        count, failures, warnings = check_lines([f.read()] if whole else f, "proof" if whole else schema)
     for no, text in failures[:SHOW] + [(no, "warning: " + w) for no, w in warnings[:SHOW]]:
         print(f"{name}:{no}: {text}")
     hidden = max(0, len(failures) - SHOW) + max(0, len(warnings) - SHOW)
@@ -115,7 +119,10 @@ def check_file(path):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m contracts.check", description=__doc__.splitlines()[0])
     ap.add_argument("files", nargs="+", help="JSON-lines files, - for stdin; a .json file is checked as proof.json")
-    return 0 if all([check_file(f) for f in ap.parse_args(argv).files]) else 1
+    ap.add_argument("--as", dest="schema", choices=sorted(NOT_MESSAGES - {"proof"}), default=None,
+                    help="check every line as one of the POST /ask bodies instead of by its type")
+    args = ap.parse_args(argv)
+    return 0 if all([check_file(f, args.schema) for f in args.files]) else 1
 
 
 if __name__ == "__main__":
