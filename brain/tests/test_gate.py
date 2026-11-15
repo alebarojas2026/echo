@@ -74,10 +74,10 @@ def test_the_layout_gives_six_links_one_zone_a_grid_and_a_rule():
     # pi5b>pi5:ble was unreliable on the kit: the file says it is no classifier link, so it is no feature
     assert brain.model_links == tuple(k for k in LINKS if k != "pi5b>pi5:ble")
     assert brain.crossing == ("pi5b>unoq:ble", "pi5>pi5b:wifi", "pi5>pi5b:ble")
-    assert (brain.presence_line, brain.presence_second) == ("pi5>pi5b:wifi", "pi5b>unoq:ble")
+    assert (brain.presence_line, brain.presence_second) == ("pi5>pi5b:wifi", None)   # "second" is read and not used
     assert (brain.presence_on_db, brain.presence_off_db, brain.presence_hold_ms) == (7.0, 4.0, 5000)
-    # the two Pi B hears come over the hotspot and never blind the sensor
-    assert list(brain.health.classifier_links) == ["pi5>unoq:wifi", "pi5>unoq:ble", "pi5b>unoq:ble"]
+    # the presence line is the sensor: it alone can blind it, and only by going silent or stale
+    assert list(brain.health.classifier_links) == ["pi5>pi5b:wifi"] and brain.health.judge_level is False
     zone = zone_rule(GATE)
     assert [zone(0.4, 0.3), zone(0.0, 0.0), zone(0.8, 0.6)] == [1, 1, 1]
     assert [zone(0.4, -0.1), zone(0.4, 0.7), zone(-0.1, 0.3), zone(0.9, 0.3)] == [0, 0, 0, 0]   # standing back is not on the spot
@@ -200,7 +200,7 @@ def test_a_three_minute_visit_is_one_enter_and_never_blinks_out(kit):
     assert comings(events) == ["exit"]
 
 
-def test_the_wifi_line_decides_and_the_bluetooth_line_only_holds(kit):
+def test_the_wifi_line_decides_and_no_bluetooth_line_has_a_say(kit):
     brain = kit.brain
     kit.play([(5, "nobody")])
     assert brain.pred["present"] is False and brain._line_says() is False
@@ -223,14 +223,70 @@ def test_the_wifi_line_decides_and_the_bluetooth_line_only_holds(kit):
     silent = dict(flat[wifi], n=0, median=None, mean=None)
     brain.window = dict(brain.window, links={**flat, wifi: silent, ble: down(ble, 9.0)})
     assert brain._line_says() is False
-    # ... but holds it for 5 s when the Wi-Fi line goes silent with somebody there
+    # ... and does not hold it either: when the Wi-Fi line goes silent with somebody there, its own last
+    # word stands for 5 s whatever the Bluetooth line reads (by then the sensor is blind), and then goes
     brain.window = dict(brain.window, links={**flat, wifi: down(wifi, 16.0)})
     assert brain._line_says() is True
-    brain.window = dict(brain.window, end=end + 3000, links={**flat, wifi: silent, ble: down(ble, 9.0)})
+    brain.window = dict(brain.window, end=end + 3000, links={**flat, wifi: silent})
     assert brain._line_says() is True
     brain.window = dict(brain.window, end=end + 6000, links={**flat, wifi: silent, ble: down(ble, 9.0)})
     assert brain._line_says() is False
     kit.play([(5, "nobody")])
+
+
+def bent(kit, bend):
+    """The kit's feed with each reading passed through bend(link, seconds since now, dbm) on its way to the brain."""
+    send, t0 = kit._send, kit.feed.t
+
+    def through(msg):
+        if msg["type"] == "rssi":
+            msg = dict(msg, dbm=round(bend(msg["link"], (msg["recv_t"] - t0) / 1000, msg["dbm"])))
+        send(msg)
+    kit._send = through
+    return kit
+
+
+def test_a_bluetooth_dip_and_a_drifting_desk_line_never_blind_the_sensor_or_make_an_object_or_a_person():
+    """What the kit's recordings showed with nobody there: the Bluetooth lines dip 9 to 20 dB by themselves,
+    and the 8 cm Wi-Fi line on the desk climbed 9 dB over one run. On a layout with a presence line none
+    of that is the sensor's business: no SENSOR BLIND, no object, no advice, nobody."""
+    def bend(link, s, dbm):
+        if link == "pi5>unoq:wifi":
+            return dbm + 9.0 * min(s, 600) / 600              # the desk line drifts 9 dB over ten minutes
+        if link.endswith(":ble") and s % 60 < 5:
+            return dbm - 12.0                                 # every Bluetooth line dips 12 dB for 5 s, once a minute
+        return dbm
+
+    kit = bent(Kit(seed=11).teach(), bend)
+    _, rows, events = kit.play([(600, "nobody")])
+    kinds = {e["kind"] for _, e in events}
+    assert not kinds & {"blind_on", "object_on", "advice", "enter", "intrusion"}, kinds
+    assert all(s["health"]["status"] != "blind" and s["health"]["blind"] == [] for _, s in rows)
+    assert all(s["pred"] is not None and s["pred"]["present"] is False and s["pred"]["kind"] == "none" for _, s in rows)
+    assert all(s["objects"] == [] and s["advice"] is None for _, s in rows)
+    assert not any(row["status"] == "blind" for _, s in rows for row in s["links"])
+    # and a person is still found afterwards, and let go
+    start, _, events = kit.play([(6, "still")])
+    assert comings(events) == ["enter"] and (when(events, "enter") - start) / 1000 <= 1.5
+    _, _, events = kit.play([(5, "nobody")])
+    assert comings(events) == ["exit"]
+
+
+def test_the_presence_line_going_silent_is_the_one_thing_that_blinds_the_sensor():
+    kit = Kit(seed=12).teach()
+    kit.play([(5, "nobody")])
+    live = kit.feed.next["pi5>pi5b:wifi"]
+    kit.feed.next["pi5>pi5b:wifi"] = float("inf")             # Pi B's Wi-Fi reader stops; its Bluetooth lines carry on
+    _, rows, events = kit.play([(10, "nobody")])
+    assert [e["info"]["link"] for _, e in events if e["kind"] == "blind_on"] == ["pi5>pi5b:wifi"]
+    assert rows[-1][1]["health"] == {"status": "blind", "blind": ["pi5>pi5b:wifi"], "reason": "rate"}
+    assert rows[-1][1]["pred"] is None                         # unknown, never "nobody"
+    assert "enter" not in comings(events)
+    kit.feed.next["pi5>pi5b:wifi"] = kit.feed.t                # and it is back
+    _, rows, events = kit.play([(10, "nobody")])
+    assert [e["kind"] for _, e in events if e["kind"].startswith("blind")] == ["blind_off"]
+    assert rows[-1][1]["health"]["status"] == "ok" and rows[-1][1]["pred"]["present"] is False
+    del live
 
 
 def test_three_links_are_enough():
@@ -282,16 +338,19 @@ def test_the_empty_level_follows_a_drift_of_five_db_in_five_minutes():
     assert comings(events) == ["exit"] and (when(events, "exit") - start_ms) / 1000 <= 2.0
 
 
-def test_with_a_fixed_baseline_the_same_drift_ends_blind_or_as_somebody_who_is_not_there():
-    """What the setting is for: drift_follow_s 0 is the fixed 20 s baseline of the contract."""
+def test_with_a_fixed_baseline_a_drift_of_the_bluetooth_lines_is_not_followed_and_still_blinds_nothing():
+    """drift_follow_s 0 is the fixed 20 s baseline of the contract. The Bluetooth lines then end up 8 dB off
+    it, which used to end blind or as somebody who is not there; with a presence line their level has no say."""
     from brain import settings as S
     kit = Kit(7)
     kit.brain = Brain(nodes=GATE, settings=S.DEFAULT.with_(drift_follow_s=0))
     kit.feed = Feed(T0_MS, 7, 1.0, drift_db_per_min=1.6)
     kit.teach()
+    start = dict(kit.brain.base)
     _, rows, events = kit.play([(300, "nobody")])
-    # the Bluetooth lines end up so far off their baseline that the sensor is blind (or says somebody)
-    assert any(s["pred"] is None or s["pred"]["present"] for _, s in rows) or "enter" in comings(events)
+    assert kit.brain.base == start                                                      # not followed
+    assert comings(events) == [] and all(s["pred"] is not None and not s["pred"]["present"] for _, s in rows)
+    assert all(s["health"]["status"] != "blind" for _, s in rows)
 
 
 def test_a_person_standing_still_for_three_minutes_is_never_taken_for_the_empty_spot():

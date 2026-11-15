@@ -216,11 +216,18 @@ class Brain:
         self._old_base: Dict[str, float] = {}
         # "presence" in nodes.json: one line decides whether somebody is there (the gate: the Wi-Fi line from
         # Pi A to Pi B, which fell 15 to 21 dB with a person on the kit and under 1 dB empty). Its 1 s
-        # median drop turns presence on at on_db and off under off_db. A second line can keep it on for
-        # second_hold_s while the first has no readings; it never turns it on.
+        # median drop turns presence on at on_db and off under off_db.
         rule = nodes.get("presence") or {}
         self.presence_line = rule.get("line") if rule.get("line") in self.model_links else None
-        self.presence_second = rule.get("second") if rule.get("second") in self.model_links else None
+        # No second opinion: on the kit the Bluetooth lines dipped 9 to 20 dB with nobody there, so "second"
+        # in the file is read and not used. While the line is silent its last word stands for second_hold_s.
+        self.presence_second = None
+        if self.presence_line:
+            # The sensor is that one line. Health is blind only when it is silent or stale; the level of a
+            # Bluetooth line, or of a line that does not cross the spot, never blinds (they dip and drift by
+            # themselves), and a line going quiet still shows in its own row and counts for tamper.
+            self.health.classifier_links = [self.presence_line]
+            self.health.judge_level = False
         self.presence_on_db, self.presence_off_db = float(rule.get("on_db", 7.0)), float(rule.get("off_db", 4.0))
         self.presence_hold_ms = int(float(rule.get("second_hold_s", 5.0)) * 1000)
         self._line_present, self._line_seen = False, None
@@ -799,6 +806,9 @@ class Brain:
         self.health.set_quiet(self.quiet_db, s.steady_x_quiet)
         self.watch.checkin_rule.other_db_of = {k: s.checkin_x_quiet * q for k, q in self.quiet_db.items()}
         self.xray.object_min_db = {k: s.object_x_quiet * q for k, q in self.quiet_db.items()}
+        if self.presence_line:   # only a thing in the presence line is an object there: no other line can raise one
+            self.xray.object_min_db = {k: self.xray.object_min_db.get(k, 0.0) if k == self.presence_line else math.inf
+                                       for k in self.links}
         self.windower, self.window = F.Windower(self.base, self.model_links), None
         self._drift_t = self._suspect_t = None
         self._line_present, self._line_seen = False, None
@@ -1048,6 +1058,8 @@ class Brain:
                 self._raw["why"] = [self.presence_line]
             elif self.presence_line and self._raw["present"]:
                 self._raw["motion"] = self._motion_says()
+            elif self.presence_line and line["present"] is False and self._raw["kind"] == "object":
+                self._raw["kind"] = "none"     # the line is clear: no other line can say "object" on this layout
             self.decision_ms.append((time.perf_counter() - t0) * 1000)
             self.window["decided"] = True
             self.raw_kind = self._raw["kind"]   # health wants this even while pred is hidden
@@ -1163,11 +1175,9 @@ class Brain:
             self._line_seen = end
             self._line_present = down >= (self.presence_off_db if self._line_present else self.presence_on_db)
         elif self._line_present:
-            # The line is silent (Pi B's readings come over the hotspot). The second line may keep
-            # somebody there for a few seconds; it never brings anybody in.
-            second = drop(self.presence_second) if self.presence_second else None
-            if not (second is not None and second >= self.presence_off_db
-                    and self._line_seen is not None and end - self._line_seen <= self.presence_hold_ms):
+            # The line is silent (Pi B's readings come over the hotspot). Its last word stands for
+            # second_hold_s; by then health is blind and no decision is shown. No other line has a say.
+            if not (self._line_seen is not None and end - self._line_seen <= self.presence_hold_ms):
                 self._line_present = False
         return self._line_present
 
