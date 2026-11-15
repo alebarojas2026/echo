@@ -27,6 +27,17 @@ class DevpostDraftTest(unittest.TestCase):
         ):
             self.assertIn(f"## {heading}", self.text)
 
+    def test_images_have_live_capture_rules_and_board_captions(self):
+        images = self.text.split("## Images", 1)[1].split("## Inspiration", 1)[0]
+        rows = [line for line in images.splitlines() if re.match(r"\| \d+\.", line)]
+        self.assertEqual(len(rows), 8)
+        for row in rows:
+            self.assertIn("Arduino UNO Q", row.split("|")[-2])
+        for phrase in ("live desk", "no recognisable face", "no camera frame",
+                       "outside the repository", "one spot and three devices",
+                       "primary sensor and dead-zone link"):
+            self.assertIn(phrase, images)
+
     def test_building_story_and_audiences_lead(self):
         for phrase in (
             "safety and after-hours security",

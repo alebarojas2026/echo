@@ -2,6 +2,23 @@
 
 **Wi-Fi that understands the room.**
 
+## Images
+
+This is the capture and caption plan for the submission lead. Take every demo view from the live desk, never the simulated demo. Include no recognisable face and no camera frame, ever. Keep photos, clips, and the exported diagram outside the repository; commit only this plan and the Mermaid source. Hide proof tiles until real results are available.
+
+| Demo order | Image to capture | Caption |
+|---|---|---|
+| 1. Cover | A hand holding the unplugged USB plug in front of the screen with its found figure; optionally use a short continuous unplug clip if Devpost accepts it | The Arduino UNO Q keeps sensing the spot after the teaching camera is unplugged. |
+| 2. Found you | Arrival words over the live room view, with the source visible | The Arduino UNO Q detects someone entering the spot from the Wi-Fi path between Pi A and Pi B. |
+| 3. The lesson | Camera teaching status and progress, never the camera's image | The Arduino UNO Q learns locally from temporary camera labels. |
+| 4. After the unplug | Radio only status, disconnected cable, and the figure remaining present when the person stops | The Arduino UNO Q continues presence and movement sensing from radio alone. |
+| 5. Armed | The live phone intrusion card beside the screen | The Arduino UNO Q raises a local intrusion event when someone stays in the armed spot. |
+| 6. The dead zone | Blocked-link advice and the verified before-and-after gain, only after the real move succeeds | The Arduino UNO Q measures the blocked Wi-Fi path and the result of moving the router. |
+| 7. The hardware | Label the Arduino UNO Q and Pi A together on the desk; label Pi B across the gap at desk height | The Arduino UNO Q runs the models; Pi A provides the hotspot and cable route, and Pi B supplies the far radio endpoint. |
+| 8. Architecture | Export the current Mermaid diagram once for Devpost, outside the repository | The Arduino UNO Q runs sensing, local records, Ask the room, replay, reports, and alerts without a cloud service. |
+
+Use the [current architecture source](https://github.com/alebarojas2026/echo/blob/main/docs/architecture.md). The layout has one spot and three devices. Wi-Fi across the gap is the primary sensor and dead-zone link; Bluetooth to the board is a second opinion. The capture lead must verify that each caption matches the deployed build before uploading.
+
 ## Inspiration
 
 Radio Sight brings safety and after-hours security to buildings using the Wi-Fi already there, with no permanent camera and no cloud dependency.
