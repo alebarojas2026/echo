@@ -1,0 +1,4 @@
+{"ok":true,"diff_ms":520000,"stepping":true}
+{"ok":true,"diff_ms":-830,"stepping":false}
+{"ok":false,"diff_ms":520000,"why":"armed: disarm first"}
+{"ok":false,"why":"send {\"t\": epoch ms}"}

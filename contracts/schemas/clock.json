@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alebarojas2026/deadzone/contracts/schemas/clock.json",
+  "$comment": "Section 12 (as proposed): the answer of GET /clock. Not a bus message: no envelope.",
+  "type": "object",
+  "properties": {
+    "t": {"type": "integer", "minimum": 0},
+    "busy": {"type": ["string", "null"], "minLength": 1},
+    "last": {"type": ["object", "null"],
+             "properties": {"t": {"type": "integer", "minimum": 0}, "stepped_ms": {"type": "integer"}, "took_s": {"type": "number", "minimum": 0},
+                            "ok": {"type": "boolean"}, "why": {"type": "string", "minLength": 1}},
+             "required": ["t", "stepped_ms", "took_s", "ok"], "additionalProperties": false,
+             "if": {"properties": {"ok": {"const": false}}, "required": ["ok"]}, "then": {"required": ["why"]}}
+  },
+  "required": ["t", "busy", "last"],
+  "additionalProperties": false
+}
