@@ -199,3 +199,34 @@ def test_even_one_false_presence_state_counts_on_an_empty_trial():
     result = S.score({'session':'e','role':'report','mode':'trials'},
                      [trial(1,'empty',0),*states(0,20000,lambda t:t==5000)])
     assert result['empty'] == {'n':1,'false':1}
+
+
+@pytest.mark.parametrize("missing", ["clearance", "gap", "unknown"])
+def test_walk_requires_coverage_until_its_last_possible_alert(missing):
+    heard = states(0, 25_000)
+    if missing == "clearance":
+        heard = [s for s in heard if s["t"] < 20_000]
+    elif missing == "gap":
+        heard = [s for s in heard if not 22_000 <= s["t"] < 23_000]
+    else:
+        heard[220]["hidden"] = True
+    rows = [trial(1, "walk", 0), *heard]
+    result = S.score({"session": "w", "role": "report", "mode": "trials"}, rows)
+    assert result["unheard_trials"] == 1
+    assert result["walk"] == {"n": 0, "passed_by": 0, "intrusion": 0, "nothing": 0}
+
+
+@pytest.mark.parametrize("kind", ["stand", "empty"])
+def test_other_trials_do_not_require_the_unscored_clearance(kind):
+    rows = [trial(1, kind, 0), *states(0, 20_000)]
+    result = S.score({"session": "w", "role": "report", "mode": "trials"}, rows)
+    assert result["unheard_trials"] == 0 and result[kind]["n"] == 1
+
+
+def test_a_late_walk_alert_belongs_only_to_the_observed_previous_trial():
+    rows = [trial(1, "walk", 0), trial(2, "walk", 25_000), *states(0, 50_000),
+            {"type": "event", "t": 24_900, "kind": "intrusion"},
+            {"type": "event", "t": 25_000, "kind": "passed_by"}]
+    result = S.score({"session": "w", "role": "report", "mode": "trials"}, rows)
+    assert result["unheard_trials"] == 0
+    assert result["walk"] == {"n": 2, "passed_by": 1, "intrusion": 1, "nothing": 0}
